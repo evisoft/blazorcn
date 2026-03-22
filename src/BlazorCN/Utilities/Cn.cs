@@ -62,11 +62,11 @@ public static partial class Cn
         if (arbitraryMatch.Success)
             return arbitraryMatch.Groups[1].Value;
 
-        if (SpacingRegex().IsMatch(baseClass))
-            return SpacingRegex().Match(baseClass).Groups[1].Value;
+        var spacingMatch = SpacingRegex().Match(baseClass);
+        if (spacingMatch.Success) return spacingMatch.Groups[1].Value;
 
-        if (SizingRegex().IsMatch(baseClass))
-            return SizingRegex().Match(baseClass).Groups[1].Value;
+        var sizingMatch = SizingRegex().Match(baseClass);
+        if (sizingMatch.Success) return sizingMatch.Groups[1].Value;
 
         if (TextSizeRegex().IsMatch(baseClass))
             return "text-size";

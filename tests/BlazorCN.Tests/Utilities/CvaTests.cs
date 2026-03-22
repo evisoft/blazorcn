@@ -90,4 +90,22 @@ public class CvaTests
         result.Should().Contain("h-12");
         result.Should().NotContain("h-9");
     }
+
+    [Fact]
+    public void Single_Dimension_Cva_Applies_Variant()
+    {
+        var cva = new Cva<TestVariant>(
+            "base-class",
+            new Dictionary<TestVariant, string>
+            {
+                [TestVariant.Default] = "bg-primary",
+                [TestVariant.Destructive] = "bg-destructive",
+            });
+
+        var result = cva.Apply(TestVariant.Destructive, "custom");
+        result.Should().Contain("base-class");
+        result.Should().Contain("bg-destructive");
+        result.Should().Contain("custom");
+        result.Should().NotContain("bg-primary");
+    }
 }

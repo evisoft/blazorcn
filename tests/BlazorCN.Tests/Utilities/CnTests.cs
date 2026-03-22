@@ -89,4 +89,32 @@ public class CnTests
         var result = Cn.Merge("base-class", conditionalClass);
         result.Should().Be("base-class");
     }
+
+    [Fact]
+    public void Merge_Flex_Replaced_By_Hidden()
+    {
+        var result = Cn.Merge("flex", "hidden");
+        result.Should().Be("hidden");
+    }
+
+    [Fact]
+    public void Merge_Deduplicates_Display_Utilities()
+    {
+        var result = Cn.Merge("flex", "flex");
+        result.Should().Be("flex");
+    }
+
+    [Fact]
+    public void Merge_Border_Width_Conflict()
+    {
+        var result = Cn.Merge("border", "border-2");
+        result.Should().Be("border-2");
+    }
+
+    [Fact]
+    public void Merge_Rounded_Conflict()
+    {
+        var result = Cn.Merge("rounded", "rounded-lg");
+        result.Should().Be("rounded-lg");
+    }
 }

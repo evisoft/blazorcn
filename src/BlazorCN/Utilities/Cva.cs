@@ -1,6 +1,36 @@
 namespace BlazorCN;
 
 /// <summary>
+/// Single-dimension Class Variance Authority — maps variant enum values to Tailwind class strings.
+/// Use when a component has variants but no size dimension.
+/// </summary>
+/// <typeparam name="TVariant">Variant enum type</typeparam>
+public sealed class Cva<TVariant>
+    where TVariant : struct, Enum
+{
+    private readonly string _base;
+    private readonly Dictionary<TVariant, string> _variants;
+
+    public Cva(
+        string baseClasses,
+        Dictionary<TVariant, string> variants)
+    {
+        _base = baseClasses;
+        _variants = variants;
+    }
+
+    /// <summary>
+    /// Resolves the final class string by combining base + variant + additional classes.
+    /// Uses Cn.Merge() so conflicting utilities are resolved by last-wins.
+    /// </summary>
+    public string Apply(TVariant variant, string? additionalClasses = null)
+    {
+        _variants.TryGetValue(variant, out var variantClasses);
+        return Cn.Merge(_base, variantClasses, additionalClasses);
+    }
+}
+
+/// <summary>
 /// Class Variance Authority — maps variant/size enum values to Tailwind class strings.
 /// Port of the CVA JavaScript library.
 /// </summary>
