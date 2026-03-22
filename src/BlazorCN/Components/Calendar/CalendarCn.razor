@@ -1,0 +1,126 @@
+@namespace BlazorCN
+@inherits ComponentBaseCn
+
+<div class="@Cn.Merge("p-3", Class)" style="@Style" data-slot="calendar" @attributes="AdditionalAttributes">
+    <div class="flex items-center justify-between mb-4">
+        <button type="button" class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent hover:text-accent-foreground" @onclick="PreviousMonth">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div class="text-sm font-medium">
+            @DisplayMonth.ToString("MMMM yyyy")
+        </div>
+        <button type="button" class="inline-flex items-center justify-center size-7 rounded-md hover:bg-accent hover:text-accent-foreground" @onclick="NextMonth">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+    </div>
+    <table class="w-full border-collapse">
+        <thead>
+            <tr>
+                @foreach (var day in DayNames)
+                {
+                    <th class="text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]">@day</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var week in GetWeeks())
+            {
+                <tr>
+                    @foreach (var date in week)
+                    {
+                        <td class="p-0 text-center text-sm relative">
+                            @if (date.HasValue)
+                            {
+                                <button type="button"
+                                        class="@GetDayClass(date.Value)"
+                                        disabled="@IsDisabled(date.Value)"
+                                        @onclick="() => SelectDate(date.Value)">
+                                    @date.Value.Day
+                                </button>
+                            }
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public DateTime? Value { get; set; }
+    [Parameter] public EventCallback<DateTime?> ValueChanged { get; set; }
+    [Parameter] public DateTime? MinDate { get; set; }
+    [Parameter] public DateTime? MaxDate { get; set; }
+
+    private DateTime DisplayMonth { get; set; }
+    private static readonly string[] DayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+    protected override void OnInitialized()
+    {
+        DisplayMonth = Value ?? DateTime.Today;
+        DisplayMonth = new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1);
+    }
+
+    private void PreviousMonth()
+    {
+        DisplayMonth = DisplayMonth.AddMonths(-1);
+    }
+
+    private void NextMonth()
+    {
+        DisplayMonth = DisplayMonth.AddMonths(1);
+    }
+
+    private async Task SelectDate(DateTime date)
+    {
+        Value = date;
+        await ValueChanged.InvokeAsync(date);
+    }
+
+    private bool IsDisabled(DateTime date)
+    {
+        if (MinDate.HasValue && date < MinDate.Value) return true;
+        if (MaxDate.HasValue && date > MaxDate.Value) return true;
+        return false;
+    }
+
+    private bool IsSelected(DateTime date) => Value.HasValue && Value.Value.Date == date.Date;
+    private bool IsToday(DateTime date) => date.Date == DateTime.Today;
+    private bool IsOutsideMonth(DateTime date) => date.Month != DisplayMonth.Month;
+
+    private string GetDayClass(DateTime date)
+    {
+        var isSelected = IsSelected(date);
+        var isToday = IsToday(date);
+        return Cn.Merge(
+            "inline-flex items-center justify-center size-9 rounded-md text-sm font-normal transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+            isSelected ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground" : "",
+            isToday && !isSelected ? "bg-accent text-accent-foreground" : "",
+            IsOutsideMonth(date) ? "text-muted-foreground opacity-50" : "");
+    }
+
+    private List<DateTime?[]> GetWeeks()
+    {
+        var weeks = new List<DateTime?[]>();
+        var firstDay = new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1);
+        var lastDay = firstDay.AddMonths(1).AddDays(-1);
+
+        var current = firstDay.AddDays(-(int)firstDay.DayOfWeek);
+
+        while (current <= lastDay || current.DayOfWeek != DayOfWeek.Sunday)
+        {
+            var week = new DateTime?[7];
+            for (var i = 0; i < 7; i++)
+            {
+                week[i] = current;
+                current = current.AddDays(1);
+            }
+            weeks.Add(week);
+
+            if (current > lastDay && current.DayOfWeek == DayOfWeek.Sunday)
+                break;
+        }
+
+        return weeks;
+    }
+}
