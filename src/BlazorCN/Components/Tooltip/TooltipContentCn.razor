@@ -1,0 +1,69 @@
+@namespace BlazorCN
+@inherits ComponentBaseCn
+@implements IAsyncDisposable
+
+@if (Tooltip?.IsOpen == true)
+{
+    <div @ref="_contentRef"
+         class="@Cn.Merge("z-50 w-fit max-w-xs rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground shadow-md", Class)"
+         style="@Style"
+         data-slot="tooltip-content"
+         data-state="open"
+         data-side="@Side.ToString().ToLowerInvariant()"
+         data-align="@Align.ToString().ToLowerInvariant()"
+         @attributes="AdditionalAttributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public FloatingSide Side { get; set; } = FloatingSide.Top;
+    [Parameter] public int SideOffset { get; set; } = 4;
+    [Parameter] public FloatingAlign Align { get; set; } = FloatingAlign.Center;
+    [Parameter] public int AlignOffset { get; set; }
+    [CascadingParameter] public TooltipCn? Tooltip { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _contentRef;
+    private readonly string _id = $"tooltip-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Tooltip?.IsOpen == true && !_jsInitialized)
+        {
+            await JsInterop.CreateFloatingAsync(Tooltip.TriggerElement, _contentRef, _id,
+                new FloatingOptions
+                {
+                    Side = Side,
+                    SideOffset = SideOffset,
+                    Align = Align,
+                    AlignOffset = AlignOffset
+                });
+            _jsInitialized = true;
+        }
+        else if (Tooltip?.IsOpen != true && _jsInitialized)
+        {
+            await CleanupJs();
+        }
+    }
+
+    private async Task CleanupJs()
+    {
+        if (_jsInitialized)
+        {
+            try
+            {
+                await JsInterop.DestroyFloatingAsync(_id);
+            }
+            catch { /* Component may be disposed after circuit */ }
+            _jsInitialized = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await CleanupJs();
+    }
+}
