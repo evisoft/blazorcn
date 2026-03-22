@@ -100,6 +100,172 @@ export function cleanup(id) {
     }
 }
 
+// --- Floating Positioning ---
+
+/** @type {Map<string, { reference: HTMLElement, floating: HTMLElement, options: object, update: Function }>} */
+const floatingMap = new Map();
+
+/**
+ * Creates a floating element positioned relative to a reference element.
+ * @param {HTMLElement} reference - The trigger/anchor element
+ * @param {HTMLElement} floating - The floating content element
+ * @param {string} id - Unique ID for cleanup
+ * @param {object} options - { side, sideOffset, align, alignOffset }
+ * @returns {object} - { side: actualSide }
+ */
+export function createFloating(reference, floating, id, options) {
+    if (!reference || !floating) return 'bottom';
+    destroyFloating(id);
+
+    const opts = {
+        side: options?.side ?? 'bottom',
+        sideOffset: options?.sideOffset ?? 4,
+        align: options?.align ?? 'center',
+        alignOffset: options?.alignOffset ?? 0
+    };
+
+    const update = () => computePosition(reference, floating, opts);
+    const actualSide = update();
+
+    const controller = new AbortController();
+    window.addEventListener('scroll', update, { signal: controller.signal, passive: true, capture: true });
+    window.addEventListener('resize', update, { signal: controller.signal, passive: true });
+
+    floatingMap.set(id, { reference, floating, options: opts, update });
+    cleanupMap.set(id, controller);
+
+    return actualSide;
+}
+
+/**
+ * Re-calculates the position of a floating element.
+ * @param {string} id
+ */
+export function updateFloating(id) {
+    const entry = floatingMap.get(id);
+    if (entry) {
+        entry.update();
+    }
+}
+
+/**
+ * Destroys a floating element and cleans up event listeners.
+ * @param {string} id
+ */
+export function destroyFloating(id) {
+    cleanup(id);
+    floatingMap.delete(id);
+}
+
+/**
+ * Computes and applies position for a floating element relative to a reference.
+ * Handles auto-flip when the element overflows the viewport.
+ * @param {HTMLElement} reference
+ * @param {HTMLElement} floating
+ * @param {object} options
+ * @returns {string} actual side used
+ */
+function computePosition(reference, floating, options) {
+    const refRect = reference.getBoundingClientRect();
+    const floatRect = floating.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+
+    let { side, sideOffset, align, alignOffset } = options;
+
+    // Calculate position for a given side
+    function calcForSide(s) {
+        let top = 0;
+        let left = 0;
+
+        switch (s) {
+            case 'top':
+                top = refRect.top - floatRect.height - sideOffset;
+                left = calcAlignHorizontal(refRect, floatRect, align, alignOffset);
+                break;
+            case 'bottom':
+                top = refRect.bottom + sideOffset;
+                left = calcAlignHorizontal(refRect, floatRect, align, alignOffset);
+                break;
+            case 'left':
+                left = refRect.left - floatRect.width - sideOffset;
+                top = calcAlignVertical(refRect, floatRect, align, alignOffset);
+                break;
+            case 'right':
+                left = refRect.right + sideOffset;
+                top = calcAlignVertical(refRect, floatRect, align, alignOffset);
+                break;
+        }
+        return { top, left };
+    }
+
+    let pos = calcForSide(side);
+    let actualSide = side;
+
+    // Auto-flip if overflowing viewport
+    if (overflows(pos, floatRect, viewportW, viewportH)) {
+        const opposite = getOppositeSide(side);
+        const altPos = calcForSide(opposite);
+        if (!overflows(altPos, floatRect, viewportW, viewportH)) {
+            pos = altPos;
+            actualSide = opposite;
+        }
+        // If both overflow, keep original side
+    }
+
+    // Apply position using fixed positioning (relative to viewport)
+    floating.style.position = 'fixed';
+    floating.style.top = `${pos.top}px`;
+    floating.style.left = `${pos.left}px`;
+    floating.style.margin = '0';
+    floating.setAttribute('data-side', actualSide);
+
+    return actualSide;
+}
+
+function calcAlignHorizontal(refRect, floatRect, align, alignOffset) {
+    switch (align) {
+        case 'start':
+            return refRect.left + alignOffset;
+        case 'end':
+            return refRect.right - floatRect.width + alignOffset;
+        case 'center':
+        default:
+            return refRect.left + (refRect.width - floatRect.width) / 2 + alignOffset;
+    }
+}
+
+function calcAlignVertical(refRect, floatRect, align, alignOffset) {
+    switch (align) {
+        case 'start':
+            return refRect.top + alignOffset;
+        case 'end':
+            return refRect.bottom - floatRect.height + alignOffset;
+        case 'center':
+        default:
+            return refRect.top + (refRect.height - floatRect.height) / 2 + alignOffset;
+    }
+}
+
+function overflows(pos, floatRect, viewportW, viewportH) {
+    return pos.top < 0
+        || pos.left < 0
+        || pos.top + floatRect.height > viewportH
+        || pos.left + floatRect.width > viewportW;
+}
+
+function getOppositeSide(side) {
+    switch (side) {
+        case 'top': return 'bottom';
+        case 'bottom': return 'top';
+        case 'left': return 'right';
+        case 'right': return 'left';
+        default: return 'bottom';
+    }
+}
+
+// --- Utilities ---
+
 /**
  * Gets all focusable elements within a container.
  * @param {HTMLElement} container

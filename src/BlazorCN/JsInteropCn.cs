@@ -48,6 +48,44 @@ public sealed class JsInteropCn : IAsyncDisposable
         await module.InvokeVoidAsync("cleanup", id);
     }
 
+    /// <summary>
+    /// Creates a floating element positioned relative to a reference element.
+    /// Returns the actual side used (may differ from requested if flipped).
+    /// </summary>
+    public async ValueTask<string> CreateFloatingAsync(
+        ElementReference reference, ElementReference floating, string id,
+        FloatingOptions options)
+    {
+        var module = await GetModuleAsync();
+        var jsOptions = new
+        {
+            side = options.Side.ToString().ToLowerInvariant(),
+            sideOffset = options.SideOffset,
+            align = options.Align.ToString().ToLowerInvariant(),
+            alignOffset = options.AlignOffset
+        };
+        return await module.InvokeAsync<string>(
+            "createFloating", reference, floating, id, jsOptions);
+    }
+
+    /// <summary>
+    /// Re-calculates the position of a floating element.
+    /// </summary>
+    public async ValueTask UpdateFloatingAsync(string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("updateFloating", id);
+    }
+
+    /// <summary>
+    /// Destroys a floating element and cleans up event listeners.
+    /// </summary>
+    public async ValueTask DestroyFloatingAsync(string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("destroyFloating", id);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_module is not null)
