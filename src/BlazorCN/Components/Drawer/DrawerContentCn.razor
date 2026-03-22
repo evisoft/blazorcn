@@ -1,0 +1,68 @@
+@namespace BlazorCN
+@inherits ComponentBaseCn
+@implements IAsyncDisposable
+
+@if (Drawer?.IsOpen == true)
+{
+    <div @ref="_element"
+         class="@Cn.Merge(GetClasses(), Class)"
+         style="@Style"
+         data-slot="drawer-content"
+         data-state="open"
+         data-direction="@Direction.ToString().ToLowerInvariant()"
+         @attributes="AdditionalAttributes">
+        @if (Direction == DrawerDirection.Bottom)
+        {
+            <div class="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" data-slot="drawer-handle"></div>
+        }
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public DrawerDirection Direction { get; set; } = DrawerDirection.Bottom;
+    [CascadingParameter] private DrawerCn? Drawer { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _element;
+    private string _id = $"drawer-content-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
+
+    private string GetClasses()
+    {
+        var baseClasses = "fixed z-50 flex flex-col bg-background";
+        var directionClasses = Direction switch
+        {
+            DrawerDirection.Bottom => "inset-x-0 bottom-0 mt-24 rounded-t-lg border-t",
+            DrawerDirection.Top => "inset-x-0 top-0 mb-24 rounded-b-lg border-b",
+            DrawerDirection.Left => "inset-y-0 left-0 mr-24 rounded-r-lg border-r w-3/4 sm:max-w-sm",
+            DrawerDirection.Right => "inset-y-0 right-0 ml-24 rounded-l-lg border-l w-3/4 sm:max-w-sm",
+            _ => ""
+        };
+        return $"{baseClasses} {directionClasses}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Drawer?.IsOpen == true && !_jsInitialized)
+        {
+            await JsInterop.TrapFocusAsync(_element, _id);
+            await JsInterop.LockScrollAsync(_id);
+            _jsInitialized = true;
+        }
+        else if (Drawer?.IsOpen != true && _jsInitialized)
+        {
+            await JsInterop.CleanupAsync(_id);
+            _jsInitialized = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupAsync(_id); } catch { /* Component may be disposed after circuit */ }
+        }
+    }
+}
