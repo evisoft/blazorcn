@@ -64,19 +64,29 @@ export function onOutsideClick(element, id, dotnetRef, methodName) {
     }, 0);
 }
 
+let _scrollLockCount = 0;
+let _savedScrollY = 0;
+
 /**
  * Locks body scroll (for modals).
+ * Uses reference counting so nested modals don't break scroll restore.
  * @param {string} id
  */
 export function lockScroll(id) {
-    cleanup(id);
-    const scrollY = window.scrollY;
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
-    document.body.style.overflow = 'hidden';
-    cleanupMap.set(id, { abort: () => unlockScrollInternal(scrollY) });
+    if (cleanupMap.has(id)) return; // already locked by this id
+    if (_scrollLockCount === 0) {
+        _savedScrollY = window.scrollY;
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${_savedScrollY}px`;
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.overflow = 'hidden';
+    }
+    _scrollLockCount++;
+    cleanupMap.set(id, { abort: () => {
+        _scrollLockCount = Math.max(0, _scrollLockCount - 1);
+        if (_scrollLockCount === 0) unlockScrollInternal(_savedScrollY);
+    }});
 }
 
 function unlockScrollInternal(scrollY) {
