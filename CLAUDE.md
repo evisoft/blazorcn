@@ -225,7 +225,8 @@ blazorcn/
 │   │   └── ...
 │   └── wwwroot/
 │       ├── blazorcn.css                 # CSS variables + base styles
-│       └── blazorcn.js                  # Minimal JS interop
+│       ├── blazorcn.js                  # Minimal JS interop
+│       └── tailwind-preset.js           # Tailwind preset for consumers
 ├── tests/BlazorCN.Tests/
 ├── docs/plans/
 ├── original/                            # Reference: shadcn-ui source
@@ -251,6 +252,14 @@ dotnet pack src/BlazorCN/BlazorCN.csproj
 2. **Composed** (CardCn, AlertCn, TableCn) — parent + child components, thin markup wrappers
 3. **Interactive** (DialogCn, SelectCn, PopoverCn) — .razor + .razor.cs, JS interop for focus/positioning
 4. **Form** (InputCn, CheckboxCn, SwitchCn) — @bind-Value, EditForm integration
+
+## Status
+
+**Complete.** All 50 component groups (~200 components) implemented and tested. 957 tests passing. NuGet package builds cleanly with 0 warnings.
+
+- XML documentation on all public utility classes, services, and enums
+- Tailwind preset for consumer theme integration
+- MIT licensed
 
 ## Reference Directories
 
