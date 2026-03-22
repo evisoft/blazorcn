@@ -107,6 +107,10 @@ public static partial class Cn
             return "shadow";
         if (ZIndexRegex().IsMatch(baseClass))
             return "z-index";
+        if (OverflowXRegex().IsMatch(baseClass))
+            return "overflow-x";
+        if (OverflowYRegex().IsMatch(baseClass))
+            return "overflow-y";
         if (OverflowRegex().IsMatch(baseClass))
             return "overflow";
         if (CursorRegex().IsMatch(baseClass))
@@ -178,7 +182,13 @@ public static partial class Cn
     [GeneratedRegex(@"^z-.+$")]
     private static partial Regex ZIndexRegex();
 
-    [GeneratedRegex(@"^overflow-.+$")]
+    [GeneratedRegex(@"^overflow-x-.+$")]
+    private static partial Regex OverflowXRegex();
+
+    [GeneratedRegex(@"^overflow-y-.+$")]
+    private static partial Regex OverflowYRegex();
+
+    [GeneratedRegex(@"^overflow-(auto|hidden|clip|visible|scroll)$")]
     private static partial Regex OverflowRegex();
 
     [GeneratedRegex(@"^cursor-.+$")]
