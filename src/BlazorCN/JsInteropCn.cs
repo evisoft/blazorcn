@@ -6,7 +6,7 @@ namespace BlazorCN;
 /// <summary>
 /// Typed wrapper for BlazorCN JavaScript interop calls.
 /// </summary>
-public sealed class JsInteropCn : IAsyncDisposable
+public sealed class JsInteropCn : IAsyncDisposable, IDisposable
 {
     private readonly IJSRuntime _js;
     private IJSObjectReference? _module;
@@ -113,6 +113,13 @@ public sealed class JsInteropCn : IAsyncDisposable
     {
         var module = await GetModuleAsync();
         await module.InvokeVoidAsync("cleanupKeyboardNavigation", id);
+    }
+
+    public void Dispose()
+    {
+        // Synchronous dispose for DI container compatibility.
+        // The module will be cleaned up by the JS runtime.
+        _module = null;
     }
 
     public async ValueTask DisposeAsync()
