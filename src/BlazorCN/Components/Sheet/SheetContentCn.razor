@@ -1,0 +1,79 @@
+@namespace BlazorCN
+@inherits ComponentBaseCn
+@implements IAsyncDisposable
+
+@if (Sheet?.IsOpen == true)
+{
+    <div @ref="_element"
+         class="@Cn.Merge(GetClasses(), Class)"
+         style="@Style"
+         data-slot="sheet-content"
+         data-state="open"
+         data-side="@Side.ToString().ToLowerInvariant()"
+         @attributes="AdditionalAttributes">
+        @ChildContent
+        <button type="button"
+                class="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:pointer-events-none"
+                data-slot="sheet-close"
+                @onclick="HandleClose">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6 6 18"></path>
+                <path d="m6 6 12 12"></path>
+            </svg>
+            <span class="sr-only">Close</span>
+        </button>
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public SheetSide Side { get; set; } = SheetSide.Right;
+    [CascadingParameter] private SheetCn? Sheet { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _element;
+    private string _id = $"sheet-content-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
+
+    private string GetClasses()
+    {
+        var baseClasses = "fixed z-50 flex flex-col gap-4 bg-background p-6 shadow-lg transition-transform";
+        var sideClasses = Side switch
+        {
+            SheetSide.Top => "inset-x-0 top-0 border-b",
+            SheetSide.Right => "inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
+            SheetSide.Bottom => "inset-x-0 bottom-0 border-t",
+            SheetSide.Left => "inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
+            _ => ""
+        };
+        return $"{baseClasses} {sideClasses}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Sheet?.IsOpen == true && !_jsInitialized)
+        {
+            await JsInterop.TrapFocusAsync(_element, _id);
+            await JsInterop.LockScrollAsync(_id);
+            _jsInitialized = true;
+        }
+        else if (Sheet?.IsOpen != true && _jsInitialized)
+        {
+            await JsInterop.CleanupAsync(_id);
+            _jsInitialized = false;
+        }
+    }
+
+    private async Task HandleClose()
+    {
+        if (Sheet is not null) await Sheet.SetOpen(false);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupAsync(_id); } catch { /* Component may be disposed after circuit */ }
+        }
+    }
+}
