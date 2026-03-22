@@ -1,0 +1,82 @@
+@namespace BlazorCN
+@inherits ComponentBaseCn
+@implements IAsyncDisposable
+
+@if (Popover?.IsOpen == true)
+{
+    <div @ref="_contentRef"
+         class="@Cn.Merge("z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none", Class)"
+         style="@Style"
+         data-slot="popover-content"
+         data-state="open"
+         data-side="@Side.ToString().ToLowerInvariant()"
+         data-align="@Align.ToString().ToLowerInvariant()"
+         @attributes="AdditionalAttributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public FloatingSide Side { get; set; } = FloatingSide.Bottom;
+    [Parameter] public int SideOffset { get; set; } = 4;
+    [Parameter] public FloatingAlign Align { get; set; } = FloatingAlign.Center;
+    [Parameter] public int AlignOffset { get; set; }
+    [CascadingParameter] public PopoverCn? Popover { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _contentRef;
+    private readonly string _id = $"popover-{Guid.NewGuid():N}";
+    private readonly string _outsideClickId = $"popover-outside-{Guid.NewGuid():N}";
+    private DotNetObjectReference<PopoverContentCn>? _dotnetRef;
+    private bool _jsInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Popover?.IsOpen == true && !_jsInitialized)
+        {
+            _dotnetRef = DotNetObjectReference.Create(this);
+            await JsInterop.CreateFloatingAsync(Popover.TriggerElement, _contentRef, _id,
+                new FloatingOptions
+                {
+                    Side = Side,
+                    SideOffset = SideOffset,
+                    Align = Align,
+                    AlignOffset = AlignOffset
+                });
+            await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick");
+            _jsInitialized = true;
+        }
+        else if (Popover?.IsOpen != true && _jsInitialized)
+        {
+            await CleanupJs();
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnOutsideClick()
+    {
+        if (Popover is not null) await Popover.SetOpen(false);
+    }
+
+    private async Task CleanupJs()
+    {
+        if (_jsInitialized)
+        {
+            try
+            {
+                await JsInterop.DestroyFloatingAsync(_id);
+                await JsInterop.CleanupAsync(_outsideClickId);
+            }
+            catch { /* Component may be disposed after circuit */ }
+            _jsInitialized = false;
+            _dotnetRef?.Dispose();
+            _dotnetRef = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await CleanupJs();
+    }
+}
