@@ -102,7 +102,7 @@ export function cleanup(id) {
 
 // --- Floating Positioning ---
 
-/** @type {Map<string, { reference: HTMLElement, floating: HTMLElement, options: object, update: Function }>} */
+/** @type {Map<string, { reference: HTMLElement, floating: HTMLElement, update: Function }>} */
 const floatingMap = new Map();
 
 /**
@@ -131,7 +131,7 @@ export function createFloating(reference, floating, id, options) {
     window.addEventListener('scroll', update, { signal: controller.signal, passive: true, capture: true });
     window.addEventListener('resize', update, { signal: controller.signal, passive: true });
 
-    floatingMap.set(id, { reference, floating, options: opts, update });
+    floatingMap.set(id, { reference, floating, update });
     cleanupMap.set(id, controller);
 
     return actualSide;
@@ -167,7 +167,18 @@ export function destroyFloating(id) {
  */
 function computePosition(reference, floating, options) {
     const refRect = reference.getBoundingClientRect();
-    const floatRect = floating.getBoundingClientRect();
+    const rawFloatRect = floating.getBoundingClientRect();
+
+    // If the floating element is hidden (width/height = 0), use scrollWidth/scrollHeight as fallbacks
+    const floatRect = {
+        top: rawFloatRect.top,
+        left: rawFloatRect.left,
+        bottom: rawFloatRect.bottom,
+        right: rawFloatRect.right,
+        width: rawFloatRect.width === 0 ? floating.scrollWidth : rawFloatRect.width,
+        height: rawFloatRect.height === 0 ? floating.scrollHeight : rawFloatRect.height
+    };
+
     const viewportW = window.innerWidth;
     const viewportH = window.innerHeight;
 
@@ -285,7 +296,7 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
     const selector = options?.selector ?? '[data-menu-item]';
     const orientation = options?.orientation ?? 'vertical';
     const controller = new AbortController();
-    cleanupMap.set(id, controller);
+    cleanupMap.set(id + ':kbd', controller);
 
     container.addEventListener('keydown', (e) => {
         const items = getNavigableItems(container, selector);
@@ -301,7 +312,8 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
 
         if (isPrev) {
             e.preventDefault();
-            const nextIdx = findPrevEnabled(items, currentIndex);
+            const startIdx = currentIndex === -1 ? items.length : currentIndex;
+            const nextIdx = findPrevEnabled(items, startIdx);
             if (nextIdx >= 0) items[nextIdx].focus();
         } else if (isNext) {
             e.preventDefault();
@@ -321,7 +333,7 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
                 dotnetRef.invokeMethodAsync(escapeMethodName);
             }
         } else if (e.key === 'Enter' || e.key === ' ') {
-            if (currentIndex >= 0) {
+            if (currentIndex >= 0 && !isItemDisabled(items[currentIndex])) {
                 e.preventDefault();
                 items[currentIndex].click();
             }
@@ -339,11 +351,11 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
  * @param {string} id
  */
 export function cleanupKeyboardNavigation(id) {
-    cleanup(id);
+    cleanup(id + ':kbd');
 }
 
 /**
- * Gets navigable items within a container, excluding disabled items.
+ * Gets all items matching the selector within a container. Disabled items are handled during navigation.
  * @param {HTMLElement} container
  * @param {string} selector
  * @returns {HTMLElement[]}
