@@ -31,11 +31,9 @@ public static partial class Cn
             var className = allClasses[i];
             var group = GetUtilityGroup(className);
 
-            if (group != null)
-            {
-                if (seen.ContainsKey(group)) continue;
-                seen[group] = i;
-            }
+            var key = group ?? className;
+            if (seen.ContainsKey(key)) continue;
+            seen[key] = i;
 
             result.Add((className, i));
         }

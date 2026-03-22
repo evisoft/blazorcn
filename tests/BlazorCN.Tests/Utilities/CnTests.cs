@@ -117,4 +117,11 @@ public class CnTests
         var result = Cn.Merge("rounded", "rounded-lg");
         result.Should().Be("rounded-lg");
     }
+
+    [Fact]
+    public void Merge_Deduplicates_Unknown_Classes()
+    {
+        var result = Cn.Merge("custom-class", "custom-class");
+        result.Should().Be("custom-class");
+    }
 }
