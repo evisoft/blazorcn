@@ -11,6 +11,9 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
     private readonly IJSRuntime _js;
     private IJSObjectReference? _module;
 
+    /// <summary>
+    /// Creates a new instance of <see cref="JsInteropCn"/>. Typically resolved from DI.
+    /// </summary>
     public JsInteropCn(IJSRuntime js)
     {
         _js = js;
@@ -22,12 +25,18 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
             "import", "./_content/BlazorCN/blazorcn.js");
     }
 
+    /// <summary>
+    /// Traps keyboard focus within the given element.
+    /// </summary>
     public async ValueTask TrapFocusAsync(ElementReference element, string id)
     {
         var module = await GetModuleAsync();
         await module.InvokeVoidAsync("trapFocus", element, id);
     }
 
+    /// <summary>
+    /// Registers a handler that fires when a click occurs outside the given element.
+    /// </summary>
     public async ValueTask OnOutsideClickAsync<T>(
         ElementReference element, string id,
         DotNetObjectReference<T> dotnetRef, string methodName) where T : class
@@ -36,12 +45,18 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         await module.InvokeVoidAsync("onOutsideClick", element, id, dotnetRef, methodName);
     }
 
+    /// <summary>
+    /// Locks page scrolling (e.g., when a modal is open).
+    /// </summary>
     public async ValueTask LockScrollAsync(string id)
     {
         var module = await GetModuleAsync();
         await module.InvokeVoidAsync("lockScroll", id);
     }
 
+    /// <summary>
+    /// Cleans up all JS resources (focus trap, outside-click listener, scroll lock) for the given ID.
+    /// </summary>
     public async ValueTask CleanupAsync(string id)
     {
         var module = await GetModuleAsync();
@@ -115,6 +130,7 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         await module.InvokeVoidAsync("cleanupKeyboardNavigation", id);
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
         // Synchronous dispose for DI container compatibility.
@@ -122,6 +138,7 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         _module = null;
     }
 
+    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         if (_module is not null)

@@ -1,5 +1,8 @@
 namespace BlazorCN;
 
+/// <summary>
+/// Size variant for the ButtonCn component.
+/// </summary>
 public enum ButtonSize
 {
     Default,

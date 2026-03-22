@@ -11,6 +11,11 @@ public sealed class Cva<TVariant>
     private readonly string _base;
     private readonly Dictionary<TVariant, string> _variants;
 
+    /// <summary>
+    /// Creates a CVA instance with the given base classes and variant map.
+    /// </summary>
+    /// <param name="baseClasses">Classes always applied regardless of variant.</param>
+    /// <param name="variants">Map of variant enum values to their Tailwind classes.</param>
     public Cva(
         string baseClasses,
         Dictionary<TVariant, string> variants)
@@ -44,6 +49,12 @@ public sealed class Cva<TVariant, TSize>
     private readonly Dictionary<TVariant, string> _variants;
     private readonly Dictionary<TSize, string> _sizes;
 
+    /// <summary>
+    /// Creates a CVA instance with the given base classes, variant map, and size map.
+    /// </summary>
+    /// <param name="baseClasses">Classes always applied regardless of variant or size.</param>
+    /// <param name="variants">Map of variant enum values to their Tailwind classes.</param>
+    /// <param name="sizes">Map of size enum values to their Tailwind classes.</param>
     public Cva(
         string baseClasses,
         Dictionary<TVariant, string> variants,
