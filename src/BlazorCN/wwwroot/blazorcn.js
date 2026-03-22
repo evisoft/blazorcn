@@ -264,6 +264,131 @@ function getOppositeSide(side) {
     }
 }
 
+// --- Keyboard Navigation ---
+
+/**
+ * Sets up keyboard navigation for a menu/list container.
+ * Arrow up/down (or left/right for horizontal) navigates between items.
+ * Home/End jumps to first/last.
+ * Escape invokes .NET callback.
+ * Enter/Space invokes click on focused item.
+ * @param {HTMLElement} container
+ * @param {string} id - for cleanup
+ * @param {object} dotnetRef - .NET reference for escape callback
+ * @param {string} escapeMethodName - method to call on escape
+ * @param {object} options - { selector: string, orientation: 'vertical'|'horizontal'|'both' }
+ */
+export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodName, options) {
+    if (!container) return;
+    cleanupKeyboardNavigation(id);
+
+    const selector = options?.selector ?? '[data-menu-item]';
+    const orientation = options?.orientation ?? 'vertical';
+    const controller = new AbortController();
+    cleanupMap.set(id, controller);
+
+    container.addEventListener('keydown', (e) => {
+        const items = getNavigableItems(container, selector);
+        if (items.length === 0) return;
+
+        const currentIndex = items.indexOf(document.activeElement);
+        const prevKey = orientation === 'horizontal' ? 'ArrowLeft' : 'ArrowUp';
+        const nextKey = orientation === 'horizontal' ? 'ArrowRight' : 'ArrowDown';
+
+        // For 'both' orientation, accept all arrow keys
+        const isPrev = e.key === prevKey || (orientation === 'both' && (e.key === 'ArrowUp' || e.key === 'ArrowLeft'));
+        const isNext = e.key === nextKey || (orientation === 'both' && (e.key === 'ArrowDown' || e.key === 'ArrowRight'));
+
+        if (isPrev) {
+            e.preventDefault();
+            const nextIdx = findPrevEnabled(items, currentIndex);
+            if (nextIdx >= 0) items[nextIdx].focus();
+        } else if (isNext) {
+            e.preventDefault();
+            const nextIdx = findNextEnabled(items, currentIndex);
+            if (nextIdx >= 0) items[nextIdx].focus();
+        } else if (e.key === 'Home') {
+            e.preventDefault();
+            const firstEnabled = findNextEnabled(items, -1);
+            if (firstEnabled >= 0) items[firstEnabled].focus();
+        } else if (e.key === 'End') {
+            e.preventDefault();
+            const lastEnabled = findPrevEnabled(items, items.length);
+            if (lastEnabled >= 0) items[lastEnabled].focus();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            if (dotnetRef && escapeMethodName) {
+                dotnetRef.invokeMethodAsync(escapeMethodName);
+            }
+        } else if (e.key === 'Enter' || e.key === ' ') {
+            if (currentIndex >= 0) {
+                e.preventDefault();
+                items[currentIndex].click();
+            }
+        }
+    }, { signal: controller.signal });
+
+    // Focus the first enabled item
+    const items = getNavigableItems(container, selector);
+    const firstEnabled = findNextEnabled(items, -1);
+    if (firstEnabled >= 0) items[firstEnabled].focus();
+}
+
+/**
+ * Cleans up keyboard navigation for a given ID.
+ * @param {string} id
+ */
+export function cleanupKeyboardNavigation(id) {
+    cleanup(id);
+}
+
+/**
+ * Gets navigable items within a container, excluding disabled items.
+ * @param {HTMLElement} container
+ * @param {string} selector
+ * @returns {HTMLElement[]}
+ */
+function getNavigableItems(container, selector) {
+    return [...container.querySelectorAll(selector)];
+}
+
+/**
+ * Checks if an element is disabled.
+ * @param {HTMLElement} el
+ * @returns {boolean}
+ */
+function isItemDisabled(el) {
+    return el.hasAttribute('data-disabled') || el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true';
+}
+
+/**
+ * Finds the next enabled item index, wrapping around.
+ * @param {HTMLElement[]} items
+ * @param {number} currentIndex
+ * @returns {number} index of next enabled item, or -1 if none
+ */
+function findNextEnabled(items, currentIndex) {
+    for (let i = 1; i <= items.length; i++) {
+        const idx = (currentIndex + i) % items.length;
+        if (!isItemDisabled(items[idx])) return idx;
+    }
+    return -1;
+}
+
+/**
+ * Finds the previous enabled item index, wrapping around.
+ * @param {HTMLElement[]} items
+ * @param {number} currentIndex
+ * @returns {number} index of previous enabled item, or -1 if none
+ */
+function findPrevEnabled(items, currentIndex) {
+    for (let i = 1; i <= items.length; i++) {
+        const idx = (currentIndex - i + items.length) % items.length;
+        if (!isItemDisabled(items[idx])) return idx;
+    }
+    return -1;
+}
+
 // --- Utilities ---
 
 /**

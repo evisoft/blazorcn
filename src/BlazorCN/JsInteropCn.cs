@@ -86,6 +86,35 @@ public sealed class JsInteropCn : IAsyncDisposable
         await module.InvokeVoidAsync("destroyFloating", id);
     }
 
+    /// <summary>
+    /// Sets up keyboard navigation for a menu/list container.
+    /// Arrow keys navigate between items, Escape invokes .NET callback.
+    /// </summary>
+    public async ValueTask SetupKeyboardNavigationAsync<T>(
+        ElementReference container, string id,
+        DotNetObjectReference<T> dotnetRef, string escapeMethodName,
+        string itemSelector = "[data-menu-item]",
+        string orientation = "vertical") where T : class
+    {
+        var module = await GetModuleAsync();
+        var jsOptions = new
+        {
+            selector = itemSelector,
+            orientation
+        };
+        await module.InvokeVoidAsync(
+            "setupKeyboardNavigation", container, id, dotnetRef, escapeMethodName, jsOptions);
+    }
+
+    /// <summary>
+    /// Cleans up keyboard navigation for a given ID.
+    /// </summary>
+    public async ValueTask CleanupKeyboardNavigationAsync(string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("cleanupKeyboardNavigation", id);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_module is not null)
