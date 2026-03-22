@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddBlazorCN(this IServiceCollection services)
     {
         services.TryAddScoped<JsInteropCn>();
+        services.TryAddScoped<ToastService>();
         return services;
     }
 }
