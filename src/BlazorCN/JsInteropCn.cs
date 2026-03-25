@@ -9,6 +9,7 @@ namespace BlazorCN;
 public sealed class JsInteropCn : IAsyncDisposable, IDisposable
 {
     private readonly IJSRuntime _js;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
     private IJSObjectReference? _module;
 
     /// <summary>
@@ -21,8 +22,19 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
 
     private async ValueTask<IJSObjectReference> GetModuleAsync()
     {
-        return _module ??= await _js.InvokeAsync<IJSObjectReference>(
-            "import", "./_content/BlazorCN/blazorcn.js");
+        if (_module is not null) return _module;
+
+        await _initLock.WaitAsync();
+        try
+        {
+            // Double-check after acquiring lock
+            return _module ??= await _js.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/BlazorCN/blazorcn.js");
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     /// <summary>
@@ -133,9 +145,7 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        // Synchronous dispose for DI container compatibility.
-        // The module will be cleaned up by the JS runtime.
-        _module = null;
+        _initLock.Dispose();
     }
 
     /// <inheritdoc />
@@ -145,5 +155,6 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         {
             await _module.DisposeAsync();
         }
+        _initLock.Dispose();
     }
 }

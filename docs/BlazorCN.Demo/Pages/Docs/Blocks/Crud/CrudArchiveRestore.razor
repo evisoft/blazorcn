@@ -1,0 +1,160 @@
+@* ============================================================
+   Block: crud-archive-restore
+   Title: Crud Archive Restore
+   Description: Manage archived records with search, restore, and permanent delete capabilities
+   Long Description: Archiving is a safer alternative to hard deletion. This component provides a complete interface for managing archived items.
+   Dependencies: BadgeCn, ButtonCn, CheckboxCn, InputCn
+   Source: original/blocks/crud/crud-archive-restore.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-6 py-5">
+            <h2 class="text-sm font-medium">Archive Manager</h2>
+            <p class="mt-1 text-xs text-muted-foreground">
+                Restore or permanently delete archived items
+            </p>
+        </div>
+
+        <div class="border-b px-6 py-4">
+            <div class="relative">
+                <LucideSearchCn Size="16" Class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Placeholder="Search archived items..."
+                         Value="@_searchQuery"
+                         Class="h-8 border-0 bg-muted/50 pl-9 text-xs shadow-none focus-visible:ring-1" />
+            </div>
+        </div>
+
+        @if (_selected.Count > 0)
+        {
+            <div class="border-b bg-muted/50 px-6 py-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-muted-foreground">@_selected.Count selected</span>
+                    <div class="flex items-center gap-2">
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                  Class="h-7 gap-1 text-xs" @onclick="BulkRestore">
+                            <LucideRefreshCwCn Size="12" Class="size-3.5" />
+                            Restore All
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                  Class="h-7 gap-1 text-xs text-red-600 hover:text-red-600" @onclick="BulkDelete">
+                            <LucideTrashCn Size="12" Class="size-3.5" />
+                            Delete All
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div>
+            @{ var filtered = _items.Where(i => string.IsNullOrEmpty(_searchQuery) || i.Name.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) || i.Type.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) || i.ArchivedBy.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)).ToList(); }
+            @if (filtered.Count == 0)
+            {
+                <div class="px-6 py-12 text-center">
+                    <LucideArchiveCn Size="32" Class="mx-auto size-8 text-muted-foreground/40" />
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        @(!string.IsNullOrEmpty(_searchQuery) ? "No matching archived items" : "No archived items")
+                    </p>
+                </div>
+            }
+            else
+            {
+                @for (var idx = 0; idx < filtered.Count; idx++)
+                {
+                    var item = filtered[idx];
+                    <div class="@(idx != filtered.Count - 1 ? "border-b" : "")">
+                        <div role="button" tabindex="0"
+                             class="flex w-full cursor-pointer items-start gap-3 px-6 py-4 text-left transition-colors hover:bg-muted/50"
+                             @onclick="@(() => ToggleExpand(item.Id))">
+                            <div @onclick:stopPropagation="true">
+                                <CheckboxCn Checked="@_selected.Contains(item.Id)" Class="mt-0.5"
+                                            CheckedChanged="@(_ => ToggleSelect(item.Id))" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@item.Name</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary"
+                                             Class="@Cn.Merge("h-5 text-xs", GetTypeColor(item.Type))">
+                                        @item.Type
+                                    </BadgeCn>
+                                </div>
+                                <div class="mt-1 text-xs text-muted-foreground">
+                                    Archived @item.ArchivedDate by @item.ArchivedBy
+                                </div>
+                                @if (_expanded.Contains(item.Id))
+                                {
+                                    <div class="mt-2 font-mono text-xs text-muted-foreground">
+                                        ID: @item.OriginalId
+                                    </div>
+                                }
+                            </div>
+                            <LucideChevronRightCn Size="16"
+                                                  Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", _expanded.Contains(item.Id) ? "rotate-90" : "")" />
+                        </div>
+                        @if (_expanded.Contains(item.Id))
+                        {
+                            <div class="border-t bg-muted/30 px-6 py-3">
+                                <div class="flex items-center gap-2">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                              Class="h-7 gap-1 text-xs" @onclick="@(() => Restore(item.Id))">
+                                        <LucideRefreshCwCn Size="12" Class="size-3.5" />
+                                        Restore
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                              Class="h-7 gap-1 text-xs text-red-600 hover:text-red-600"
+                                              @onclick="@(() => PermanentDelete(item.Id))">
+                                        <LucideTrashCn Size="12" Class="size-3.5" />
+                                        Delete Permanently
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="border-t bg-muted/30 px-6 py-3">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <LucideArchiveCn Size="12" Class="size-3.5" />
+                <span>@_items.Count archived items</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ArchivedItem(string Id, string Name, string Type, string ArchivedDate, string ArchivedBy, string OriginalId);
+
+    private string _searchQuery = "";
+    private readonly HashSet<string> _selected = [];
+    private readonly HashSet<string> _expanded = [];
+
+    private readonly List<ArchivedItem> _items =
+    [
+        new("1", "Q4 Marketing Campaign", "Project", "Mar 10, 2024", "Sarah Chen", "proj_7k2m9"),
+        new("2", "john.doe@example.com", "User", "Mar 8, 2024", "Admin", "user_4j8n1"),
+        new("3", "Product Launch Announcement", "Post", "Mar 5, 2024", "Mike Johnson", "post_2w9k5"),
+        new("4", "design-assets-v2.zip", "File", "Feb 28, 2024", "Emily Rodriguez", "file_8h3p7"),
+        new("5", "Spam comment from bot", "Comment", "Feb 25, 2024", "Tom Anderson", "cmt_1q5r9"),
+        new("6", "Legacy API Documentation", "Post", "Feb 20, 2024", "Lisa Park", "post_6m2k8"),
+        new("7", "test.user@example.com", "User", "Feb 15, 2024", "Admin", "user_9n4j2"),
+    ];
+
+    private void ToggleSelect(string id) { if (!_selected.Remove(id)) _selected.Add(id); }
+    private void ToggleExpand(string id) { if (!_expanded.Remove(id)) _expanded.Add(id); }
+    private void Restore(string id) { _items.RemoveAll(i => i.Id == id); _selected.Remove(id); }
+    private void PermanentDelete(string id) { _items.RemoveAll(i => i.Id == id); _selected.Remove(id); }
+    private void BulkRestore() { _items.RemoveAll(i => _selected.Contains(i.Id)); _selected.Clear(); }
+    private void BulkDelete() { _items.RemoveAll(i => _selected.Contains(i.Id)); _selected.Clear(); }
+
+    private static string GetTypeColor(string type) => type switch
+    {
+        "User" => "bg-blue-500/10 text-blue-600",
+        "Post" => "bg-emerald-500/10 text-emerald-600",
+        "Comment" => "bg-amber-500/10 text-amber-600",
+        "File" => "bg-purple-500/10 text-purple-600",
+        "Project" => "bg-red-500/10 text-red-600",
+        _ => "bg-muted text-muted-foreground",
+    };
+}

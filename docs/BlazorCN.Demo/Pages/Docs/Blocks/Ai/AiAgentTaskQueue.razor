@@ -1,0 +1,178 @@
+@* ===========================================================
+   Block: ai-agent-task-queue
+   Title: Ai Agent Task Queue
+   Description: React AI agent task queue block for Next.js with pending, in-progress, and completed sections, priority badges, and progress tracking using shadcn/ui and Tailwind CSS
+   Long Description: React AI Agent Plan Builder Block
+   Dependencies: BadgeCn
+   Source: original/blocks/ai/ai-agent-task-queue.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex-1">
+                <span class="font-medium text-sm">Task Queue</span>
+                <p class="text-muted-foreground text-xs">
+                    @_completed of @_tasks.Count tasks complete
+                </p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-mono font-normal text-xs">
+                @_completionPercent%
+            </BadgeCn>
+        </div>
+
+        @* Progress bar *@
+        <div class="border-b px-4 py-2">
+            <div class="h-1 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                    class="h-full rounded-full bg-foreground transition-all duration-300"
+                    style="width: @(_completionPercent)%">
+                </div>
+            </div>
+        </div>
+
+        @* Sections *@
+        <div>
+            @{ var visibleSections = _sections.Where(s => s.Tasks.Count > 0).ToList(); }
+            @foreach (var section in visibleSections)
+            {
+                var isLastSection = section == visibleSections.Last();
+                var isExpanded = _expandedSection == section.Key;
+
+                <div class="@(isLastSection ? "" : "border-b")">
+                    @* Section header *@
+                    <button
+                        type="button"
+                        @onclick="() => _expandedSection = isExpanded ? null : section.Key"
+                        class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", section.Dot)"></span>
+                        <span class="flex-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                            @(section.Label)
+                        </span>
+                        <span class="text-muted-foreground text-xs">@(section.Tasks.Count)</span>
+                        <LucideChevronRightCn Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @* Task rows *@
+                    @if (isExpanded)
+                    {
+                        <div>
+                            @foreach (var task in section.Tasks)
+                            {
+                                <div class="flex items-center gap-3 border-t px-4 py-2.5 transition-colors hover:bg-muted/50">
+                                    <button
+                                        type="button"
+                                        @onclick="() => ToggleTask(task.Id)"
+                                        class="@Cn.Merge("flex size-4 shrink-0 items-center justify-center rounded border transition-colors", task.Status == "completed" ? "border-emerald-500 bg-emerald-500 text-white" : "border-border hover:border-foreground/30")">
+                                        @if (task.Status == "completed")
+                                        {
+                                            <LucideCheckCn Size="12" Class="size-3" />
+                                        }
+                                    </button>
+
+                                    <div class="min-w-0 flex-1">
+                                        <span class="@Cn.Merge("text-sm", task.Status == "completed" ? "text-muted-foreground line-through" : "")">
+                                            @task.Title
+                                        </span>
+                                        @if (task.EstimatedTime != null && task.Status != "completed")
+                                        {
+                                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                                @task.EstimatedTime
+                                            </p>
+                                        }
+                                    </div>
+
+                                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", _priorityDot[task.Priority])"></span>
+                                        @_priorityLabel[task.Priority]
+                                    </span>
+
+                                    <span class="font-mono text-muted-foreground text-xs">
+                                        @task.Assignee.Split(' ').Last()
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-3 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @_tasks.Count(t => t.Priority == "critical") critical
+            </span>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @_tasks.Count(t => t.Priority == "high") high
+            </span>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                @_tasks.Count(t => t.Priority == "medium") medium
+            </span>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-muted-foreground/40"></span>
+                @_tasks.Count(t => t.Priority == "low") low
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expandedSection = "in-progress";
+
+    private record AgentTask(string Id, string Title, string Priority, string Status, string Assignee, string? EstimatedTime = null);
+
+    private record SectionInfo(string Key, string Label, List<AgentTask> Tasks, string Dot);
+
+    private List<AgentTask> _tasks = new()
+    {
+        new("t1", "Migrate authentication to JWT", "critical", "in-progress", "Agent Alpha", "~3 min"),
+        new("t2", "Update API rate limiting middleware", "high", "in-progress", "Agent Beta", "~2 min"),
+        new("t3", "Refactor database connection pooling", "high", "pending", "Agent Alpha", "~5 min"),
+        new("t4", "Add input validation to user endpoints", "medium", "pending", "Agent Beta", "~2 min"),
+        new("t5", "Write integration tests for auth flow", "medium", "pending", "Agent Alpha", "~4 min"),
+        new("t6", "Update OpenAPI specification", "low", "completed", "Agent Beta"),
+        new("t7", "Fix CORS configuration for staging", "high", "completed", "Agent Alpha"),
+        new("t8", "Remove deprecated v1 API routes", "low", "completed", "Agent Beta"),
+    };
+
+    private static readonly Dictionary<string, string> _priorityDot = new()
+    {
+        ["critical"] = "bg-red-500",
+        ["high"] = "bg-amber-500",
+        ["medium"] = "bg-blue-500",
+        ["low"] = "bg-muted-foreground/40",
+    };
+
+    private static readonly Dictionary<string, string> _priorityLabel = new()
+    {
+        ["critical"] = "Crit",
+        ["high"] = "High",
+        ["medium"] = "Med",
+        ["low"] = "Low",
+    };
+
+    private int _completed => _tasks.Count(t => t.Status == "completed");
+    private int _completionPercent => _tasks.Count > 0 ? (int)Math.Round((double)_completed / _tasks.Count * 100) : 0;
+
+    private List<SectionInfo> _sections => new()
+    {
+        new("in-progress", "In progress", _tasks.Where(t => t.Status == "in-progress").ToList(), "bg-blue-500"),
+        new("pending", "Queued", _tasks.Where(t => t.Status == "pending").ToList(), "bg-muted-foreground/40"),
+        new("completed", "Completed", _tasks.Where(t => t.Status == "completed").ToList(), "bg-emerald-500"),
+    };
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+        {
+            var task = _tasks[idx];
+            _tasks[idx] = task with { Status = task.Status == "completed" ? "pending" : "completed" };
+        }
+    }
+}

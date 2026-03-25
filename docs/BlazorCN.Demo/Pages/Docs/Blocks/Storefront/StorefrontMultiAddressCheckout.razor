@@ -1,0 +1,178 @@
+@* ============================================================
+   Block: storefront-multi-address-checkout
+   Title: Storefront Multi Address Checkout
+   Description: Ship to multiple addresses flow with item assignment, address list with item counts, per-address shipping method selection, and combined total
+   Dependencies: ButtonCn, LucideChevronRightCn, LucideMapPinCn, LucidePackageCn
+   Source: original/blocks/storefront/storefront-multi-address-checkout.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Ship to Multiple Addresses</h2>
+            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>@TotalItems items</span>
+                <span>&middot;</span>
+                <span>@_addresses.Length addresses</span>
+            </div>
+        </div>
+
+        @* Address List *@
+        <div>
+            @for (var i = 0; i < _addresses.Length; i++)
+            {
+                var addr = _addresses[i];
+                var isExpanded = _expanded == addr.Id;
+                var isLast = i == _addresses.Length - 1;
+                var subtotal = GetAddressSubtotal(addr);
+                var shippingCost = GetShippingCost(addr.Id);
+                var itemCount = addr.Items.Sum(item => item.Quantity);
+
+                <div class="@(!isLast ? "border-b" : "")">
+                    <button type="button"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="() => ToggleExpanded(addr.Id)">
+                        <LucideMapPinCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@addr.Label</span>
+                            <p class="mt-0.5 truncate text-xs text-muted-foreground">
+                                @addr.Street, @addr.City, @addr.State @addr.Zip
+                            </p>
+                        </div>
+                        <span class="mr-2 flex items-center gap-1 text-xs text-muted-foreground">
+                            <LucidePackageCn Size="16" Class="size-3" />
+                            @itemCount
+                        </span>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-11">
+                            @* Items for this address *@
+                            <div class="mb-3">
+                                <span class="mb-1.5 block text-xs font-medium text-muted-foreground">Items</span>
+                                @foreach (var item in addr.Items)
+                                {
+                                    <div class="flex items-center justify-between py-1">
+                                        <span class="text-sm">
+                                            @item.Name
+                                            @if (item.Quantity > 1)
+                                            {
+                                                <span class="ml-1 text-xs text-muted-foreground">x@item.Quantity</span>
+                                            }
+                                        </span>
+                                        <span class="text-sm tabular-nums">$@((item.Price * item.Quantity).ToString("F2"))</span>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Shipping method for this address *@
+                            <div class="mb-3">
+                                <span class="mb-1.5 block text-xs font-medium text-muted-foreground">Shipping method</span>
+                                <div class="flex flex-col gap-1">
+                                    @foreach (var method in _shippingMethods)
+                                    {
+                                        var isSelected = _shippingSelections[addr.Id] == method.Id;
+                                        <button type="button"
+                                                class="@Cn.Merge("flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs transition-colors", isSelected ? "bg-muted/50" : "hover:bg-muted/30")"
+                                                @onclick="() => SelectShipping(addr.Id, method.Id)">
+                                            <div>
+                                                <span class="font-medium">@method.Label</span>
+                                                <span class="ml-2 text-muted-foreground">@method.Estimate</span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="tabular-nums">$@method.Price.ToString("F2")</span>
+                                                @if (isSelected)
+                                                {
+                                                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                }
+                                            </div>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Address subtotal *@
+                            <div class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                                <span class="text-xs text-muted-foreground">Subtotal</span>
+                                <span class="text-xs font-medium tabular-nums">$@((subtotal + shippingCost).ToString("F2"))</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Order Total *@
+        <div class="border-t px-4 py-3">
+            <div class="flex flex-col gap-1">
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Items (@TotalItems)</span>
+                    <span class="tabular-nums">$@ItemsTotal.ToString("F2")</span>
+                </div>
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Shipping (@_addresses.Length addresses)</span>
+                    <span class="tabular-nums">$@ShippingTotal.ToString("F2")</span>
+                </div>
+                <div class="mt-1 flex items-center justify-between border-t pt-2">
+                    <span class="text-sm font-medium">Total</span>
+                    <span class="text-2xl font-semibold tabular-nums">$@OrderTotal.ToString("F2")</span>
+                </div>
+            </div>
+        </div>
+
+        @* Place Order *@
+        <div class="border-t px-4 py-3">
+            <ButtonCn Class="h-8 w-full text-xs" Size="ButtonSize.Sm">
+                Place Order
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CartItem(string Id, string Name, decimal Price, int Quantity);
+    private record ShippingMethod(string Id, string Label, decimal Price, string Estimate);
+    private record ShippingAddress(string Id, string Label, string Street, string City, string State, string Zip, CartItem[] Items);
+
+    private static readonly ShippingMethod[] _shippingMethods =
+    {
+        new("standard", "Standard", 5.99m, "5-7 business days"),
+        new("express", "Express", 12.99m, "2-3 business days"),
+        new("overnight", "Overnight", 24.99m, "Next business day")
+    };
+
+    private static readonly ShippingAddress[] _addresses =
+    {
+        new("addr1", "Home", "742 Evergreen Terrace", "Portland", "OR", "97201",
+            new[] { new CartItem("i1", "Merino Wool Sweater", 128.00m, 1), new CartItem("i2", "Leather Belt", 64.00m, 1) }),
+        new("addr2", "Office", "350 Fifth Avenue, Suite 4100", "New York", "NY", "10118",
+            new[] { new CartItem("i3", "Canvas Tote Bag", 45.00m, 2) }),
+        new("addr3", "Mom's House", "8 Hillside Drive", "Austin", "TX", "73301",
+            new[] { new CartItem("i4", "Silk Scarf", 89.00m, 1) })
+    };
+
+    private string? _expanded = "addr1";
+    private Dictionary<string, string> _shippingSelections = new()
+    {
+        ["addr1"] = "standard",
+        ["addr2"] = "express",
+        ["addr3"] = "standard"
+    };
+
+    private decimal GetAddressSubtotal(ShippingAddress addr) =>
+        addr.Items.Sum(item => item.Price * item.Quantity);
+
+    private decimal GetShippingCost(string addressId) =>
+        _shippingMethods.FirstOrDefault(m => m.Id == _shippingSelections[addressId])?.Price ?? 0;
+
+    private decimal ItemsTotal => _addresses.Sum(a => GetAddressSubtotal(a));
+    private decimal ShippingTotal => _addresses.Sum(a => GetShippingCost(a.Id));
+    private decimal OrderTotal => ItemsTotal + ShippingTotal;
+    private int TotalItems => _addresses.Sum(a => a.Items.Sum(i => i.Quantity));
+
+    private void ToggleExpanded(string id) => _expanded = _expanded == id ? null : id;
+    private void SelectShipping(string addressId, string methodId) => _shippingSelections[addressId] = methodId;
+}

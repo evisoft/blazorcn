@@ -12,9 +12,8 @@ public class SkeletonCnTests : BunitContext
         var cut = Render<SkeletonCn>();
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("skeleton");
+        div.ClassList.Should().Contain("cn-skeleton");
         div.ClassList.Should().Contain("animate-pulse");
-        div.ClassList.Should().Contain("rounded-md");
-        div.ClassList.Should().Contain("bg-accent");
     }
 
     [Fact]

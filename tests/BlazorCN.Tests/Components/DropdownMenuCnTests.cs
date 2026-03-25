@@ -161,14 +161,9 @@ public class DropdownMenuCnTests : BunitContext
             .AddChildContent<DropdownMenuContentCn>(c => c
                 .AddChildContent("Body")));
         var content = cut.Find("[data-slot='dropdown-menu-content']");
+        content.ClassList.Should().Contain("cn-dropdown-menu-content");
         content.ClassList.Should().Contain("z-50");
         content.ClassList.Should().Contain("overflow-hidden");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
-        content.ClassList.Should().Contain("p-1");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
     }
 
     [Fact]
@@ -235,18 +230,13 @@ public class DropdownMenuCnTests : BunitContext
             .AddChildContent<DropdownMenuItemCn>(i => i
                 .AddChildContent("Item")));
         var item = cut.Find("[data-slot='dropdown-menu-item']");
+        item.ClassList.Should().Contain("cn-dropdown-menu-item");
         item.ClassList.Should().Contain("relative");
         item.ClassList.Should().Contain("flex");
         item.ClassList.Should().Contain("cursor-default");
         item.ClassList.Should().Contain("select-none");
         item.ClassList.Should().Contain("items-center");
-        item.ClassList.Should().Contain("gap-2");
-        item.ClassList.Should().Contain("rounded-sm");
-        item.ClassList.Should().Contain("px-2");
-        item.ClassList.Should().Contain("py-1.5");
-        item.ClassList.Should().Contain("text-sm");
-        item.ClassList.Should().Contain("outline-none");
-        item.ClassList.Should().Contain("transition-colors");
+        item.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -279,7 +269,7 @@ public class DropdownMenuCnTests : BunitContext
                 .Add(x => x.Variant, "destructive")
                 .AddChildContent("Delete")));
         var item = cut.Find("[data-slot='dropdown-menu-item']");
-        item.ClassList.Should().Contain("text-destructive");
+        item.GetAttribute("data-variant").Should().Be("destructive");
     }
 
     [Fact]
@@ -290,7 +280,7 @@ public class DropdownMenuCnTests : BunitContext
             .AddChildContent<DropdownMenuItemCn>(i => i
                 .Add(x => x.Inset, true)
                 .AddChildContent("Item")));
-        cut.Find("[data-slot='dropdown-menu-item']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='dropdown-menu-item']").GetAttribute("data-inset").Should().NotBeNull();
     }
 
     [Fact]
@@ -370,10 +360,7 @@ public class DropdownMenuCnTests : BunitContext
     {
         var cut = Render<DropdownMenuLabelCn>(p => p.AddChildContent("Label"));
         var el = cut.Find("[data-slot='dropdown-menu-label']");
-        el.ClassList.Should().Contain("px-2");
-        el.ClassList.Should().Contain("py-1.5");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("font-semibold");
+        el.ClassList.Should().Contain("cn-dropdown-menu-label");
     }
 
     [Fact]
@@ -382,7 +369,7 @@ public class DropdownMenuCnTests : BunitContext
         var cut = Render<DropdownMenuLabelCn>(p => p
             .Add(c => c.Inset, true)
             .AddChildContent("Label"));
-        cut.Find("[data-slot='dropdown-menu-label']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='dropdown-menu-label']").GetAttribute("data-inset").Should().NotBeNull();
     }
 
     [Fact]
@@ -415,10 +402,7 @@ public class DropdownMenuCnTests : BunitContext
     {
         var cut = Render<DropdownMenuSeparatorCn>();
         var el = cut.Find("[data-slot='dropdown-menu-separator']");
-        el.ClassList.Should().Contain("-mx-1");
-        el.ClassList.Should().Contain("my-1");
-        el.ClassList.Should().Contain("h-px");
-        el.ClassList.Should().Contain("bg-muted");
+        el.ClassList.Should().Contain("cn-dropdown-menu-separator");
     }
 
     [Fact]
@@ -443,10 +427,7 @@ public class DropdownMenuCnTests : BunitContext
     {
         var cut = Render<DropdownMenuShortcutCn>(p => p.AddChildContent("Ctrl+K"));
         var el = cut.Find("[data-slot='dropdown-menu-shortcut']");
-        el.ClassList.Should().Contain("ml-auto");
-        el.ClassList.Should().Contain("text-xs");
-        el.ClassList.Should().Contain("tracking-widest");
-        el.ClassList.Should().Contain("opacity-60");
+        el.ClassList.Should().Contain("cn-dropdown-menu-shortcut");
     }
 
     [Fact]
@@ -697,15 +678,11 @@ public class DropdownMenuCnTests : BunitContext
             .AddChildContent<DropdownMenuSubTriggerCn>(t => t
                 .AddChildContent("More")));
         var el = cut.Find("[data-slot='dropdown-menu-sub-trigger']");
+        el.ClassList.Should().Contain("cn-dropdown-menu-sub-trigger");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("cursor-default");
         el.ClassList.Should().Contain("select-none");
         el.ClassList.Should().Contain("items-center");
-        el.ClassList.Should().Contain("gap-2");
-        el.ClassList.Should().Contain("rounded-sm");
-        el.ClassList.Should().Contain("px-2");
-        el.ClassList.Should().Contain("py-1.5");
-        el.ClassList.Should().Contain("text-sm");
     }
 
     [Fact]
@@ -715,7 +692,7 @@ public class DropdownMenuCnTests : BunitContext
             .AddChildContent<DropdownMenuSubTriggerCn>(t => t
                 .Add(c => c.Inset, true)
                 .AddChildContent("More")));
-        cut.Find("[data-slot='dropdown-menu-sub-trigger']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='dropdown-menu-sub-trigger']").GetAttribute("data-inset").Should().NotBeNull();
     }
 
     // --- DropdownMenuSubContentCn ---
@@ -766,14 +743,9 @@ public class DropdownMenuCnTests : BunitContext
 
         cut.Find("[data-slot='dropdown-menu-sub-trigger']").Click();
         var content = cut.Find("[data-slot='dropdown-menu-sub-content']");
+        content.ClassList.Should().Contain("cn-dropdown-menu-sub-content");
         content.ClassList.Should().Contain("z-50");
         content.ClassList.Should().Contain("overflow-hidden");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
-        content.ClassList.Should().Contain("p-1");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
     }
 
     [Fact]
@@ -810,6 +782,50 @@ public class DropdownMenuCnTests : BunitContext
 
         cut.Find("[data-slot='dropdown-menu-sub-trigger']").Click();
         cut.Find("[data-slot='dropdown-menu-sub-content']").GetAttribute("data-align").Should().Be("start");
+    }
+
+    // --- ARIA ---
+
+    [Fact]
+    public void DropdownMenuTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<DropdownMenuCn>(p => p
+            .AddChildContent<DropdownMenuTriggerCn>(t => t
+                .AddChildContent("Open")));
+        var trigger = cut.Find("[data-slot='dropdown-menu-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
+
+    [Fact]
+    public void DropdownMenuTrigger_Has_AriaHasPopup_Menu()
+    {
+        var cut = Render<DropdownMenuCn>(p => p
+            .AddChildContent<DropdownMenuTriggerCn>(t => t
+                .AddChildContent("Open")));
+        cut.Find("[data-slot='dropdown-menu-trigger']").GetAttribute("aria-haspopup").Should().Be("menu");
+    }
+
+    [Fact]
+    public void DropdownMenuSubTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<DropdownMenuSubCn>(p => p
+            .AddChildContent<DropdownMenuSubTriggerCn>(t => t
+                .AddChildContent("More")));
+        var trigger = cut.Find("[data-slot='dropdown-menu-sub-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
+
+    [Fact]
+    public void DropdownMenuSubTrigger_Has_AriaHasPopup_Menu()
+    {
+        var cut = Render<DropdownMenuSubCn>(p => p
+            .AddChildContent<DropdownMenuSubTriggerCn>(t => t
+                .AddChildContent("More")));
+        cut.Find("[data-slot='dropdown-menu-sub-trigger']").GetAttribute("aria-haspopup").Should().Be("menu");
     }
 
     // --- Integration ---

@@ -1,0 +1,203 @@
+@* ============================================================
+   Block: tables-scheduling
+   Title: Tables Scheduling
+   Description: Table component with time slot scheduling grid showing availability for booking and calendar interfaces
+   Dependencies: BadgeCn, TableCn, TooltipCn
+   Source: original/blocks/tables/tables-scheduling.tsx
+   ============================================================ *@
+
+<div style="width: 900px">
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold">Weekly Schedule</h3>
+                <p class="text-sm text-muted-foreground">Jan 15 - Jan 19, 2024</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <BadgeCn Class="gap-1 border-green-200 text-green-700" Variant="BadgeVariant.Outline">
+                    <div class="h-2 w-2 rounded-full bg-green-500"></div>
+                    @_availableCount available
+                </BadgeCn>
+                <BadgeCn Class="gap-1" Variant="BadgeVariant.Outline">
+                    <div class="h-2 w-2 rounded-full bg-primary"></div>
+                    @_bookedCount booked
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <TableCn style="width: 850px">
+                <TableHeaderCn>
+                    <TableRowCn>
+                        <TableHeadCn Class="w-24 font-semibold text-foreground">
+                            <LucideClockCn Size="16" Class="h-4 w-4" />
+                        </TableHeadCn>
+                        @foreach (var day in _days)
+                        {
+                            <TableHeadCn Class="font-semibold text-foreground text-center">
+                                <div class="flex flex-col items-center">
+                                    <span>@day</span>
+                                    <span class="text-xs font-normal text-muted-foreground">@GetDatePart(day)</span>
+                                </div>
+                            </TableHeadCn>
+                        }
+                    </TableRowCn>
+                </TableHeaderCn>
+                <TableBodyCn>
+                    @foreach (var row in _schedule)
+                    {
+                        <TableRowCn>
+                            <TableCellCn Class="font-mono text-sm text-muted-foreground">@row.Time</TableCellCn>
+                            @foreach (var day in _days)
+                            {
+                                var slot = row.Slots[day];
+                                var time = row.Time;
+
+                                <TableCellCn Class="p-1">
+                                    @if (slot.Status == "unavailable")
+                                    {
+                                        <div class="h-10 w-full rounded bg-muted/50 flex items-center justify-center">
+                                            <LucideXCn Size="12" Class="h-3 w-3 text-muted-foreground/50" />
+                                        </div>
+                                    }
+                                    else if (slot.Status == "booked")
+                                    {
+                                        <TooltipCn>
+                                            <TooltipTriggerCn>
+                                                <div class="h-10 w-full rounded bg-primary/10 border border-primary/20 flex items-center justify-center px-2 cursor-default">
+                                                    <span class="text-xs font-medium text-primary truncate">@slot.Title</span>
+                                                </div>
+                                            </TooltipTriggerCn>
+                                            <TooltipContentCn>
+                                                <div class="space-y-1">
+                                                    <p class="font-medium">@slot.Title</p>
+                                                    <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <LucideUserCn Size="12" Class="h-3 w-3" />
+                                                        <span>@slot.BookedBy</span>
+                                                    </div>
+                                                    <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                                                        <LucideClockCn Size="12" Class="h-3 w-3" />
+                                                        <span>@time</span>
+                                                    </div>
+                                                </div>
+                                            </TooltipContentCn>
+                                        </TooltipCn>
+                                    }
+                                    else
+                                    {
+                                        <TooltipCn>
+                                            <TooltipTriggerCn>
+                                                <button type="button"
+                                                        class="h-10 w-full rounded border border-dashed border-green-300 bg-green-50/50 hover:bg-green-100 hover:border-green-400 transition-colors flex items-center justify-center"
+                                                        @onclick="() => HandleBook(day, time)">
+                                                </button>
+                                            </TooltipTriggerCn>
+                                            <TooltipContentCn>
+                                                <p>Click to book</p>
+                                            </TooltipContentCn>
+                                        </TooltipCn>
+                                    }
+                                </TableCellCn>
+                            }
+                        </TableRowCn>
+                    }
+                </TableBodyCn>
+            </TableCn>
+        </div>
+
+        <div class="flex items-center gap-6 text-xs text-muted-foreground">
+            <div class="flex items-center gap-1.5">
+                <div class="h-4 w-8 rounded border border-dashed border-green-300 bg-green-50/50"></div>
+                <span>Available - click to book</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="h-4 w-8 rounded bg-primary/10 border border-primary/20"></div>
+                <span>Booked - hover for details</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="h-4 w-8 rounded bg-muted/50"></div>
+                <span>Unavailable</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly string[] _days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+    private class SlotInfo
+    {
+        public string Status { get; set; } = "available";
+        public string? BookedBy { get; set; }
+        public string? Title { get; set; }
+    }
+
+    private class TimeRow
+    {
+        public string Time { get; set; } = "";
+        public Dictionary<string, SlotInfo> Slots { get; set; } = new();
+    }
+
+    private List<TimeRow> _schedule = null!;
+    private int _availableCount;
+    private int _bookedCount;
+
+    protected override void OnInitialized()
+    {
+        _schedule = new List<TimeRow>
+        {
+            MakeRow("9:00 AM", ("booked","Sarah Chen","Project Review"), ("available",null,null), ("booked","Team","Standup"), ("available",null,null), ("booked","Team","Standup")),
+            MakeRow("9:30 AM", ("booked","Sarah Chen","Project Review"), ("available",null,null), ("available",null,null), ("available",null,null), ("available",null,null)),
+            MakeRow("10:00 AM", ("available",null,null), ("booked","Marcus Johnson","1:1 Meeting"), ("available",null,null), ("booked","Emily Rodriguez","Design Review"), ("available",null,null)),
+            MakeRow("10:30 AM", ("available",null,null), ("booked","Marcus Johnson","1:1 Meeting"), ("available",null,null), ("booked","Emily Rodriguez","Design Review"), ("unavailable",null,null)),
+            MakeRow("11:00 AM", ("booked","Client","Client Call"), ("available",null,null), ("booked","David Kim","Tech Sync"), ("available",null,null), ("unavailable",null,null)),
+            MakeRow("11:30 AM", ("booked","Client","Client Call"), ("available",null,null), ("available",null,null), ("available",null,null), ("unavailable",null,null)),
+            MakeRow("12:00 PM", ("unavailable",null,null), ("unavailable",null,null), ("unavailable",null,null), ("unavailable",null,null), ("unavailable",null,null)),
+            MakeRow("12:30 PM", ("unavailable",null,null), ("unavailable",null,null), ("unavailable",null,null), ("unavailable",null,null), ("unavailable",null,null)),
+            MakeRow("1:00 PM", ("available",null,null), ("available",null,null), ("available",null,null), ("booked","Lisa Thompson","Interview"), ("available",null,null)),
+            MakeRow("1:30 PM", ("available",null,null), ("booked","James Wilson","Planning"), ("available",null,null), ("booked","Lisa Thompson","Interview"), ("available",null,null)),
+            MakeRow("2:00 PM", ("booked","Anna Martinez","Sprint Review"), ("booked","James Wilson","Planning"), ("available",null,null), ("available",null,null), ("booked","Team","Retrospective")),
+            MakeRow("2:30 PM", ("booked","Anna Martinez","Sprint Review"), ("available",null,null), ("available",null,null), ("available",null,null), ("booked","Team","Retrospective")),
+        };
+        RecalcCounts();
+    }
+
+    private static TimeRow MakeRow(string time, params (string status, string? bookedBy, string? title)[] daySlots)
+    {
+        var row = new TimeRow { Time = time };
+        for (var i = 0; i < _days.Length && i < daySlots.Length; i++)
+        {
+            var (s, b, t) = daySlots[i];
+            row.Slots[_days[i]] = new SlotInfo { Status = s, BookedBy = b, Title = t };
+        }
+        return row;
+    }
+
+    private void RecalcCounts()
+    {
+        _availableCount = _schedule.Sum(r => r.Slots.Values.Count(s => s.Status == "available"));
+        _bookedCount = _schedule.Sum(r => r.Slots.Values.Count(s => s.Status == "booked"));
+    }
+
+    private void HandleBook(string day, string time)
+    {
+        var row = _schedule.FirstOrDefault(r => r.Time == time);
+        if (row != null && row.Slots.TryGetValue(day, out var slot) && slot.Status == "available")
+        {
+            slot.Status = "booked";
+            slot.BookedBy = "You";
+            slot.Title = "New Booking";
+            RecalcCounts();
+        }
+    }
+
+    private static string GetDatePart(string day) => day switch
+    {
+        "Mon" => " Jan 15",
+        "Tue" => " Jan 16",
+        "Wed" => " Jan 17",
+        "Thu" => " Jan 18",
+        "Fri" => " Jan 19",
+        _ => "",
+    };
+}

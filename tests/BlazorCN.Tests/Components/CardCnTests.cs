@@ -12,10 +12,9 @@ public class CardCnTests : BunitContext
         var cut = Render<CardCn>(p => p.AddChildContent("Card content"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("card");
-        div.ClassList.Should().Contain("rounded-xl");
-        div.ClassList.Should().Contain("border");
-        div.ClassList.Should().Contain("bg-card");
-        div.ClassList.Should().Contain("shadow-sm");
+        div.ClassList.Should().Contain("cn-card");
+        div.ClassList.Should().Contain("flex");
+        div.ClassList.Should().Contain("flex-col");
     }
 
     [Fact]
@@ -24,8 +23,8 @@ public class CardCnTests : BunitContext
         var cut = Render<CardHeaderCn>(p => p.AddChildContent("Header"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("card-header");
+        div.ClassList.Should().Contain("cn-card-header");
         div.ClassList.Should().Contain("grid");
-        div.ClassList.Should().Contain("px-6");
     }
 
     [Fact]
@@ -34,7 +33,7 @@ public class CardCnTests : BunitContext
         var cut = Render<CardTitleCn>(p => p.AddChildContent("Title"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("card-title");
-        div.ClassList.Should().Contain("font-semibold");
+        div.ClassList.Should().Contain("cn-card-title");
     }
 
     [Fact]
@@ -43,7 +42,7 @@ public class CardCnTests : BunitContext
         var cut = Render<CardDescriptionCn>(p => p.AddChildContent("Description"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("card-description");
-        div.ClassList.Should().Contain("text-muted-foreground");
+        div.ClassList.Should().Contain("cn-card-description");
     }
 
     [Fact]
@@ -61,7 +60,7 @@ public class CardCnTests : BunitContext
         var cut = Render<CardContentCn>(p => p.AddChildContent("Content"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("card-content");
-        div.ClassList.Should().Contain("px-6");
+        div.ClassList.Should().Contain("cn-card-content");
     }
 
     [Fact]
@@ -70,7 +69,7 @@ public class CardCnTests : BunitContext
         var cut = Render<CardFooterCn>(p => p.AddChildContent("Footer"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("card-footer");
-        div.ClassList.Should().Contain("px-6");
+        div.ClassList.Should().Contain("cn-card-footer");
         div.ClassList.Should().Contain("items-center");
     }
 

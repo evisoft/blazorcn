@@ -1,0 +1,274 @@
+@* ============================================================
+   Block: storefront-tax-calculator
+   Title: Storefront Tax Calculator
+   Description: Tax estimation panel with country and state selector, tax rate display, VAT input for B2B, and itemized tax breakdown
+   Dependencies: ButtonCn, InputCn, LabelCn, LucideBuildingCn, LucideGlobeCn, LucideReceiptTextCn, SwitchCn
+   Source: original/blocks/storefront/storefront-tax-calculator.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideReceiptTextCn Size="16" Class="size-4 text-muted-foreground" />
+                <h2 class="text-sm font-medium">Tax Estimator</h2>
+            </div>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Calculate applicable taxes for your order
+            </p>
+        </div>
+
+        @* Country & State Selector *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="flex-1">
+                    <LabelCn Class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        Country
+                    </LabelCn>
+                    <select class="h-8 w-full rounded-md border bg-transparent px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                            value="@_country"
+                            @onchange="OnCountryChange">
+                        @foreach (var kvp in _countries)
+                        {
+                            <option value="@kvp.Key">@kvp.Value</option>
+                        }
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <LabelCn Class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        State / Region
+                    </LabelCn>
+                    <select class="h-8 w-full rounded-md border bg-transparent px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                            value="@_state"
+                            @onchange="OnStateChange">
+                        @foreach (var kvp in AvailableStates)
+                        {
+                            <option value="@kvp.Key">@kvp.Value</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        @* Tax Rate & Mode *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium">@TaxInfo.Label</p>
+                    <p class="text-xs text-muted-foreground">
+                        @if (_vatApplied)
+                        {
+                            <text>VAT exempt (B2B)</text>
+                        }
+                        else
+                        {
+                            @($"{TaxInfo.Rate}% tax rate")
+                        }
+                    </p>
+                </div>
+                <span class="text-2xl font-semibold tabular-nums">
+                    @(_vatApplied ? "0" : TaxInfo.Rate.ToString())%
+                </span>
+            </div>
+            <div class="mt-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideGlobeCn Size="16" Class="size-3.5 text-muted-foreground" />
+                    <span class="text-xs text-muted-foreground">Tax-inclusive pricing</span>
+                </div>
+                <SwitchCn @bind-Checked="_taxInclusive" />
+            </div>
+        </div>
+
+        @* VAT Registration *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideBuildingCn Size="16" Class="size-3.5 text-muted-foreground" />
+                <p class="text-xs font-medium text-muted-foreground">VAT Registration (B2B)</p>
+            </div>
+            <div class="mt-2 flex items-center gap-2">
+                <InputCn Class="h-8 flex-1 text-sm"
+                         Disabled="@_vatApplied"
+                         Placeholder="e.g. DE123456789"
+                         @bind-Value="_vatNumber" />
+                @if (_vatApplied)
+                {
+                    <ButtonCn Class="h-8 px-3 text-xs"
+                              Variant="ButtonVariant.Ghost"
+                              @onclick="HandleRemoveVat">
+                        Remove
+                    </ButtonCn>
+                }
+                else
+                {
+                    <ButtonCn Class="h-8 px-3 text-xs"
+                              Disabled="@(_vatNumber.Trim().Length < 8)"
+                              Variant="ButtonVariant.Outline"
+                              @onclick="HandleValidateVat">
+                        Validate
+                    </ButtonCn>
+                }
+            </div>
+            @if (_vatApplied)
+            {
+                <div class="mt-2 flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    <span class="text-xs text-emerald-600 dark:text-emerald-400">VAT number verified &mdash; tax exempt</span>
+                </div>
+            }
+        </div>
+
+        @* Itemized Tax Breakdown *@
+        <div class="border-b px-4 py-3">
+            <p class="mb-2 text-xs font-medium text-muted-foreground">Itemized Breakdown</p>
+            <div class="space-y-2">
+                @foreach (var item in ItemTaxes)
+                {
+                    <div class="flex items-center justify-between">
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@item.Name</span>
+                            <p class="text-xs text-muted-foreground">
+                                @item.Quantity x $@item.UnitPrice.ToString("F2")
+                            </p>
+                        </div>
+                        <div class="shrink-0 text-right">
+                            <p class="text-sm tabular-nums">$@item.LineTotal.ToString("F2")</p>
+                            <p class="text-xs tabular-nums text-muted-foreground">
+                                +$@item.Tax.ToString("F2") tax
+                            </p>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="px-4 py-3">
+            <div class="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Subtotal</span>
+                <span class="tabular-nums">$@Subtotal.ToString("F2")</span>
+            </div>
+            <div class="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Tax (@(_vatApplied ? "exempt" : $"{EffectiveRate}%"))</span>
+                <span class="tabular-nums">$@TotalTax.ToString("F2")</span>
+            </div>
+            <div class="mt-2 flex items-center justify-between border-t pt-2">
+                <span class="text-sm font-medium">Estimated Total</span>
+                <span class="text-2xl font-semibold tabular-nums">$@GrandTotal.ToString("F2")</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CartItem(string Id, string Name, int Quantity, decimal UnitPrice);
+    private record TaxRateInfo(decimal Rate, string Label);
+    private record ItemTax(string Id, string Name, int Quantity, decimal UnitPrice, decimal LineTotal, decimal Tax);
+
+    private static readonly CartItem[] _cartItems =
+    {
+        new("1", "Ergonomic Office Chair", 1, 549.0m),
+        new("2", "Wireless Keyboard", 2, 79.0m),
+        new("3", "USB-C Monitor Cable", 3, 24.99m)
+    };
+
+    private static readonly Dictionary<string, Dictionary<string, TaxRateInfo>> _taxRates = new()
+    {
+        ["US"] = new()
+        {
+            ["CA"] = new(7.25m, "California Sales Tax"),
+            ["NY"] = new(8.0m, "New York Sales Tax"),
+            ["TX"] = new(6.25m, "Texas Sales Tax"),
+            ["WA"] = new(6.5m, "Washington Sales Tax"),
+            ["OR"] = new(0m, "Oregon (No Sales Tax)")
+        },
+        ["GB"] = new()
+        {
+            ["EN"] = new(20m, "UK VAT"),
+            ["SC"] = new(20m, "UK VAT")
+        },
+        ["DE"] = new()
+        {
+            ["BY"] = new(19m, "German VAT (MwSt)"),
+            ["BE"] = new(19m, "German VAT (MwSt)")
+        },
+        ["CA"] = new()
+        {
+            ["ON"] = new(13m, "Ontario HST"),
+            ["BC"] = new(12m, "British Columbia PST + GST"),
+            ["AB"] = new(5m, "Alberta GST")
+        }
+    };
+
+    private static readonly Dictionary<string, string> _countries = new()
+    {
+        ["US"] = "United States",
+        ["GB"] = "United Kingdom",
+        ["DE"] = "Germany",
+        ["CA"] = "Canada"
+    };
+
+    private static readonly Dictionary<string, Dictionary<string, string>> _states = new()
+    {
+        ["US"] = new() { ["CA"] = "California", ["NY"] = "New York", ["TX"] = "Texas", ["WA"] = "Washington", ["OR"] = "Oregon" },
+        ["GB"] = new() { ["EN"] = "England", ["SC"] = "Scotland" },
+        ["DE"] = new() { ["BY"] = "Bavaria", ["BE"] = "Berlin" },
+        ["CA"] = new() { ["ON"] = "Ontario", ["BC"] = "British Columbia", ["AB"] = "Alberta" }
+    };
+
+    private string _country = "US";
+    private string _state = "CA";
+    private bool _taxInclusive;
+    private string _vatNumber = "";
+    private bool _vatApplied;
+
+    private Dictionary<string, string> AvailableStates =>
+        _states.GetValueOrDefault(_country) ?? new();
+
+    private TaxRateInfo TaxInfo =>
+        _taxRates.GetValueOrDefault(_country)?.GetValueOrDefault(_state) ?? new(0m, "No tax data");
+
+    private decimal EffectiveRate => _vatApplied ? 0m : TaxInfo.Rate;
+
+    private decimal Subtotal => _cartItems.Sum(i => i.UnitPrice * i.Quantity);
+
+    private ItemTax[] ItemTaxes => _cartItems.Select(item =>
+    {
+        var lineTotal = item.UnitPrice * item.Quantity;
+        var tax = _taxInclusive
+            ? lineTotal - lineTotal / (1m + EffectiveRate / 100m)
+            : lineTotal * (EffectiveRate / 100m);
+        return new ItemTax(item.Id, item.Name, item.Quantity, item.UnitPrice, lineTotal, Math.Round(tax, 2));
+    }).ToArray();
+
+    private decimal TotalTax => ItemTaxes.Sum(i => i.Tax);
+    private decimal GrandTotal => _taxInclusive ? Subtotal : Subtotal + TotalTax;
+
+    private void OnCountryChange(ChangeEventArgs e)
+    {
+        _country = e.Value?.ToString() ?? "US";
+        var states = AvailableStates;
+        _state = states.Keys.FirstOrDefault() ?? "";
+        _vatApplied = false;
+    }
+
+    private void OnStateChange(ChangeEventArgs e)
+    {
+        _state = e.Value?.ToString() ?? "";
+        _vatApplied = false;
+    }
+
+    private void HandleValidateVat()
+    {
+        if (_vatNumber.Trim().Length >= 8)
+        {
+            _vatApplied = true;
+        }
+    }
+
+    private void HandleRemoveVat()
+    {
+        _vatApplied = false;
+        _vatNumber = "";
+    }
+}

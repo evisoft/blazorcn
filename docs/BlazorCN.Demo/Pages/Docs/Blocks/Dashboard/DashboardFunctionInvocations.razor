@@ -1,0 +1,146 @@
+@* ============================================================
+   Block: dashboard-function-invocations
+   Title: Dashboard Function Invocations
+   Description: Animated React serverless function invocation metrics dashboard block for Next.js with seven Lambda-style functions showing invocation counts, average duration, cold start percentages, error rates, animated duration bars, and staggered row entrance animations using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Endpoint response time percentile tracking
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-function-invocations.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideZapCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Function Invocations</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">Serverless execution metrics</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span class="tabular-nums">@FormatCount(_totalInvocations) total</span>
+                <span class="text-muted-foreground">·</span>
+                <span class="tabular-nums">@(_avgColdStart.ToString("F1"))% cold starts</span>
+            </div>
+        </div>
+
+        @* Functions *@
+        <div>
+            @for (var i = 0; i < _functions.Length; i++)
+            {
+                var fn = _functions[i];
+                var isExpanded = _expanded == fn.Id;
+                var isLast = i == _functions.Length - 1;
+                var durationPct = Math.Min((double)fn.AvgDurationMs / _maxDuration * 100, 100);
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : fn.Id)"
+                        class="w-full px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="flex items-center gap-3">
+                            <div class="min-w-0 flex-1">
+                                <span class="font-mono font-medium text-sm">@fn.Name</span>
+                                <div class="mt-1 flex items-center gap-3 text-muted-foreground text-xs">
+                                    <span class="tabular-nums">@FormatCount(fn.Invocations) calls</span>
+                                    <span>·</span>
+                                    <span class="tabular-nums">@(fn.AvgDurationMs)ms avg</span>
+                                    <span>·</span>
+                                    <span class="tabular-nums">@(fn.ColdStartPct)% cold</span>
+                                    <span>·</span>
+                                    <span class="@(Cn.Merge("tabular-nums", ErrorColor(fn.ErrorRate)))">
+                                        @(fn.ErrorRate)% errors
+                                    </span>
+                                </div>
+                            </div>
+                            <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                        </div>
+
+                        @* Duration bar *@
+                        <div class="mt-2 flex items-center gap-3">
+                            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/50">
+                                <div class="@(Cn.Merge("h-full rounded-full", DurationColor(fn.AvgDurationMs)))"
+                                     style="@($"width: {durationPct:F1}%")">
+                                </div>
+                            </div>
+                            <span class="w-14 shrink-0 text-right font-mono text-muted-foreground text-xs tabular-nums">
+                                @(fn.AvgDurationMs)ms
+                            </span>
+                        </div>
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-3">
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                        <div>
+                                            <span class="text-muted-foreground">Runtime</span>
+                                            <p class="mt-0.5 font-medium">@fn.Runtime</p>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted-foreground">Memory</span>
+                                            <p class="mt-0.5 font-medium tabular-nums">@fn.MemoryMb MB</p>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted-foreground">Region</span>
+                                            <p class="mt-0.5 font-mono">@fn.Region</p>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted-foreground">Last invoked</span>
+                                            <p class="mt-0.5">@fn.LastInvoked</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded;
+    private const int _maxDuration = 5000;
+
+    private record ServerlessFunction(string Id, string Name, string Runtime, int Invocations, int AvgDurationMs, double ColdStartPct, int MemoryMb, double ErrorRate, string LastInvoked, string Region);
+
+    private static string FormatCount(int n)
+    {
+        if (n >= 1_000_000) return $"{n / 1_000_000.0:F1}M";
+        if (n >= 1_000) return $"{n / 1_000.0:F1}K";
+        return n.ToString();
+    }
+
+    private static string DurationColor(int ms)
+    {
+        if (ms > 1000) return "bg-red-500/70";
+        if (ms > 200) return "bg-amber-500/70";
+        return "bg-foreground/20";
+    }
+
+    private static string ErrorColor(double rate)
+    {
+        if (rate >= 2) return "text-red-600 dark:text-red-400";
+        if (rate >= 1) return "text-amber-600 dark:text-amber-400";
+        return "text-muted-foreground";
+    }
+
+    private static readonly ServerlessFunction[] _functions =
+    [
+        new("1", "api/auth/callback", "Node.js 20", 184920, 42, 3.2, 128, 0.02, "2 seconds ago", "us-east-1"),
+        new("2", "api/stripe/webhook", "Node.js 20", 29841, 187, 8.1, 256, 0.15, "14 seconds ago", "us-east-1"),
+        new("3", "api/search", "Node.js 20", 412038, 320, 1.4, 512, 0.08, "1 second ago", "us-east-1"),
+        new("4", "api/images/optimize", "Node.js 20", 87412, 1240, 12.3, 1024, 1.2, "8 seconds ago", "us-west-2"),
+        new("5", "api/pdf/generate", "Node.js 20", 14293, 2840, 18.7, 1024, 2.4, "3 minutes ago", "us-west-2"),
+        new("6", "api/cron/daily-digest", "Node.js 20", 730, 4200, 95.0, 512, 0.41, "6 hours ago", "us-east-1"),
+        new("7", "api/analytics/ingest", "Node.js 20", 1293847, 18, 0.3, 128, 0.01, "1 second ago", "us-east-1"),
+    ];
+
+    private static readonly int _totalInvocations = _functions.Sum(f => f.Invocations);
+    private static readonly double _avgColdStart = _functions.Sum(f => f.ColdStartPct * f.Invocations) / _totalInvocations;
+}

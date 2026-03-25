@@ -51,7 +51,8 @@ public class ToggleCnTests : BunitContext
     {
         var cut = Render<ToggleCn>(p => p.AddChildContent("Bold"));
         var button = cut.Find("button");
-        button.ClassList.Should().Contain("bg-transparent");
+        button.ClassList.Should().Contain("cn-toggle");
+        button.ClassList.Should().Contain("cn-toggle-variant-default");
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public class ToggleCnTests : BunitContext
             .Add(c => c.Variant, ToggleVariant.Outline)
             .AddChildContent("Bold"));
         var button = cut.Find("button");
-        button.ClassList.Should().Contain("border");
+        button.ClassList.Should().Contain("cn-toggle-variant-outline");
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public class ToggleCnTests : BunitContext
             .Add(c => c.Size, ToggleSize.Sm)
             .AddChildContent("Bold"));
         var button = cut.Find("button");
-        button.ClassList.Should().Contain("h-8");
+        button.ClassList.Should().Contain("cn-toggle-size-sm");
     }
 
     [Fact]
@@ -81,7 +82,7 @@ public class ToggleCnTests : BunitContext
             .Add(c => c.Size, ToggleSize.Lg)
             .AddChildContent("Bold"));
         var button = cut.Find("button");
-        button.ClassList.Should().Contain("h-10");
+        button.ClassList.Should().Contain("cn-toggle-size-lg");
     }
 
     [Fact]

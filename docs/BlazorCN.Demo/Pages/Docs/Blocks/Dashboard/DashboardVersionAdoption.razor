@@ -1,0 +1,183 @@
+@* ============================================================
+   Block: dashboard-version-adoption
+   Title: Dashboard Version Adoption
+   Description: Animated React API version migration tracker block for Next.js with version adoption rates, client migration progress, deprecation timelines, animated usage bars, and expandable version details using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Data migration progress monitoring
+   Dependencies: BadgeCn, ButtonCn
+   Source: original/blocks/dashboard/dashboard-version-adoption.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">API Version Adoption</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_totalClients total API consumers
+                </p>
+            </div>
+            @if (_deprecatedClients > 0)
+            {
+                <span class="flex items-center gap-1.5 text-amber-600 text-xs dark:text-amber-400">
+                    <LucideClockCn Size="12" Class="size-3" />
+                    @_deprecatedClients on deprecated
+                </span>
+            }
+        </div>
+
+        @* Distribution bar *@
+        <div class="border-b px-4 py-3">
+            <div class="flex h-3 overflow-hidden rounded-full bg-muted">
+                @foreach (var ver in _versions)
+                {
+                    var config = _statusConfig[ver.Status];
+                    <div class="@(Cn.Merge("h-full opacity-50", config.Dot))"
+                         style="@($"width: {ver.Adoption}%")"></div>
+                }
+            </div>
+            <div class="mt-2 flex items-center gap-4">
+                @foreach (var ver in _versions)
+                {
+                    var config = _statusConfig[ver.Status];
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@(Cn.Merge("size-1.5 rounded-full", config.Dot))"></span>
+                        @ver.Version
+                        <span class="tabular-nums">@ver.Adoption%</span>
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Version rows *@
+        <div>
+            @for (var i = 0; i < _versions.Length; i++)
+            {
+                var ver = _versions[i];
+                var isExpanded = _expanded == ver.Id;
+                var config = _statusConfig[ver.Status];
+                var isLast = i == _versions.Length - 1;
+
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : ver.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono font-semibold text-sm">@ver.Version</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@(Cn.Merge("font-normal text-[10px]", config.Badge))">
+                                    @config.Label
+                                </BadgeCn>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                <span class="tabular-nums">@ver.Clients clients</span>
+                                <span>&middot;</span>
+                                <span class="tabular-nums">@ver.RequestsPerDay/day</span>
+                                @if (!string.IsNullOrEmpty(ver.SunsetDate))
+                                {
+                                    <span>&middot;</span>
+                                    <span>Sunset @ver.SunsetDate</span>
+                                }
+                            </div>
+                        </div>
+
+                        @* Adoption bar *@
+                        <div class="flex w-24 shrink-0 items-center gap-2">
+                            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                <div class="@(Cn.Merge("h-full rounded-full opacity-50", config.Dot))"
+                                     style="@($"width: {ver.Adoption}%")"></div>
+                            </div>
+                            <span class="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">
+                                @ver.Adoption%
+                            </span>
+                        </div>
+
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-4 pl-9">
+                                <div class="mb-3 rounded-md bg-muted/50 p-3">
+                                    <span class="font-medium text-muted-foreground text-xs">
+                                        Top consumers
+                                    </span>
+                                    <div class="mt-2 space-y-1.5">
+                                        @foreach (var consumer in ver.TopConsumers)
+                                        {
+                                            <div class="flex items-center justify-between">
+                                                <span class="font-mono text-sm">@consumer.Name</span>
+                                                <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                                    @consumer.Requests
+                                                </span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                                    <span>Released @ver.ReleasedDate</span>
+                                    @if (ver.Status == "deprecated")
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="ml-auto h-7 text-xs">
+                                            Migration Guide
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded;
+
+    private record TopConsumer(string Name, string Requests);
+    private record VersionData(string Id, string Version, string Status, int Adoption, int Clients, string RequestsPerDay, string? SunsetDate, string ReleasedDate, TopConsumer[] TopConsumers);
+    private record StatusConfig(string Dot, string Label, string Badge);
+
+    private int _totalClients => _versions.Sum(v => v.Clients);
+    private int _deprecatedClients => _versions.Where(v => v.Status == "deprecated").Sum(v => v.Clients);
+
+    private readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["current"] = new StatusConfig("bg-emerald-500", "Current", "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"),
+        ["supported"] = new StatusConfig("bg-blue-500", "Supported", "bg-blue-500/10 text-blue-600 dark:text-blue-400"),
+        ["deprecated"] = new StatusConfig("bg-amber-500", "Deprecated", "bg-amber-500/10 text-amber-600 dark:text-amber-400"),
+        ["sunset"] = new StatusConfig("bg-red-500", "Sunset", "bg-red-500/10 text-red-600 dark:text-red-400")
+    };
+
+    private readonly VersionData[] _versions = new[]
+    {
+        new VersionData("v1", "v4", "current", 45, 342, "2.8M", null, "Jan 2026", new[]
+        {
+            new TopConsumer("acme-web-app", "820K/day"),
+            new TopConsumer("mobile-ios", "614K/day"),
+            new TopConsumer("partner-integration", "390K/day")
+        }),
+        new VersionData("v2", "v3", "supported", 38, 518, "2.4M", "Sep 2026", "Jun 2025", new[]
+        {
+            new TopConsumer("dashboard-v2", "540K/day"),
+            new TopConsumer("analytics-pipeline", "480K/day"),
+            new TopConsumer("third-party-crm", "310K/day")
+        }),
+        new VersionData("v3", "v2", "deprecated", 14, 127, "890K", "Jun 2026", "Nov 2024", new[]
+        {
+            new TopConsumer("legacy-backend", "320K/day"),
+            new TopConsumer("reporting-service", "180K/day"),
+            new TopConsumer("webhook-relay", "95K/day")
+        }),
+        new VersionData("v4", "v1", "deprecated", 3, 24, "190K", "Apr 2026", "Mar 2024", new[]
+        {
+            new TopConsumer("old-mobile-android", "110K/day"),
+            new TopConsumer("internal-tool", "52K/day")
+        })
+    };
+}

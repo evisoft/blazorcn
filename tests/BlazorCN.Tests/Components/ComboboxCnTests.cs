@@ -99,6 +99,7 @@ public class ComboboxCnTests : BunitContext
             .AddChildContent<ComboboxTriggerCn>(t => t
                 .AddChildContent("Open")));
         var el = cut.Find("[data-slot='combobox-trigger']");
+        el.ClassList.Should().Contain("cn-combobox-trigger");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("h-9");
         el.ClassList.Should().Contain("w-full");
@@ -192,14 +193,9 @@ public class ComboboxCnTests : BunitContext
             .AddChildContent<ComboboxContentCn>(c => c
                 .AddChildContent("Body")));
         var content = cut.Find("[data-slot='combobox-content']");
+        content.ClassList.Should().Contain("cn-combobox-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("overflow-hidden");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
         content.ClassList.Should().Contain("p-1");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
     }
 
     [Fact]
@@ -266,7 +262,7 @@ public class ComboboxCnTests : BunitContext
         el.ClassList.Should().Contain("rounded-md");
         el.ClassList.Should().Contain("bg-transparent");
         el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("outline-none");
+        el.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -398,18 +394,15 @@ public class ComboboxCnTests : BunitContext
                 .Add(x => x.Value, "val")
                 .AddChildContent("Item")));
         var item = cut.Find("[data-slot='combobox-item']");
+        item.ClassList.Should().Contain("cn-combobox-item");
         item.ClassList.Should().Contain("relative");
         item.ClassList.Should().Contain("flex");
         item.ClassList.Should().Contain("w-full");
         item.ClassList.Should().Contain("cursor-default");
         item.ClassList.Should().Contain("select-none");
         item.ClassList.Should().Contain("items-center");
-        item.ClassList.Should().Contain("rounded-sm");
-        item.ClassList.Should().Contain("py-1.5");
         item.ClassList.Should().Contain("pl-8");
-        item.ClassList.Should().Contain("pr-2");
-        item.ClassList.Should().Contain("text-sm");
-        item.ClassList.Should().Contain("outline-none");
+        item.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -534,10 +527,7 @@ public class ComboboxCnTests : BunitContext
     {
         var cut = Render<ComboboxSeparatorCn>();
         var el = cut.Find("[data-slot='combobox-separator']");
-        el.ClassList.Should().Contain("-mx-1");
-        el.ClassList.Should().Contain("my-1");
-        el.ClassList.Should().Contain("h-px");
-        el.ClassList.Should().Contain("bg-muted");
+        el.ClassList.Should().Contain("cn-combobox-separator");
     }
 
     [Fact]
@@ -546,6 +536,229 @@ public class ComboboxCnTests : BunitContext
         var cut = Render<ComboboxSeparatorCn>(p => p
             .Add(c => c.Class, "custom-sep"));
         cut.Find("[data-slot='combobox-separator']").ClassList.Should().Contain("custom-sep");
+    }
+
+    // --- ARIA ---
+
+    [Fact]
+    public void ComboboxTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .AddChildContent<ComboboxTriggerCn>(t => t
+                .AddChildContent("Open")));
+        var trigger = cut.Find("[data-slot='combobox-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
+
+    [Fact]
+    public void ComboboxTrigger_Has_AriaHasPopup_Listbox()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .AddChildContent<ComboboxTriggerCn>(t => t
+                .AddChildContent("Open")));
+        cut.Find("[data-slot='combobox-trigger']").GetAttribute("aria-haspopup").Should().Be("listbox");
+    }
+
+    [Fact]
+    public void ComboboxContent_Has_Role_Listbox()
+    {
+        SetupJsInterop();
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<ComboboxContentCn>(c => c
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='combobox-content']").GetAttribute("role").Should().Be("listbox");
+    }
+
+    [Fact]
+    public void ComboboxContent_Has_Default_AriaLabel()
+    {
+        SetupJsInterop();
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<ComboboxContentCn>(c => c
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='combobox-content']").GetAttribute("aria-label").Should().Be("Suggestions");
+    }
+
+    [Fact]
+    public void ComboboxContent_AriaLabel_Override_Via_AdditionalAttributes()
+    {
+        SetupJsInterop();
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<ComboboxContentCn>(c => c
+                .Add(x => x.AdditionalAttributes, new Dictionary<string, object?> { { "aria-label", "Search results" } })
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='combobox-content']").GetAttribute("aria-label").Should().Be("Search results");
+    }
+
+    [Fact]
+    public void ComboboxItem_Has_Role_Option()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<ComboboxItemCn>(i => i
+                .Add(x => x.Value, "val")
+                .AddChildContent("Item")));
+        cut.Find("[data-slot='combobox-item']").GetAttribute("role").Should().Be("option");
+    }
+
+    [Fact]
+    public void ComboboxItem_AriaSelected_Reflects_Selection()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Value, "apple")
+            .AddChildContent<ComboboxItemCn>(i => i
+                .Add(x => x.Value, "apple")
+                .AddChildContent("Apple")));
+        cut.Find("[data-slot='combobox-item']").GetAttribute("aria-selected").Should().Be("true");
+
+        var cut2 = Render<ComboboxCn>(p => p
+            .Add(c => c.Value, "banana")
+            .AddChildContent<ComboboxItemCn>(i => i
+                .Add(x => x.Value, "apple")
+                .AddChildContent("Apple")));
+        cut2.Find("[data-slot='combobox-item']").GetAttribute("aria-selected").Should().Be("false");
+    }
+
+    // --- Multiple Selection ---
+
+    [Fact]
+    public void Combobox_Multiple_Click_Toggles_Item_In_List()
+    {
+        List<string> selectedValues = [];
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Multiple, true)
+            .Add(c => c.Open, true)
+            .Add(c => c.SelectedValuesChanged, EventCallback.Factory.Create<List<string>>(this, v => selectedValues = v))
+            .AddChildContent(builder =>
+            {
+                builder.OpenComponent<ComboboxItemCn>(0);
+                builder.AddAttribute(1, "Value", "apple");
+                builder.AddAttribute(2, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Apple")));
+                builder.CloseComponent();
+                builder.OpenComponent<ComboboxItemCn>(3);
+                builder.AddAttribute(4, "Value", "banana");
+                builder.AddAttribute(5, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Banana")));
+                builder.CloseComponent();
+            }));
+
+        // Select apple
+        cut.FindAll("[data-slot='combobox-item']")[0].Click();
+        selectedValues.Should().Contain("apple");
+
+        // Select banana
+        cut.FindAll("[data-slot='combobox-item']")[1].Click();
+        selectedValues.Should().Contain("apple");
+        selectedValues.Should().Contain("banana");
+
+        // Deselect apple
+        cut.FindAll("[data-slot='combobox-item']")[0].Click();
+        selectedValues.Should().NotContain("apple");
+        selectedValues.Should().Contain("banana");
+    }
+
+    [Fact]
+    public void Combobox_Multiple_Does_Not_Close_On_Select()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Multiple, true)
+            .Add(c => c.Open, true)
+            .AddChildContent<ComboboxItemCn>(i => i
+                .Add(x => x.Value, "apple")
+                .AddChildContent("Apple")));
+
+        cut.Find("[data-slot='combobox-item']").Click();
+        cut.Find("[data-slot='combobox']").GetAttribute("data-state").Should().Be("open");
+    }
+
+    [Fact]
+    public void Combobox_Multiple_Shows_Check_For_Selected_Items()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Multiple, true)
+            .Add(c => c.SelectedValues, new List<string> { "apple" })
+            .AddChildContent(builder =>
+            {
+                builder.OpenComponent<ComboboxItemCn>(0);
+                builder.AddAttribute(1, "Value", "apple");
+                builder.AddAttribute(2, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Apple")));
+                builder.CloseComponent();
+                builder.OpenComponent<ComboboxItemCn>(3);
+                builder.AddAttribute(4, "Value", "banana");
+                builder.AddAttribute(5, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Banana")));
+                builder.CloseComponent();
+            }));
+
+        // Apple should show check icon
+        cut.FindAll("[data-slot='combobox-item']")[0].QuerySelectorAll("svg").Should().NotBeEmpty();
+        // Banana should not
+        cut.FindAll("[data-slot='combobox-item']")[1].QuerySelectorAll("svg").Should().BeEmpty();
+    }
+
+    // --- Clear ---
+
+    [Fact]
+    public void ComboboxTrigger_ShowClear_False_No_Clear_Button()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Value, "apple")
+            .AddChildContent<ComboboxTriggerCn>(t => t
+                .AddChildContent("Apple")));
+        cut.FindAll("[data-slot='combobox-clear']").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ComboboxTrigger_ShowClear_True_No_Value_No_Clear_Button()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .AddChildContent<ComboboxTriggerCn>(t => t
+                .Add(x => x.ShowClear, true)
+                .AddChildContent("Select...")));
+        cut.FindAll("[data-slot='combobox-clear']").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ComboboxTrigger_ShowClear_True_With_Value_Shows_Clear_Button()
+    {
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Value, "apple")
+            .AddChildContent<ComboboxTriggerCn>(t => t
+                .Add(x => x.ShowClear, true)
+                .AddChildContent("Apple")));
+        cut.Find("[data-slot='combobox-clear']").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ComboboxTrigger_Clear_Button_Clears_Value()
+    {
+        string? selectedValue = "apple";
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Value, "apple")
+            .Add(c => c.ValueChanged, EventCallback.Factory.Create<string?>(this, v => selectedValue = v))
+            .AddChildContent<ComboboxTriggerCn>(t => t
+                .Add(x => x.ShowClear, true)
+                .AddChildContent("Apple")));
+        cut.Find("[data-slot='combobox-clear']").Click();
+        selectedValue.Should().BeNull();
+    }
+
+    [Fact]
+    public void ComboboxTrigger_Clear_Multiple_Clears_All()
+    {
+        List<string> selectedValues = ["apple", "banana"];
+        var cut = Render<ComboboxCn>(p => p
+            .Add(c => c.Multiple, true)
+            .Add(c => c.SelectedValues, new List<string> { "apple", "banana" })
+            .Add(c => c.SelectedValuesChanged, EventCallback.Factory.Create<List<string>>(this, v => selectedValues = v))
+            .AddChildContent<ComboboxTriggerCn>(t => t
+                .Add(x => x.ShowClear, true)
+                .AddChildContent("2 selected")));
+        cut.Find("[data-slot='combobox-clear']").Click();
+        selectedValues.Should().BeEmpty();
     }
 
     // --- Integration ---

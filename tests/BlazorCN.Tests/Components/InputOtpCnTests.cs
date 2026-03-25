@@ -21,9 +21,9 @@ public class InputOtpCnTests : BunitContext
     {
         var cut = Render<InputOtpCn>(p => p.AddChildContent("Content"));
         var el = cut.Find("[data-slot='input-otp']");
+        el.ClassList.Should().Contain("cn-input-otp");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("items-center");
-        el.ClassList.Should().Contain("gap-2");
     }
 
     [Fact]
@@ -131,16 +131,11 @@ public class InputOtpCnTests : BunitContext
             .AddChildContent<InputOtpSlotCn>(s => s
                 .Add(c => c.Index, 0)));
         var el = cut.Find("[data-slot='input-otp-slot']");
+        el.ClassList.Should().Contain("cn-input-otp-slot");
         el.ClassList.Should().Contain("relative");
         el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("h-9");
-        el.ClassList.Should().Contain("w-9");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-center");
-        el.ClassList.Should().Contain("border-y");
-        el.ClassList.Should().Contain("border-r");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("shadow-sm");
     }
 
     [Fact]
@@ -237,6 +232,24 @@ public class InputOtpCnTests : BunitContext
         cut.Find("[data-slot='input-otp-separator']").ClassList.Should().Contain("custom-sep");
     }
 
+    // --- Focus/Blur behavior ---
+
+    [Fact]
+    public void InputOtpSlot_Becomes_Active_On_Focus()
+    {
+        var cut = Render<InputOtpCn>(p => p
+            .AddChildContent<InputOtpSlotCn>(s => s
+                .Add(c => c.Index, 0)));
+        // Initially not active
+        cut.Find("[data-slot='input-otp-slot']").GetAttribute("data-active").Should().Be("false");
+
+        // Focus the hidden input
+        cut.Find("[data-slot='input-otp'] input").Focus();
+
+        // Slot should now be active
+        cut.Find("[data-slot='input-otp-slot']").GetAttribute("data-active").Should().Be("true");
+    }
+
     // --- InputOtp Input behavior ---
 
     [Fact]
@@ -251,5 +264,42 @@ public class InputOtpCnTests : BunitContext
     {
         var cut = Render<InputOtpCn>(p => p.AddChildContent("Content"));
         cut.Find("[data-slot='input-otp'] input").GetAttribute("autocomplete").Should().Be("one-time-code");
+    }
+
+    // --- Pattern ---
+
+    [Fact]
+    public void InputOtp_Default_Pattern_Is_DigitsOnly()
+    {
+        var cut = Render<InputOtpCn>(p => p.AddChildContent("Content"));
+        var input = cut.Find("[data-slot='input-otp'] input");
+        input.GetAttribute("inputmode").Should().Be("numeric");
+    }
+
+    [Fact]
+    public void InputOtp_Alphanumeric_Pattern_Sets_Text_InputMode()
+    {
+        var cut = Render<InputOtpCn>(p => p
+            .Add(c => c.Pattern, InputOtpCn.RegexpOnlyDigitsAndChars)
+            .AddChildContent("Content"));
+        var input = cut.Find("[data-slot='input-otp'] input");
+        input.GetAttribute("inputmode").Should().Be("text");
+    }
+
+    [Fact]
+    public void InputOtp_Custom_InputMode_Overrides_Default()
+    {
+        var cut = Render<InputOtpCn>(p => p
+            .Add(c => c.InputMode, "tel")
+            .AddChildContent("Content"));
+        var input = cut.Find("[data-slot='input-otp'] input");
+        input.GetAttribute("inputmode").Should().Be("tel");
+    }
+
+    [Fact]
+    public void InputOtp_Pattern_Constants_Are_Defined()
+    {
+        InputOtpCn.RegexpOnlyDigits.Should().Be("[0-9]");
+        InputOtpCn.RegexpOnlyDigitsAndChars.Should().Be("[0-9a-zA-Z]");
     }
 }

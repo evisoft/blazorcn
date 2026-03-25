@@ -1,0 +1,296 @@
+@* ===========================================================
+   Block: settings-incident-escalation
+   Title: Settings Incident Escalation
+   Description: Incident escalation policy with multi-tier escalation levels, contact assignments, auto-escalation timers, and severity configuration
+   Dependencies: BadgeCn, ButtonCn, InputCn, LucideCheckCn, LucideChevronRightCn, LucideClockCn, LucidePhoneCn, LucidePlusCn, LucideTrashCn, LucideUserCn, SelectCn, SwitchCn
+   Source: original/blocks/settings/settings-incident-escalation.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <p class="text-sm font-medium">Incident escalation</p>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Define escalation tiers, contacts, and auto-escalation timers
+            </p>
+        </div>
+
+        @* Global settings *@
+        <div class="border-b px-4 py-3">
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <LucideClockCn Size="16" Class="size-3.5 text-muted-foreground" />
+                        <div>
+                            <p class="text-sm font-medium">Auto-escalation</p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Automatically escalate if not acknowledged within timeout
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="@($"flex items-center gap-1.5 text-xs {(_autoEscalation ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}")">
+                            <span class="@($"size-1.5 rounded-full {(_autoEscalation ? "bg-emerald-500" : "bg-muted-foreground/40")}")"></span>
+                            @(_autoEscalation ? "Active" : "Disabled")
+                        </span>
+                        <SwitchCn @bind-Checked="_autoEscalation" />
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <LucidePhoneCn Size="16" Class="size-3.5 text-muted-foreground" />
+                        <div>
+                            <p class="text-sm font-medium">Repeat alerts</p>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Re-notify every 5 minutes until acknowledged
+                            </p>
+                        </div>
+                    </div>
+                    <SwitchCn @bind-Checked="_repeatAlerts" />
+                </div>
+            </div>
+        </div>
+
+        @* Escalation tiers *@
+        <div>
+            <div class="px-4 py-3">
+                <p class="text-sm font-medium">Escalation tiers</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    @_tiers.Count tiers with @_tiers.Sum(t => t.Contacts.Count) total contacts
+                </p>
+            </div>
+            @for (var i = 0; i < _tiers.Count; i++)
+            {
+                var tier = _tiers[i];
+                var isExpanded = _expanded == tier.Id;
+                var isLast = i == _tiers.Count - 1;
+                var tierId = tier.Id;
+                var tierIndex = i;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            class="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => _expanded = isExpanded ? null : tierId)">
+                        <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
+                            @(tierIndex + 1)
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@tier.Label</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@tier.Description</p>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                            @(tier.TimeoutMinutes)m
+                        </BadgeCn>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="space-y-3 px-4 pb-4 pl-12">
+                            <div>
+                                <span class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                                    Timeout (minutes)
+                                </span>
+                                <InputCn Value="@tier.TimeoutMinutes.ToString()"
+                                         ValueChanged="@(v => UpdateTimeout(tierId, v))"
+                                         Type="number" Class="h-8 w-24 text-sm" />
+                            </div>
+
+                            <div>
+                                <span class="mb-2 block text-xs font-medium text-muted-foreground">
+                                    Contacts
+                                </span>
+                                @foreach (var contact in tier.Contacts)
+                                {
+                                    var contactId = contact.Id;
+                                    <div class="mb-2 flex items-center gap-3 rounded-md bg-muted/50 p-3">
+                                        <LucideUserCn Size="16" Class="size-3.5 shrink-0 text-muted-foreground" />
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-sm font-medium">@contact.Name</p>
+                                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                                @contact.Role
+                                            </p>
+                                        </div>
+                                        <span class="flex items-center gap-1.5 text-xs">
+                                            <span class="@($"size-1.5 rounded-full {GetChannelDot(contact.Channel)}")"></span>
+                                            @GetChannelLabel(contact.Channel)
+                                        </span>
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="h-6 px-1.5 text-red-600 dark:text-red-400"
+                                                  @onclick="@(() => RemoveContact(tierId, contactId))">
+                                            <LucideTrashCn Size="16" Class="size-3" />
+                                        </ButtonCn>
+                                    </div>
+                                }
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                                    <LucidePlusCn Size="16" Class="size-3" />
+                                    Add contact
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Severity routing *@
+        <div class="border-t">
+            <button type="button"
+                    class="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                    @onclick="@(() => _showSeverity = !_showSeverity)">
+                <div>
+                    <p class="text-sm font-medium">Severity routing</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Map severity levels to starting escalation tiers
+                    </p>
+                </div>
+                <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", _showSeverity ? "rotate-90" : "")" />
+            </button>
+            @if (_showSeverity)
+            {
+                @foreach (var sev in _severities)
+                {
+                    var sevId = sev.Id;
+                    <div class="flex items-center justify-between border-t px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            <span class="@($"size-1.5 rounded-full {sev.DotColor}")"></span>
+                            <span class="text-sm font-medium">@sev.Label</span>
+                        </div>
+                        <SelectCn TValue="string" Value="@sev.StartTier" ValueChanged="@(v => UpdateSeverityTier(sevId, v))">
+                            <SelectTriggerCn Class="h-7 w-32 text-xs">
+                                <SelectValueCn />
+                            </SelectTriggerCn>
+                            <SelectContentCn>
+                                @for (var ti = 0; ti < _tiers.Count; ti++)
+                                {
+                                    var t = _tiers[ti];
+                                    var tierNum = ti + 1;
+                                    <SelectItemCn Value="@t.Id">Tier @tierNum</SelectItemCn>
+                                }
+                            </SelectContentCn>
+                        </SelectCn>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-end border-t px-4 py-3">
+            @if (_saved)
+            {
+                <span class="mr-2 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                    <LucideCheckCn Size="16" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs"
+                      @onclick="HandleSave">
+                Save policy
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class EscalationContact
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Role { get; set; } = "";
+        public string Channel { get; set; } = "";
+    }
+
+    private class EscalationTier
+    {
+        public string Id { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string Description { get; set; } = "";
+        public int TimeoutMinutes { get; set; }
+        public List<EscalationContact> Contacts { get; set; } = new();
+    }
+
+    private class SeverityLevel
+    {
+        public string Id { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string DotColor { get; set; } = "";
+        public string StartTier { get; set; } = "";
+    }
+
+    private bool _autoEscalation = true;
+    private bool _repeatAlerts = true;
+    private string? _expanded = "t1";
+    private bool _showSeverity;
+    private bool _saved;
+
+    private List<EscalationTier> _tiers = new()
+    {
+        new() { Id = "t1", Label = "Tier 1 \u2014 First responder", Description = "On-call engineer receives initial alert", TimeoutMinutes = 5, Contacts = new()
+        {
+            new() { Id = "c1", Name = "Jordan Kim", Role = "SRE Engineer", Channel = "slack" },
+            new() { Id = "c2", Name = "Taylor Nguyen", Role = "Backend Engineer", Channel = "sms" },
+        }},
+        new() { Id = "t2", Label = "Tier 2 \u2014 Team lead", Description = "Engineering lead notified if Tier 1 does not acknowledge", TimeoutMinutes = 15, Contacts = new()
+        {
+            new() { Id = "c3", Name = "Sam Patel", Role = "Engineering Manager", Channel = "phone" },
+        }},
+        new() { Id = "t3", Label = "Tier 3 \u2014 Executive", Description = "VP Engineering and CTO notified for unresolved incidents", TimeoutMinutes = 30, Contacts = new()
+        {
+            new() { Id = "c4", Name = "Alex Rivera", Role = "VP Engineering", Channel = "phone" },
+            new() { Id = "c5", Name = "Morgan Chen", Role = "CTO", Channel = "phone" },
+        }},
+    };
+
+    private List<SeverityLevel> _severities = new()
+    {
+        new() { Id = "critical", Label = "Critical", DotColor = "bg-red-500", StartTier = "t1" },
+        new() { Id = "high", Label = "High", DotColor = "bg-amber-500", StartTier = "t1" },
+        new() { Id = "medium", Label = "Medium", DotColor = "bg-blue-500", StartTier = "t1" },
+        new() { Id = "low", Label = "Low", DotColor = "bg-muted-foreground/40", StartTier = "t1" },
+    };
+
+    private static string GetChannelLabel(string channel) => channel switch
+    {
+        "email" => "Email",
+        "sms" => "SMS",
+        "phone" => "Phone",
+        "slack" => "Slack",
+        _ => channel,
+    };
+
+    private static string GetChannelDot(string channel) => channel switch
+    {
+        "email" => "bg-blue-500",
+        "sms" => "bg-emerald-500",
+        "phone" => "bg-amber-500",
+        "slack" => "bg-purple-500",
+        _ => "",
+    };
+
+    private void UpdateTimeout(string tierId, string minutes)
+    {
+        if (!int.TryParse(minutes, out var parsed)) return;
+        var tier = _tiers.FirstOrDefault(t => t.Id == tierId);
+        if (tier != null) tier.TimeoutMinutes = parsed;
+    }
+
+    private void RemoveContact(string tierId, string contactId)
+    {
+        var tier = _tiers.FirstOrDefault(t => t.Id == tierId);
+        tier?.Contacts.RemoveAll(c => c.Id == contactId);
+    }
+
+    private void UpdateSeverityTier(string severityId, string startTier)
+    {
+        var sev = _severities.FirstOrDefault(s => s.Id == severityId);
+        if (sev != null) sev.StartTier = startTier;
+    }
+
+    private async Task HandleSave()
+    {
+        _saved = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _saved = false;
+    }
+}

@@ -99,19 +99,12 @@ public class SelectCnTests : BunitContext
             .AddChildContent<SelectTriggerCn>(t => t
                 .AddChildContent("Open")));
         var el = cut.Find("[data-slot='select-trigger']");
+        el.ClassList.Should().Contain("cn-select-trigger");
         el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("h-9");
-        el.ClassList.Should().Contain("w-full");
+        el.ClassList.Should().Contain("w-fit");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-between");
-        el.ClassList.Should().Contain("rounded-md");
-        el.ClassList.Should().Contain("border");
-        el.ClassList.Should().Contain("border-input");
-        el.ClassList.Should().Contain("bg-transparent");
-        el.ClassList.Should().Contain("px-3");
-        el.ClassList.Should().Contain("py-2");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("shadow-sm");
+        el.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -198,7 +191,9 @@ public class SelectCnTests : BunitContext
         var cut = Render<SelectCn>(p => p
             .AddChildContent<SelectValueCn>(v => v
                 .Add(c => c.Placeholder, "Pick one")));
-        cut.Find("[data-slot='select-value']").ClassList.Should().Contain("truncate");
+        var el = cut.Find("[data-slot='select-value']");
+        el.ClassList.Should().Contain("cn-select-value");
+        el.ClassList.Should().Contain("truncate");
     }
 
     [Fact]
@@ -260,14 +255,10 @@ public class SelectCnTests : BunitContext
             .AddChildContent<SelectContentCn>(c => c
                 .AddChildContent("Body")));
         var content = cut.Find("[data-slot='select-content']");
+        content.ClassList.Should().Contain("cn-select-content");
         content.ClassList.Should().Contain("z-50");
         content.ClassList.Should().Contain("overflow-hidden");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
         content.ClassList.Should().Contain("p-1");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
     }
 
     [Fact]
@@ -337,18 +328,14 @@ public class SelectCnTests : BunitContext
                 .Add(x => x.Value, "val")
                 .AddChildContent("Item")));
         var item = cut.Find("[data-slot='select-item']");
+        item.ClassList.Should().Contain("cn-select-item");
         item.ClassList.Should().Contain("relative");
         item.ClassList.Should().Contain("flex");
         item.ClassList.Should().Contain("w-full");
         item.ClassList.Should().Contain("cursor-default");
         item.ClassList.Should().Contain("select-none");
         item.ClassList.Should().Contain("items-center");
-        item.ClassList.Should().Contain("rounded-sm");
-        item.ClassList.Should().Contain("py-1.5");
-        item.ClassList.Should().Contain("pl-8");
-        item.ClassList.Should().Contain("pr-2");
-        item.ClassList.Should().Contain("text-sm");
-        item.ClassList.Should().Contain("outline-none");
+        item.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -491,10 +478,7 @@ public class SelectCnTests : BunitContext
     {
         var cut = Render<SelectLabelCn>(p => p.AddChildContent("Label"));
         var el = cut.Find("[data-slot='select-label']");
-        el.ClassList.Should().Contain("px-2");
-        el.ClassList.Should().Contain("py-1.5");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("font-semibold");
+        el.ClassList.Should().Contain("cn-select-label");
     }
 
     [Fact]
@@ -527,10 +511,8 @@ public class SelectCnTests : BunitContext
     {
         var cut = Render<SelectSeparatorCn>();
         var el = cut.Find("[data-slot='select-separator']");
-        el.ClassList.Should().Contain("-mx-1");
-        el.ClassList.Should().Contain("my-1");
-        el.ClassList.Should().Contain("h-px");
-        el.ClassList.Should().Contain("bg-muted");
+        el.ClassList.Should().Contain("cn-select-separator");
+        el.ClassList.Should().Contain("pointer-events-none");
     }
 
     [Fact]
@@ -539,6 +521,92 @@ public class SelectCnTests : BunitContext
         var cut = Render<SelectSeparatorCn>(p => p
             .Add(c => c.Class, "custom-sep"));
         cut.Find("[data-slot='select-separator']").ClassList.Should().Contain("custom-sep");
+    }
+
+    // --- ARIA ---
+
+    [Fact]
+    public void SelectTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<SelectCn>(p => p
+            .AddChildContent<SelectTriggerCn>(t => t
+                .AddChildContent("Open")));
+        var trigger = cut.Find("[data-slot='select-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
+
+    [Fact]
+    public void SelectTrigger_Has_AriaHasPopup_Listbox()
+    {
+        var cut = Render<SelectCn>(p => p
+            .AddChildContent<SelectTriggerCn>(t => t
+                .AddChildContent("Open")));
+        cut.Find("[data-slot='select-trigger']").GetAttribute("aria-haspopup").Should().Be("listbox");
+    }
+
+    [Fact]
+    public void SelectContent_Has_Role_Listbox()
+    {
+        SetupJsInterop();
+        var cut = Render<SelectCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<SelectContentCn>(c => c
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='select-content']").GetAttribute("role").Should().Be("listbox");
+    }
+
+    [Fact]
+    public void SelectContent_Has_Default_AriaLabel()
+    {
+        SetupJsInterop();
+        var cut = Render<SelectCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<SelectContentCn>(c => c
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='select-content']").GetAttribute("aria-label").Should().Be("Options");
+    }
+
+    [Fact]
+    public void SelectContent_AriaLabel_Override_Via_AdditionalAttributes()
+    {
+        SetupJsInterop();
+        var cut = Render<SelectCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<SelectContentCn>(c => c
+                .Add(x => x.AdditionalAttributes, new Dictionary<string, object?> { { "aria-label", "Choose a fruit" } })
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='select-content']").GetAttribute("aria-label").Should().Be("Choose a fruit");
+    }
+
+    [Fact]
+    public void SelectItem_Has_Role_Option()
+    {
+        var cut = Render<SelectCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<SelectItemCn>(i => i
+                .Add(x => x.Value, "val")
+                .AddChildContent("Item")));
+        cut.Find("[data-slot='select-item']").GetAttribute("role").Should().Be("option");
+    }
+
+    [Fact]
+    public void SelectItem_AriaSelected_Reflects_Selection()
+    {
+        var cut = Render<SelectCn>(p => p
+            .Add(c => c.Value, "apple")
+            .AddChildContent<SelectItemCn>(i => i
+                .Add(x => x.Value, "apple")
+                .AddChildContent("Apple")));
+        cut.Find("[data-slot='select-item']").GetAttribute("aria-selected").Should().Be("true");
+
+        var cut2 = Render<SelectCn>(p => p
+            .Add(c => c.Value, "banana")
+            .AddChildContent<SelectItemCn>(i => i
+                .Add(x => x.Value, "apple")
+                .AddChildContent("Apple")));
+        cut2.Find("[data-slot='select-item']").GetAttribute("aria-selected").Should().Be("false");
     }
 
     // --- Integration ---

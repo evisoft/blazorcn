@@ -1,0 +1,165 @@
+@* ============================================================
+   Block: account-notification-rules
+   Title: Account Notification Rules
+   Description: If-this-then-that style notification routing rules with conditions, delivery channels, and enable/disable toggles for granular alert management
+   Dependencies: BadgeCn, ButtonCn, CheckboxCn, DialogCn, SelectCn, SwitchCn
+   Source: original/blocks/account/account-notification-rules.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideWorkflowCn Class="h-5 w-5 text-muted-foreground" Size="20" />
+                    <div>
+                        <h2 class="text-sm font-medium">Notification Rules</h2>
+                        <p class="text-xs text-muted-foreground">Route alerts to the right channel based on conditions</p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Class="gap-2" OnClick="@(() => _dialogOpen = true)">
+                    <LucidePlusCn Class="h-4 w-4" Size="16" />
+                    Add Rule
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="divide-y">
+            @foreach (var rule in _rules)
+            {
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50", !rule.Enabled ? "opacity-50" : "")">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-medium">@rule.Condition</span>
+                            <LucideArrowRightCn Class="h-3.5 w-3.5 shrink-0 text-muted-foreground" Size="14" />
+                            <div class="flex items-center gap-1.5">
+                                @foreach (var channel in rule.Channels)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 gap-1 px-1.5 text-[10px]">
+                                        @if (channel == "email") { <LucideMailCn Class="h-3 w-3" Size="12" /> }
+                                        else if (channel == "sms") { <LucideSmartphoneCn Class="h-3 w-3" Size="12" /> }
+                                        else if (channel == "slack") { <LucideMessageSquareCn Class="h-3 w-3" Size="12" /> }
+                                        else { <LucideBellCn Class="h-3 w-3" Size="12" /> }
+                                        @GetChannelLabel(channel)
+                                    </BadgeCn>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <SwitchCn Checked="@rule.Enabled" CheckedChanged="@((bool _) => rule.Enabled = !rule.Enabled)" />
+                </div>
+            }
+        </div>
+    </div>
+
+    <DialogCn @bind-Open="_dialogOpen">
+        <DialogContentCn Class="w-full max-w-[450px]">
+            <DialogHeaderCn>
+                <DialogTitleCn>Add Notification Rule</DialogTitleCn>
+                <DialogDescriptionCn>Define a condition and choose delivery channels</DialogDescriptionCn>
+            </DialogHeaderCn>
+            <div class="space-y-4 py-4">
+                <div class="space-y-2">
+                    <span class="text-xs font-medium text-muted-foreground">CONDITION</span>
+                    <SelectCn Value="@_newCondition" ValueChanged="@((string v) => _newCondition = v)">
+                        <SelectTriggerCn>
+                            <SelectValueCn Placeholder="Select a trigger condition" />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var option in _conditionOptions)
+                            {
+                                <SelectItemCn Value="@option">@option</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+                <div class="space-y-2">
+                    <span class="text-xs font-medium text-muted-foreground">CHANNELS</span>
+                    <div class="space-y-2">
+                        @foreach (var (key, label) in new[] { ("email", "Email"), ("sms", "SMS"), ("slack", "Slack"), ("push", "Push") })
+                        {
+                            var channelKey = key;
+                            <div class="flex items-center gap-3 rounded-md border px-3 py-2">
+                                <CheckboxCn Checked="@_newChannels.Contains(channelKey)"
+                                            CheckedChanged="@((bool _) => ToggleChannel(channelKey))" />
+                                @if (channelKey == "email") { <LucideMailCn Class="h-4 w-4 text-muted-foreground" Size="16" /> }
+                                else if (channelKey == "sms") { <LucideSmartphoneCn Class="h-4 w-4 text-muted-foreground" Size="16" /> }
+                                else if (channelKey == "slack") { <LucideMessageSquareCn Class="h-4 w-4 text-muted-foreground" Size="16" /> }
+                                else { <LucideBellCn Class="h-4 w-4 text-muted-foreground" Size="16" /> }
+                                <span class="flex-1 cursor-pointer text-sm font-medium">@label</span>
+                                @if (_newChannels.Contains(channelKey))
+                                {
+                                    <LucideCheckCn Class="h-4 w-4 text-emerald-500" Size="16" />
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" OnClick="@(() => _dialogOpen = false)">Cancel</ButtonCn>
+                <ButtonCn OnClick="HandleAddRule" Disabled="@(string.IsNullOrEmpty(_newCondition) || _newChannels.Count == 0)">Add Rule</ButtonCn>
+            </DialogFooterCn>
+        </DialogContentCn>
+    </DialogCn>
+</section>
+
+@code {
+    private class NotificationRule
+    {
+        public string Id { get; set; } = "";
+        public string Condition { get; set; } = "";
+        public List<string> Channels { get; set; } = [];
+        public bool Enabled { get; set; }
+    }
+
+    private bool _dialogOpen;
+    private string _newCondition = "";
+    private HashSet<string> _newChannels = [];
+
+    private List<NotificationRule> _rules =
+    [
+        new() { Id = "1", Condition = "When invoice exceeds $500", Channels = ["email", "sms"], Enabled = true },
+        new() { Id = "2", Condition = "When new team member joins", Channels = ["slack"], Enabled = true },
+        new() { Id = "3", Condition = "When storage hits 90%", Channels = ["email"], Enabled = false },
+    ];
+
+    private static readonly string[] _conditionOptions =
+    [
+        "When invoice exceeds $1,000",
+        "When API usage hits 80%",
+        "When payment fails",
+        "When user role changes",
+        "When security alert triggered",
+        "When subscription renews",
+    ];
+
+    private static string GetChannelLabel(string channel) => channel switch
+    {
+        "email" => "Email",
+        "sms" => "SMS",
+        "slack" => "Slack",
+        "push" => "Push",
+        _ => channel,
+    };
+
+    private void ToggleChannel(string channel)
+    {
+        if (!_newChannels.Remove(channel)) _newChannels.Add(channel);
+    }
+
+    private void HandleAddRule()
+    {
+        if (string.IsNullOrEmpty(_newCondition) || _newChannels.Count == 0) return;
+        _rules.Add(new NotificationRule
+        {
+            Id = (_rules.Count + 1).ToString(),
+            Condition = _newCondition,
+            Channels = [.. _newChannels],
+            Enabled = true,
+        });
+        _newCondition = "";
+        _newChannels = [];
+        _dialogOpen = false;
+    }
+}

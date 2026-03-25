@@ -1,0 +1,83 @@
+@inject NavigationManager Nav
+
+<DialogCn @bind-Open="Open" @bind-Open:after="OnOpenChanged">
+    <DialogOverlayCn />
+    <DialogContentCn Class="overflow-hidden p-0">
+        <CommandCn Class="[&_[data-slot=command-input]]:h-12">
+            <CommandInputCn Placeholder="Type a command or search..." @bind-Value="_search" @bind-Value:after="OnSearchChanged" />
+            <CommandListCn>
+                @if (!_hasResults)
+                {
+                    <CommandEmptyCn>No results found.</CommandEmptyCn>
+                }
+                @foreach (var section in _filteredSections)
+                {
+                    <CommandGroupCn Heading="@(section.Title)">
+                        @foreach (var item in section.Items)
+                        {
+                            <CommandItemCn Value="@item.Label" OnSelect="@(() => NavigateTo(item.Href))">
+                                <LucideFileCn Size="16" Class="mr-2 size-4" />
+                                <span>@item.Label</span>
+                            </CommandItemCn>
+                        }
+                    </CommandGroupCn>
+                }
+            </CommandListCn>
+        </CommandCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    private string? _search;
+    private List<NavSection> _filteredSections = [];
+    private bool _hasResults;
+
+    protected override void OnInitialized() => FilterItems();
+
+    private Task OnOpenChanged()
+    {
+        // Reset search when dialog opens/closes
+        if (!Open)
+        {
+            _search = null;
+            FilterItems();
+        }
+        return OpenChanged.InvokeAsync(Open);
+    }
+
+    private void OnSearchChanged() => FilterItems();
+
+    private void FilterItems()
+    {
+        var allSections = NavData.GettingStarted.Concat(NavData.Components).Concat(NavData.Blocks);
+        var query = _search?.Trim() ?? "";
+
+        if (string.IsNullOrEmpty(query))
+        {
+            _filteredSections = allSections.ToList();
+        }
+        else
+        {
+            _filteredSections = allSections
+                .Select(s => new NavSection(s.Title, s.Items
+                    .Where(i => i.Label.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .ToArray()))
+                .Where(s => s.Items.Length > 0)
+                .ToList();
+        }
+
+        _hasResults = _filteredSections.Any(s => s.Items.Length > 0);
+    }
+
+    private async Task NavigateTo(string href)
+    {
+        Open = false;
+        await OpenChanged.InvokeAsync(false);
+        _search = null;
+        FilterItems();
+        Nav.NavigateTo(href);
+    }
+}

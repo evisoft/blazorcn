@@ -1,0 +1,156 @@
+@* ============================================================
+   Block: dashboard-microservice-mesh
+   Title: Dashboard Microservice Mesh
+   Description: Animated React service mesh topology dashboard for Next.js with microservice list, request flow rates, error percentages, latency metrics, and dependency mapping using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Network bandwidth and packet metrics
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-microservice-mesh.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideNetworkCn Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Service Mesh</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_services.Count(s => s.Health == "healthy")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_services.Count(s => s.Health == "degraded")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_services.Count(s => s.Health == "down")
+                </span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="text-muted-foreground text-xs">@_services.Length services</span>
+            </div>
+        </div>
+
+        @* Service rows *@
+        <div>
+            @for (var i = 0; i < _services.Length; i++)
+            {
+                var service = _services[i];
+                var isExpanded = _expanded == service.Id;
+                var isLast = i == _services.Length - 1;
+                var config = _healthConfig[service.Health];
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : service.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        @* Health dot *@
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@service.Name</span>
+                                <span class="font-mono text-muted-foreground text-[10px]">
+                                    @service.Version
+                                </span>
+                            </div>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @service.Instances instance@(service.Instances != 1 ? "s" : "")
+                            </p>
+                        </div>
+
+                        @* Metrics *@
+                        <div class="flex shrink-0 items-center gap-4">
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">rps</span>
+                                <span class="block font-mono text-xs tabular-nums">@service.Rps</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">errors</span>
+                                <span class="@(Cn.Merge("block font-mono text-xs tabular-nums", GetErrorColor(service.ErrorPercent)))">
+                                    @(service.ErrorPercent)%
+                                </span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">p99</span>
+                                <span class="block font-mono text-xs tabular-nums">
+                                    @service.P99Latency
+                                </span>
+                            </div>
+                        </div>
+
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Upstream dependencies
+                                </span>
+                                <div class="space-y-2">
+                                    @foreach (var upstream in service.Upstreams)
+                                    {
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-mono text-sm">@upstream.Name</span>
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-muted-foreground text-xs tabular-nums">
+                                                    @upstream.Rps rps
+                                                </span>
+                                                <span class="text-muted-foreground text-xs">·</span>
+                                                <span class="text-muted-foreground text-xs tabular-nums">
+                                                    @upstream.ErrorRate errors
+                                                </span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "s3";
+
+    private record Upstream(string Name, string Rps, string ErrorRate);
+    private record MeshService(string Id, string Name, string Version, string Health, string Rps, double ErrorPercent, string P99Latency, int Instances, Upstream[] Upstreams);
+    private record HealthConfig(string Dot, string Label);
+
+    private static string GetErrorColor(double errorPercent)
+    {
+        if (errorPercent > 1) return "text-red-600 dark:text-red-400";
+        if (errorPercent > 0.1) return "text-amber-600 dark:text-amber-400";
+        return "text-muted-foreground";
+    }
+
+    private static readonly Dictionary<string, HealthConfig> _healthConfig = new()
+    {
+        ["healthy"] = new("bg-emerald-500", "Healthy"),
+        ["degraded"] = new("bg-amber-500", "Degraded"),
+        ["down"] = new("bg-red-500", "Down"),
+    };
+
+    private static readonly MeshService[] _services =
+    [
+        new("s1", "api-gateway", "v3.12.1", "healthy", "8,420", 0.12, "45ms", 6,
+            [new("auth-service", "4,210", "0.08%"), new("user-service", "3,105", "0.05%"), new("product-catalog", "2,840", "0.02%")]),
+        new("s2", "auth-service", "v2.8.0", "healthy", "4,210", 0.08, "32ms", 3,
+            [new("user-service", "2,100", "0.04%"), new("redis-cache", "4,200", "0.01%")]),
+        new("s3", "user-service", "v4.1.3", "degraded", "5,205", 2.4, "185ms", 4,
+            [new("postgres-primary", "3,800", "0.5%"), new("redis-cache", "5,200", "0.01%")]),
+        new("s4", "product-catalog", "v1.15.2", "healthy", "2,840", 0.02, "28ms", 2,
+            [new("elasticsearch", "2,200", "0.01%"), new("redis-cache", "2,800", "0.0%")]),
+        new("s5", "payment-processor", "v2.3.7", "healthy", "1,120", 0.05, "92ms", 3,
+            [new("stripe-adapter", "1,100", "0.03%"), new("postgres-primary", "1,120", "0.02%")]),
+        new("s6", "notification-worker", "v1.4.0", "down", "0", 100, "\u2014", 0,
+            [new("rabbitmq", "0", "100%"), new("email-relay", "0", "100%")]),
+    ];
+}

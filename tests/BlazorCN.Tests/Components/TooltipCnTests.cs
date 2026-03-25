@@ -195,16 +195,12 @@ public class TooltipCnTests : BunitContext
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
         var content = cut.Find("[data-slot='tooltip-content']");
+        content.ClassList.Should().Contain("cn-tooltip-content");
         content.ClassList.Should().Contain("z-50");
         content.ClassList.Should().Contain("w-fit");
-        content.ClassList.Should().Contain("max-w-xs");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("bg-primary");
-        content.ClassList.Should().Contain("px-3");
-        content.ClassList.Should().Contain("py-1.5");
-        content.ClassList.Should().Contain("text-xs");
-        content.ClassList.Should().Contain("text-primary-foreground");
-        content.ClassList.Should().Contain("shadow-md");
+        content.ClassList.Should().Contain("bg-foreground");
+        content.ClassList.Should().Contain("text-balance");
+        content.ClassList.Should().Contain("text-background");
     }
 
     [Fact]

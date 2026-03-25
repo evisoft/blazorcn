@@ -1,0 +1,191 @@
+@* ============================================================
+   Block: account-notifications-inbox
+   Title: Account Notifications Inbox
+   Description: Notification inbox with table display showing notification history, types, timestamps, read/unread status, batch actions, and mark as read functionality
+   Dependencies: BadgeCn, ButtonCn, CheckboxCn, SelectCn
+   Source: original/blocks/account/account-notifications-inbox.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideInboxCn Class="h-5 w-5 text-muted-foreground" Size="20" />
+                    <div>
+                        <h2 class="text-sm font-medium">Notification Inbox</h2>
+                        <p class="text-xs text-muted-foreground">View and manage all your notifications</p>
+                    </div>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">@_notifications.Count(n => !n.IsRead) unread</BadgeCn>
+            </div>
+        </div>
+
+        <div class="space-y-4 p-4">
+            <div class="flex items-center justify-between">
+                <SelectCn Value="@_filter" ValueChanged="@((string v) => _filter = v)">
+                    <SelectTriggerCn Class="h-8 w-[160px] text-xs">
+                        <LucideFilterCn Class="mr-1.5 h-3.5 w-3.5" Size="14" />
+                        <SelectValueCn />
+                    </SelectTriggerCn>
+                    <SelectContentCn>
+                        <SelectItemCn Value="all">All Notifications</SelectItemCn>
+                        <SelectItemCn Value="unread">Unread Only</SelectItemCn>
+                    </SelectContentCn>
+                </SelectCn>
+
+                <div class="flex flex-wrap gap-1.5">
+                    @if (_selectedIds.Count > 0)
+                    {
+                        <ButtonCn Class="h-7 gap-1 text-xs" OnClick="@(() => HandleMarkAsRead(_selectedIds.ToList()))"
+                                  Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                            <LucideCheckCn Class="h-3 w-3" Size="12" />
+                            Read (@_selectedIds.Count)
+                        </ButtonCn>
+                        <ButtonCn Class="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                                  OnClick="@(() => HandleDelete(_selectedIds.ToList()))"
+                                  Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                            <LucideTrash2Cn Class="h-3 w-3" Size="12" />
+                            Delete (@_selectedIds.Count)
+                        </ButtonCn>
+                    }
+                    @if (_notifications.Any(n => !n.IsRead) && _selectedIds.Count == 0)
+                    {
+                        <ButtonCn Class="h-7 gap-1 text-xs" OnClick="HandleMarkAllAsRead"
+                                  Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                            <LucideCheckCheckCn Class="h-3 w-3" Size="12" />
+                            Mark All as Read
+                        </ButtonCn>
+                    }
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-muted-foreground">@(_filter == "unread" ? "UNREAD NOTIFICATIONS" : "ALL NOTIFICATIONS")</span>
+                    @if (FilteredNotifications.Length > 0)
+                    {
+                        <span class="flex cursor-pointer items-center gap-1.5">
+                            <CheckboxCn Checked="@(FilteredNotifications.Length > 0 && _selectedIds.Count == FilteredNotifications.Length)"
+                                        CheckedChanged="@((bool _) => HandleSelectAll())" />
+                            <span class="text-xs text-muted-foreground">Select all</span>
+                        </span>
+                    }
+                </div>
+
+                @if (FilteredNotifications.Length == 0)
+                {
+                    <div class="flex flex-col items-center justify-center rounded-md border border-dashed py-6 text-center">
+                        <LucideBellCn Class="mb-2 h-8 w-8 text-muted-foreground" Size="32" />
+                        <p class="text-sm text-muted-foreground">@(_filter == "unread" ? "You're all caught up!" : "No notifications yet")</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="divide-y rounded-md border">
+                        @foreach (var notification in FilteredNotifications)
+                        {
+                            <div class="@Cn.Merge("flex items-start gap-3 px-3 py-3 transition-colors", !notification.IsRead ? "bg-blue-500/5" : "")">
+                                <div class="flex items-center gap-2 pt-0.5">
+                                    <CheckboxCn Checked="@_selectedIds.Contains(notification.Id)"
+                                                CheckedChanged="@((bool _) => ToggleSelect(notification.Id))" />
+                                    @if (notification.Type == "success") { <LucideCircleCheckCn Class="h-4 w-4 text-emerald-600" Size="16" /> }
+                                    else if (notification.Type == "warning") { <LucideAlertTriangleCn Class="h-4 w-4 text-amber-600" Size="16" /> }
+                                    else if (notification.Type == "error") { <LucideCircleAlertCn Class="h-4 w-4 text-red-600" Size="16" /> }
+                                    else { <LucideInfoCn Class="h-4 w-4 text-blue-600" Size="16" /> }
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="mb-0.5 flex flex-wrap items-center gap-1.5">
+                                        <p class="@Cn.Merge("text-sm", notification.IsRead ? "font-medium" : "font-semibold")">@notification.Title</p>
+                                        @if (!notification.IsRead)
+                                        {
+                                            <span class="size-1.5 rounded-full bg-blue-500"></span>
+                                        }
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">@GetTypeLabel(notification.Type)</BadgeCn>
+                                    </div>
+                                    <p class="text-xs text-muted-foreground">@notification.Message</p>
+                                    <p class="mt-0.5 text-xs text-muted-foreground">@notification.Timestamp</p>
+                                </div>
+                                <div class="flex shrink-0 items-center gap-1">
+                                    @if (!notification.IsRead)
+                                    {
+                                        <ButtonCn Class="h-6 gap-1 px-2 text-xs" OnClick="@(() => HandleMarkAsRead([notification.Id]))"
+                                                  Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost">
+                                            <LucideCheckCn Class="h-3 w-3" Size="12" />
+                                            Read
+                                        </ButtonCn>
+                                    }
+                                    <ButtonCn Class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                              OnClick="@(() => HandleDelete([notification.Id]))"
+                                              Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost">
+                                        <LucideTrash2Cn Class="h-3.5 w-3.5" Size="14" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class Notification
+    {
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Message { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+        public bool IsRead { get; set; }
+    }
+
+    private string _filter = "all";
+    private HashSet<string> _selectedIds = [];
+
+    private Notification[] FilteredNotifications => _filter == "unread"
+        ? _notifications.Where(n => !n.IsRead).ToArray()
+        : _notifications.ToArray();
+
+    private List<Notification> _notifications =
+    [
+        new() { Id = "1", Type = "info", Title = "New feature available", Message = "Check out our new dashboard analytics", Timestamp = "2 hours ago", IsRead = false },
+        new() { Id = "2", Type = "success", Title = "Payment successful", Message = "Your subscription has been renewed", Timestamp = "1 day ago", IsRead = false },
+        new() { Id = "3", Type = "warning", Title = "Storage limit approaching", Message = "You're using 85% of your storage quota", Timestamp = "2 days ago", IsRead = true },
+    ];
+
+    private static string GetTypeLabel(string type) => type switch
+    {
+        "success" => "Success",
+        "warning" => "Warning",
+        "error" => "Error",
+        _ => "Info",
+    };
+
+    private void ToggleSelect(string id) { if (!_selectedIds.Remove(id)) _selectedIds.Add(id); }
+
+    private void HandleSelectAll()
+    {
+        var filtered = FilteredNotifications;
+        if (_selectedIds.Count == filtered.Length) _selectedIds.Clear();
+        else _selectedIds = [.. filtered.Select(n => n.Id)];
+    }
+
+    private void HandleMarkAsRead(List<string> ids)
+    {
+        foreach (var n in _notifications.Where(n => ids.Contains(n.Id))) n.IsRead = true;
+        _selectedIds.Clear();
+    }
+
+    private void HandleDelete(List<string> ids)
+    {
+        _notifications.RemoveAll(n => ids.Contains(n.Id));
+        _selectedIds.ExceptWith(ids);
+    }
+
+    private void HandleMarkAllAsRead()
+    {
+        foreach (var n in _notifications) n.IsRead = true;
+    }
+}

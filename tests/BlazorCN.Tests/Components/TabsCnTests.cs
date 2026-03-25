@@ -92,6 +92,27 @@ public class TabsCnTests : BunitContext
     }
 
     [Fact]
+    public void TabsList_Has_Default_AriaLabel()
+    {
+        var cut = Render<TabsCn>(p => p
+            .Add(c => c.DefaultValue, "tab1")
+            .AddChildContent<TabsListCn>(list => list
+                .AddChildContent("Items")));
+        cut.Find("[role='tablist']").GetAttribute("aria-label").Should().Be("Tabs");
+    }
+
+    [Fact]
+    public void TabsList_AriaLabel_Override_Via_AdditionalAttributes()
+    {
+        var cut = Render<TabsCn>(p => p
+            .Add(c => c.DefaultValue, "tab1")
+            .AddChildContent<TabsListCn>(list => list
+                .Add(x => x.AdditionalAttributes, new Dictionary<string, object?> { { "aria-label", "Settings sections" } })
+                .AddChildContent("Items")));
+        cut.Find("[role='tablist']").GetAttribute("aria-label").Should().Be("Settings sections");
+    }
+
+    [Fact]
     public void Disabled_Trigger_Has_Disabled_Attribute()
     {
         var cut = Render<TabsCn>(p => p

@@ -1,0 +1,113 @@
+@* ============================================================
+   Block: account-api-usage-limits
+   Title: Account Api Usage Limits
+   Description: Rate limit dashboard showing API usage per endpoint with progress bars, semantic color coding, current limits, and upgrade prompts when approaching thresholds
+   Long Description: Subscription and payment management
+   Dependencies: BadgeCn, ButtonCn, ProgressCn, LucideActivityCn, LucideArrowUpRightCn, LucideGaugeCn
+   Source: original/blocks/account/account-api-usage-limits.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideGaugeCn Size="20" Class="text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">API Usage Limits</h2>
+                        <p class="text-xs text-muted-foreground">
+                            Monitor rate limits across your endpoints
+                        </p>
+                    </div>
+                </div>
+                @if (_hasHighUsage)
+                {
+                    <ButtonCn Size="ButtonSize.Sm" Class="gap-1.5 text-xs">
+                        <LucideArrowUpRightCn Size="14" />
+                        Upgrade
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium">Overall Usage</p>
+                    <p class="text-xs text-muted-foreground">
+                        Current billing cycle — resets in 12 days
+                    </p>
+                </div>
+                <p class="text-2xl font-semibold tabular-nums">@(_overallPercentage.ToString("0"))%</p>
+            </div>
+            <ProgressCn Class="@($"mt-2 h-1.5 {GetBarColor(_overallPercentage)}")" Value="@_overallPercentage" />
+        </div>
+
+        <div>
+            <div class="px-4 py-2">
+                <span class="text-xs font-medium text-muted-foreground">PER-ENDPOINT BREAKDOWN</span>
+            </div>
+            @foreach (var endpoint in _endpoints)
+            {
+                var percentage = GetPercentage(endpoint.Current, endpoint.Limit);
+                var status = GetStatusLabel(percentage);
+                <div class="border-t px-4 py-3 transition-colors hover:bg-muted/50">
+                    <div class="mb-2 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <LucideActivityCn Size="14" Class="text-muted-foreground" />
+                            <code class="font-mono text-xs text-muted-foreground">@endpoint.Path</code>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">
+                                @endpoint.Method
+                            </BadgeCn>
+                        </div>
+                        <span class="@($"text-[10px] font-medium {status.ClassName}")">@status.Text</span>
+                    </div>
+                    <ProgressCn Class="@($"mb-1.5 h-1.5 {GetBarColor(percentage)}")" Value="@percentage" />
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-xs text-muted-foreground">
+                            @endpoint.Current.ToString("N0") / @endpoint.Limit.ToString("N0") requests
+                        </span>
+                        <span class="text-xs tabular-nums text-muted-foreground">
+                            @(percentage.ToString("0.0"))%
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EndpointUsage(string Id, string Path, int Current, int Limit, string Method);
+    private record StatusLabel(string Text, string ClassName);
+
+    private static readonly EndpointUsage[] _endpoints =
+    [
+        new("1", "/api/search", 8432, 10000, "GET"),
+        new("2", "/api/upload", 234, 500, "POST"),
+        new("3", "/api/export", 45, 100, "GET"),
+    ];
+
+    private double _overallPercentage => GetPercentage(
+        _endpoints.Sum(e => e.Current),
+        _endpoints.Sum(e => e.Limit));
+
+    private bool _hasHighUsage => _endpoints.Any(e => GetPercentage(e.Current, e.Limit) > 80);
+
+    private static double GetPercentage(int current, int limit) =>
+        Math.Min((double)current / limit * 100, 100);
+
+    private static string GetBarColor(double percentage) => percentage switch
+    {
+        >= 90 => "[&>div]:bg-red-500",
+        >= 70 => "[&>div]:bg-amber-500",
+        _ => "[&>div]:bg-emerald-500",
+    };
+
+    private static StatusLabel GetStatusLabel(double percentage) => percentage switch
+    {
+        >= 90 => new("Critical", "text-red-600"),
+        >= 70 => new("Warning", "text-amber-600"),
+        _ => new("Healthy", "text-emerald-600"),
+    };
+}

@@ -1,0 +1,215 @@
+@* ============================================================
+   Block: tables-row-comments
+   Title: Tables Row Comments
+   Description: Table component with row comments and notes functionality for collaboration and review dashboards
+   Dependencies: AvatarCn, BadgeCn, ButtonCn, TableCn, TextareaCn
+   Source: original/blocks/tables/tables-row-comments.tsx
+   ============================================================ *@
+
+<div style="width: 900px">
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold">Task Reviews</h3>
+                <p class="text-sm text-muted-foreground">
+                    @_tasks.Count tasks with @_tasks.Sum(t => t.Comments.Count) comments
+                </p>
+            </div>
+            @{ var unreadCount = _tasks.Count(t => t.HasUnread); }
+            @if (unreadCount > 0)
+            {
+                <BadgeCn Class="gap-1" Variant="BadgeVariant.Secondary">
+                    <LucideMessageCircleCn Size="12" Class="h-3 w-3" />
+                    @unreadCount unread
+                </BadgeCn>
+            }
+        </div>
+
+        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <TableCn Class="table-fixed" style="width: 850px">
+                <TableHeaderCn>
+                    <TableRowCn>
+                        <TableHeadCn Class="w-24 font-semibold text-foreground">ID</TableHeadCn>
+                        <TableHeadCn Class="w-72 font-semibold text-foreground">Task</TableHeadCn>
+                        <TableHeadCn Class="w-32 font-semibold text-foreground">Assignee</TableHeadCn>
+                        <TableHeadCn Class="w-28 font-semibold text-foreground">Status</TableHeadCn>
+                        <TableHeadCn Class="font-semibold text-foreground">Comments</TableHeadCn>
+                    </TableRowCn>
+                </TableHeaderCn>
+                <TableBodyCn>
+                    @foreach (var task in _tasks)
+                    {
+                        var isExpanded = _expandedRows.Contains(task.Id);
+                        var (statusLabel, statusVariant) = GetStatusConfig(task.Status);
+                        var taskId = task.Id;
+
+                        <TableRowCn Class="@(task.HasUnread ? "bg-primary/5" : "")">
+                            <TableCellCn Class="font-mono text-sm text-muted-foreground">@task.Id</TableCellCn>
+                            <TableCellCn Class="font-medium truncate" title="@task.Title">@task.Title</TableCellCn>
+                            <TableCellCn Class="text-sm">@task.Assignee</TableCellCn>
+                            <TableCellCn>
+                                <BadgeCn Variant="@statusVariant">@statusLabel</BadgeCn>
+                            </TableCellCn>
+                            <TableCellCn>
+                                <ButtonCn Class="@Cn.Merge("gap-2", task.HasUnread ? "text-primary" : "")" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" OnClick="() => ToggleRow(taskId)">
+                                    <LucideMessageCircleCn Size="16" Class="h-4 w-4" />
+                                    <span>@task.Comments.Count</span>
+                                    @if (task.HasUnread)
+                                    {
+                                        <span class="h-2 w-2 rounded-full bg-primary"></span>
+                                    }
+                                    <LucideChevronDownCn Size="16" Class="@Cn.Merge("h-4 w-4 transition-transform", isExpanded ? "rotate-180" : "")" />
+                                </ButtonCn>
+                            </TableCellCn>
+                        </TableRowCn>
+                        @if (isExpanded)
+                        {
+                            <tr>
+                                <td class="p-0" colspan="5">
+                                    <div class="border-t bg-muted/30 px-4 py-3">
+                                        <div class="space-y-3">
+                                            @foreach (var comment in task.Comments)
+                                            {
+                                                <div class="flex gap-3">
+                                                    <AvatarCn Class="h-8 w-8">
+                                                        <AvatarFallbackCn Class="text-xs">@GetInitials(comment.Author)</AvatarFallbackCn>
+                                                    </AvatarCn>
+                                                    <div class="flex-1 space-y-1">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-sm font-medium">@comment.Author</span>
+                                                            <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                                                        </div>
+                                                        <p class="text-sm text-muted-foreground">@comment.Content</p>
+                                                    </div>
+                                                </div>
+                                            }
+
+                                            <div class="flex gap-3 pt-2">
+                                                <AvatarCn Class="h-8 w-8">
+                                                    <AvatarFallbackCn Class="text-xs">YO</AvatarFallbackCn>
+                                                </AvatarCn>
+                                                <div class="flex-1 flex gap-2">
+                                                    <TextareaCn Class="min-h-[60px] resize-none text-sm" placeholder="Add a comment..." @bind-Value="@_newComments[taskId]" />
+                                                    <ButtonCn Class="self-end" Size="ButtonSize.Sm" OnClick="() => AddComment(taskId)">
+                                                        <LucideSendCn Size="16" Class="h-4 w-4" />
+                                                    </ButtonCn>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </TableBodyCn>
+            </TableCn>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs text-muted-foreground">
+            <div class="flex items-center gap-1.5">
+                <LucideMessageCircleCn Size="14" Class="h-3.5 w-3.5" />
+                <span>Click to expand comments</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="h-2 w-2 rounded-full bg-primary"></span>
+                <span>Unread comments indicator</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private class CommentItem
+    {
+        public string Id { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string Content { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+    }
+
+    private class TaskItem
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Assignee { get; set; } = "";
+        public string Status { get; set; } = "";
+        public List<CommentItem> Comments { get; set; } = new();
+        public bool HasUnread { get; set; }
+    }
+
+    private List<TaskItem> _tasks = new()
+    {
+        new() { Id = "TASK-001", Title = "Update user authentication flow", Assignee = "Sarah Chen", Status = "in-review", HasUnread = true, Comments = new()
+        {
+            new() { Id = "c1", Author = "Marcus Johnson", Content = "The OAuth implementation looks good. Just one question about the token refresh logic.", Timestamp = "2 hours ago" },
+            new() { Id = "c2", Author = "Sarah Chen", Content = "Good catch! I have updated the refresh interval to 15 minutes as discussed.", Timestamp = "1 hour ago" },
+            new() { Id = "c3", Author = "Emily Rodriguez", Content = "LGTM! Ready for final approval.", Timestamp = "30 min ago" },
+        }},
+        new() { Id = "TASK-002", Title = "Fix dashboard performance issues", Assignee = "David Kim", Status = "approved", HasUnread = false, Comments = new()
+        {
+            new() { Id = "c4", Author = "Lisa Thompson", Content = "Great optimization! Load time improved by 40%.", Timestamp = "Yesterday" },
+        }},
+        new() { Id = "TASK-003", Title = "Implement export functionality", Assignee = "Emily Rodriguez", Status = "pending", HasUnread = false, Comments = new() },
+        new() { Id = "TASK-004", Title = "Design new onboarding screens", Assignee = "James Wilson", Status = "in-review", HasUnread = true, Comments = new()
+        {
+            new() { Id = "c5", Author = "Anna Martinez", Content = "Love the new illustrations! Can we add more contrast to the CTA buttons?", Timestamp = "4 hours ago" },
+            new() { Id = "c6", Author = "James Wilson", Content = "Sure, I will increase the saturation and add a subtle shadow.", Timestamp = "3 hours ago" },
+        }},
+        new() { Id = "TASK-005", Title = "API rate limiting implementation", Assignee = "Michael Brown", Status = "rejected", HasUnread = false, Comments = new()
+        {
+            new() { Id = "c7", Author = "David Kim", Content = "We need to reconsider the approach. Current implementation blocks legitimate batch operations.", Timestamp = "1 day ago" },
+            new() { Id = "c8", Author = "Michael Brown", Content = "Understood. I will revise to use sliding window instead of fixed buckets.", Timestamp = "1 day ago" },
+        }},
+        new() { Id = "TASK-006", Title = "Mobile responsive fixes", Assignee = "Anna Martinez", Status = "approved", HasUnread = false, Comments = new()
+        {
+            new() { Id = "c9", Author = "Sarah Chen", Content = "Tested on iOS and Android - all looks great!", Timestamp = "2 days ago" },
+        }},
+    };
+
+    private HashSet<string> _expandedRows = new();
+    private Dictionary<string, string> _newComments = new();
+
+    protected override void OnInitialized()
+    {
+        foreach (var task in _tasks)
+            _newComments[task.Id] = "";
+    }
+
+    private void ToggleRow(string taskId)
+    {
+        if (!_expandedRows.Remove(taskId))
+            _expandedRows.Add(taskId);
+
+        var task = _tasks.FirstOrDefault(t => t.Id == taskId);
+        if (task != null) task.HasUnread = false;
+    }
+
+    private void AddComment(string taskId)
+    {
+        if (!_newComments.TryGetValue(taskId, out var text) || string.IsNullOrWhiteSpace(text)) return;
+
+        var task = _tasks.FirstOrDefault(t => t.Id == taskId);
+        if (task == null) return;
+
+        task.Comments.Add(new CommentItem
+        {
+            Id = $"c{task.Comments.Count + 100}",
+            Author = "You",
+            Content = text.Trim(),
+            Timestamp = "Just now",
+        });
+        _newComments[taskId] = "";
+    }
+
+    private static string GetInitials(string name) =>
+        string.Join("", name.Split(' ').Select(n => n[0])).ToUpper();
+
+    private static (string Label, BadgeVariant Variant) GetStatusConfig(string status) => status switch
+    {
+        "pending" => ("Pending", BadgeVariant.Secondary),
+        "in-review" => ("In Review", BadgeVariant.Outline),
+        "approved" => ("Approved", BadgeVariant.Default),
+        "rejected" => ("Rejected", BadgeVariant.Destructive),
+        _ => (status, BadgeVariant.Secondary),
+    };
+}

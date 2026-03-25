@@ -1,0 +1,172 @@
+@* ===========================================================
+   Block: ai-code-review
+   Title: Ai Code Review
+   Description: React AI code review block for Next.js with inline diff annotations, issue badges, and AI-powered comments using shadcn/ui and Tailwind CSS
+   Long Description:
+   Dependencies: BadgeCn, ButtonCn
+   Source: original/blocks/ai/ai-code-review.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Code Review</span>
+                <p class="mt-0.5 font-mono text-muted-foreground text-xs">
+                    src/components/UserDashboard.tsx
+                </p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_reviewComments.Count(c => c.Severity == "error")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_reviewComments.Count(c => c.Severity == "warning")
+                </span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_reviewComments.Count issues
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Diff *@
+        <div class="max-h-[340px] overflow-auto border-b">
+            <div class="font-mono text-[13px]">
+                @foreach (var line in _diffLines)
+                {
+                    <div class="@Cn.Merge("flex items-stretch border-l-2", line.Type == "added" ? "border-l-emerald-500/60 bg-emerald-500/8" : line.Type == "removed" ? "border-l-red-500/60 bg-red-500/8" : "border-l-transparent")">
+                        <span class="flex w-10 shrink-0 items-center justify-end pr-3 text-muted-foreground/40 select-none">
+                            @line.Number
+                        </span>
+                        <span class="@Cn.Merge("w-4 shrink-0 text-center select-none", line.Type == "added" ? "text-emerald-500" : line.Type == "removed" ? "text-red-500" : "text-transparent")">
+                            @(line.Type == "added" ? "+" : line.Type == "removed" ? "-" : " ")
+                        </span>
+                        <span class="@Cn.Merge("flex-1 py-0.5 pr-4", line.Type == "added" ? "text-foreground" : line.Type == "removed" ? "text-muted-foreground line-through decoration-red-500/40" : "text-muted-foreground")">
+                            @(line.Content ?? "\u00A0")
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Review Comments *@
+        <div>
+            @for (var i = 0; i < _reviewComments.Count; i++)
+            {
+                var comment = _reviewComments[i];
+                var isLast = i == _reviewComments.Count - 1;
+                var isExpanded = _expanded == comment.Id;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="() => _expanded = isExpanded ? null : comment.Id"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", _severityDot[comment.Severity])"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@comment.Title</span>
+                            <p class="mt-0.5 font-mono text-muted-foreground text-xs">
+                                Line @comment.Line
+                            </p>
+                        </div>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <p class="mb-3 text-muted-foreground text-sm leading-relaxed">
+                                @comment.Message
+                            </p>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="font-medium text-muted-foreground text-xs">
+                                        Suggested fix
+                                    </span>
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Ghost"
+                                        Size="ButtonSize.Sm"
+                                        Class="h-6 gap-1 px-2 text-xs">
+                                        @if (_copied == comment.Id)
+                                        {
+                                            <LucideCheckCn Size="12" Class="size-3" />
+                                            <span>Copied</span>
+                                        }
+                                        else
+                                        {
+                                            <LucideCopyCn Size="12" Class="size-3" />
+                                            <span>Copy</span>
+                                        }
+                                    </ButtonCn>
+                                </div>
+                                <p class="text-sm leading-relaxed">@comment.Fix</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "1";
+    private string? _copied = null;
+
+    private record DiffLine(int Number, string Content, string Type);
+    private record ReviewComment(string Id, int Line, string Severity, string Title, string Message, string Fix);
+
+    private static readonly Dictionary<string, string> _severityDot = new()
+    {
+        ["error"] = "bg-red-500",
+        ["warning"] = "bg-amber-500",
+        ["suggestion"] = "bg-blue-500",
+    };
+
+    private static readonly List<DiffLine> _diffLines = new()
+    {
+        new(1, "import { useState } from \"react\"", "unchanged"),
+        new(2, "import { fetchUser } from \"./api\"", "unchanged"),
+        new(3, "", "unchanged"),
+        new(4, "export function UserDashboard() {", "unchanged"),
+        new(5, "  const [user, setUser] = useState(null)", "removed"),
+        new(5, "  const [user, setUser] = useState<User | null>(null)", "added"),
+        new(6, "  const [loading, setLoading] = useState(true)", "unchanged"),
+        new(7, "", "unchanged"),
+        new(8, "  useEffect(() => {", "unchanged"),
+        new(9, "    fetchUser().then(data => {", "unchanged"),
+        new(10, "      setUser(data)", "unchanged"),
+        new(11, "      setLoading(false)", "unchanged"),
+        new(12, "    })", "removed"),
+        new(12, "    }).catch(err => {", "added"),
+        new(13, "      console.error(\"Failed to fetch user:\", err)", "added"),
+        new(14, "      setLoading(false)", "added"),
+        new(15, "    })", "added"),
+        new(16, "  })", "removed"),
+        new(16, "  }, [])", "added"),
+        new(17, "", "unchanged"),
+        new(18, "  if (loading) return <Spinner />", "unchanged"),
+        new(19, "  return <Dashboard user={user} />", "removed"),
+        new(19, "  if (!user) return <ErrorState />", "added"),
+        new(20, "}", "unchanged"),
+    };
+
+    private static readonly List<ReviewComment> _reviewComments = new()
+    {
+        new("1", 5, "error", "Missing type annotation",
+            "The useState hook is initialized with null but lacks a type annotation. TypeScript cannot infer the correct type, leading to potential runtime errors when accessing user properties.",
+            "Add explicit type: useState<User | null>(null)"),
+        new("2", 12, "error", "Unhandled promise rejection",
+            "The fetchUser() promise chain has no .catch() handler. If the API request fails, the error will be silently swallowed and loading will remain true forever.",
+            "Add error handling with .catch() and set loading to false in the error path"),
+        new("3", 16, "warning", "Missing dependency array",
+            "useEffect without a dependency array will run on every render, causing unnecessary API calls and potential infinite loops if setUser triggers a re-render.",
+            "Add an empty dependency array [] to run the effect only once on mount"),
+        new("4", 19, "suggestion", "No null check for user",
+            "After the loading check, user could still be null if the fetch failed. Rendering Dashboard with a null user prop may cause a crash.",
+            "Add a null check: if (!user) return <ErrorState />"),
+    };
+}

@@ -34,15 +34,10 @@ public class MenubarCnTests : BunitContext
     {
         var cut = Render<MenubarCn>(p => p.AddChildContent("Content"));
         var el = cut.Find("[data-slot='menubar']");
+        el.ClassList.Should().Contain("cn-menubar");
         el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("h-9");
         el.ClassList.Should().Contain("items-center");
-        el.ClassList.Should().Contain("gap-1");
-        el.ClassList.Should().Contain("rounded-lg");
-        el.ClassList.Should().Contain("border");
         el.ClassList.Should().Contain("bg-background");
-        el.ClassList.Should().Contain("p-1");
-        el.ClassList.Should().Contain("shadow-sm");
     }
 
     [Fact]
@@ -50,6 +45,22 @@ public class MenubarCnTests : BunitContext
     {
         var cut = Render<MenubarCn>(p => p.AddChildContent("Content"));
         cut.Find("[data-slot='menubar']").GetAttribute("role").Should().Be("menubar");
+    }
+
+    [Fact]
+    public void Menubar_Has_Default_AriaLabel()
+    {
+        var cut = Render<MenubarCn>(p => p.AddChildContent("Content"));
+        cut.Find("[data-slot='menubar']").GetAttribute("aria-label").Should().Be("Menu");
+    }
+
+    [Fact]
+    public void Menubar_AriaLabel_Override_Via_AdditionalAttributes()
+    {
+        var cut = Render<MenubarCn>(p => p
+            .Add(c => c.AdditionalAttributes, new Dictionary<string, object?> { { "aria-label", "Main navigation" } })
+            .AddChildContent("Content"));
+        cut.Find("[data-slot='menubar']").GetAttribute("aria-label").Should().Be("Main navigation");
     }
 
     [Fact]
@@ -120,13 +131,9 @@ public class MenubarCnTests : BunitContext
                 .AddChildContent<MenubarTriggerCn>(t => t
                     .AddChildContent("File"))));
         var el = cut.Find("[data-slot='menubar-trigger']");
+        el.ClassList.Should().Contain("cn-menubar-trigger");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("items-center");
-        el.ClassList.Should().Contain("rounded-sm");
-        el.ClassList.Should().Contain("px-3");
-        el.ClassList.Should().Contain("py-1");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("font-medium");
         el.ClassList.Should().Contain("select-none");
     }
 
@@ -218,14 +225,9 @@ public class MenubarCnTests : BunitContext
 
         cut.Find("[data-slot='menubar-trigger']").Click();
         var content = cut.Find("[data-slot='menubar-content']");
+        content.ClassList.Should().Contain("cn-menubar-content");
         content.ClassList.Should().Contain("z-50");
         content.ClassList.Should().Contain("overflow-hidden");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
-        content.ClassList.Should().Contain("p-1");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
     }
 
     [Fact]
@@ -288,16 +290,13 @@ public class MenubarCnTests : BunitContext
     {
         var cut = Render<MenubarItemCn>(p => p.AddChildContent("Item"));
         var el = cut.Find("[data-slot='menubar-item']");
+        el.ClassList.Should().Contain("cn-menubar-item");
         el.ClassList.Should().Contain("relative");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("cursor-default");
         el.ClassList.Should().Contain("select-none");
         el.ClassList.Should().Contain("items-center");
-        el.ClassList.Should().Contain("gap-2");
-        el.ClassList.Should().Contain("rounded-sm");
-        el.ClassList.Should().Contain("px-2");
-        el.ClassList.Should().Contain("py-1.5");
-        el.ClassList.Should().Contain("text-sm");
+        el.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -315,7 +314,7 @@ public class MenubarCnTests : BunitContext
         var cut = Render<MenubarItemCn>(p => p
             .Add(c => c.Variant, "destructive")
             .AddChildContent("Delete"));
-        cut.Find("[data-slot='menubar-item']").ClassList.Should().Contain("text-destructive");
+        cut.Find("[data-slot='menubar-item']").GetAttribute("data-variant").Should().Be("destructive");
     }
 
     [Fact]
@@ -324,7 +323,7 @@ public class MenubarCnTests : BunitContext
         var cut = Render<MenubarItemCn>(p => p
             .Add(c => c.Inset, true)
             .AddChildContent("Item"));
-        cut.Find("[data-slot='menubar-item']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='menubar-item']").GetAttribute("data-inset").Should().NotBeNull();
     }
 
     [Fact]
@@ -377,10 +376,7 @@ public class MenubarCnTests : BunitContext
     {
         var cut = Render<MenubarLabelCn>(p => p.AddChildContent("Label"));
         var el = cut.Find("[data-slot='menubar-label']");
-        el.ClassList.Should().Contain("px-2");
-        el.ClassList.Should().Contain("py-1.5");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("font-semibold");
+        el.ClassList.Should().Contain("cn-menubar-label");
     }
 
     [Fact]
@@ -389,7 +385,7 @@ public class MenubarCnTests : BunitContext
         var cut = Render<MenubarLabelCn>(p => p
             .Add(c => c.Inset, true)
             .AddChildContent("Label"));
-        cut.Find("[data-slot='menubar-label']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='menubar-label']").GetAttribute("data-inset").Should().NotBeNull();
     }
 
     // --- MenubarSeparatorCn ---
@@ -413,10 +409,10 @@ public class MenubarCnTests : BunitContext
     {
         var cut = Render<MenubarSeparatorCn>();
         var el = cut.Find("[data-slot='menubar-separator']");
+        el.ClassList.Should().Contain("cn-menubar-separator");
         el.ClassList.Should().Contain("-mx-1");
         el.ClassList.Should().Contain("my-1");
         el.ClassList.Should().Contain("h-px");
-        el.ClassList.Should().Contain("bg-muted");
     }
 
     // --- MenubarShortcutCn ---
@@ -433,10 +429,8 @@ public class MenubarCnTests : BunitContext
     {
         var cut = Render<MenubarShortcutCn>(p => p.AddChildContent("Ctrl+N"));
         var el = cut.Find("[data-slot='menubar-shortcut']");
+        el.ClassList.Should().Contain("cn-menubar-shortcut");
         el.ClassList.Should().Contain("ml-auto");
-        el.ClassList.Should().Contain("text-xs");
-        el.ClassList.Should().Contain("tracking-widest");
-        el.ClassList.Should().Contain("opacity-60");
     }
 
     [Fact]
@@ -628,6 +622,7 @@ public class MenubarCnTests : BunitContext
             .AddChildContent<MenubarSubTriggerCn>(t => t
                 .AddChildContent("More")));
         var el = cut.Find("[data-slot='menubar-sub-trigger']");
+        el.ClassList.Should().Contain("cn-menubar-sub-trigger");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("cursor-default");
         el.ClassList.Should().Contain("select-none");
@@ -680,6 +675,52 @@ public class MenubarCnTests : BunitContext
 
         cut.Find("[data-slot='menubar-sub-trigger']").Click();
         cut.Find("[data-slot='menubar-sub-content']").GetAttribute("data-side").Should().Be("right");
+    }
+
+    // --- ARIA ---
+
+    [Fact]
+    public void MenubarTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<MenubarCn>(p => p
+            .AddChildContent<MenubarMenuCn>(m => m
+                .AddChildContent<MenubarTriggerCn>(t => t
+                    .AddChildContent("File"))));
+        var trigger = cut.Find("[data-slot='menubar-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
+
+    [Fact]
+    public void MenubarTrigger_Has_AriaHasPopup_Menu()
+    {
+        var cut = Render<MenubarCn>(p => p
+            .AddChildContent<MenubarMenuCn>(m => m
+                .AddChildContent<MenubarTriggerCn>(t => t
+                    .AddChildContent("File"))));
+        cut.Find("[data-slot='menubar-trigger']").GetAttribute("aria-haspopup").Should().Be("menu");
+    }
+
+    [Fact]
+    public void MenubarSubTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<MenubarSubCn>(p => p
+            .AddChildContent<MenubarSubTriggerCn>(t => t
+                .AddChildContent("More")));
+        var trigger = cut.Find("[data-slot='menubar-sub-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
+
+    [Fact]
+    public void MenubarSubTrigger_Has_AriaHasPopup_Menu()
+    {
+        var cut = Render<MenubarSubCn>(p => p
+            .AddChildContent<MenubarSubTriggerCn>(t => t
+                .AddChildContent("More")));
+        cut.Find("[data-slot='menubar-sub-trigger']").GetAttribute("aria-haspopup").Should().Be("menu");
     }
 
     // --- Integration ---

@@ -1,0 +1,163 @@
+@* ============================================================
+   Block: dashboard-storage-tiering
+   Title: Dashboard Storage Tiering
+   Description: Animated React storage tier distribution block for Next.js with hot warm and cold data tiers showing capacity usage, object counts, cost per GB, animated usage bars, and migration suggestions using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Disk and storage consumption metrics
+   Dependencies: ButtonCn
+   Source: original/blocks/dashboard/dashboard-storage-tiering.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Storage Tiering</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @FormatGB(_totalUsed) total across @_tiers.Length tiers
+                </p>
+            </div>
+            <div class="text-right">
+                <span class="font-semibold text-sm tabular-nums">$@_totalCost.ToString("F2")</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">/month</p>
+            </div>
+        </div>
+
+        @* Tier distribution bar *@
+        <div class="border-b px-4 py-3">
+            <div class="flex h-2 overflow-hidden rounded-full bg-muted">
+                @for (var i = 0; i < _tiers.Length; i++)
+                {
+                    var tier = _tiers[i];
+                    var percentage = (double)tier.UsedGB / _totalUsed * 100;
+                    var colors = _tierColors[tier.Type];
+                    <div class="@(Cn.Merge("h-full", colors.Bar, i == 0 ? "rounded-l-full" : "", i == _tiers.Length - 1 ? "rounded-r-full" : ""))"
+                         style="@($"width: {percentage:F1}%")"></div>
+                }
+            </div>
+            <div class="mt-2 flex items-center gap-4">
+                @foreach (var tier in _tiers)
+                {
+                    var colors = _tierColors[tier.Type];
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@(Cn.Merge("size-1.5 rounded-full", colors.Dot))"></span>
+                        @tier.Name
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Tier details *@
+        <div>
+            @foreach (var tier in _tiers)
+            {
+                var usedPercentage = (double)tier.UsedGB / tier.TotalGB * 100;
+                var colors = _tierColors[tier.Type];
+                <div class="border-b px-4 py-3">
+                    <div class="flex items-center gap-3">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", colors.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@tier.Name</span>
+                                <span class="text-muted-foreground text-xs">\u00b7</span>
+                                <span class="text-muted-foreground text-xs">@tier.AccessFrequency</span>
+                            </div>
+                        </div>
+                        <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                            $@tier.CostPerGB/GB
+                        </span>
+                    </div>
+
+                    <div class="mt-2 pl-5">
+                        <div class="mb-1 flex items-center justify-between">
+                            <span class="text-muted-foreground text-xs">
+                                @FormatGB(tier.UsedGB) of @FormatGB(tier.TotalGB)
+                            </span>
+                            <span class="text-muted-foreground text-xs">
+                                @FormatNumber(tier.Objects) objects
+                            </span>
+                        </div>
+                        <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div class="@(Cn.Merge("h-full rounded-full", colors.Bar))"
+                                 style="@($"width: {usedPercentage:F1}%")"></div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Migration suggestions header *@
+        <div class="border-b bg-muted/30 px-4 py-2">
+            <div class="flex items-center justify-between">
+                <span class="font-medium text-muted-foreground text-xs">Migration Suggestions</span>
+                <span class="text-muted-foreground text-xs">
+                    Save ~$@_potentialSavings.ToString("F2")/mo
+                </span>
+            </div>
+        </div>
+
+        @* Suggestions *@
+        <div>
+            @for (var i = 0; i < _suggestions.Length; i++)
+            {
+                var suggestion = _suggestions[i];
+                var isLast = i == _suggestions.Length - 1;
+                <div class="@(Cn.Merge("flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50", isLast ? "" : "border-b"))">
+                    <LucideDatabaseCn Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                    <div class="min-w-0 flex-1">
+                        <span class="text-sm">@suggestion.Description</span>
+                        <div class="mt-0.5 flex items-center gap-1.5 text-muted-foreground text-xs">
+                            <span>@suggestion.FromTier</span>
+                            <LucideArrowRightCn Size="10" Class="size-2.5" />
+                            <span>@suggestion.ToTier</span>
+                            <span class="mx-1">\u00b7</span>
+                            <span class="tabular-nums">@suggestion.SizeGB GB</span>
+                        </div>
+                    </div>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 shrink-0 text-xs">
+                        Migrate
+                    </ButtonCn>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StorageTier(string Id, string Name, string Type, int UsedGB, int TotalGB, int Objects, double CostPerGB, string AccessFrequency);
+    private record MigrationSuggestion(string Id, string Description, string FromTier, string ToTier, int SizeGB, double MonthlySavings);
+    private record TierColors(string Bar, string Dot);
+
+    private static string FormatNumber(int n) =>
+        n >= 1_000_000 ? $"{(double)n / 1_000_000:F1}M"
+        : n >= 1_000 ? $"{n / 1_000}K"
+        : n.ToString();
+
+    private static string FormatGB(int gb) =>
+        gb >= 1000 ? $"{(double)gb / 1000:F1} TB" : $"{gb} GB";
+
+    private static readonly int _totalUsed = _tiers.Sum(t => t.UsedGB);
+    private static readonly double _totalCost = _tiers.Sum(t => t.UsedGB * t.CostPerGB);
+    private static readonly double _potentialSavings = _suggestions.Sum(s => s.MonthlySavings);
+
+    private static readonly Dictionary<string, TierColors> _tierColors = new()
+    {
+        ["hot"] = new("bg-red-500/60", "bg-red-500"),
+        ["warm"] = new("bg-amber-500/60", "bg-amber-500"),
+        ["cold"] = new("bg-blue-500/60", "bg-blue-500"),
+    };
+
+    private static readonly StorageTier[] _tiers =
+    [
+        new("t1", "Hot Storage", "hot", 842, 1000, 2_340_000, 0.023, "Accessed daily"),
+        new("t2", "Warm Storage", "warm", 3_210, 5000, 8_900_000, 0.0125, "Accessed monthly"),
+        new("t3", "Cold Archive", "cold", 12_450, 20000, 42_000_000, 0.004, "Rarely accessed"),
+    ];
+
+    private static readonly MigrationSuggestion[] _suggestions =
+    [
+        new("m1", "Log files older than 90 days in hot storage", "Hot", "Warm", 128, 1.34),
+        new("m2", "Analytics snapshots from Q1-Q3 2025", "Warm", "Cold", 540, 4.59),
+        new("m3", "Unused user upload thumbnails", "Hot", "Cold", 64, 1.22),
+    ];
+}

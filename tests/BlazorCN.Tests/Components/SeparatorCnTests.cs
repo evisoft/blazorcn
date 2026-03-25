@@ -14,9 +14,8 @@ public class SeparatorCnTests : BunitContext
         div.GetAttribute("data-slot").Should().Be("separator");
         div.GetAttribute("role").Should().Be("separator");
         div.GetAttribute("data-orientation").Should().Be("horizontal");
-        div.ClassList.Should().Contain("h-px");
-        div.ClassList.Should().Contain("w-full");
-        div.ClassList.Should().Contain("bg-border");
+        div.ClassList.Should().Contain("cn-separator");
+        div.ClassList.Should().Contain("cn-separator-horizontal");
     }
 
     [Fact]
@@ -25,8 +24,7 @@ public class SeparatorCnTests : BunitContext
         var cut = Render<SeparatorCn>(p => p.Add(c => c.Orientation, Orientation.Vertical));
         var div = cut.Find("div");
         div.GetAttribute("data-orientation").Should().Be("vertical");
-        div.ClassList.Should().Contain("h-full");
-        div.ClassList.Should().Contain("w-px");
+        div.ClassList.Should().Contain("cn-separator-vertical");
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using Bunit;
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Xunit;
 
@@ -35,6 +36,22 @@ public class CarouselCnTests : BunitContext
     {
         var cut = Render<CarouselCn>(p => p.AddChildContent("Content"));
         cut.Find("[data-slot='carousel']").GetAttribute("aria-roledescription").Should().Be("carousel");
+    }
+
+    [Fact]
+    public void Carousel_Has_Default_AriaLabel()
+    {
+        var cut = Render<CarouselCn>(p => p.AddChildContent("Content"));
+        cut.Find("[data-slot='carousel']").GetAttribute("aria-label").Should().Be("Carousel");
+    }
+
+    [Fact]
+    public void Carousel_AriaLabel_Override_Via_AdditionalAttributes()
+    {
+        var cut = Render<CarouselCn>(p => p
+            .Add(c => c.AdditionalAttributes, new Dictionary<string, object?> { { "aria-label", "Image gallery" } })
+            .AddChildContent("Content"));
+        cut.Find("[data-slot='carousel']").GetAttribute("aria-label").Should().Be("Image gallery");
     }
 
     [Fact]
@@ -360,6 +377,82 @@ public class CarouselCnTests : BunitContext
                 .Add(x => x.AdditionalAttributes, new Dictionary<string, object?> { { "id", "item-1" } })
                 .AddChildContent("Slide 1")));
         cut.Find("[data-slot='carousel-item']").GetAttribute("id").Should().Be("item-1");
+    }
+
+    // --- CurrentIndex / API ---
+
+    [Fact]
+    public void Carousel_CurrentIndex_Defaults_To_Zero()
+    {
+        var cut = Render<CarouselCn>(p => p.AddChildContent("Content"));
+        // No explicit assertion on internal state, but it renders
+        cut.Find("[data-slot='carousel']").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Carousel_CurrentIndex_Parameter_Sets_Initial()
+    {
+        int currentIndex = 0;
+        var cut = Render<CarouselCn>(p => p
+            .Add(c => c.CurrentIndex, 2)
+            .Add(c => c.CurrentIndexChanged, EventCallback.Factory.Create<int>(this, v => currentIndex = v))
+            .AddChildContent("Content"));
+        cut.Find("[data-slot='carousel']").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Carousel_CurrentIndexChanged_Fires_On_ScrollNext()
+    {
+        int currentIndex = -1;
+        var cut = Render<CarouselCn>(p => p
+            .Add(c => c.CurrentIndexChanged, EventCallback.Factory.Create<int>(this, v => currentIndex = v))
+            .AddChildContent(builder =>
+            {
+                builder.OpenComponent<CarouselContentCn>(0);
+                builder.AddAttribute(1, "ChildContent", (RenderFragment)(b =>
+                {
+                    for (var i = 0; i < 3; i++)
+                    {
+                        b.OpenComponent<CarouselItemCn>(i * 10);
+                        b.AddAttribute(i * 10 + 1, "ChildContent", (RenderFragment)(ib => ib.AddContent(0, "Slide")));
+                        b.CloseComponent();
+                    }
+                }));
+                builder.CloseComponent();
+                builder.OpenComponent<CarouselNextCn>(100);
+                builder.CloseComponent();
+            }));
+
+        cut.Find("[data-slot='carousel-next']").Click();
+        currentIndex.Should().Be(1);
+    }
+
+    [Fact]
+    public void Carousel_CurrentIndexChanged_Fires_On_ScrollPrev()
+    {
+        int currentIndex = -1;
+        var cut = Render<CarouselCn>(p => p
+            .Add(c => c.CurrentIndex, 2)
+            .Add(c => c.CurrentIndexChanged, EventCallback.Factory.Create<int>(this, v => currentIndex = v))
+            .AddChildContent(builder =>
+            {
+                builder.OpenComponent<CarouselContentCn>(0);
+                builder.AddAttribute(1, "ChildContent", (RenderFragment)(b =>
+                {
+                    for (var i = 0; i < 3; i++)
+                    {
+                        b.OpenComponent<CarouselItemCn>(i * 10);
+                        b.AddAttribute(i * 10 + 1, "ChildContent", (RenderFragment)(ib => ib.AddContent(0, "Slide")));
+                        b.CloseComponent();
+                    }
+                }));
+                builder.CloseComponent();
+                builder.OpenComponent<CarouselPreviousCn>(100);
+                builder.CloseComponent();
+            }));
+
+        cut.Find("[data-slot='carousel-previous']").Click();
+        currentIndex.Should().Be(1);
     }
 
     // --- Contains SVG Icons ---

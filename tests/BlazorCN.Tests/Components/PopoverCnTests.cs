@@ -160,15 +160,10 @@ public class PopoverCnTests : BunitContext
             .AddChildContent<PopoverContentCn>(c => c
                 .AddChildContent("Body")));
         var content = cut.Find("[data-slot='popover-content']");
+        content.ClassList.Should().Contain("cn-popover-content");
         content.ClassList.Should().Contain("z-50");
         content.ClassList.Should().Contain("w-72");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
-        content.ClassList.Should().Contain("p-4");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
-        content.ClassList.Should().Contain("outline-none");
+        content.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -292,8 +287,8 @@ public class PopoverCnTests : BunitContext
     {
         var cut = Render<PopoverTitleCn>(p => p.AddChildContent("Title"));
         var el = cut.Find("[data-slot='popover-title']");
+        el.ClassList.Should().Contain("cn-popover-title");
         el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("font-semibold");
     }
 
     [Fact]
@@ -328,8 +323,8 @@ public class PopoverCnTests : BunitContext
     {
         var cut = Render<PopoverDescriptionCn>(p => p.AddChildContent("Description"));
         var el = cut.Find("[data-slot='popover-description']");
+        el.ClassList.Should().Contain("cn-popover-description");
         el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("text-muted-foreground");
     }
 
     [Fact]
@@ -348,6 +343,20 @@ public class PopoverCnTests : BunitContext
             .Add(c => c.AdditionalAttributes, new Dictionary<string, object?> { { "id", "desc" } })
             .AddChildContent("Description"));
         cut.Find("[data-slot='popover-description']").GetAttribute("id").Should().Be("desc");
+    }
+
+    // --- ARIA ---
+
+    [Fact]
+    public void PopoverTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<PopoverCn>(p => p
+            .AddChildContent<PopoverTriggerCn>(t => t
+                .AddChildContent("Open")));
+        var trigger = cut.Find("[data-slot='popover-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
     }
 
     // --- Integration ---

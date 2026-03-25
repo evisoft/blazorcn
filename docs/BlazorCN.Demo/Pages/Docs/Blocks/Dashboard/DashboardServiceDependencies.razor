@@ -1,0 +1,158 @@
+@* ============================================================
+   Block: dashboard-service-dependencies
+   Title: Dashboard Service Dependencies
+   Description: Animated React service dependency map dashboard block for Next.js with upstream and downstream service status, latency metrics, health indicators, and connection counts using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Network traffic flow monitoring
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-service-dependencies.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideNetworkCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Service Dependencies</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        @_services.Length services monitored
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_healthyCount healthy
+                </span>
+                @if (_unhealthyCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @_unhealthyCount unhealthy
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Services *@
+        <div>
+            @for (var i = 0; i < _services.Length; i++)
+            {
+                var service = _services[i];
+                var isExpanded = _expanded == service.Id;
+                var isLast = i == _services.Length - 1;
+                var config = _healthConfig[service.Health];
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : service.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-mono font-medium text-sm">@service.Name</span>
+                            <div class="mt-0.5 flex items-center gap-3 text-muted-foreground text-xs">
+                                <span class="flex items-center gap-1">
+                                    <LucideArrowUpCn Size="12" Class="size-3" />
+                                    @service.UpstreamCount upstream
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <LucideArrowDownCn Size="12" Class="size-3" />
+                                    @service.DownstreamCount downstream
+                                </span>
+                            </div>
+                        </div>
+                        <div class="shrink-0 text-right">
+                            <span class="block font-mono text-xs tabular-nums">
+                                @service.P99Latency
+                            </span>
+                            <span class="block text-muted-foreground text-[10px]">
+                                @service.ErrorRate err
+                            </span>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="space-y-2 px-4 pb-4 pl-9">
+                            @* Upstream *@
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Upstream dependencies
+                                </span>
+                                <div class="space-y-1.5">
+                                    @foreach (var dep in service.Upstream)
+                                    {
+                                        <div class="flex items-center gap-2 text-sm">
+                                            <span class="@(Cn.Merge("size-1.5 rounded-full", _healthConfig[dep.Status].Dot))"></span>
+                                            <span class="flex-1 font-mono text-xs">@dep.Name</span>
+                                            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                                @dep.Latency
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            @* Downstream *@
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Downstream consumers
+                                </span>
+                                <div class="space-y-1.5">
+                                    @foreach (var dep in service.Downstream)
+                                    {
+                                        <div class="flex items-center gap-2 text-sm">
+                                            <span class="@(Cn.Merge("size-1.5 rounded-full", _healthConfig[dep.Status].Dot))"></span>
+                                            <span class="flex-1 font-mono text-xs">@dep.Name</span>
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px] font-normal">
+                                                @_healthConfig[dep.Status].Label
+                                            </BadgeCn>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "s2";
+
+    private record DependentService(string Name, string Status, string Latency);
+    private record Service(string Id, string Name, string Health, string P99Latency, string ErrorRate, int UpstreamCount, int DownstreamCount, DependentService[] Upstream, DependentService[] Downstream);
+    private record HealthConfig(string Dot, string Label);
+
+    private static readonly int _healthyCount = _services.Count(s => s.Health == "healthy");
+    private static readonly int _unhealthyCount = _services.Count(s => s.Health == "unhealthy");
+
+    private static readonly Dictionary<string, HealthConfig> _healthConfig = new()
+    {
+        ["healthy"] = new("bg-emerald-500", "Healthy"),
+        ["degraded"] = new("bg-amber-500", "Degraded"),
+        ["unhealthy"] = new("bg-red-500", "Unhealthy"),
+    };
+
+    private static readonly Service[] _services =
+    [
+        new("s1", "api-gateway", "healthy", "45ms", "0.02%", 3, 5,
+            [new("auth-service", "healthy", "12ms"), new("rate-limiter", "healthy", "3ms"), new("config-server", "healthy", "8ms")],
+            [new("web-app", "healthy", "\u2014"), new("mobile-bff", "healthy", "\u2014"), new("webhook-worker", "degraded", "\u2014"), new("admin-panel", "healthy", "\u2014"), new("cli-tool", "healthy", "\u2014")]),
+        new("s2", "user-service", "degraded", "312ms", "0.8%", 2, 4,
+            [new("postgres-primary", "healthy", "24ms"), new("redis-cache", "degraded", "89ms")],
+            [new("api-gateway", "healthy", "\u2014"), new("billing-service", "healthy", "\u2014"), new("notification-service", "healthy", "\u2014"), new("analytics-pipeline", "healthy", "\u2014")]),
+        new("s3", "billing-service", "healthy", "78ms", "0.01%", 3, 2,
+            [new("stripe-api", "healthy", "142ms"), new("postgres-billing", "healthy", "18ms"), new("user-service", "degraded", "95ms")],
+            [new("api-gateway", "healthy", "\u2014"), new("invoice-worker", "healthy", "\u2014")]),
+        new("s4", "search-service", "unhealthy", "2480ms", "4.2%", 2, 3,
+            [new("elasticsearch", "unhealthy", "2100ms"), new("redis-cache", "degraded", "89ms")],
+            [new("api-gateway", "healthy", "\u2014"), new("recommendation-engine", "healthy", "\u2014"), new("autocomplete-service", "unhealthy", "\u2014")]),
+        new("s5", "notification-service", "healthy", "52ms", "0.05%", 3, 1,
+            [new("user-service", "degraded", "95ms"), new("sendgrid-api", "healthy", "180ms"), new("redis-queue", "healthy", "4ms")],
+            [new("api-gateway", "healthy", "\u2014")]),
+    ];
+}

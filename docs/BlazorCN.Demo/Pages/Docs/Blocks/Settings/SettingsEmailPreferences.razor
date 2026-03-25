@@ -1,0 +1,179 @@
+@* ===========================================================
+   Block: settings-email-preferences
+   Title: Settings Email Preferences
+   Description: Email preference center with frequency selector, digest options, per-topic unsubscribe toggles, and global opt-out
+   Dependencies: BadgeCn, ButtonCn, LucideAlertTriangleCn, LucideCheckCn, LucideInboxCn, LucideMailCn, LucideMailXCn, SelectCn, SwitchCn
+   Source: original/blocks/settings/settings-email-preferences.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideMailCn Size="16" Class="size-4 text-muted-foreground" />
+                <p class="text-sm font-medium">Email preferences</p>
+            </div>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Control which emails you receive and how often
+            </p>
+        </div>
+
+        @* Global opt-out *@
+        <div class="flex items-center justify-between border-b px-4 py-4">
+            <div class="flex items-center gap-3">
+                <LucideMailXCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <div class="flex items-center gap-2">
+                        <p class="text-sm font-medium">Unsubscribe from all emails</p>
+                        @if (_globalOptOut)
+                        {
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                Active
+                            </BadgeCn>
+                        }
+                    </div>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Stop all non-transactional emails. Receipts and security alerts still send.
+                    </p>
+                </div>
+            </div>
+            <SwitchCn @bind-Checked="_globalOptOut" />
+        </div>
+
+        @* Frequency *@
+        <div class="@Cn.Merge("flex items-center justify-between border-b px-4 py-4", _globalOptOut ? "opacity-50" : "")">
+            <div>
+                <p class="text-sm font-medium">Email frequency</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    How often non-critical emails are delivered
+                </p>
+            </div>
+            <SelectCn TValue="string" Value="@_frequency" ValueChanged="v => _frequency = v">
+                <SelectTriggerCn Class="h-8 w-32 text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="realtime">Real-time</SelectItemCn>
+                    <SelectItemCn Value="daily">Daily</SelectItemCn>
+                    <SelectItemCn Value="weekly">Weekly</SelectItemCn>
+                    <SelectItemCn Value="monthly">Monthly</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Digest mode *@
+        <div class="@Cn.Merge("flex items-center justify-between border-b px-4 py-4", _globalOptOut ? "opacity-50" : "")">
+            <div class="flex items-center gap-3">
+                <LucideInboxCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <p class="text-sm font-medium">Digest mode</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Batch notifications into a single summary email
+                    </p>
+                </div>
+            </div>
+            <SwitchCn @bind-Checked="_digestEnabled" />
+        </div>
+
+        @* Topic subscriptions header *@
+        <div class="flex items-center justify-between border-b px-4 py-2">
+            <span class="text-xs font-medium text-muted-foreground">Email topics</span>
+            <span class="text-xs tabular-nums text-muted-foreground">
+                @SubscribedCount of @_topics.Count subscribed
+            </span>
+        </div>
+
+        @* Topics *@
+        <div class="@(_globalOptOut ? "opacity-50" : "")">
+            @for (var i = 0; i < _topics.Count; i++)
+            {
+                var topic = _topics[i];
+                var isLast = i == _topics.Count - 1;
+                var topicId = topic.Id;
+                <div class="@($"flex items-center justify-between px-4 py-3 {(isLast ? "" : "border-b")}")">
+                    <div class="min-w-0 flex-1 pr-4">
+                        <div class="flex items-center gap-2">
+                            <p class="text-sm font-medium">@topic.Label</p>
+                            <span class="text-xs text-muted-foreground">Last: @topic.LastSent</span>
+                        </div>
+                        <p class="mt-0.5 text-xs text-muted-foreground">@topic.Description</p>
+                    </div>
+                    <SwitchCn Checked="@(topic.Subscribed && !_globalOptOut)"
+                              CheckedChanged="@(_ => ToggleTopic(topicId))" />
+                </div>
+            }
+        </div>
+
+        @* Transactional notice *@
+        @if (_globalOptOut)
+        {
+            <div class="flex items-center gap-2 border-t px-4 py-3">
+                <LucideAlertTriangleCn Size="16" Class="size-3 shrink-0 text-amber-500" />
+                <span class="text-xs text-muted-foreground">
+                    Transactional emails (password reset, billing receipts) will still be sent regardless of your preferences.
+                </span>
+            </div>
+        }
+
+        @* Save *@
+        <div class="flex items-center justify-end gap-2 border-t px-4 py-3">
+            @if (_saved)
+            {
+                <span class="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                    <LucideCheckCn Size="16" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs"
+                      @onclick="HandleSave">
+                Save preferences
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class EmailTopic
+    {
+        public string Id { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool Subscribed { get; set; }
+        public string LastSent { get; set; } = "";
+    }
+
+    private string _frequency = "realtime";
+    private bool _digestEnabled;
+    private bool _globalOptOut;
+    private bool _saved;
+
+    private List<EmailTopic> _topics = new()
+    {
+        new() { Id = "product-updates", Label = "Product updates", Description = "New features, improvements, and platform changes", Subscribed = true, LastSent = "Mar 14" },
+        new() { Id = "security-alerts", Label = "Security alerts", Description = "Login notifications, password changes, and breach alerts", Subscribed = true, LastSent = "Mar 16" },
+        new() { Id = "billing-receipts", Label = "Billing receipts", Description = "Payment confirmations, invoices, and renewal reminders", Subscribed = true, LastSent = "Mar 1" },
+        new() { Id = "team-activity", Label = "Team activity", Description = "Member joins, role changes, and workspace activity", Subscribed = true, LastSent = "Mar 15" },
+        new() { Id = "weekly-report", Label = "Weekly report", Description = "Summary of your workspace usage and key metrics", Subscribed = true, LastSent = "Mar 11" },
+        new() { Id = "tips-guides", Label = "Tips and guides", Description = "Best practices, tutorials, and productivity tips", Subscribed = false, LastSent = "Feb 28" },
+        new() { Id = "community", Label = "Community highlights", Description = "Featured projects, case studies, and community events", Subscribed = false, LastSent = "Mar 10" },
+        new() { Id = "changelog", Label = "Changelog digest", Description = "Technical changelog with API updates and breaking changes", Subscribed = true, LastSent = "Mar 13" },
+    };
+
+    private int SubscribedCount => _topics.Count(t => t.Subscribed);
+
+    private void ToggleTopic(string id)
+    {
+        var topic = _topics.FirstOrDefault(t => t.Id == id);
+        if (topic != null)
+            topic.Subscribed = !topic.Subscribed;
+    }
+
+    private async Task HandleSave()
+    {
+        _saved = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _saved = false;
+    }
+}

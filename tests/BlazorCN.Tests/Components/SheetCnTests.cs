@@ -178,15 +178,15 @@ public class SheetCnTests : BunitContext
                 .AddChildContent("Body")));
         var el = cut.Find("[data-slot='sheet-content']");
         el.GetAttribute("data-side").Should().Be("right");
-        el.ClassList.Should().Contain("border-l");
+        el.ClassList.Should().Contain("cn-sheet-content");
     }
 
     [Theory]
-    [InlineData(SheetSide.Top, "top", "border-b")]
-    [InlineData(SheetSide.Right, "right", "border-l")]
-    [InlineData(SheetSide.Bottom, "bottom", "border-t")]
-    [InlineData(SheetSide.Left, "left", "border-r")]
-    public void SheetContent_Renders_Correct_Classes_For_Side(SheetSide side, string expectedDataSide, string expectedBorderClass)
+    [InlineData(SheetSide.Top, "top")]
+    [InlineData(SheetSide.Right, "right")]
+    [InlineData(SheetSide.Bottom, "bottom")]
+    [InlineData(SheetSide.Left, "left")]
+    public void SheetContent_Renders_Correct_DataSide_For_Side(SheetSide side, string expectedDataSide)
     {
         SetupJsInterop();
         var cut = Render<SheetCn>(p => p
@@ -196,7 +196,7 @@ public class SheetCnTests : BunitContext
                 .AddChildContent("Body")));
         var el = cut.Find("[data-slot='sheet-content']");
         el.GetAttribute("data-side").Should().Be(expectedDataSide);
-        el.ClassList.Should().Contain(expectedBorderClass);
+        el.ClassList.Should().Contain("cn-sheet-content");
     }
 
     [Fact]
@@ -208,12 +208,7 @@ public class SheetCnTests : BunitContext
             .AddChildContent<SheetContentCn>(c => c
                 .AddChildContent("Body")));
         var el = cut.Find("[data-slot='sheet-content']");
-        el.ClassList.Should().Contain("fixed");
-        el.ClassList.Should().Contain("z-50");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("bg-background");
-        el.ClassList.Should().Contain("shadow-lg");
+        el.ClassList.Should().Contain("cn-sheet-content");
     }
 
     [Fact]
@@ -265,6 +260,35 @@ public class SheetCnTests : BunitContext
         cut.Find("[data-slot='sheet-content']").GetAttribute("role").Should().Be("dialog");
     }
 
+    [Fact]
+    public void SheetContent_AriaLabelledby_Matches_Title_Id()
+    {
+        SetupJsInterop();
+        var cut = Render<SheetCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<SheetContentCn>(c => c
+                .AddChildContent<SheetTitleCn>(t => t
+                    .AddChildContent("Sheet Title"))));
+        var content = cut.Find("[data-slot='sheet-content']");
+        var title = cut.Find("[data-slot='sheet-title']");
+        var labelledBy = content.GetAttribute("aria-labelledby");
+        labelledBy.Should().NotBeNullOrEmpty();
+        title.GetAttribute("id").Should().Be(labelledBy);
+    }
+
+    [Fact]
+    public void SheetContent_Without_Title_Has_AriaLabel_Fallback()
+    {
+        SetupJsInterop();
+        var cut = Render<SheetCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<SheetContentCn>(c => c
+                .AddChildContent("Body without title")));
+        var content = cut.Find("[data-slot='sheet-content']");
+        content.GetAttribute("aria-labelledby").Should().BeNull();
+        content.GetAttribute("aria-label").Should().Be("Sheet");
+    }
+
     // --- SheetHeaderCn ---
 
     [Fact]
@@ -279,9 +303,9 @@ public class SheetCnTests : BunitContext
     {
         var cut = Render<SheetHeaderCn>(p => p.AddChildContent("Header"));
         var el = cut.Find("[data-slot='sheet-header']");
+        el.ClassList.Should().Contain("cn-sheet-header");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("gap-2");
     }
 
     [Fact]
@@ -307,10 +331,10 @@ public class SheetCnTests : BunitContext
     {
         var cut = Render<SheetFooterCn>(p => p.AddChildContent("Footer"));
         var el = cut.Find("[data-slot='sheet-footer']");
+        el.ClassList.Should().Contain("cn-sheet-footer");
         el.ClassList.Should().Contain("mt-auto");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("gap-2");
     }
 
     [Fact]
@@ -336,8 +360,7 @@ public class SheetCnTests : BunitContext
     {
         var cut = Render<SheetTitleCn>(p => p.AddChildContent("Title"));
         var el = cut.Find("[data-slot='sheet-title']");
-        el.ClassList.Should().Contain("text-lg");
-        el.ClassList.Should().Contain("font-semibold");
+        el.ClassList.Should().Contain("cn-sheet-title");
     }
 
     [Fact]
@@ -363,8 +386,7 @@ public class SheetCnTests : BunitContext
     {
         var cut = Render<SheetDescriptionCn>(p => p.AddChildContent("Description"));
         var el = cut.Find("[data-slot='sheet-description']");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("text-muted-foreground");
+        el.ClassList.Should().Contain("cn-sheet-description");
     }
 
     [Fact]

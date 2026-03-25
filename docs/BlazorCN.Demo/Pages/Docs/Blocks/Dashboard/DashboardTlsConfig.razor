@@ -1,0 +1,180 @@
+@* ============================================================
+   Block: dashboard-tls-config
+   Title: Dashboard Tls Config
+   Description: Animated React TLS configuration audit block for Next.js with protocol version support, cipher suite grades, security score display, expandable endpoint details, and compliance indicators using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: SSL/TLS certificate inventory and renewal
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-tls-config.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">TLS Configuration</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_endpoints.Length endpoints scanned
+                </p>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                @if (_issueCount > 0)
+                {
+                    <span class="flex items-center gap-1.5">
+                        <LucideShieldAlertCn Size="12" Class="size-3 text-amber-500" />
+                        @_issueCount need attention
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Endpoint rows *@
+        <div>
+            @for (var i = 0; i < _endpoints.Length; i++)
+            {
+                var endpoint = _endpoints[i];
+                var isExpanded = _expanded == endpoint.Id;
+                var isLast = i == _endpoints.Length - 1;
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : endpoint.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("flex size-8 shrink-0 items-center justify-center rounded-md font-semibold text-sm", _gradeColor[endpoint.Grade], _gradeBg[endpoint.Grade]))">
+                            @endpoint.Grade
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5">
+                                <LucideLockCn Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                <span class="truncate font-mono font-medium text-sm">
+                                    @endpoint.Hostname
+                                </span>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                <span>@string.Join(", ", endpoint.Protocols)</span>
+                                @if (endpoint.DeprecatedProtocols.Length > 0)
+                                {
+                                    <span>\u00b7</span>
+                                    <span class="text-red-600 dark:text-red-400">
+                                        @endpoint.DeprecatedProtocols.Length deprecated
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">
+                            @(endpoint.HstsEnabled ? "HSTS" : "No HSTS")
+                        </BadgeCn>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-[52px]">
+                            @* Certificate info *@
+                            <div class="mb-3 rounded-md bg-muted/50 p-3">
+                                <span class="font-medium text-muted-foreground text-xs">
+                                    Certificate
+                                </span>
+                                <div class="mt-1 flex items-center gap-3 text-sm">
+                                    <span>@endpoint.CertIssuer</span>
+                                    <span class="text-muted-foreground text-xs">\u00b7</span>
+                                    <span class="text-muted-foreground text-xs">
+                                        Expires @endpoint.CertExpiry
+                                    </span>
+                                </div>
+                                @if (endpoint.HstsEnabled)
+                                {
+                                    <p class="mt-1 text-muted-foreground text-xs">
+                                        HSTS max-age: @(endpoint.HstsMaxAge)s
+                                    </p>
+                                }
+                            </div>
+
+                            @* Cipher suites *@
+                            <div>
+                                <span class="font-medium text-muted-foreground text-xs">
+                                    Cipher Suites
+                                </span>
+                                <div class="mt-2 space-y-1.5">
+                                    @foreach (var cipher in endpoint.Ciphers)
+                                    {
+                                        <div class="flex items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
+                                            <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", _strengthDot[cipher.Strength]))"></span>
+                                            <span class="min-w-0 flex-1 truncate font-mono text-xs">
+                                                @cipher.Name
+                                            </span>
+                                            <span class="shrink-0 text-muted-foreground text-[10px]">
+                                                @cipher.KeyExchange
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Deprecated protocol warning *@
+                            @if (endpoint.DeprecatedProtocols.Length > 0)
+                            {
+                                <div class="mt-3 rounded-md bg-red-500/5 p-3">
+                                    <span class="font-medium text-red-600 text-xs dark:text-red-400">
+                                        Deprecated protocols detected
+                                    </span>
+                                    <p class="mt-1 text-muted-foreground text-sm leading-relaxed">
+                                        Disable @string.Join(" and ", endpoint.DeprecatedProtocols) to improve your
+                                        security grade. These protocols have known vulnerabilities and are no
+                                        longer supported by modern browsers.
+                                    </p>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded;
+
+    private record CipherSuite(string Name, string Strength, string KeyExchange);
+    private record TlsEndpoint(string Id, string Hostname, string Grade, string[] Protocols, string[] DeprecatedProtocols, bool HstsEnabled, string HstsMaxAge, string CertIssuer, string CertExpiry, CipherSuite[] Ciphers);
+
+    private static readonly int _issueCount = _endpoints.Count(e => e.Grade != "A+" && e.Grade != "A");
+
+    private static readonly Dictionary<string, string> _gradeColor = new()
+    {
+        ["A+"] = "text-emerald-600 dark:text-emerald-400",
+        ["A"] = "text-emerald-600 dark:text-emerald-400",
+        ["B"] = "text-amber-600 dark:text-amber-400",
+        ["C"] = "text-red-600 dark:text-red-400",
+        ["F"] = "text-red-600 dark:text-red-400",
+    };
+
+    private static readonly Dictionary<string, string> _gradeBg = new()
+    {
+        ["A+"] = "bg-emerald-500/10",
+        ["A"] = "bg-emerald-500/10",
+        ["B"] = "bg-amber-500/10",
+        ["C"] = "bg-red-500/10",
+        ["F"] = "bg-red-500/10",
+    };
+
+    private static readonly Dictionary<string, string> _strengthDot = new()
+    {
+        ["strong"] = "bg-emerald-500",
+        ["acceptable"] = "bg-amber-500",
+        ["weak"] = "bg-red-500",
+    };
+
+    private static readonly TlsEndpoint[] _endpoints =
+    [
+        new("e1", "api.acme.com", "A+", ["TLS 1.3", "TLS 1.2"], [], true, "31536000", "Let's Encrypt R3", "Jun 15, 2026",
+            [new("TLS_AES_256_GCM_SHA384", "strong", "X25519"), new("TLS_CHACHA20_POLY1305_SHA256", "strong", "X25519"), new("TLS_AES_128_GCM_SHA256", "strong", "X25519")]),
+        new("e2", "app.acme.com", "A", ["TLS 1.3", "TLS 1.2"], [], true, "15768000", "DigiCert SHA2", "Sep 03, 2026",
+            [new("TLS_AES_256_GCM_SHA384", "strong", "X25519"), new("ECDHE-RSA-AES128-GCM-SHA256", "acceptable", "ECDHE")]),
+        new("e3", "staging.acme.com", "B", ["TLS 1.3", "TLS 1.2", "TLS 1.1"], ["TLS 1.1"], false, "0", "Let's Encrypt R3", "Apr 28, 2026",
+            [new("TLS_AES_256_GCM_SHA384", "strong", "X25519"), new("ECDHE-RSA-AES128-SHA256", "acceptable", "ECDHE"), new("DHE-RSA-AES128-SHA", "weak", "DHE-1024")]),
+        new("e4", "legacy.acme.com", "C", ["TLS 1.2", "TLS 1.1", "TLS 1.0"], ["TLS 1.1", "TLS 1.0"], false, "0", "GeoTrust RSA", "May 10, 2026",
+            [new("ECDHE-RSA-AES128-GCM-SHA256", "acceptable", "ECDHE"), new("AES128-SHA256", "weak", "RSA"), new("DES-CBC3-SHA", "weak", "RSA")]),
+    ];
+}

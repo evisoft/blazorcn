@@ -1,0 +1,213 @@
+@* ===========================================================
+   Block: ai-api-playground
+   Title: Ai Api Playground
+   Description: AI API playground block with configuration panel, JSON preview, and request testing
+   Dependencies: ButtonCn, InputCn, LucideCheckCn, LucideCopyCn, SelectCn, SelectContentCn, SelectItemCn, SelectTriggerCn, SelectValueCn, SliderCn
+   Source: original/blocks/ai/ai-api-playground.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <span class="text-sm font-medium">API Playground</span>
+            <span class="text-xs text-muted-foreground">Configure and test AI API requests</span>
+        </div>
+
+        @* Configuration *@
+        <div class="space-y-4 border-b px-4 py-4">
+            @* Model selector *@
+            <div class="flex items-center gap-3">
+                <span class="w-20 shrink-0 text-xs text-muted-foreground">Model</span>
+                <SelectCn TValue="string" Value="@_model" ValueChanged="@(v => _model = v)">
+                    <SelectTriggerCn Class="h-8 text-xs">
+                        <SelectValueCn />
+                    </SelectTriggerCn>
+                    <SelectContentCn>
+                        @foreach (var m in _models)
+                        {
+                            <SelectItemCn Value="@m.Id" Class="text-xs">@m.Name</SelectItemCn>
+                        }
+                    </SelectContentCn>
+                </SelectCn>
+            </div>
+
+            @* Temperature *@
+            <div class="flex items-center gap-3">
+                <span class="w-20 shrink-0 text-xs text-muted-foreground">Temperature</span>
+                <SliderCn Class="flex-1"
+                          Min="0" Max="2" Step="0.1"
+                          Value="@_temperature"
+                          ValueChanged="@(v => _temperature = v)" />
+                <span class="w-8 shrink-0 text-right font-mono text-xs text-muted-foreground">
+                    @_temperature.ToString("F1")
+                </span>
+            </div>
+
+            @* Max tokens *@
+            <div class="flex items-center gap-3">
+                <span class="w-20 shrink-0 text-xs text-muted-foreground">Max tokens</span>
+                <SliderCn Class="flex-1"
+                          Min="64" Max="4096" Step="64"
+                          Value="@_maxTokens"
+                          ValueChanged="@(v => _maxTokens = v)" />
+                <span class="w-8 shrink-0 text-right font-mono text-xs text-muted-foreground">
+                    @((int)_maxTokens)
+                </span>
+            </div>
+        </div>
+
+        @* System prompt *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs text-muted-foreground">System prompt</span>
+            <textarea class="w-full resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus:outline-none"
+                      rows="2"
+                      @bind="_systemPrompt"></textarea>
+        </div>
+
+        @* User message *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <InputCn Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                     Placeholder="Enter user message..."
+                     @bind-Value="_userMessage" />
+            <ButtonCn Class="h-7 shrink-0 text-xs"
+                      Size="ButtonSize.Sm"
+                      Variant="ButtonVariant.Outline"
+                      Disabled="@_loading"
+                      @onclick="HandleSend">
+                @(_loading ? "Sending..." : "Send")
+            </ButtonCn>
+        </div>
+
+        @* Tabs *@
+        <div class="flex items-center gap-0 border-b">
+            <button type="button"
+                    class="@Cn.Merge("px-4 py-2 text-xs transition-colors", _activeTab == "request" ? "border-b-2 border-foreground font-medium text-foreground" : "text-muted-foreground hover:text-foreground")"
+                    @onclick="@(() => _activeTab = "request")">
+                Request
+            </button>
+            <button type="button"
+                    class="@Cn.Merge("px-4 py-2 text-xs transition-colors", _activeTab == "response" ? "border-b-2 border-foreground font-medium text-foreground" : "text-muted-foreground hover:text-foreground")"
+                    @onclick="@(() => _activeTab = "response")">
+                Response
+            </button>
+            <div class="flex-1"></div>
+            <ButtonCn Class="mr-2 h-6 gap-1 px-2 text-xs"
+                      Variant="ButtonVariant.Ghost"
+                      Size="ButtonSize.Sm"
+                      @onclick="HandleCopy">
+                @if (_copied)
+                {
+                    <LucideCheckCn Size="16" Class="size-3" />
+                    <text>Copied</text>
+                }
+                else
+                {
+                    <LucideCopyCn Size="16" Class="size-3" />
+                    <text>Copy</text>
+                }
+            </ButtonCn>
+        </div>
+
+        @* JSON preview *@
+        <div class="p-0">
+            @if (_activeTab == "request")
+            {
+                <pre class="overflow-auto p-4 font-mono text-xs leading-relaxed text-muted-foreground">@RequestJson</pre>
+            }
+            else if (_response != null)
+            {
+                <pre class="overflow-auto p-4 font-mono text-xs leading-relaxed text-muted-foreground">@ResponseJson</pre>
+            }
+            else
+            {
+                <div class="flex h-32 items-center justify-center">
+                    <span class="text-xs text-muted-foreground">
+                        Send a request to see the response
+                    </span>
+                </div>
+            }
+        </div>
+
+        @* Token usage footer *@
+        @if (_response != null && _activeTab == "response")
+        {
+            <div class="flex items-center gap-3 border-t px-4 py-2.5">
+                <span class="text-xs text-muted-foreground">@_response.PromptTokens prompt</span>
+                <span class="text-xs text-muted-foreground">&middot;</span>
+                <span class="text-xs text-muted-foreground">@_response.CompletionTokens completion</span>
+                <span class="text-xs text-muted-foreground">&middot;</span>
+                <span class="font-mono text-xs text-muted-foreground">@_response.TotalTokens total tokens</span>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record ModelInfo(string Id, string Name);
+    private record ResponseData(string Id, string Model, int PromptTokens, int CompletionTokens, int TotalTokens, string Content);
+
+    private static readonly ModelInfo[] _models =
+    {
+        new("gpt-4o", "GPT-4o"),
+        new("claude-4-sonnet", "Claude Sonnet 4"),
+        new("gemini-2.5-pro", "Gemini 2.5 Pro"),
+        new("gpt-4o-mini", "GPT-4o Mini")
+    };
+
+    private string _model = "gpt-4o";
+    private double _temperature = 0.7;
+    private double _maxTokens = 1024;
+    private string _systemPrompt = "You are a helpful assistant that provides concise, accurate answers.";
+    private string _userMessage = "Explain React Server Components in 2-3 sentences.";
+    private ResponseData? _response;
+    private bool _loading;
+    private string _activeTab = "request";
+    private bool _copied;
+
+    private string RequestJson => @$"{{
+  ""model"": ""{_model}"",
+  ""temperature"": {_temperature:F1},
+  ""max_tokens"": {(int)_maxTokens},
+  ""messages"": [
+    {{ ""role"": ""system"", ""content"": ""{_systemPrompt}"" }},
+    {{ ""role"": ""user"", ""content"": ""{_userMessage}"" }}
+  ]
+}}";
+
+    private string ResponseJson => _response == null ? "" : @$"{{
+  ""id"": ""{_response.Id}"",
+  ""object"": ""chat.completion"",
+  ""model"": ""{_response.Model}"",
+  ""choices"": [
+    {{
+      ""index"": 0,
+      ""message"": {{
+        ""role"": ""assistant"",
+        ""content"": ""{_response.Content}""
+      }},
+      ""finish_reason"": ""stop""
+    }}
+  ],
+  ""usage"": {{ ""prompt_tokens"": {_response.PromptTokens}, ""completion_tokens"": {_response.CompletionTokens}, ""total_tokens"": {_response.TotalTokens} }}
+}}";
+
+    private async Task HandleSend()
+    {
+        _loading = true;
+        _activeTab = "response";
+        StateHasChanged();
+        await Task.Delay(1500);
+        _response = new("chatcmpl-9k2x4fR3mN", _model, 42, 58, 100,
+            "React Server Components render on the server and send HTML to the client. They reduce bundle size by keeping server-only code out of the client bundle, enable direct database access, and improve initial page load performance.");
+        _loading = false;
+    }
+
+    private async Task HandleCopy()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

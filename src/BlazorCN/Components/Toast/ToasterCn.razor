@@ -9,12 +9,13 @@
      @attributes="AdditionalAttributes">
     @foreach (var toast in _toasts)
     {
-        <ToastCn Message="@toast" OnDismiss="RemoveToast" />
+        <ToastCn @key="toast.Id" Message="@toast" OnDismiss="RemoveToast" />
     }
 </div>
 
 @code {
     private readonly List<ToastMessage> _toasts = new();
+    private readonly Dictionary<string, CancellationTokenSource> _timers = new();
 
     protected override void OnInitialized()
     {
@@ -27,26 +28,41 @@
         {
             _toasts.Add(message);
             StateHasChanged();
-
-            // Auto-dismiss after duration
             _ = AutoDismissAsync(message);
         });
     }
 
     private async Task AutoDismissAsync(ToastMessage message)
     {
-        await Task.Delay(message.DurationMs);
-        await InvokeAsync(() => RemoveToast(message.Id));
+        var cts = new CancellationTokenSource();
+        _timers[message.Id] = cts;
+        try
+        {
+            await Task.Delay(message.DurationMs, cts.Token);
+            await InvokeAsync(() => RemoveToast(message.Id));
+        }
+        catch (TaskCanceledException) { }
     }
 
     internal void RemoveToast(string id)
     {
         _toasts.RemoveAll(t => t.Id == id);
+        if (_timers.Remove(id, out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
         StateHasChanged();
     }
 
     public void Dispose()
     {
         ToastService.OnShow -= HandleShow;
+        foreach (var cts in _timers.Values)
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+        _timers.Clear();
     }
 }

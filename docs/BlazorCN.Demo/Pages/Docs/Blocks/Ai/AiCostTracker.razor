@@ -1,0 +1,176 @@
+@* ===========================================================
+   Block: ai-cost-tracker
+   Title: Ai Cost Tracker
+   Description: AI cost tracking dashboard with budget bar, daily trends, model breakdown, and top operations
+   Dependencies: BadgeCn, LucideChevronRightCn
+   Source: original/blocks/ai/ai-cost-tracker.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Budget summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-baseline gap-1">
+                <span class="@Cn.Merge("text-2xl font-semibold tabular-nums", BudgetColor)">
+                    $@Spent.ToString("F2")
+                </span>
+                <span class="text-xs text-muted-foreground">/ $@Budget</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                @(BudgetPct)% used
+            </BadgeCn>
+            <span class="ml-auto text-xs text-muted-foreground">March 2026</span>
+        </div>
+
+        @* Budget bar *@
+        <div class="border-b px-4 py-3">
+            <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div class="@Cn.Merge("h-full rounded-full transition-all", BarColor)"
+                     style="@($"width: {BudgetPct}%")"></div>
+            </div>
+        </div>
+
+        @* Daily trend *@
+        <div class="border-b px-4 py-3">
+            <span class="text-xs font-medium text-muted-foreground">Daily spend</span>
+            <div class="mt-2 flex items-end gap-2" style="height: 80px">
+                @foreach (var day in _dailyCosts)
+                {
+                    var pct = (int)Math.Round(day.Cost / MaxDailyCost * 100);
+                    <div class="flex flex-1 flex-col items-center gap-1">
+                        <span class="font-mono text-[10px] tabular-nums text-muted-foreground">
+                            $@((int)day.Cost)
+                        </span>
+                        <div class="relative w-full" style="height: 50px">
+                            <div class="absolute inset-x-0 bottom-0 rounded-sm bg-foreground/10"
+                                 style="height: 100%"></div>
+                            <div class="absolute inset-x-0 bottom-0 rounded-sm bg-foreground/25 transition-all"
+                                 style="@($"height: {pct}%")"></div>
+                        </div>
+                        <span class="text-[10px] text-muted-foreground">@day.Day</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Model breakdown *@
+        <div class="border-b px-4 py-3">
+            <span class="text-xs font-medium text-muted-foreground">Cost by model</span>
+            <div class="mt-2 space-y-2">
+                @foreach (var m in _modelCosts)
+                {
+                    var pct = (int)Math.Round(m.Cost / TotalModelCost * 100);
+                    <div class="flex items-center gap-3">
+                        <span class="w-28 truncate text-sm">@m.Model</span>
+                        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div class="h-full rounded-full bg-foreground/20"
+                                 style="@($"width: {pct}%")"></div>
+                        </div>
+                        <span class="w-8 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                            @(pct)%
+                        </span>
+                        <span class="w-14 text-right font-mono text-xs tabular-nums">
+                            $@m.Cost.ToString("F2")
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Top operations *@
+        <div>
+            <div class="px-4 py-2">
+                <span class="text-xs font-medium text-muted-foreground">Top operations</span>
+            </div>
+            @for (var i = 0; i < _expensiveOps.Length; i++)
+            {
+                var op = _expensiveOps[i];
+                var isExpanded = _expanded == op.Name;
+                var isLast = i == _expensiveOps.Length - 1;
+                var opName = op.Name;
+                var idx = i;
+                <div class="@(!isLast ? "border-b" : "")">
+                    <button type="button"
+                            class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => _expanded = isExpanded ? null : opName)">
+                        <span class="font-mono text-xs text-muted-foreground">@(idx + 1)</span>
+                        <span class="min-w-0 flex-1 truncate text-sm">@op.Name</span>
+                        <span class="font-mono text-xs tabular-nums">@op.Cost</span>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="flex items-center gap-4 text-xs">
+                                    <span class="text-muted-foreground">
+                                        @op.Count requests this month
+                                    </span>
+                                    <span class="text-muted-foreground">&middot;</span>
+                                    <span class="@(op.Trend == "up" ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")">
+                                        @(op.Trend == "up" ? "Trending up" : "Trending down")
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DailyCost(string Day, double Cost);
+    private record ModelCost(string Model, double Cost);
+    private record ExpensiveOp(string Name, string Cost, int Count, string Trend);
+
+    private const int Budget = 100;
+    private const double Spent = 42.38;
+    private static int BudgetPct => (int)Math.Round(Spent / Budget * 100);
+
+    private static readonly DailyCost[] _dailyCosts =
+    {
+        new("Mon", 5.2),
+        new("Tue", 8.1),
+        new("Wed", 6.4),
+        new("Thu", 9.8),
+        new("Fri", 4.9),
+        new("Sat", 3.2),
+        new("Sun", 4.78)
+    };
+
+    private static double MaxDailyCost => _dailyCosts.Max(d => d.Cost);
+
+    private static readonly ModelCost[] _modelCosts =
+    {
+        new("GPT-4o", 18.4),
+        new("Claude Sonnet 4", 12.6),
+        new("GPT-4o Mini", 6.8),
+        new("Gemini 2.5 Pro", 4.58)
+    };
+
+    private static double TotalModelCost => _modelCosts.Sum(m => m.Cost);
+
+    private static readonly ExpensiveOp[] _expensiveOps =
+    {
+        new("Document Summarization", "$14.20", 342, "up"),
+        new("Code Generation", "$10.85", 187, "up"),
+        new("Image Analysis", "$8.60", 98, "down")
+    };
+
+    private string? _expanded;
+
+    private static string BudgetColor => BudgetPct >= 80
+        ? "text-red-600 dark:text-red-400"
+        : BudgetPct >= 60
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-emerald-600 dark:text-emerald-400";
+
+    private static string BarColor => BudgetPct >= 80
+        ? "bg-red-500"
+        : BudgetPct >= 60
+            ? "bg-amber-500"
+            : "bg-emerald-500";
+}

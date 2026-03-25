@@ -1,0 +1,160 @@
+@* ===========================================================
+   Block: ai-chat-with-tools
+   Title: Ai Chat With Tools
+   Description: AI chat with tool execution cards, status badges, JSON results, and function calling display
+   Dependencies: BadgeCn, ButtonCn, LucideArrowUpCn, LucideCheckCn, LucideCopyCn
+   Source: original/blocks/ai/ai-chat-with-tools.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <span class="text-sm font-medium">Tool-Use Assistant</span>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="text-xs text-muted-foreground">@ToolCount tools available</span>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto">
+            <div class="flex flex-col">
+                @for (var i = 0; i < _messages.Length; i++)
+                {
+                    var msg = _messages[i];
+                    var isLast = i == _messages.Length - 1;
+                    <div class="@(!isLast ? "border-b" : "")">
+                        <div class="px-4 py-3">
+                            @* Tool calls *@
+                            @if (msg.ToolCalls != null)
+                            {
+                                <div class="flex flex-col gap-2">
+                                    @foreach (var tool in msg.ToolCalls)
+                                    {
+                                        var toolId = tool.Id;
+                                        <div class="rounded-md bg-muted/50 p-3">
+                                            <div class="mb-2 flex items-center justify-between">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="@Cn.Merge("size-1.5 rounded-full", GetStatusDot(tool.Status))"></span>
+                                                    <span class="font-mono text-xs font-medium">@tool.Name</span>
+                                                </div>
+                                                <div class="flex items-center gap-2">
+                                                    @if (!string.IsNullOrEmpty(tool.Duration))
+                                                    {
+                                                        <span class="font-mono text-[10px] text-muted-foreground">@tool.Duration</span>
+                                                    }
+                                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 text-[10px] font-normal">
+                                                        @GetStatusLabel(tool.Status)
+                                                    </BadgeCn>
+                                                    <ButtonCn Class="h-5 gap-1 px-1.5 text-[10px]"
+                                                              Variant="ButtonVariant.Ghost"
+                                                              Size="ButtonSize.Sm"
+                                                              @onclick="@(() => HandleCopyTool(toolId))">
+                                                        @if (_copiedTool == toolId)
+                                                        {
+                                                            <LucideCheckCn Size="16" Class="size-3" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <LucideCopyCn Size="16" Class="size-3" />
+                                                        }
+                                                    </ButtonCn>
+                                                </div>
+                                            </div>
+                                            <div class="mb-2">
+                                                <span class="mb-1 block text-[10px] font-medium text-muted-foreground">Input</span>
+                                                <pre class="overflow-x-auto font-mono text-xs text-muted-foreground">@tool.InputJson</pre>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(tool.OutputJson))
+                                            {
+                                                <div>
+                                                    <span class="mb-1 block text-[10px] font-medium text-muted-foreground">Result</span>
+                                                    <pre class="overflow-x-auto font-mono text-xs text-muted-foreground">@tool.OutputJson</pre>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @* Text response *@
+                            @if (!string.IsNullOrEmpty(msg.Content))
+                            {
+                                <span class="mb-1 block text-xs font-medium text-muted-foreground">
+                                    @(msg.Role == "user" ? "You" : "AI")
+                                </span>
+                                <p class="whitespace-pre-wrap text-sm leading-relaxed">@msg.Content</p>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <div class="relative">
+                <textarea class="min-h-0 max-h-28 w-full resize-none border-0 bg-transparent pr-10 text-sm shadow-none focus:outline-none focus-visible:ring-0"
+                          rows="1"
+                          placeholder="Ask something that requires tools..."
+                          @bind="_input"></textarea>
+                <ButtonCn Class="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@(string.IsNullOrWhiteSpace(_input))">
+                    <LucideArrowUpCn Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ToolCall(string Id, string Name, string Status, string InputJson, string? OutputJson = null, string? Duration = null);
+    private record ChatMessage(string Id, string Role, string Content, ToolCall[]? ToolCalls = null);
+
+    private static readonly ChatMessage[] _messages =
+    {
+        new("1", "user", "What's the weather like in Tokyo right now, and are there any major news stories today?"),
+        new("2", "assistant", "", ToolCalls: new ToolCall[]
+        {
+            new("tc-1", "get_weather", "completed",
+                "{\n  \"location\": \"Tokyo, Japan\",\n  \"units\": \"celsius\"\n}",
+                "{\n  \"temperature\": 18,\n  \"condition\": \"Partly cloudy\",\n  \"humidity\": 62,\n  \"wind\": \"14 km/h NE\",\n  \"forecast\": \"Clearing tonight, sunny tomorrow\"\n}",
+                "320ms"),
+            new("tc-2", "get_news", "completed",
+                "{\n  \"query\": \"major news today\",\n  \"region\": \"global\",\n  \"limit\": 3\n}",
+                "{\n  \"articles\": [\n    { \"title\": \"G7 summit reaches climate agreement\", \"source\": \"Reuters\" },\n    { \"title\": \"SpaceX Starship completes orbital refueling test\", \"source\": \"AP\" },\n    { \"title\": \"Global semiconductor supply chain stabilizes\", \"source\": \"Bloomberg\" }\n  ]\n}",
+                "540ms")
+        }),
+        new("3", "assistant", "Here's what I found:\n\nWeather in Tokyo\nIt's currently 18\u00b0C and partly cloudy with 62% humidity and light northeast winds at 14 km/h. Expect clearing skies tonight and a sunny day tomorrow \u2014 great weather if you're planning outdoor activities.\n\nTop News Stories\n1. G7 Climate Agreement \u2014 G7 leaders have reached a new climate accord with binding emission targets for 2030 (Reuters)\n2. SpaceX Orbital Refueling \u2014 Starship successfully completed its first orbital refueling demonstration, a key milestone for the Artemis lunar program (AP)\n3. Semiconductor Recovery \u2014 Global chip supply chains are returning to normal after two years of disruption, with lead times dropping below 10 weeks (Bloomberg)\n\nWant me to dig deeper into any of these stories?")
+    };
+
+    private string _input = "";
+    private string? _copiedTool;
+
+    private int ToolCount => _messages.Sum(m => m.ToolCalls?.Length ?? 0);
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "running" => "bg-amber-500 animate-pulse",
+        "completed" => "bg-emerald-500",
+        "error" => "bg-red-500",
+        _ => "bg-gray-500"
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "running" => "Running",
+        "completed" => "Completed",
+        "error" => "Error",
+        _ => status
+    };
+
+    private async Task HandleCopyTool(string id)
+    {
+        _copiedTool = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedTool = null;
+    }
+}

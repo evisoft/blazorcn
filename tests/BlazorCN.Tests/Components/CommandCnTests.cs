@@ -21,15 +21,13 @@ public class CommandCnTests : BunitContext
     {
         var cut = Render<CommandCn>(p => p.AddChildContent("Content"));
         var el = cut.Find("[data-slot='command']");
+        el.ClassList.Should().Contain("cn-command");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("h-full");
         el.ClassList.Should().Contain("w-full");
         el.ClassList.Should().Contain("flex-col");
         el.ClassList.Should().Contain("overflow-hidden");
-        el.ClassList.Should().Contain("rounded-md");
         el.ClassList.Should().Contain("border");
-        el.ClassList.Should().Contain("bg-popover");
-        el.ClassList.Should().Contain("text-popover-foreground");
     }
 
     [Fact]
@@ -77,14 +75,13 @@ public class CommandCnTests : BunitContext
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Search...")));
         var el = cut.Find("[data-slot='command-input'] input");
+        el.ClassList.Should().Contain("cn-command-input");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("h-10");
-        el.ClassList.Should().Contain("w-full");
         el.ClassList.Should().Contain("rounded-md");
         el.ClassList.Should().Contain("bg-transparent");
         el.ClassList.Should().Contain("py-3");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("outline-none");
+        el.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -154,7 +151,7 @@ public class CommandCnTests : BunitContext
     {
         var cut = Render<CommandListCn>(p => p.AddChildContent("Items"));
         var el = cut.Find("[data-slot='command-list']");
-        el.ClassList.Should().Contain("max-h-[300px]");
+        el.ClassList.Should().Contain("cn-command-list");
         el.ClassList.Should().Contain("overflow-y-auto");
         el.ClassList.Should().Contain("overflow-x-hidden");
     }
@@ -182,9 +179,7 @@ public class CommandCnTests : BunitContext
     {
         var cut = Render<CommandEmptyCn>(p => p.AddChildContent("No results"));
         var el = cut.Find("[data-slot='command-empty']");
-        el.ClassList.Should().Contain("py-6");
-        el.ClassList.Should().Contain("text-center");
-        el.ClassList.Should().Contain("text-sm");
+        el.ClassList.Should().Contain("cn-command-empty");
     }
 
     [Fact]
@@ -217,9 +212,7 @@ public class CommandCnTests : BunitContext
     {
         var cut = Render<CommandGroupCn>(p => p.AddChildContent("Group items"));
         var el = cut.Find("[data-slot='command-group']");
-        el.ClassList.Should().Contain("overflow-hidden");
-        el.ClassList.Should().Contain("p-1");
-        el.ClassList.Should().Contain("text-foreground");
+        el.ClassList.Should().Contain("cn-command-group");
     }
 
     [Fact]
@@ -286,17 +279,7 @@ public class CommandCnTests : BunitContext
     {
         var cut = Render<CommandItemCn>(p => p.AddChildContent("Item"));
         var item = cut.Find("[data-slot='command-item']");
-        item.ClassList.Should().Contain("relative");
-        item.ClassList.Should().Contain("flex");
-        item.ClassList.Should().Contain("cursor-default");
-        item.ClassList.Should().Contain("select-none");
-        item.ClassList.Should().Contain("items-center");
-        item.ClassList.Should().Contain("gap-2");
-        item.ClassList.Should().Contain("rounded-sm");
-        item.ClassList.Should().Contain("px-2");
-        item.ClassList.Should().Contain("py-1.5");
-        item.ClassList.Should().Contain("text-sm");
-        item.ClassList.Should().Contain("outline-none");
+        item.ClassList.Should().Contain("cn-command-item");
     }
 
     [Fact]
@@ -386,9 +369,7 @@ public class CommandCnTests : BunitContext
     {
         var cut = Render<CommandSeparatorCn>();
         var el = cut.Find("[data-slot='command-separator']");
-        el.ClassList.Should().Contain("-mx-1");
-        el.ClassList.Should().Contain("h-px");
-        el.ClassList.Should().Contain("bg-border");
+        el.ClassList.Should().Contain("cn-command-separator");
     }
 
     [Fact]

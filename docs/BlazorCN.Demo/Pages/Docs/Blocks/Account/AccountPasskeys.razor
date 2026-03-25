@@ -1,0 +1,248 @@
+@* ============================================================
+   Block: account-passkeys
+   Title: Account Passkeys
+   Description: Passkey management for WebAuthn passwordless authentication with device registration and security key support
+   Dependencies: AlertDialogCn, BadgeCn, ButtonCn, DialogCn, InputCn, LabelCn, SwitchCn
+   Source: original/blocks/account/account-passkeys.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideFingerprintCn Class="h-5 w-5 text-muted-foreground" Size="20" />
+                    <div>
+                        <h2 class="text-sm font-medium">Passkeys</h2>
+                        <p class="text-xs text-muted-foreground">Sign in securely without passwords using biometrics</p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Class="gap-1.5" OnClick="@(() => _showAddDialog = true)">
+                    <LucidePlusCn Class="h-3.5 w-3.5" Size="14" />
+                    Add Passkey
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="space-y-4 p-4">
+            <div class="space-y-2">
+                <span class="text-xs font-medium text-muted-foreground">REGISTERED PASSKEYS</span>
+                <div class="divide-y rounded-md border">
+                    @if (_passkeys.Count == 0)
+                    {
+                        <div class="flex flex-col items-center justify-center py-6 text-center">
+                            <LucideFingerprintCn Class="mb-2 h-8 w-8 text-muted-foreground" Size="32" />
+                            <p class="text-sm text-muted-foreground">No passkeys registered</p>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var passkey in _passkeys)
+                        {
+                            <div class="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/50">
+                                <div class="@Cn.Merge("flex h-8 w-8 shrink-0 items-center justify-center rounded-md", passkey.Type == "security-key" ? "bg-amber-500/10 text-amber-600" : "bg-muted text-muted-foreground")">
+                                    @if (passkey.Type == "security-key")
+                                    {
+                                        <LucideUsbCn Class="h-4 w-4" Size="16" />
+                                    }
+                                    else if (passkey.Device.ToLowerInvariant() == "ios")
+                                    {
+                                        <LucideSmartphoneCn Class="h-4 w-4" Size="16" />
+                                    }
+                                    else
+                                    {
+                                        <LucideLaptopCn Class="h-4 w-4" Size="16" />
+                                    }
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <p class="text-sm font-medium">@passkey.Name</p>
+                                        @if (passkey.IsDefault)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-0.5 px-1.5 text-[10px]">
+                                                <LucideStarCn Class="h-2.5 w-2.5" Size="10" />
+                                                Default
+                                            </BadgeCn>
+                                        }
+                                        @if (passkey.Type == "security-key")
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 gap-0.5 px-1.5 text-[10px]">
+                                                <LucideUsbCn Class="h-2.5 w-2.5" Size="10" />
+                                                Security Key
+                                            </BadgeCn>
+                                        }
+                                        @if (passkey.IsSynced)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-0.5 px-1.5 text-[10px]">
+                                                <LucideCloudCn Class="h-2.5 w-2.5" Size="10" />
+                                                Synced
+                                            </BadgeCn>
+                                        }
+                                    </div>
+                                    <p class="mt-0.5 text-xs text-muted-foreground">@passkey.Device &middot; Added @passkey.CreatedAt</p>
+                                </div>
+                                <p class="shrink-0 text-xs text-muted-foreground">@passkey.LastUsed</p>
+                                <div class="flex shrink-0 items-center gap-0.5">
+                                    @if (!passkey.IsDefault)
+                                    {
+                                        <ButtonCn Class="h-7 w-7 p-0" OnClick="@(() => SetAsDefault(passkey.Id))"
+                                                  Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" title="Set as default">
+                                            <LucideStarOffCn Class="h-3.5 w-3.5" Size="14" />
+                                        </ButtonCn>
+                                    }
+                                    <ButtonCn Class="h-7 w-7 p-0" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                              OnClick="@(() => { _selectedPasskey = passkey; _newPasskeyName = passkey.Name; _showRenameDialog = true; })">
+                                        <LucidePencilCn Class="h-3.5 w-3.5" Size="14" />
+                                    </ButtonCn>
+                                    <ButtonCn Class="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                              OnClick="@(() => { _selectedPasskey = passkey; _showDeleteDialog = true; })">
+                                        <LucideTrash2Cn Class="h-3.5 w-3.5" Size="14" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <DialogCn @bind-Open="_showAddDialog">
+        <DialogContentCn Class="w-full max-w-[450px]">
+            <DialogHeaderCn>
+                <DialogTitleCn>Add a Passkey</DialogTitleCn>
+                <DialogDescriptionCn>Register a new passkey using your device's biometrics or a security key</DialogDescriptionCn>
+            </DialogHeaderCn>
+            <div class="space-y-4 py-4">
+                <div class="space-y-2">
+                    <LabelCn For="passkey-name">Passkey Name (optional)</LabelCn>
+                    <InputCn id="passkey-name" placeholder="e.g., Work MacBook, Personal Phone" @bind-Value="_newPasskeyName" />
+                </div>
+                <div class="flex items-center justify-between border-t pt-4">
+                    <div>
+                        <p class="text-sm font-medium">Set as default</p>
+                        <p class="text-xs text-muted-foreground">Use this passkey by default when signing in</p>
+                    </div>
+                    <SwitchCn Checked="@_passkeyAsDefault" CheckedChanged="@((bool v) => _passkeyAsDefault = v)" />
+                </div>
+            </div>
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" OnClick="@(() => _showAddDialog = false)">Cancel</ButtonCn>
+                <ButtonCn Class="gap-1.5" OnClick="HandleRegisterPasskey">
+                    <LucideFingerprintCn Class="h-4 w-4" Size="16" />
+                    Register Passkey
+                </ButtonCn>
+            </DialogFooterCn>
+        </DialogContentCn>
+    </DialogCn>
+
+    <DialogCn @bind-Open="_showRenameDialog">
+        <DialogContentCn Class="w-full max-w-[400px]">
+            <DialogHeaderCn>
+                <DialogTitleCn>Rename Passkey</DialogTitleCn>
+                <DialogDescriptionCn>Give this passkey a recognizable name</DialogDescriptionCn>
+            </DialogHeaderCn>
+            <div class="space-y-4 py-4">
+                <div class="space-y-2">
+                    <LabelCn For="rename-passkey">Passkey Name</LabelCn>
+                    <InputCn id="rename-passkey" placeholder="e.g., Work Laptop" @bind-Value="_newPasskeyName" />
+                </div>
+            </div>
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" OnClick="@(() => _showRenameDialog = false)">Cancel</ButtonCn>
+                <ButtonCn Disabled="@string.IsNullOrWhiteSpace(_newPasskeyName)" OnClick="HandleRename">Save Name</ButtonCn>
+            </DialogFooterCn>
+        </DialogContentCn>
+    </DialogCn>
+
+    <AlertDialogCn @bind-Open="_showDeleteDialog">
+        <AlertDialogContentCn>
+            <AlertDialogHeaderCn>
+                <AlertDialogTitleCn>Remove Passkey</AlertDialogTitleCn>
+                <AlertDialogDescriptionCn>Are you sure you want to remove "@(_selectedPasskey?.Name)"? You won't be able to sign in with this passkey anymore.</AlertDialogDescriptionCn>
+            </AlertDialogHeaderCn>
+            @if (_passkeys.Count == 1)
+            {
+                <div class="flex items-start gap-2 rounded-md bg-red-500/10 p-3">
+                    <LucideCircleAlertCn Class="mt-0.5 h-4 w-4 shrink-0 text-red-700" Size="16" />
+                    <p class="text-xs text-red-700">This is your only passkey. Make sure you have another way to sign in before removing it.</p>
+                </div>
+            }
+            <AlertDialogFooterCn>
+                <AlertDialogCancelCn>Cancel</AlertDialogCancelCn>
+                <AlertDialogActionCn Class="bg-destructive text-destructive-foreground hover:bg-destructive/90" OnClick="HandleDelete">Remove Passkey</AlertDialogActionCn>
+            </AlertDialogFooterCn>
+        </AlertDialogContentCn>
+    </AlertDialogCn>
+</section>
+
+@code {
+    private class Passkey
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Device { get; set; } = "";
+        public string CreatedAt { get; set; } = "";
+        public string LastUsed { get; set; } = "";
+        public bool IsDefault { get; set; }
+        public bool IsSynced { get; set; }
+    }
+
+    private Passkey? _selectedPasskey;
+    private bool _showAddDialog;
+    private bool _showRenameDialog;
+    private bool _showDeleteDialog;
+    private string _newPasskeyName = "";
+    private bool _passkeyAsDefault = true;
+
+    private List<Passkey> _passkeys =
+    [
+        new() { Id = "1", Name = "MacBook Pro Touch ID", Type = "platform", Device = "macOS", CreatedAt = "Jun 15, 2024", LastUsed = "Just now", IsDefault = true, IsSynced = true },
+        new() { Id = "2", Name = "iPhone Face ID", Type = "platform", Device = "iOS", CreatedAt = "Jun 15, 2024", LastUsed = "2 days ago", IsDefault = false, IsSynced = true },
+        new() { Id = "3", Name = "YubiKey 5 NFC", Type = "security-key", Device = "Hardware Key", CreatedAt = "Aug 20, 2024", LastUsed = "2 weeks ago", IsDefault = false, IsSynced = false },
+    ];
+
+    private void SetAsDefault(string id) { foreach (var p in _passkeys) p.IsDefault = p.Id == id; }
+
+    private void HandleRegisterPasskey()
+    {
+        var newPasskey = new Passkey
+        {
+            Id = $"pk_{_passkeys.Count + 1}",
+            Name = string.IsNullOrWhiteSpace(_newPasskeyName) ? "New Passkey" : _newPasskeyName,
+            Type = "platform",
+            Device = "Current Device",
+            CreatedAt = "Today",
+            LastUsed = "Just now",
+            IsDefault = false,
+            IsSynced = false,
+        };
+        if (_passkeyAsDefault) { foreach (var p in _passkeys) p.IsDefault = false; newPasskey.IsDefault = true; }
+        _passkeys.Add(newPasskey);
+        _showAddDialog = false;
+        _newPasskeyName = "";
+        _passkeyAsDefault = true;
+    }
+
+    private void HandleRename()
+    {
+        if (_selectedPasskey != null && !string.IsNullOrWhiteSpace(_newPasskeyName))
+        {
+            _selectedPasskey.Name = _newPasskeyName.Trim();
+            _showRenameDialog = false;
+            _selectedPasskey = null;
+            _newPasskeyName = "";
+        }
+    }
+
+    private void HandleDelete()
+    {
+        if (_selectedPasskey != null)
+        {
+            _passkeys.RemoveAll(p => p.Id == _selectedPasskey.Id);
+            _showDeleteDialog = false;
+            _selectedPasskey = null;
+        }
+    }
+}

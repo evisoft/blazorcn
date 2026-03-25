@@ -1,6 +1,6 @@
 // BlazorCN JS Interop — minimal behaviors that CSS can't handle
 
-/** @type {Map<string, AbortController|{abort: Function}>} */
+/** @type {Map<string, AbortController|{abort: Function, previouslyFocused?: Element}>} */
 const cleanupMap = new Map();
 
 /**
@@ -10,10 +10,12 @@ const cleanupMap = new Map();
  */
 export function trapFocus(element, id) {
     if (!element) return;
+    const previouslyFocused = document.activeElement;
     cleanup(id);
 
+    const focusKey = id + ':focus';
     const controller = new AbortController();
-    cleanupMap.set(id, controller);
+    cleanupMap.set(focusKey, { abort: () => controller.abort(), previouslyFocused });
 
     const focusable = getFocusableElements(element);
     if (focusable.length === 0) return;
@@ -56,7 +58,9 @@ export function onOutsideClick(element, id, dotnetRef, methodName) {
     cleanupMap.set(id, controller);
 
     setTimeout(() => {
+        if (controller.signal.aborted) return;
         document.addEventListener('pointerdown', (e) => {
+            if (!element.isConnected) return;
             if (!element.contains(e.target)) {
                 dotnetRef.invokeMethodAsync(methodName);
             }
@@ -73,7 +77,8 @@ let _savedScrollY = 0;
  * @param {string} id
  */
 export function lockScroll(id) {
-    if (cleanupMap.has(id)) return; // already locked by this id
+    const scrollKey = id + ':scroll';
+    if (cleanupMap.has(scrollKey)) return; // already locked by this id
     if (_scrollLockCount === 0) {
         _savedScrollY = window.scrollY;
         document.body.style.position = 'fixed';
@@ -83,7 +88,7 @@ export function lockScroll(id) {
         document.body.style.overflow = 'hidden';
     }
     _scrollLockCount++;
-    cleanupMap.set(id, { abort: () => {
+    cleanupMap.set(scrollKey, { abort: () => {
         _scrollLockCount = Math.max(0, _scrollLockCount - 1);
         if (_scrollLockCount === 0) unlockScrollInternal(_savedScrollY);
     }});
@@ -103,10 +108,17 @@ function unlockScrollInternal(scrollY) {
  * @param {string} id
  */
 export function cleanup(id) {
-    const existing = cleanupMap.get(id);
-    if (existing) {
-        if (typeof existing.abort === 'function') existing.abort();
-        cleanupMap.delete(id);
+    // Process scroll before focus: restore scroll position before restoring focus.
+    // Process base id last for non-suffixed callers (onOutsideClick, createFloating).
+    for (const key of [id + ':scroll', id + ':focus', id]) {
+        const existing = cleanupMap.get(key);
+        if (existing) {
+            if (typeof existing.abort === 'function') existing.abort();
+            if (existing.previouslyFocused && existing.previouslyFocused.isConnected) {
+                existing.previouslyFocused.focus();
+            }
+            cleanupMap.delete(key);
+        }
     }
 }
 

@@ -225,12 +225,12 @@ public class ToastCnTests : BunitContext
         service.Show("Hello");
 
         var toast = cut.Find("[data-slot='toast']");
+        toast.ClassList.Should().Contain("cn-toast");
         toast.ClassList.Should().Contain("group");
         toast.ClassList.Should().Contain("pointer-events-auto");
         toast.ClassList.Should().Contain("relative");
         toast.ClassList.Should().Contain("flex");
         toast.ClassList.Should().Contain("w-full");
-        toast.ClassList.Should().Contain("rounded-md");
         toast.ClassList.Should().Contain("border");
         toast.ClassList.Should().Contain("p-4");
         toast.ClassList.Should().Contain("shadow-lg");

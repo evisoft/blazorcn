@@ -1,0 +1,165 @@
+@* ============================================================
+   Block: dashboard-usage-billing
+   Title: Dashboard Usage Billing
+   Description: Animated React usage-based billing meter block for Next.js with metered resource consumption, projected monthly costs, threshold alerts, usage breakdown by resource type, and animated progress bars using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Recurring revenue and churn tracking
+   Dependencies: BadgeCn, ButtonCn
+   Source: original/blocks/dashboard/dashboard-usage-billing.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Usage &amp; Billing</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_daysRemaining days remaining in period
+                </p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                View Invoice
+            </ButtonCn>
+        </div>
+
+        @* Cost summary *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-center gap-6">
+                <div>
+                    <span class="text-muted-foreground text-xs">Current charges</span>
+                    <div class="flex items-baseline gap-0.5">
+                        <span class="font-semibold text-2xl tabular-nums">
+                            $@_currentCharges.ToString("F2")
+                        </span>
+                    </div>
+                </div>
+                <div class="h-8 w-px bg-border"></div>
+                <div>
+                    <span class="text-muted-foreground text-xs">Projected total</span>
+                    <div class="flex items-baseline gap-1">
+                        <span class="font-semibold text-2xl tabular-nums text-muted-foreground">
+                            $@_projectedTotal.ToString("F2")
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            @* Period progress *@
+            <div class="mt-3">
+                <div class="mb-1 flex items-center justify-between">
+                    <span class="text-muted-foreground text-xs">Billing period</span>
+                    <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                        @_dayProgressPct% elapsed
+                    </span>
+                </div>
+                <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full rounded-full bg-foreground/20"
+                         style="@($"width: {_dayProgressPct}%")"></div>
+                </div>
+            </div>
+        </div>
+
+        @* Resource usage header *@
+        <div class="border-b bg-muted/30 px-4 py-2">
+            <span class="font-medium text-muted-foreground text-xs">Resource Usage</span>
+        </div>
+
+        @* Usage meters *@
+        <div>
+            @for (var i = 0; i < _meters.Length; i++)
+            {
+                var meter = _meters[i];
+                var config = _statusConfig[meter.Status];
+                var usagePercent = Math.Min((double)meter.Used / meter.Limit * 100, 100);
+                var isLast = i == _meters.Length - 1;
+                var isOver = meter.Used > meter.Limit;
+                var cost = meter.Used * meter.UnitPrice;
+                <div class="@(Cn.Merge("px-4 py-3", isLast ? "" : "border-b"))">
+                    <div class="flex items-center gap-2">
+                        <span class="min-w-0 flex-1 font-medium text-sm">@meter.Resource</span>
+                        @if (!string.IsNullOrEmpty(config.Badge))
+                        {
+                            <BadgeCn Variant="BadgeVariant.Secondary"
+                                     Class="@(Cn.Merge("font-normal text-[10px]", meter.Status == "exceeded" || meter.Status == "critical" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"))">
+                                @if (isOver)
+                                {
+                                    <LucideAlertTriangleCn Size="10" Class="mr-1 size-2.5" />
+                                }
+                                @config.Badge
+                            </BadgeCn>
+                        }
+                        <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                            $@cost.ToString("F2")
+                        </span>
+                    </div>
+
+                    <div class="mt-2">
+                        <div class="mb-1 flex items-center justify-between">
+                            <span class="text-muted-foreground text-xs">
+                                @FormatValue(meter.Used, meter.Unit) of
+                                @FormatValue(meter.Limit, meter.Unit) @meter.Unit
+                            </span>
+                            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                @((int)Math.Round(meter.Used / meter.Limit * 100))%
+                            </span>
+                        </div>
+                        <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div class="@(Cn.Merge("h-full rounded-full", config.Bar))"
+                                 style="@($"width: {usagePercent:F1}%")"></div>
+                        </div>
+                    </div>
+
+                    @if (isOver)
+                    {
+                        <div class="mt-1.5 flex items-center gap-1 text-red-600 text-xs dark:text-red-400">
+                            <LucideZapCn Size="12" Class="size-3" />
+                            <span>
+                                @FormatValue(meter.Used - meter.Limit, meter.Unit) @meter.Unit over limit \u00b7
+                                overage rate $@((meter.UnitPrice * 1.5).ToString("F4"))/@meter.Unit.TrimEnd('s')
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record UsageMeter(string Id, string Resource, string Unit, double Used, double Limit, double UnitPrice, string Status);
+    private record StatusConfig(string Bar, string Badge);
+
+    private const int _daysRemaining = 13;
+    private const int _daysTotal = 31;
+    private const double _currentCharges = 127.43;
+    private const double _projectedTotal = 218.67;
+    private static readonly int _dayProgressPct = (int)Math.Round((double)(_daysTotal - _daysRemaining) / _daysTotal * 100);
+
+    private static string FormatValue(double value, string unit)
+    {
+        if (unit is "requests" or "emails")
+        {
+            if (value >= 1_000_000) return $"{value / 1_000_000:F1}M";
+            if (value >= 1_000) return $"{value / 1_000:F1}K";
+        }
+        if (value >= 1000) return $"{value / 1000:F1}K";
+        return value % 1 == 0 ? ((int)value).ToString() : value.ToString("F1");
+    }
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["normal"] = new("bg-emerald-500/50", ""),
+        ["warning"] = new("bg-amber-500/60", "Warning"),
+        ["critical"] = new("bg-red-500/60", "Critical"),
+        ["exceeded"] = new("bg-red-500/80", "Exceeded"),
+    };
+
+    private static readonly UsageMeter[] _meters =
+    [
+        new("u1", "API Requests", "requests", 842_000, 1_000_000, 0.0001, "warning"),
+        new("u2", "Bandwidth", "GB", 245, 500, 0.08, "normal"),
+        new("u3", "Storage", "GB", 47.3, 50, 0.15, "critical"),
+        new("u4", "Compute Hours", "hours", 312, 500, 0.12, "normal"),
+        new("u5", "Email Sends", "emails", 12_480, 10_000, 0.001, "exceeded"),
+    ];
+}

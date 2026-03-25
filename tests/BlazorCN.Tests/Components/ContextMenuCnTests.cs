@@ -154,14 +154,9 @@ public class ContextMenuCnTests : BunitContext
 
         cut.Find("[data-slot='context-menu-trigger']").TriggerEvent("oncontextmenu", new MouseEventArgs { ClientX = 100, ClientY = 200 });
         var content = cut.Find("[data-slot='context-menu-content']");
+        content.ClassList.Should().Contain("cn-context-menu-content");
         content.ClassList.Should().Contain("z-50");
         content.ClassList.Should().Contain("overflow-hidden");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
-        content.ClassList.Should().Contain("p-1");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
     }
 
     [Fact]
@@ -226,16 +221,13 @@ public class ContextMenuCnTests : BunitContext
     {
         var cut = Render<ContextMenuItemCn>(p => p.AddChildContent("Item"));
         var item = cut.Find("[data-slot='context-menu-item']");
+        item.ClassList.Should().Contain("cn-context-menu-item");
         item.ClassList.Should().Contain("relative");
         item.ClassList.Should().Contain("flex");
         item.ClassList.Should().Contain("cursor-default");
         item.ClassList.Should().Contain("select-none");
         item.ClassList.Should().Contain("items-center");
-        item.ClassList.Should().Contain("gap-2");
-        item.ClassList.Should().Contain("rounded-sm");
-        item.ClassList.Should().Contain("px-2");
-        item.ClassList.Should().Contain("py-1.5");
-        item.ClassList.Should().Contain("text-sm");
+        item.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -253,7 +245,7 @@ public class ContextMenuCnTests : BunitContext
         var cut = Render<ContextMenuItemCn>(p => p
             .Add(c => c.Variant, "destructive")
             .AddChildContent("Delete"));
-        cut.Find("[data-slot='context-menu-item']").ClassList.Should().Contain("text-destructive");
+        cut.Find("[data-slot='context-menu-item']").GetAttribute("data-variant").Should().Be("destructive");
     }
 
     [Fact]
@@ -262,7 +254,7 @@ public class ContextMenuCnTests : BunitContext
         var cut = Render<ContextMenuItemCn>(p => p
             .Add(c => c.Inset, true)
             .AddChildContent("Item"));
-        cut.Find("[data-slot='context-menu-item']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='context-menu-item']").GetAttribute("data-inset").Should().NotBeNull();
     }
 
     [Fact]
@@ -327,10 +319,7 @@ public class ContextMenuCnTests : BunitContext
     {
         var cut = Render<ContextMenuLabelCn>(p => p.AddChildContent("Label"));
         var el = cut.Find("[data-slot='context-menu-label']");
-        el.ClassList.Should().Contain("px-2");
-        el.ClassList.Should().Contain("py-1.5");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("font-semibold");
+        el.ClassList.Should().Contain("cn-context-menu-label");
     }
 
     [Fact]
@@ -339,7 +328,7 @@ public class ContextMenuCnTests : BunitContext
         var cut = Render<ContextMenuLabelCn>(p => p
             .Add(c => c.Inset, true)
             .AddChildContent("Label"));
-        cut.Find("[data-slot='context-menu-label']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='context-menu-label']").GetAttribute("data-inset").Should().NotBeNull();
     }
 
     // --- ContextMenuSeparatorCn ---
@@ -363,10 +352,7 @@ public class ContextMenuCnTests : BunitContext
     {
         var cut = Render<ContextMenuSeparatorCn>();
         var el = cut.Find("[data-slot='context-menu-separator']");
-        el.ClassList.Should().Contain("-mx-1");
-        el.ClassList.Should().Contain("my-1");
-        el.ClassList.Should().Contain("h-px");
-        el.ClassList.Should().Contain("bg-muted");
+        el.ClassList.Should().Contain("cn-context-menu-separator");
     }
 
     // --- ContextMenuShortcutCn ---
@@ -383,10 +369,7 @@ public class ContextMenuCnTests : BunitContext
     {
         var cut = Render<ContextMenuShortcutCn>(p => p.AddChildContent("Ctrl+Z"));
         var el = cut.Find("[data-slot='context-menu-shortcut']");
-        el.ClassList.Should().Contain("ml-auto");
-        el.ClassList.Should().Contain("text-xs");
-        el.ClassList.Should().Contain("tracking-widest");
-        el.ClassList.Should().Contain("opacity-60");
+        el.ClassList.Should().Contain("cn-context-menu-shortcut");
     }
 
     [Fact]
@@ -578,15 +561,11 @@ public class ContextMenuCnTests : BunitContext
             .AddChildContent<ContextMenuSubTriggerCn>(t => t
                 .AddChildContent("More")));
         var el = cut.Find("[data-slot='context-menu-sub-trigger']");
+        el.ClassList.Should().Contain("cn-context-menu-sub-trigger");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("cursor-default");
         el.ClassList.Should().Contain("select-none");
         el.ClassList.Should().Contain("items-center");
-        el.ClassList.Should().Contain("gap-2");
-        el.ClassList.Should().Contain("rounded-sm");
-        el.ClassList.Should().Contain("px-2");
-        el.ClassList.Should().Contain("py-1.5");
-        el.ClassList.Should().Contain("text-sm");
     }
 
     // --- ContextMenuSubContentCn ---
@@ -653,12 +632,32 @@ public class ContextMenuCnTests : BunitContext
 
         cut.Find("[data-slot='context-menu-sub-trigger']").Click();
         var content = cut.Find("[data-slot='context-menu-sub-content']");
+        content.ClassList.Should().Contain("cn-context-menu-sub-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
-        content.ClassList.Should().Contain("p-1");
-        content.ClassList.Should().Contain("shadow-md");
+        content.ClassList.Should().Contain("overflow-hidden");
+    }
+
+    // --- ARIA ---
+
+    [Fact]
+    public void ContextMenuSubTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<ContextMenuSubCn>(p => p
+            .AddChildContent<ContextMenuSubTriggerCn>(t => t
+                .AddChildContent("More")));
+        var trigger = cut.Find("[data-slot='context-menu-sub-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
+
+    [Fact]
+    public void ContextMenuSubTrigger_Has_AriaHasPopup_Menu()
+    {
+        var cut = Render<ContextMenuSubCn>(p => p
+            .AddChildContent<ContextMenuSubTriggerCn>(t => t
+                .AddChildContent("More")));
+        cut.Find("[data-slot='context-menu-sub-trigger']").GetAttribute("aria-haspopup").Should().Be("menu");
     }
 
     // --- Integration ---

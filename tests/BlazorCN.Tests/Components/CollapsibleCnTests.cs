@@ -72,4 +72,16 @@ public class CollapsibleCnTests : BunitContext
         var trigger = cut.Find("[data-slot='collapsible-trigger']");
         trigger.GetAttribute("type").Should().Be("button");
     }
+
+    [Fact]
+    public void Trigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<CollapsibleCn>(p => p
+            .AddChildContent<CollapsibleTriggerCn>(t => t
+                .AddChildContent("Toggle")));
+        var trigger = cut.Find("[data-slot='collapsible-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
+    }
 }

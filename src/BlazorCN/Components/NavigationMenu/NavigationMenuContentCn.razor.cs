@@ -17,15 +17,22 @@ public partial class NavigationMenuContentCn : IAsyncDisposable
     {
         if (NavItem?.IsOpen == true && !_jsInitialized)
         {
-            await JsInterop.CreateFloatingAsync(NavItem.TriggerElement, _contentRef, _id,
-                new FloatingOptions
-                {
-                    Side = FloatingSide.Bottom,
-                    SideOffset = 4,
-                    Align = FloatingAlign.Start,
-                    AlignOffset = 0
-                });
             _jsInitialized = true;
+            try
+            {
+                await JsInterop.CreateFloatingAsync(NavItem.TriggerElement, _contentRef, _id,
+                    new FloatingOptions
+                    {
+                        Side = FloatingSide.Bottom,
+                        SideOffset = 4,
+                        Align = FloatingAlign.Start,
+                        AlignOffset = 0
+                    });
+            }
+            catch
+            {
+                _jsInitialized = false;
+            }
         }
         else if (NavItem?.IsOpen != true && _jsInitialized)
         {

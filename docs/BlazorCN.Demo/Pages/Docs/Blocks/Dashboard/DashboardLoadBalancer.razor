@@ -1,0 +1,120 @@
+@* ============================================================
+   Block: dashboard-load-balancer
+   Title: Dashboard Load Balancer
+   Description: Animated React load balancer traffic distribution dashboard for Next.js with backend server health, request counts, response times, animated progress bars, and connection pool status using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: CPU, memory, and disk usage metrics
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-load-balancer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideServerCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Load Balancer</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">Round-robin · 5 backends</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="font-semibold text-sm tabular-nums">@_totalRps.ToString("N0")</span>
+                <span class="text-muted-foreground text-xs">req/s</span>
+            </div>
+        </div>
+
+        @* Backend rows *@
+        <div>
+            @for (var i = 0; i < _backends.Length; i++)
+                        {
+                var backend = _backends[i];
+                var config = _statusConfig[backend.Status];
+                var connPercent = backend.MaxConnections > 0 ? (double)backend.Connections / backend.MaxConnections * 100 : 0;
+                var isLast = i == _backends.Length - 1;
+
+                <div class="@(Cn.Merge("px-4 py-3 transition-colors hover:bg-muted/50", !isLast ? "border-b" : ""))">
+                    <div class="flex items-center gap-3">
+                        @* Status dot *@
+                        <div class="relative flex shrink-0 items-center justify-center">
+                            <span class="@(Cn.Merge("size-2 rounded-full", config.Dot))"></span>
+                        </div>
+
+                        @* Name & Address *@
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@backend.Name</span>
+                            <p class="mt-0.5 font-mono text-muted-foreground text-xs">
+                                @backend.Address
+                            </p>
+                        </div>
+
+                        @* Metrics *@
+                        <div class="flex shrink-0 items-center gap-4">
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">rps</span>
+                                <span class="block font-mono text-xs tabular-nums">
+                                    @backend.RequestsPerSec.ToString("N0")
+                                </span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">latency</span>
+                                <span class="@(Cn.Merge("block font-mono text-xs tabular-nums", GetLatencyColor(backend.AvgResponseMs)))">
+                                    @(backend.AvgResponseMs > 0 ? $"{backend.AvgResponseMs}ms" : "—")
+                                </span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">traffic</span>
+                                <span class="block font-mono text-xs tabular-nums">
+                                    @(backend.TrafficPercent)%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Connection pool bar *@
+                    <div class="mt-2 flex items-center gap-2">
+                        <span class="text-muted-foreground text-[10px] tabular-nums">
+                            @backend.Connections/@backend.MaxConnections
+                        </span>
+                        <div class="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div class="@(Cn.Merge("h-full rounded-full", connPercent > 80 ? "bg-red-500" : connPercent > 50 ? "bg-amber-500" : "bg-emerald-500"))"
+                                 style="@($"width: {connPercent:F1}%")">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Backend(string Id, string Name, string Address, string Status, int Connections, int MaxConnections, int RequestsPerSec, int AvgResponseMs, int TrafficPercent);
+    private record StatusInfo(string Dot, string Label);
+
+    private readonly int _totalRps = 12400;
+
+    private static string GetLatencyColor(int ms)
+    {
+        if (ms == 0) return "text-muted-foreground";
+        if (ms <= 15) return "text-emerald-600 dark:text-emerald-400";
+        if (ms <= 25) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private readonly Dictionary<string, StatusInfo> _statusConfig = new()
+    {
+        ["healthy"] = new("bg-emerald-500", "Healthy"),
+        ["draining"] = new("bg-amber-500", "Draining"),
+        ["unhealthy"] = new("bg-red-500", "Down")
+    };
+
+    private readonly Backend[] _backends = new[]
+    {
+        new Backend("b1", "web-prod-01", "10.0.1.12:8080", "healthy", 248, 500, 3850, 14, 31),
+        new Backend("b2", "web-prod-02", "10.0.1.13:8080", "healthy", 231, 500, 3620, 16, 29),
+        new Backend("b3", "web-prod-03", "10.0.1.14:8080", "healthy", 195, 500, 3180, 12, 26),
+        new Backend("b4", "web-prod-04", "10.0.1.15:8080", "draining", 42, 500, 1750, 23, 14),
+        new Backend("b5", "web-prod-05", "10.0.1.16:8080", "unhealthy", 0, 500, 0, 0, 0)
+    };
+}

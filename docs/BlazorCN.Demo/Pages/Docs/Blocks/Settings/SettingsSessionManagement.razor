@@ -1,0 +1,222 @@
+@* ===========================================================
+   Block: settings-session-management
+   Title: Settings Session Management
+   Description: Animated React session management settings page for Next.js with active session list, timeout configuration, concurrent session limits, and device revocation built with shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Password, 2FA, and session management
+   Dependencies: BadgeCn, ButtonCn, SelectCn, SwitchCn
+   Source: original/blocks/settings/settings-session-management.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Session Management</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Control active sessions and security policies
+                </p>
+            </div>
+            <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                <span>@_activeSessions.Count active</span>
+            </div>
+        </div>
+
+        @* Session timeout *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Session timeout</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Auto-logout after inactivity period
+                </p>
+            </div>
+            <SelectCn @bind-Value="_sessionTimeout">
+                <SelectTriggerCn Class="h-8 w-36 text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    @foreach (var opt in _timeoutOptions)
+                    {
+                        <SelectItemCn Value="@opt.Value">@opt.Label</SelectItemCn>
+                    }
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Concurrent sessions *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Concurrent sessions</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Maximum simultaneous logins allowed
+                </p>
+            </div>
+            <SelectCn @bind-Value="_concurrent">
+                <SelectTriggerCn Class="h-8 w-36 text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    @foreach (var opt in _concurrentOptions)
+                    {
+                        <SelectItemCn Value="@opt.Value">@opt.Label</SelectItemCn>
+                    }
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Toggles *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Remember trusted devices</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Skip 2FA on recognized devices for 30 days
+                </p>
+            </div>
+            <SwitchCn @bind-Checked="_rememberDevice" />
+        </div>
+
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">New login alerts</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Email notification when a new device signs in
+                </p>
+            </div>
+            <SwitchCn @bind-Checked="_notifyNewLogin" />
+        </div>
+
+        @* Active sessions *@
+        <div class="border-b">
+            <div class="flex items-center justify-between px-4 py-3">
+                <span class="font-medium text-muted-foreground text-xs">Active sessions</span>
+                @if (_activeSessions.Count > 1)
+                {
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                              Class="h-6 gap-1 px-2 text-red-600 text-xs hover:text-red-700"
+                              OnClick="RevokeAllOther">
+                        <LucideLogOutCn Size="12" Class="size-3" />
+                        Revoke all others
+                    </ButtonCn>
+                }
+            </div>
+            @for (var i = 0; i < _activeSessions.Count; i++)
+            {
+                var session = _activeSessions[i];
+                var isLast = i == _activeSessions.Count - 1;
+
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-3", !isLast ? "border-b" : "")">
+                    @if (session.DeviceType == "laptop")
+                    {
+                        <LucideLaptopCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                    }
+                    else if (session.DeviceType == "mobile")
+                    {
+                        <LucideSmartphoneCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                    }
+                    else
+                    {
+                        <LucideMonitorCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                    }
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-sm">@session.Device</span>
+                            @if (session.Current)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                    Current
+                                </BadgeCn>
+                            }
+                        </div>
+                        <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                            <span>@session.Browser</span>
+                            <span>&middot;</span>
+                            <span>@session.Location</span>
+                            <span>&middot;</span>
+                            <span class="font-mono">@session.Ip</span>
+                        </div>
+                    </div>
+                    <span class="shrink-0 text-muted-foreground text-xs">@session.LastActive</span>
+                    @if (!session.Current)
+                    {
+                        var sessionId = session.Id;
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                  Class="h-6 w-6 shrink-0 p-0 text-muted-foreground hover:text-red-600"
+                                  OnClick="() => RevokeSession(sessionId)">
+                            <LucideLogOutCn Size="12" Class="size-3" />
+                        </ButtonCn>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-end gap-2 px-4 py-3">
+            @if (_saved)
+            {
+                <span class="flex items-center gap-1 text-emerald-600 text-xs dark:text-emerald-400">
+                    <LucideCheckCn Size="12" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs" OnClick="HandleSave">
+                Save changes
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _sessionTimeout = "60";
+    private string _concurrent = "5";
+    private bool _rememberDevice = true;
+    private bool _notifyNewLogin = true;
+    private bool _saved;
+
+    private record SelectOption(string Value, string Label);
+
+    private static readonly List<SelectOption> _timeoutOptions = new()
+    {
+        new("15", "15 minutes"), new("30", "30 minutes"), new("60", "1 hour"),
+        new("240", "4 hours"), new("480", "8 hours"), new("1440", "24 hours"), new("10080", "7 days"),
+    };
+
+    private static readonly List<SelectOption> _concurrentOptions = new()
+    {
+        new("1", "1 session"), new("3", "3 sessions"), new("5", "5 sessions"),
+        new("10", "10 sessions"), new("unlimited", "Unlimited"),
+    };
+
+    private record SessionInfo(string Id, string Device, string DeviceType, string Browser, string Location, string Ip, string LastActive, bool Current);
+
+    private readonly List<SessionInfo> _activeSessions = new()
+    {
+        new("s1", "MacBook Pro", "laptop", "Chrome 122", "San Francisco, CA", "192.168.1.42", "Active now", true),
+        new("s2", "iPhone 15 Pro", "mobile", "Safari 17", "San Francisco, CA", "192.168.1.58", "12 min ago", false),
+        new("s3", "Windows Desktop", "desktop", "Firefox 123", "New York, NY", "10.0.0.134", "2 hours ago", false),
+        new("s4", "iPad Air", "mobile", "Safari 17", "Austin, TX", "172.16.0.87", "Yesterday", false),
+    };
+
+    private void RevokeSession(string id)
+    {
+        _activeSessions.RemoveAll(s => s.Id == id);
+    }
+
+    private void RevokeAllOther()
+    {
+        _activeSessions.RemoveAll(s => !s.Current);
+    }
+
+    private void HandleSave()
+    {
+        _saved = true;
+        _ = ResetSaved();
+    }
+
+    private async Task ResetSaved()
+    {
+        await Task.Delay(2000);
+        _saved = false;
+        StateHasChanged();
+    }
+}

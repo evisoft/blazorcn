@@ -1,0 +1,140 @@
+@* ============================================================
+   Block: dashboard-error-budget
+   Title: Dashboard Error Budget
+   Description: Animated React SRE error budget dashboard block for Next.js with burn rate tracking, remaining budget percentage, SLO targets, incident alerts, and animated gauge bars using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Service availability with 30-day charts
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-error-budget.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideShieldCn Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Error Budget</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_budgets.Count(b => b.Status == "healthy")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_budgets.Count(b => b.Status == "warning" || b.Status == "critical")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_budgets.Count(b => b.Status == "exhausted")
+                </span>
+            </div>
+        </div>
+
+        @* Active alerts *@
+        @{
+            var activeAlerts = _budgets.Where(b => b.Status == "critical" || b.Status == "exhausted").ToArray();
+        }
+        @if (activeAlerts.Length > 0)
+        {
+            <div class="border-b bg-red-500/5 px-4 py-2.5">
+                <div class="flex items-center gap-2">
+                    <LucideAlertTriangleCn Size="14" Class="size-3.5 text-red-600 dark:text-red-400" />
+                    <span class="font-medium text-red-600 text-xs dark:text-red-400">
+                        @activeAlerts.Length budget@(activeAlerts.Length > 1 ? "s" : "") need attention
+                    </span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">
+                        @string.Join(", ", activeAlerts.Select(a => a.Service))
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* Period info *@
+        <div class="flex items-center gap-4 border-b px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">Monthly budget period</span>
+            <span class="text-muted-foreground text-xs">·</span>
+            <span class="text-muted-foreground text-xs tabular-nums">18 days remaining</span>
+        </div>
+
+        @* Budget rows *@
+        <div>
+            @for (var i = 0; i < _budgets.Length; i++)
+            {
+                var budget = _budgets[i];
+                var isLast = i == _budgets.Length - 1;
+                <div class="@(Cn.Merge("px-4 py-3", isLast ? "" : "border-b", budget.Status == "exhausted" ? "bg-red-500/5" : ""))">
+                    <div class="flex items-center gap-3">
+                        <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", _statusDot[budget.Status]))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@budget.Service</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @budget.Sli · SLO @budget.SloTarget · Current @budget.CurrentSli
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <span class="@(Cn.Merge("font-medium text-sm tabular-nums", _statusText[budget.Status]))">
+                                @(budget.BudgetRemaining)%
+                            </span>
+                            <p class="text-muted-foreground text-xs tabular-nums">
+                                @(budget.Status == "exhausted" ? "Exhausted" : $"{budget.BurnRate} burn")
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-2 ml-[18px] h-1.5 overflow-hidden rounded-full bg-muted/50">
+                        <div class="@(Cn.Merge("h-full rounded-full", _statusBarColor[budget.Status]))"
+                             style="@($"width: {budget.BudgetRemaining}%")">
+                        </div>
+                    </div>
+                    @if (budget.Status == "exhausted")
+                    {
+                        <div class="mt-1.5 ml-[18px]">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 bg-red-500/10 px-1.5 font-normal text-[10px] text-red-600 dark:text-red-400">
+                                Feature freeze recommended
+                            </BadgeCn>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ErrorBudgetItem(string Id, string Service, string Sli, string SloTarget, string CurrentSli, int BudgetRemaining, string BurnRate, double BurnRateValue, int PeriodDaysLeft, string Status);
+
+    private static readonly Dictionary<string, string> _statusDot = new()
+    {
+        ["healthy"] = "bg-emerald-500",
+        ["warning"] = "bg-amber-500",
+        ["critical"] = "bg-red-500",
+        ["exhausted"] = "bg-red-500",
+    };
+
+    private static readonly Dictionary<string, string> _statusBarColor = new()
+    {
+        ["healthy"] = "bg-emerald-500",
+        ["warning"] = "bg-amber-500",
+        ["critical"] = "bg-red-500",
+        ["exhausted"] = "bg-red-500",
+    };
+
+    private static readonly Dictionary<string, string> _statusText = new()
+    {
+        ["healthy"] = "text-emerald-600 dark:text-emerald-400",
+        ["warning"] = "text-amber-600 dark:text-amber-400",
+        ["critical"] = "text-red-600 dark:text-red-400",
+        ["exhausted"] = "text-red-600 dark:text-red-400",
+    };
+
+    private static readonly ErrorBudgetItem[] _budgets =
+    [
+        new("1", "API Gateway", "Availability", "99.95%", "99.97%", 72, "0.6x", 0.6, 18, "healthy"),
+        new("2", "Payment Service", "Success Rate", "99.99%", "99.98%", 34, "2.1x", 2.1, 18, "warning"),
+        new("3", "Search API", "Latency p99 < 500ms", "99.5%", "98.8%", 8, "5.4x", 5.4, 18, "critical"),
+        new("4", "Auth Service", "Availability", "99.99%", "99.99%", 88, "0.3x", 0.3, 18, "healthy"),
+        new("5", "Notification Service", "Delivery Rate", "99.9%", "99.4%", 0, "\u2014", 0, 18, "exhausted"),
+        new("6", "Data Pipeline", "Freshness < 5min", "99.0%", "99.2%", 56, "1.2x", 1.2, 18, "healthy"),
+    ];
+}

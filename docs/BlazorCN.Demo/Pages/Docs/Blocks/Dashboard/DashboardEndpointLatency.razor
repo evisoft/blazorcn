@@ -1,0 +1,199 @@
+@* ============================================================
+   Block: dashboard-endpoint-latency
+   Title: Dashboard Endpoint Latency
+   Description: Animated React per-endpoint response time monitoring dashboard block for Next.js with slow endpoint alerts, latency distribution heatmap, SLA compliance indicators, and method-grouped breakdowns using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Global API latency percentiles with p50/p95/p99
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-endpoint-latency.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideClockCn Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Endpoint Latency</span>
+            </div>
+            @if (_slowEndpoints.Length > 0)
+                        {
+                <BadgeCn Variant="BadgeVariant.Secondary"
+                         Class="font-normal text-amber-600 text-xs dark:text-amber-400">
+                    <LucideTriangleAlertCn Size="12" Class="mr-1 size-3" />
+                    @_slowEndpoints.Length slow
+                </BadgeCn>
+            }
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-muted-foreground text-xs">Avg Latency</p>
+                <p class="font-semibold text-2xl tabular-nums">@_avgLatency</p>
+            </div>
+            <div class="h-8 w-px bg-border"></div>
+            <div>
+                <p class="text-muted-foreground text-xs">SLA Compliance</p>
+                <p class="font-semibold text-sm tabular-nums text-amber-600 dark:text-amber-400">
+                    @_slaCompliance
+                </p>
+            </div>
+            <div class="h-8 w-px bg-border"></div>
+            <div>
+                <p class="text-muted-foreground text-xs">Endpoints</p>
+                <p class="font-semibold text-sm tabular-nums">@_endpoints.Length</p>
+            </div>
+        </div>
+
+        @* Endpoint list *@
+        <div>
+            @for (var i = 0; i < _endpoints.Length; i++)
+                        {
+                var endpoint = _endpoints[i];
+                var isExpanded = _expanded == endpoint.Id;
+                var isLast = i == _endpoints.Length - 1;
+                var breachesSla = endpoint.AvgMs > endpoint.SlaTarget;
+
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : endpoint.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", GetLatencyDot(endpoint.AvgMs, endpoint.SlaTarget)))"></span>
+                        <span class="inline-flex w-12 shrink-0 items-center rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+                            @endpoint.Method
+                        </span>
+                        <span class="min-w-0 flex-1 truncate font-mono text-xs">@endpoint.Path</span>
+                        <span class="w-14 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                            @endpoint.Rpm rpm
+                        </span>
+                        <span class="@(Cn.Merge("w-14 shrink-0 text-right font-medium text-xs tabular-nums", GetLatencyColor(endpoint.AvgMs, endpoint.SlaTarget)))">
+                            @FormatMs(endpoint.AvgMs)
+                        </span>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                                {
+                        <div class="overflow-hidden">
+                            <div class="space-y-3 px-4 pb-4 pt-1">
+                                @* Heatmap *@
+                                <div>
+                                    <p class="mb-1.5 text-muted-foreground text-xs">
+                                        12-hour latency heatmap
+                                    </p>
+                                    <div class="flex gap-1">
+                                        @{
+                                            var maxMs = endpoint.Hourly.Max(x => x.AvgMs);
+                                        }
+                                        @foreach (var h in endpoint.Hourly)
+                                                    {
+                                            var opacity = GetHeatmapOpacity(h.AvgMs, maxMs);
+                                            <div class="h-6 flex-1 rounded-sm bg-foreground"
+                                                 style="@($"opacity: {opacity:F2}")"
+                                                 title="@($"{h.Hour}: {FormatMs(h.AvgMs)}")">
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="mt-1 flex justify-between">
+                                        <span class="text-muted-foreground text-[10px]">6 AM</span>
+                                        <span class="text-muted-foreground text-[10px]">5 PM</span>
+                                    </div>
+                                </div>
+
+                                @* Details *@
+                                <div class="flex items-center gap-4 text-xs">
+                                    <span class="text-muted-foreground">
+                                        SLA target: @FormatMs(endpoint.SlaTarget)
+                                    </span>
+                                    <span class="text-muted-foreground">·</span>
+                                    <span class="@(breachesSla ? "font-medium text-red-600 dark:text-red-400" : "font-medium text-emerald-600 dark:text-emerald-400")">
+                                        @(breachesSla ? "Breaching SLA" : "Within SLA")
+                                    </span>
+                                    <span class="text-muted-foreground">·</span>
+                                    <span class="@(Cn.Merge("tabular-nums", endpoint.Trend == "slower" ? "text-red-600 dark:text-red-400" : endpoint.Trend == "faster" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"))">
+                                        @endpoint.TrendValue vs last week
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "1";
+
+    private record HourlyLatency(string Hour, int AvgMs);
+    private record EndpointData(string Id, string Path, string Method, int AvgMs, int SlaTarget, string Rpm, string Trend, string TrendValue, HourlyLatency[] Hourly);
+
+    private static string FormatMs(int ms)
+    {
+        if (ms >= 1000) return $"{ms / 1000.0:F1}s";
+        return $"{ms}ms";
+    }
+
+    private static string GetLatencyColor(int ms, int target)
+    {
+        var ratio = (double)ms / target;
+        if (ratio <= 0.8) return "text-emerald-600 dark:text-emerald-400";
+        if (ratio <= 1.0) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private static string GetLatencyDot(int ms, int target)
+    {
+        var ratio = (double)ms / target;
+        if (ratio <= 0.8) return "bg-emerald-500";
+        if (ratio <= 1.0) return "bg-amber-500";
+        return "bg-red-500";
+    }
+
+    private static double GetHeatmapOpacity(int ms, int maxMs) => Math.Max(0.1, (double)ms / maxMs);
+
+    private EndpointData[] _slowEndpoints => _endpoints.Where(e => e.AvgMs > e.SlaTarget).ToArray();
+    private const string _avgLatency = "280ms";
+    private const string _slaCompliance = "60%";
+
+    private readonly EndpointData[] _endpoints = new[]
+    {
+        new EndpointData("1", "/api/v2/checkout/process", "POST", 342, 250, "680", "slower", "+18%", new[]
+        {
+            new HourlyLatency("6a", 210), new HourlyLatency("7a", 240), new HourlyLatency("8a", 310),
+            new HourlyLatency("9a", 380), new HourlyLatency("10a", 420), new HourlyLatency("11a", 395),
+            new HourlyLatency("12p", 360), new HourlyLatency("1p", 340), new HourlyLatency("2p", 320),
+            new HourlyLatency("3p", 350), new HourlyLatency("4p", 380), new HourlyLatency("5p", 410)
+        }),
+        new EndpointData("2", "/api/v2/search/products", "GET", 156, 100, "2.4K", "slower", "+32%", new[]
+        {
+            new HourlyLatency("6a", 80), new HourlyLatency("7a", 95), new HourlyLatency("8a", 140),
+            new HourlyLatency("9a", 180), new HourlyLatency("10a", 210), new HourlyLatency("11a", 190),
+            new HourlyLatency("12p", 165), new HourlyLatency("1p", 155), new HourlyLatency("2p", 140),
+            new HourlyLatency("3p", 160), new HourlyLatency("4p", 175), new HourlyLatency("5p", 195)
+        }),
+        new EndpointData("3", "/api/v2/users/me", "GET", 18, 100, "4.1K", "stable", "0%", new[]
+        {
+            new HourlyLatency("6a", 15), new HourlyLatency("7a", 16), new HourlyLatency("8a", 20),
+            new HourlyLatency("9a", 22), new HourlyLatency("10a", 19), new HourlyLatency("11a", 18),
+            new HourlyLatency("12p", 17), new HourlyLatency("1p", 18), new HourlyLatency("2p", 16),
+            new HourlyLatency("3p", 19), new HourlyLatency("4p", 20), new HourlyLatency("5p", 21)
+        }),
+        new EndpointData("4", "/api/v2/reports/generate", "POST", 1840, 500, "45", "slower", "+8%", new[]
+        {
+            new HourlyLatency("6a", 1200), new HourlyLatency("7a", 1400), new HourlyLatency("8a", 1800),
+            new HourlyLatency("9a", 2200), new HourlyLatency("10a", 2400), new HourlyLatency("11a", 2100),
+            new HourlyLatency("12p", 1900), new HourlyLatency("1p", 1700), new HourlyLatency("2p", 1600),
+            new HourlyLatency("3p", 1800), new HourlyLatency("4p", 1950), new HourlyLatency("5p", 2050)
+        }),
+        new EndpointData("5", "/api/v2/notifications", "GET", 42, 100, "1.8K", "faster", "-12%", new[]
+        {
+            new HourlyLatency("6a", 35), new HourlyLatency("7a", 38), new HourlyLatency("8a", 45),
+            new HourlyLatency("9a", 48), new HourlyLatency("10a", 44), new HourlyLatency("11a", 42),
+            new HourlyLatency("12p", 40), new HourlyLatency("1p", 41), new HourlyLatency("2p", 39),
+            new HourlyLatency("3p", 43), new HourlyLatency("4p", 46), new HourlyLatency("5p", 44)
+        })
+    };
+}

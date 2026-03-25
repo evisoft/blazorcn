@@ -1,0 +1,148 @@
+@* ===========================================================
+   Block: ai-prompt-inline-suggestions
+   Title: Ai Prompt Inline Suggestions
+   Description: AI prompt with inline ghost text suggestions, tab-to-accept, and alternative suggestion chips
+   Dependencies: ButtonCn, LucideCheckCn, LucideSendCn
+   Source: original/blocks/ai/ai-prompt-inline-suggestions.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Input with ghost text overlay *@
+        <div class="relative px-4 pb-2 pt-4">
+            @* Ghost text overlay *@
+            <div class="pointer-events-none absolute inset-x-4 top-4 overflow-hidden whitespace-pre-wrap break-words text-sm leading-[1.5rem]"
+                 aria-hidden="true">
+                <span class="invisible">@_input</span>
+                @if (!string.IsNullOrEmpty(GhostText))
+                {
+                    <span class="text-muted-foreground/40">@GhostText</span>
+                }
+            </div>
+
+            <textarea @bind="_input" @bind:event="oninput"
+                      placeholder="Start typing to see suggestions..."
+                      rows="3"
+                      class="relative z-10 w-full min-h-[72px] max-h-40 resize-none border-0 bg-transparent text-sm leading-[1.5rem] outline-none placeholder:text-muted-foreground"
+                      spellcheck="false"></textarea>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                @if (!string.IsNullOrEmpty(GhostText) && !_accepted)
+                {
+                    <span class="text-xs text-muted-foreground">
+                        Press
+                        <kbd class="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">Tab</kbd>
+                        to accept
+                    </span>
+                }
+                @if (_accepted)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                        <LucideCheckCn Size="16" Class="size-3" />
+                        Accepted
+                    </span>
+                }
+                @if (string.IsNullOrEmpty(GhostText) && !_accepted && _input.Length > 0)
+                {
+                    <span class="text-xs text-muted-foreground">No suggestions</span>
+                }
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                      Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                      Class="h-7 gap-1.5 text-xs"
+                      @onclick="HandleSubmit">
+                <LucideSendCn Size="16" Class="size-3" />
+                Send
+            </ButtonCn>
+        </div>
+    </div>
+
+    @* Alternative suggestions *@
+    @if (Alternatives.Length > 0 && !string.IsNullOrWhiteSpace(_input))
+    {
+        <div class="mt-2 space-y-1.5">
+            <span class="px-1 text-xs text-muted-foreground">Suggestions</span>
+            <div class="space-y-1">
+                @foreach (var alt in Alternatives)
+                {
+                    var a = alt;
+                    <button type="button"
+                            class="block w-full rounded-md bg-muted/50 px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                            @onclick="@(() => { _input = a; _accepted = false; })">
+                        @a
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    private record SuggestionEntry(string Prefix, string Completion, string Full);
+
+    private static readonly SuggestionEntry[] _suggestions =
+    {
+        new("how", " do I implement authentication in Next.js with Better Auth?", "How do I implement authentication in Next.js with Better Auth?"),
+        new("how do", " I deploy a Next.js app to Vercel with environment variables?", "How do I deploy a Next.js app to Vercel with environment variables?"),
+        new("how do i", " set up Stripe subscriptions with webhooks in Next.js?", "How do I set up Stripe subscriptions with webhooks in Next.js?"),
+        new("create", " a responsive dashboard layout with sidebar navigation using shadcn/ui", "Create a responsive dashboard layout with sidebar navigation using shadcn/ui"),
+        new("create a", " TypeScript React hook for infinite scroll with Intersection Observer", "Create a TypeScript React hook for infinite scroll with Intersection Observer"),
+        new("explain", " the differences between React Server Components and Client Components", "Explain the differences between React Server Components and Client Components"),
+        new("explain the", " Next.js caching strategies: ISR, SSR, SSG, and on-demand revalidation", "Explain the Next.js caching strategies: ISR, SSR, SSG, and on-demand revalidation"),
+        new("write", " a Prisma schema for a multi-tenant SaaS application with role-based access", "Write a Prisma schema for a multi-tenant SaaS application with role-based access"),
+        new("write a", " unit test for a React form component with React Testing Library", "Write a unit test for a React form component with React Testing Library"),
+        new("debug", " why my Next.js middleware is not matching API routes correctly", "Debug why my Next.js middleware is not matching API routes correctly"),
+        new("compare", " Drizzle ORM vs Prisma for a Next.js project with PostgreSQL", "Compare Drizzle ORM vs Prisma for a Next.js project with PostgreSQL"),
+        new("refactor", " this component to use React Server Components and reduce client-side JavaScript", "Refactor this component to use React Server Components and reduce client-side JavaScript")
+    };
+
+    private string _input = "";
+    private bool _accepted;
+
+    private SuggestionEntry? FindSuggestion()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return null;
+        var lower = _input.ToLowerInvariant();
+        var matches = _suggestions.Where(s => s.Prefix.StartsWith(lower) || lower.StartsWith(s.Prefix)).ToArray();
+        if (matches.Length == 0) return null;
+        var exact = matches.FirstOrDefault(s => lower == s.Prefix);
+        if (exact != null) return exact;
+        var startsWith = matches.FirstOrDefault(s => s.Prefix.StartsWith(lower));
+        return startsWith ?? matches[0];
+    }
+
+    private string GhostText
+    {
+        get
+        {
+            var suggestion = FindSuggestion();
+            return suggestion != null && !string.IsNullOrWhiteSpace(_input)
+                ? suggestion.Full[_input.Length..]
+                : "";
+        }
+    }
+
+    private string[] Alternatives
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_input)) return Array.Empty<string>();
+            var lower = _input.ToLowerInvariant();
+            return _suggestions
+                .Where(s => s.Prefix.StartsWith(lower) || lower.StartsWith(s.Prefix))
+                .Select(s => s.Full)
+                .Take(3)
+                .ToArray();
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+        _accepted = false;
+    }
+}

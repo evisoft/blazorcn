@@ -1,0 +1,239 @@
+@* ============================================================
+   Block: crud-comment-thread
+   Title: Crud Comment Thread
+   Description: Manage threaded discussions with replies, edits, and pinning
+   Long Description: A complete threaded comment system for managing user discussions. Features nested replies, inline editing, comment pinning, and author avatars. Perfect for issue trackers, support tickets, code reviews, or any collaborative platform requiring structured discussion threads.
+   Dependencies: BadgeCn, ButtonCn, TextareaCn
+   Source: original/blocks/crud/crud-comment-thread.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h2 class="font-medium text-sm">Comments</h2>
+                    <p class="mt-0.5 text-muted-foreground text-xs">@_comments.Count comments</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="border-b px-4 py-3">
+            <TextareaCn Placeholder="Add a comment..."
+                        Value="@_newCommentText"
+                        Class="min-h-20 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0" />
+            <div class="mt-2">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                          Disabled="@string.IsNullOrWhiteSpace(_newCommentText)"
+                          Class="h-7 text-xs" @onclick="AddComment">
+                    Post Comment
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div>
+            @{
+                var pinnedComments = _comments.Where(c => c.Pinned).ToList();
+                var unpinnedComments = _comments.Where(c => !c.Pinned).ToList();
+                var orderedComments = pinnedComments.Concat(unpinnedComments).ToList();
+            }
+            @foreach (var comment in orderedComments)
+            {
+                @RenderComment(comment, 0)
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class CommentItem
+    {
+        public string Id { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string AuthorInitial { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+        public string Text { get; set; } = "";
+        public bool Pinned { get; set; }
+        public List<CommentItem>? Replies { get; set; }
+    }
+
+    private string? _replyingTo;
+    private string _replyText = "";
+    private string _newCommentText = "";
+    private int _nextId = 6;
+
+    private readonly List<CommentItem> _comments =
+    [
+        new()
+        {
+            Id = "1", Author = "Sarah Chen", AuthorInitial = "S", Timestamp = "2 hours ago",
+            Text = "I'm seeing intermittent timeout errors when calling the /api/users endpoint during peak hours. Is this a known issue?",
+            Pinned = false,
+            Replies =
+            [
+                new() { Id = "2", Author = "Alex Kim", AuthorInitial = "A", Timestamp = "1 hour ago", Text = "We've identified the issue. The connection pool was exhausted due to a memory leak in the database driver. Deploying a fix now.", Pinned = false },
+                new() { Id = "3", Author = "Sarah Chen", AuthorInitial = "S", Timestamp = "45 min ago", Text = "Thanks for the quick response! Let me know when the fix is live so I can verify on our end.", Pinned = false },
+            ]
+        },
+        new() { Id = "4", Author = "Marcus Lee", AuthorInitial = "M", Timestamp = "3 hours ago", Text = "Resolved: Database connection pool settings have been optimized. Monitoring shows stable response times under load.", Pinned = true },
+        new() { Id = "5", Author = "Jordan Taylor", AuthorInitial = "J", Timestamp = "5 hours ago", Text = "Can we add rate limiting documentation to the API reference? Current docs don't mention the 100 req/min limit.", Pinned = false },
+    ];
+
+    private void AddComment()
+    {
+        if (string.IsNullOrWhiteSpace(_newCommentText)) return;
+        _comments.Insert(0, new CommentItem
+        {
+            Id = (_nextId++).ToString(),
+            Author = "Current User",
+            AuthorInitial = "C",
+            Timestamp = "Just now",
+            Text = _newCommentText,
+            Pinned = false,
+        });
+        _newCommentText = "";
+    }
+
+    private void AddReply(string parentId)
+    {
+        if (string.IsNullOrWhiteSpace(_replyText)) return;
+        var reply = new CommentItem
+        {
+            Id = (_nextId++).ToString(),
+            Author = "Current User",
+            AuthorInitial = "C",
+            Timestamp = "Just now",
+            Text = _replyText,
+            Pinned = false,
+        };
+        AddReplyToParent(_comments, parentId, reply);
+        _replyText = "";
+        _replyingTo = null;
+    }
+
+    private static bool AddReplyToParent(List<CommentItem> comments, string parentId, CommentItem reply)
+    {
+        foreach (var c in comments)
+        {
+            if (c.Id == parentId)
+            {
+                c.Replies ??= [];
+                c.Replies.Add(reply);
+                return true;
+            }
+            if (c.Replies != null && AddReplyToParent(c.Replies, parentId, reply)) return true;
+        }
+        return false;
+    }
+
+    private void DeleteComment(string id) { RemoveById(_comments, id); }
+
+    private static bool RemoveById(List<CommentItem> comments, string id)
+    {
+        var removed = comments.RemoveAll(c => c.Id == id) > 0;
+        if (!removed)
+        {
+            foreach (var c in comments)
+            {
+                if (c.Replies != null && RemoveById(c.Replies, id)) return true;
+            }
+        }
+        return removed;
+    }
+
+    private void TogglePin(string id) { TogglePinRecursive(_comments, id); }
+
+    private static bool TogglePinRecursive(List<CommentItem> comments, string id)
+    {
+        foreach (var c in comments)
+        {
+            if (c.Id == id) { c.Pinned = !c.Pinned; return true; }
+            if (c.Replies != null && TogglePinRecursive(c.Replies, id)) return true;
+        }
+        return false;
+    }
+
+    private RenderFragment RenderComment(CommentItem comment, int level) => __builder =>
+    {
+        var isReplying = _replyingTo == comment.Id;
+
+        <div class="border-b px-4 py-3 transition-colors last:border-0 hover:bg-muted/50"
+             style="@($"padding-left: {level * 24 + 16}px")">
+            <div class="flex items-start gap-3">
+                <div class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-sm">
+                    @comment.AuthorInitial
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-medium text-sm">@comment.Author</span>
+                        <span class="text-muted-foreground text-xs">@comment.Timestamp</span>
+                        @if (comment.Pinned)
+                        {
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-xs">
+                                <LucidePinCn Size="12" Class="size-3" />
+                                Pinned
+                            </BadgeCn>
+                        }
+                    </div>
+                    <p class="mt-1 text-sm">@comment.Text</p>
+                    <div class="mt-2 flex items-center gap-1">
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                  Class="h-6 gap-1 px-2 text-xs" @onclick="@(() => _replyingTo = comment.Id)">
+                            <LucideReplyCn Size="12" Class="size-3" />
+                            Reply
+                        </ButtonCn>
+                        @if (comment.Replies != null && comment.Replies.Count > 0)
+                        {
+                            <span class="flex items-center gap-1 px-2 text-muted-foreground text-xs">
+                                <LucideMessageSquareCn Size="12" Class="size-3" />
+                                @comment.Replies.Count
+                            </span>
+                        }
+                    </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0"
+                              @onclick="@(() => TogglePin(comment.Id))">
+                        <LucidePinCn Size="12" Class="@Cn.Merge("size-3", comment.Pinned ? "fill-amber-500 text-amber-500" : "text-muted-foreground")" />
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0">
+                        <LucideEdit2Cn Size="12" Class="size-3 text-muted-foreground" />
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0"
+                              @onclick="@(() => DeleteComment(comment.Id))">
+                        <LucideTrash2Cn Size="12" Class="size-3 text-muted-foreground" />
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+
+        @if (isReplying)
+        {
+            <div class="border-b bg-muted/50 px-4 py-3"
+                 style="@($"padding-left: {(level + 1) * 24 + 16}px")">
+                <TextareaCn Placeholder="Write a reply..."
+                            Value="@_replyText"
+                            Class="min-h-20 resize-none border-0 bg-background shadow-none focus-visible:ring-0" />
+                <div class="mt-2 flex items-center gap-2">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                              Disabled="@string.IsNullOrWhiteSpace(_replyText)"
+                              Class="h-7 text-xs" @onclick="@(() => AddReply(comment.Id))">
+                        Post Reply
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                              Class="h-7 text-xs" @onclick="@(() => _replyingTo = null)">
+                        Cancel
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @if (comment.Replies != null)
+        {
+            foreach (var reply in comment.Replies)
+            {
+                @RenderComment(reply, level + 1)
+            }
+        }
+    };
+}

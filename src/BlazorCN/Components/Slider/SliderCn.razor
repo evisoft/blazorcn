@@ -1,41 +1,121 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
 
-<div class="@Cn.Merge("relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50", Class)"
+@{
+    var isVertical = Orientation == SliderOrientation.Vertical;
+    var orientationAttr = isVertical ? "vertical" : "horizontal";
+    var rootClasses = Cn.Merge(
+        "cn-slider relative flex w-full touch-none items-center select-none",
+        isVertical ? "h-full w-auto flex-col" : "",
+        Disabled ? "opacity-50" : "",
+        Class);
+    var trackClasses = "cn-slider-track relative grow overflow-hidden";
+    var rangeClasses = isVertical
+        ? "cn-slider-range absolute select-none w-full"
+        : "cn-slider-range absolute select-none h-full";
+}
+
+<div class="@rootClasses"
      style="@Style"
      data-slot="slider"
      data-disabled="@(Disabled ? "true" : null)"
+     data-orientation="@orientationAttr"
      @attributes="AdditionalAttributes">
-    <div class="relative h-1.5 w-full grow overflow-hidden rounded-full bg-muted" data-slot="slider-track">
-        <div class="absolute h-full bg-primary" style="width: @(ValuePercent.ToString(System.Globalization.CultureInfo.InvariantCulture))%" data-slot="slider-range"></div>
+    <div class="@trackClasses" data-slot="slider-track" data-orientation="@orientationAttr">
+        <div class="@rangeClasses"
+             style="@RangeStyle"
+             data-slot="slider-range"
+             data-orientation="@orientationAttr">
+        </div>
     </div>
-    <input type="range"
-           class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-           min="@Min.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-           max="@Max.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-           step="@Step.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-           value="@Value.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-           disabled="@Disabled"
-           @oninput="HandleInput" />
-    <div class="absolute block size-4 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
-         style="left: calc(@(ValuePercent.ToString(System.Globalization.CultureInfo.InvariantCulture))% - 8px)"
-         data-slot="slider-thumb">
-    </div>
+    @for (var i = 0; i < ResolvedValues.Length; i++)
+    {
+        var index = i;
+        var percent = GetPercent(ResolvedValues[index]);
+        var thumbStyle = isVertical
+            ? $"bottom: calc({percent.ToString(Inv)}% - 6px)"
+            : $"left: calc({percent.ToString(Inv)}% - 6px)";
+        <div class="cn-slider-thumb absolute block shrink-0 select-none active:ring-4 disabled:pointer-events-none disabled:opacity-50"
+             style="@thumbStyle"
+             data-slot="slider-thumb">
+        </div>
+    }
+    @for (var i = 0; i < ResolvedValues.Length; i++)
+    {
+        var index = i;
+        <input type="range"
+               class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+               min="@Min.ToString(Inv)"
+               max="@Max.ToString(Inv)"
+               step="@Step.ToString(Inv)"
+               value="@ResolvedValues[index].ToString(Inv)"
+               disabled="@Disabled"
+               @oninput="(e) => HandleInput(e, index)" />
+    }
 </div>
 
 @code {
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    /// <summary>Single value (for simple slider). Use <see cref="Values"/> for range/multiple.</summary>
     [Parameter] public double Value { get; set; }
+    /// <summary>Callback when single value changes.</summary>
     [Parameter] public EventCallback<double> ValueChanged { get; set; }
+
+    /// <summary>Array of values for range or multiple-thumb sliders.</summary>
+    [Parameter] public double[]? Values { get; set; }
+    /// <summary>Callback when values array changes.</summary>
+    [Parameter] public EventCallback<double[]> ValuesChanged { get; set; }
+
     [Parameter] public double Min { get; set; } = 0;
     [Parameter] public double Max { get; set; } = 100;
     [Parameter] public double Step { get; set; } = 1;
     [Parameter] public bool Disabled { get; set; }
+    [Parameter] public SliderOrientation Orientation { get; set; } = SliderOrientation.Horizontal;
 
-    private double ValuePercent => Max > Min ? Math.Clamp((Value - Min) / (Max - Min) * 100, 0, 100) : 0;
+    private bool IsMultiValue => Values is not null;
 
-    private async Task HandleInput(ChangeEventArgs e)
+    private double[] ResolvedValues => IsMultiValue ? Values! : new[] { Value };
+
+    private double GetPercent(double val) =>
+        Max > Min ? Math.Clamp((val - Min) / (Max - Min) * 100, 0, 100) : 0;
+
+    private string RangeStyle
     {
-        if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var newValue))
+        get
+        {
+            var sorted = ResolvedValues.OrderBy(v => v).ToArray();
+            var isVertical = Orientation == SliderOrientation.Vertical;
+
+            if (sorted.Length == 1)
+            {
+                var p = GetPercent(sorted[0]);
+                return isVertical
+                    ? $"bottom: 0%; height: {p.ToString(Inv)}%"
+                    : $"left: 0%; width: {p.ToString(Inv)}%";
+            }
+
+            var minP = GetPercent(sorted[0]);
+            var maxP = GetPercent(sorted[^1]);
+            return isVertical
+                ? $"bottom: {minP.ToString(Inv)}%; height: {(maxP - minP).ToString(Inv)}%"
+                : $"left: {minP.ToString(Inv)}%; width: {(maxP - minP).ToString(Inv)}%";
+        }
+    }
+
+    private async Task HandleInput(ChangeEventArgs e, int index)
+    {
+        if (!double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, Inv, out var newValue))
+            return;
+
+        if (IsMultiValue)
+        {
+            var updated = (double[])Values!.Clone();
+            updated[index] = newValue;
+            Values = updated;
+            await ValuesChanged.InvokeAsync(updated);
+        }
+        else
         {
             Value = newValue;
             await ValueChanged.InvokeAsync(Value);

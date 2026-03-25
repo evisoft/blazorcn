@@ -1,0 +1,191 @@
+@* ===========================================================
+   Block: settings-role-permissions
+   Title: Settings Role Permissions
+   Description: React animated role and permission management settings block for Next.js with CRUD permission matrix, role creation, member assignment, and expandable resource controls using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Backup scheduling and restore options
+   Dependencies: BadgeCn, ButtonCn, SwitchCn
+   Source: original/blocks/settings/settings-role-permissions.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideShieldCn Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Roles &amp; Permissions</h2>
+                        <p class="text-xs text-muted-foreground">
+                            @_roles.Count roles &middot; @_resources.Count resources
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 text-xs">
+                    <LucidePlusCn Size="12" Class="size-3" />
+                    New Role
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Roles *@
+        <div>
+            @for (var i = 0; i < _roles.Count; i++)
+            {
+                var role = _roles[i];
+                var index = i;
+                var isExpanded = _expanded == role.Id;
+                var isLast = index == _roles.Count - 1;
+                var permCount = TotalPermissions(role);
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button" @onclick="() => _expanded = isExpanded ? null : role.Id"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", permCount == TotalPossible ? "bg-emerald-500" : permCount > 0 ? "bg-amber-500" : "bg-muted-foreground")"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@role.Name</span>
+                                @if (role.IsSystem)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">
+                                        System
+                                    </BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>@role.Description</span>
+                                <span>&middot;</span>
+                                <span class="flex items-center gap-1">
+                                    <LucideUsersCn Size="12" Class="size-3" />
+                                    @role.MemberCount
+                                </span>
+                                <span>&middot;</span>
+                                <span class="font-mono">@permCount/@TotalPossible</span>
+                            </div>
+                        </div>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            @* CRUD matrix header *@
+                            <div class="mb-1 grid grid-cols-[1fr_48px_48px_48px_48px] items-center gap-1 px-2">
+                                <span class="text-xs font-medium text-muted-foreground">Resource</span>
+                                @foreach (var op in _crudOps)
+                                {
+                                    <span class="text-center text-[10px] font-medium uppercase text-muted-foreground">@op[..1]</span>
+                                }
+                            </div>
+
+                            @* Resource rows *@
+                            <div class="space-y-0.5">
+                                @foreach (var resource in _resources)
+                                {
+                                    <div class="grid grid-cols-[1fr_48px_48px_48px_48px] items-center gap-1 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
+                                        <div>
+                                            <span class="text-xs font-medium">@resource.Name</span>
+                                            <p class="text-[10px] text-muted-foreground">@resource.Description</p>
+                                        </div>
+                                        @foreach (var op in _crudOps)
+                                        {
+                                            var resId = resource.Id;
+                                            var opName = op;
+                                            <div class="flex justify-center">
+                                                <SwitchCn Checked="GetPermission(role, resId, opName)"
+                                                          CheckedChanged="v => SetPermission(role, resId, opName, v)" />
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+
+                            @* Actions *@
+                            <div class="mt-3 flex items-center justify-end">
+                                @if (!role.IsSystem)
+                                {
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                              Class="h-6 gap-1 px-2 text-xs text-red-600 hover:text-red-600"
+                                              OnClick="() => RemoveRole(role.Id)">
+                                        <LucideTrashCn Size="12" Class="size-3" />
+                                        Delete role
+                                    </ButtonCn>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "admin";
+
+    private static readonly string[] _crudOps = { "create", "read", "update", "delete" };
+
+    private record ResourceDef(string Id, string Name, string Description);
+
+    private static readonly List<ResourceDef> _resources = new()
+    {
+        new("projects", "Projects", "Workspaces and project resources"),
+        new("users", "Users", "Team member accounts"),
+        new("billing", "Billing", "Invoices, plans, and payment methods"),
+        new("settings", "Settings", "Workspace configuration"),
+        new("api-keys", "API Keys", "Authentication tokens and keys"),
+        new("integrations", "Integrations", "Third-party app connections"),
+    };
+
+    private class RoleDef
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public int MemberCount { get; set; }
+        public bool IsSystem { get; set; }
+        public Dictionary<string, Dictionary<string, bool>> Permissions { get; set; } = new();
+    }
+
+    private int TotalPossible => _resources.Count * _crudOps.Length;
+
+    private int TotalPermissions(RoleDef role)
+    {
+        var count = 0;
+        foreach (var perms in role.Permissions.Values)
+            foreach (var val in perms.Values)
+                if (val) count++;
+        return count;
+    }
+
+    private bool GetPermission(RoleDef role, string resourceId, string op)
+        => role.Permissions.TryGetValue(resourceId, out var perms) && perms.TryGetValue(op, out var val) && val;
+
+    private void SetPermission(RoleDef role, string resourceId, string op, bool value)
+    {
+        if (!role.Permissions.ContainsKey(resourceId))
+            role.Permissions[resourceId] = new();
+        role.Permissions[resourceId][op] = value;
+    }
+
+    private void RemoveRole(string id)
+    {
+        _roles.RemoveAll(r => r.Id == id);
+        if (_expanded == id) _expanded = null;
+    }
+
+    private static Dictionary<string, bool> AllTrue() => new() { ["create"] = true, ["read"] = true, ["update"] = true, ["delete"] = true };
+    private static Dictionary<string, bool> P(bool c, bool r, bool u, bool d) => new() { ["create"] = c, ["read"] = r, ["update"] = u, ["delete"] = d };
+
+    private readonly List<RoleDef> _roles = new()
+    {
+        new() { Id = "owner", Name = "Owner", Description = "Full access to everything", MemberCount = 1, IsSystem = true,
+            Permissions = new() { ["projects"] = AllTrue(), ["users"] = AllTrue(), ["billing"] = AllTrue(), ["settings"] = AllTrue(), ["api-keys"] = AllTrue(), ["integrations"] = AllTrue() } },
+        new() { Id = "admin", Name = "Admin", Description = "Manage team and resources", MemberCount = 3, IsSystem = true,
+            Permissions = new() { ["projects"] = AllTrue(), ["users"] = P(true,true,true,false), ["billing"] = P(false,true,false,false), ["settings"] = P(false,true,true,false), ["api-keys"] = AllTrue(), ["integrations"] = P(true,true,true,false) } },
+        new() { Id = "editor", Name = "Editor", Description = "Create and modify content", MemberCount = 8, IsSystem = false,
+            Permissions = new() { ["projects"] = P(true,true,true,false), ["users"] = P(false,true,false,false), ["billing"] = P(false,false,false,false), ["settings"] = P(false,true,false,false), ["api-keys"] = P(false,true,false,false), ["integrations"] = P(false,true,false,false) } },
+        new() { Id = "viewer", Name = "Viewer", Description = "Read-only access", MemberCount = 12, IsSystem = true,
+            Permissions = new() { ["projects"] = P(false,true,false,false), ["users"] = P(false,true,false,false), ["billing"] = P(false,false,false,false), ["settings"] = P(false,true,false,false), ["api-keys"] = P(false,false,false,false), ["integrations"] = P(false,true,false,false) } },
+    };
+}

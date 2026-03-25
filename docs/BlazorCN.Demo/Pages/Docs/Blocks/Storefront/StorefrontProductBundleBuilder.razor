@@ -1,0 +1,253 @@
+@* ============================================================
+   Block: storefront-product-bundle-builder
+   Title: Storefront Product Bundle Builder
+   Description: Build-your-own bundle configurator with category steps, item selection, running total, bundle discount, and complete bundle button
+   Long Description: Increase average order value with this interactive bundle builder block. Customers follow a step-by-step flow picking one main item, two side items, and one drink to build their own bundle. Each step shows available items with prices and selection state. A running total updates as items are added, with an automatic bundle discount applied when all steps are complete. The summary shows selected items with a clear price breakdown. Built with Button components using the Vercel minimal aesthetic.
+   Dependencies: ButtonCn, LucideCheckCn, LucideChevronRightCn, LucideMinusCn, LucideShoppingBagCn
+   Source: original/blocks/storefront/storefront-product-bundle-builder.tsx
+   ============================================================ *@
+
+<section class="container mx-auto py-16">
+    <section class="mx-auto w-full max-w-2xl p-4">
+        <div class="overflow-hidden rounded-lg border bg-card">
+            @* Header *@
+            <div class="border-b px-4 py-3">
+                <h2 class="text-sm font-medium">Build Your Bundle</h2>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Complete all 3 steps for 10% off your bundle
+                </p>
+            </div>
+
+            @* Progress *@
+            <div class="flex items-center gap-3 border-b px-4 py-2.5">
+                @for (var i = 0; i < _bundleSteps.Length; i++)
+                {
+                    var step = _bundleSteps[i];
+                    var index = i;
+                    var count = _selections.ContainsKey(step.Id) ? _selections[step.Id].Count : 0;
+                    var isDone = count >= step.Required;
+                    <button
+                        class="flex items-center gap-1.5"
+                        @onclick="@(() => _activeStep = step.Id)"
+                        type="button">
+                        <span class="@(Cn.Merge("flex size-5 items-center justify-center rounded-full text-[10px] font-medium", isDone ? "bg-foreground text-background" : _activeStep == step.Id ? "border border-foreground text-foreground" : "border border-muted-foreground/30 text-muted-foreground"))">
+                            @if (isDone)
+                            {
+                                <LucideCheckCn Size="12" Class="size-3" />
+                            }
+                            else
+                            {
+                                @(index + 1)
+                            }
+                        </span>
+                        <span class="@(Cn.Merge("text-xs", _activeStep == step.Id ? "font-medium text-foreground" : "text-muted-foreground"))">
+                            @step.ShortTitle
+                        </span>
+                        @if (index < _bundleSteps.Length - 1)
+                        {
+                            <LucideChevronRightCn Size="12" Class="size-3 text-muted-foreground/40" />
+                        }
+                    </button>
+                }
+            </div>
+
+            @* Active Step Items *@
+            @foreach (var step in _bundleSteps)
+            {
+                if (step.Id != _activeStep) continue;
+                var stepSelections = _selections.ContainsKey(step.Id) ? _selections[step.Id] : new List<string>();
+                <div>
+                    <div class="border-b bg-muted/30 px-4 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-medium">@step.Title</span>
+                            <span class="text-[10px] text-muted-foreground">
+                                @stepSelections.Count of @step.Required selected
+                            </span>
+                        </div>
+                    </div>
+                    @for (var j = 0; j < step.Items.Length; j++)
+                    {
+                        var item = step.Items[j];
+                        var isItemLast = j == step.Items.Length - 1;
+                        var isSelected = stepSelections.Contains(item.Id);
+                        var isDisabled = !isSelected && stepSelections.Count >= step.Required && step.Required > 1;
+                        <div class="@(!isItemLast ? "border-b" : "")">
+                            <button
+                                class="@(Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors", isDisabled ? "cursor-not-allowed opacity-40" : isSelected ? "bg-primary/5" : "hover:bg-muted/50"))"
+                                disabled="@isDisabled"
+                                @onclick="@(() => ToggleItem(step.Id, item.Id))"
+                                type="button">
+                                <div class="@(Cn.Merge("flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors", isSelected ? "border-primary bg-primary" : "border-muted-foreground/30"))">
+                                    @if (isSelected)
+                                    {
+                                        <LucideCheckCn Size="12" Class="size-3 text-primary-foreground" />
+                                    }
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-sm font-medium">@item.Name</span>
+                                    <p class="text-xs text-muted-foreground">@item.Description</p>
+                                </div>
+                                <span class="shrink-0 text-xs font-medium tabular-nums">
+                                    $@item.Price.ToString("F2")
+                                </span>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Selected Items Summary *@
+            @if (SelectedItems.Length > 0)
+            {
+                <div class="border-t px-4 py-3">
+                    <p class="mb-2 text-xs font-medium text-muted-foreground">
+                        Your Bundle (@CompletedSteps/@_bundleSteps.Length steps complete)
+                    </p>
+                    <div class="space-y-1">
+                        @foreach (var item in SelectedItems)
+                        {
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                                    <span class="text-xs">@item.Name</span>
+                                </div>
+                                <span class="text-xs tabular-nums text-muted-foreground">
+                                    $@item.Price.ToString("F2")
+                                </span>
+                            </div>
+                        }
+                    </div>
+
+                    @* Price Breakdown *@
+                    <div class="mt-3 space-y-1 border-t pt-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-muted-foreground">Subtotal</span>
+                            <span class="text-xs tabular-nums">$@Subtotal.ToString("F2")</span>
+                        </div>
+                        @if (IsComplete)
+                        {
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <LucideMinusCn Size="12" Class="size-3 text-emerald-600" />
+                                    <span class="text-xs text-emerald-600 dark:text-emerald-400">
+                                        Bundle discount (10%)
+                                    </span>
+                                </div>
+                                <span class="text-xs tabular-nums text-emerald-600 dark:text-emerald-400">
+                                    -$@Discount.ToString("F2")
+                                </span>
+                            </div>
+                        }
+                        <div class="flex items-center justify-between border-t pt-2">
+                            <span class="text-sm font-medium">Total</span>
+                            <span class="text-2xl font-semibold tabular-nums">$@Total.ToString("F2")</span>
+                        </div>
+                    </div>
+
+                    @* Complete Bundle Button *@
+                    <ButtonCn Class="mt-3 h-8 w-full text-xs" Disabled="@(!IsComplete)" Size="ButtonSize.Sm">
+                        <LucideShoppingBagCn Size="12" Class="mr-1.5 size-3" />
+                        @if (IsComplete)
+                        {
+                            <text>Complete Bundle</text>
+                        }
+                        else
+                        {
+                            @($"Select {_bundleSteps.Length - CompletedSteps} more to complete")
+                        }
+                    </ButtonCn>
+                    @if (!IsComplete)
+                    {
+                        <p class="mt-1.5 text-center text-[10px] text-muted-foreground">
+                            Complete all steps to unlock your 10% bundle discount
+                        </p>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+</section>
+
+@code {
+    private string _activeStep = "main";
+    private Dictionary<string, List<string>> _selections = new()
+    {
+        ["main"] = new(),
+        ["sides"] = new(),
+        ["drink"] = new()
+    };
+
+    private const decimal BundleDiscount = 0.1m;
+
+    private record BundleItem(string Id, string Name, string Description, decimal Price);
+    private record BundleStep(string Id, string Title, string ShortTitle, string Subtitle, int Required, BundleItem[] Items);
+
+    private static readonly BundleStep[] _bundleSteps =
+    [
+        new("main", "Choose Your Main", "Main", "Pick 1 entr\u00e9e", 1,
+        [
+            new("m1", "Grilled Chicken Bowl", "Herb-marinated chicken, jasmine rice, roasted vegetables", 14.99m),
+            new("m2", "Teriyaki Salmon", "Glazed Atlantic salmon, soba noodles, edamame", 17.99m),
+            new("m3", "Mushroom Risotto", "Arborio rice, wild mushrooms, parmesan, truffle oil", 13.99m),
+            new("m4", "BBQ Pulled Pork", "Slow-smoked pork, coleslaw, brioche bun", 15.99m)
+        ]),
+        new("sides", "Add Two Sides", "Sides", "Pick 2 sides", 2,
+        [
+            new("s1", "Caesar Salad", "Romaine, croutons, parmesan, house dressing", 5.99m),
+            new("s2", "Sweet Potato Fries", "Crispy baked with sea salt and chipotle aioli", 4.99m),
+            new("s3", "Miso Soup", "White miso, tofu, wakame, scallions", 3.99m),
+            new("s4", "Garlic Bread", "Sourdough, roasted garlic butter, herbs", 4.49m),
+            new("s5", "Seasonal Fruit", "Fresh mixed berries and sliced melon", 5.49m)
+        ]),
+        new("drink", "Pick a Drink", "Drink", "Pick 1 beverage", 1,
+        [
+            new("d1", "Sparkling Water", "San Pellegrino, 500ml", 2.99m),
+            new("d2", "Fresh Lemonade", "House-squeezed with mint", 4.49m),
+            new("d3", "Iced Matcha Latte", "Ceremonial grade matcha, oat milk", 5.99m),
+            new("d4", "Cold Brew Coffee", "24-hour steeped, served over ice", 4.99m)
+        ])
+    ];
+
+    private static readonly BundleItem[] _allItems = _bundleSteps.SelectMany(s => s.Items).ToArray();
+
+    private void ToggleItem(string stepId, string itemId)
+    {
+        var step = _bundleSteps.FirstOrDefault(s => s.Id == stepId);
+        if (step is null) return;
+
+        var current = _selections[stepId];
+        if (current.Contains(itemId))
+        {
+            current.Remove(itemId);
+        }
+        else if (current.Count >= step.Required)
+        {
+            if (step.Required == 1)
+            {
+                current.Clear();
+                current.Add(itemId);
+            }
+        }
+        else
+        {
+            current.Add(itemId);
+        }
+    }
+
+    private BundleItem[] SelectedItems => _selections.Values
+        .SelectMany(ids => ids)
+        .Select(id => _allItems.FirstOrDefault(i => i.Id == id))
+        .Where(i => i is not null)
+        .ToArray()!;
+
+    private decimal Subtotal => SelectedItems.Sum(i => i.Price);
+
+    private bool IsComplete => _bundleSteps.All(s =>
+        _selections.ContainsKey(s.Id) && _selections[s.Id].Count >= s.Required);
+
+    private decimal Discount => IsComplete ? Math.Round(Subtotal * BundleDiscount, 2) : 0;
+    private decimal Total => Subtotal - Discount;
+
+    private int CompletedSteps => _bundleSteps.Count(s =>
+        _selections.ContainsKey(s.Id) && _selections[s.Id].Count >= s.Required);
+}

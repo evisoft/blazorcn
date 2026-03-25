@@ -1,0 +1,154 @@
+@* ===========================================================
+   Block: ai-usage-dashboard
+   Title: Ai Usage Dashboard
+   Description: React AI usage analytics dashboard block for Next.js with stat cards, bar chart, and recent queries using shadcn/ui and Tailwind CSS
+   Long Description:
+   Dependencies: BadgeCn, LucideChevronRightCn
+   Source: original/blocks/ai/ai-usage-dashboard.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Stats row *@
+        <div class="grid grid-cols-2 border-b sm:grid-cols-4">
+            @for (var i = 0; i < _stats.Length; i++)
+            {
+                var stat = _stats[i];
+                var isLast = i == _stats.Length - 1;
+                var trendColor = TrendColor(stat.Change, stat.InvertTrend);
+                <div class="@($"px-4 py-3 {(isLast ? "" : "border-r")}")">
+                    <span class="text-xs text-muted-foreground">@stat.Label</span>
+                    <div class="mt-1 flex items-baseline gap-1.5">
+                        <span class="text-2xl font-semibold tabular-nums">@stat.Value</span>
+                    </div>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <span class="@($"font-mono text-xs tabular-nums {trendColor}")">
+                            @(stat.Change > 0 ? "+" : "")@(stat.Change)%
+                        </span>
+                        <span class="text-xs text-muted-foreground">@stat.Subtitle</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Bar chart *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-3 flex items-center justify-between">
+                <span class="text-sm font-medium">Daily Token Usage</span>
+                <span class="text-xs text-muted-foreground">This week</span>
+            </div>
+            <div class="flex items-end gap-2" style="height: 120px">
+                @foreach (var day in _dailyUsage)
+                {
+                    var pct = (double)day.Tokens / day.MaxTokens * 100;
+                    <div class="flex flex-1 flex-col items-center gap-1.5">
+                        <span class="font-mono text-xs tabular-nums text-muted-foreground">
+                            @(Math.Round((double)day.Tokens / 1000))k
+                        </span>
+                        <div class="relative w-full" style="height: 80px">
+                            <div class="absolute inset-x-0 bottom-0 rounded-sm bg-muted/40"
+                                 style="height: 100%"></div>
+                            <div class="absolute inset-x-0 bottom-0 rounded-sm bg-foreground transition-all duration-500"
+                                 style="@($"height: {pct:F0}%")"></div>
+                        </div>
+                        <span class="text-xs text-muted-foreground">@day.Day</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Token limit *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <span class="text-xs text-muted-foreground">Monthly limit</span>
+            <div class="flex-1">
+                <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full rounded-full bg-foreground transition-all"
+                         style="@($"width: {_tokenUsedPct}%")"></div>
+                </div>
+            </div>
+            <span class="font-mono text-xs tabular-nums">@(_tokenUsedPct)%</span>
+            <span class="text-xs text-muted-foreground">2.4M / 5M</span>
+        </div>
+
+        @* Recent queries *@
+        <div>
+            <div class="px-4 py-2">
+                <span class="text-xs font-medium text-muted-foreground">Recent Queries</span>
+            </div>
+            @for (var i = 0; i < _recentQueries.Length; i++)
+            {
+                var q = _recentQueries[i];
+                var isExpanded = _expanded == q.Id;
+                var isLast = i == _recentQueries.Length - 1;
+                var queryId = q.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => _expanded = isExpanded ? null : queryId)"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="min-w-0 flex-1">
+                            <span class="truncate text-sm font-medium">@q.Query</span>
+                        </div>
+                        <span class="shrink-0 text-xs text-muted-foreground">@q.Timestamp</span>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="flex items-center gap-3 px-4 pb-3 pl-4">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                @q.Model
+                            </BadgeCn>
+                            <span class="font-mono text-xs tabular-nums text-muted-foreground">
+                                @q.Tokens.ToString("N0") tokens
+                            </span>
+                            <span class="text-xs text-muted-foreground">&middot;</span>
+                            <span class="font-mono text-xs text-muted-foreground">@q.Latency</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, string Value, double Change, bool InvertTrend, string Subtitle);
+    private record DailyUsage(string Day, int Tokens, int MaxTokens);
+    private record RecentQuery(string Id, string Query, string Model, int Tokens, string Latency, string Timestamp);
+
+    private string? _expanded;
+    private const int _tokenUsedPct = 48;
+
+    private static string TrendColor(double change, bool invert)
+    {
+        var isPositive = invert ? change < 0 : change > 0;
+        return isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+    }
+
+    private static readonly StatItem[] _stats =
+    [
+        new("API Calls", "12,847", 12.5, false, "This month"),
+        new("Tokens Used", "2.4M", 8.3, false, "of 5M limit"),
+        new("Total Cost", "$142.58", -3.2, true, "This billing cycle"),
+        new("Avg Response", "1.2s", -15.4, true, "p50 latency"),
+    ];
+
+    private static readonly DailyUsage[] _dailyUsage =
+    [
+        new("Mon", 320000, 500000),
+        new("Tue", 410000, 500000),
+        new("Wed", 280000, 500000),
+        new("Thu", 490000, 500000),
+        new("Fri", 350000, 500000),
+        new("Sat", 180000, 500000),
+        new("Sun", 220000, 500000),
+    ];
+
+    private static readonly RecentQuery[] _recentQueries =
+    [
+        new("1", "Summarize quarterly earnings report", "GPT-4o", 2840, "1.8s", "2 min ago"),
+        new("2", "Generate product descriptions for catalog", "Claude 3.5", 4120, "2.1s", "8 min ago"),
+        new("3", "Translate support ticket to Spanish", "GPT-4o Mini", 890, "0.4s", "15 min ago"),
+        new("4", "Classify customer feedback sentiment", "Claude 3.5", 1560, "0.9s", "22 min ago"),
+        new("5", "Extract entities from legal document", "GPT-4o", 6230, "3.2s", "31 min ago"),
+    ];
+}

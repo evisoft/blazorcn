@@ -1,0 +1,239 @@
+@* ===========================================================
+   Block: settings-payment-gateway
+   Title: Settings Payment Gateway
+   Description: Animated React payment gateway settings page for Next.js with Stripe and PayPal API key management, test mode toggle, webhook URL, and transaction summary built with shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Company information and branding
+   Dependencies: BadgeCn, ButtonCn, InputCn, SwitchCn
+   Source: original/blocks/settings/settings-payment-gateway.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <p class="font-medium text-sm">Payment Gateway</p>
+            <p class="mt-0.5 text-muted-foreground text-xs">
+                Configure payment providers and API credentials
+            </p>
+        </div>
+
+        @* Test mode toggle *@
+        <div class="flex items-center justify-between border-b px-4 py-4">
+            <div class="flex items-center gap-3">
+                <LucideTestTubeCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <div class="flex items-center gap-2">
+                        <p class="font-medium text-sm">Test mode</p>
+                        @if (_testMode)
+                        {
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs text-amber-600 dark:text-amber-400">
+                                Sandbox
+                            </BadgeCn>
+                        }
+                    </div>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        Use sandbox credentials for testing
+                    </p>
+                </div>
+            </div>
+            <SwitchCn @bind-Checked="_testMode" />
+        </div>
+
+        @* Transaction stats *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            @foreach (var stat in _stats)
+            {
+                <div class="flex items-baseline gap-1.5">
+                    <span class="font-semibold text-sm tabular-nums">@stat.Value</span>
+                    <span class="@Cn.Merge("text-xs tabular-nums", stat.Trend == "up" || stat.Trend == "down" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                        @stat.Change
+                    </span>
+                </div>
+            }
+        </div>
+
+        @* Gateways *@
+        @foreach (var gateway in _gateways)
+        {
+            <div class="border-b px-4 py-4">
+                <div class="flex items-center gap-3">
+                    <div class="@Cn.Merge("flex size-8 shrink-0 items-center justify-center rounded-md", gateway.Enabled ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground")">
+                        <LucideCreditCardCn Size="16" Class="size-4" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-sm">@gateway.Name</span>
+                            @if (gateway.Enabled)
+                            {
+                                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                            }
+                        </div>
+                        <p class="mt-0.5 text-muted-foreground text-xs">
+                            @(gateway.Enabled ? "Active" : "Disabled") &middot; @(_testMode ? "Test" : "Live") keys
+                        </p>
+                    </div>
+                    <SwitchCn @bind-Checked="gateway.Enabled" />
+                </div>
+
+                @if (gateway.Enabled)
+                {
+                    var pubKey = gateway.Id + "-pub";
+                    var secKey = gateway.Id + "-sec";
+                    var hookKey = gateway.Id + "-hook";
+
+                    <div class="mt-4 ml-11 space-y-3">
+                        @* Public key *@
+                        <div>
+                            <span class="mb-1 block text-muted-foreground text-xs">Public key</span>
+                            <div class="flex items-center gap-2">
+                                <InputCn Value="@gateway.PublicKey" Class="h-8 flex-1 font-mono text-xs" Readonly="true" />
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 w-8 shrink-0 p-0" OnClick="() => CopyValue(pubKey)">
+                                    @if (_copied == pubKey)
+                                    {
+                                        <LucideCheckCn Size="12" Class="size-3" />
+                                    }
+                                    else
+                                    {
+                                        <LucideCopyCn Size="12" Class="size-3" />
+                                    }
+                                </ButtonCn>
+                            </div>
+                        </div>
+
+                        @* Secret key *@
+                        <div>
+                            <span class="mb-1 block text-muted-foreground text-xs">Secret key</span>
+                            <div class="flex items-center gap-2">
+                                <InputCn Value="@(_showSecrets.ContainsKey(gateway.Id) && _showSecrets[gateway.Id] ? gateway.SecretKey : MaskKey(gateway.SecretKey))" Class="h-8 flex-1 font-mono text-xs" Readonly="true" />
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 w-8 shrink-0 p-0" OnClick="() => ToggleSecret(gateway.Id)">
+                                    @if (_showSecrets.ContainsKey(gateway.Id) && _showSecrets[gateway.Id])
+                                    {
+                                        <LucideEyeOffCn Size="12" Class="size-3" />
+                                    }
+                                    else
+                                    {
+                                        <LucideEyeCn Size="12" Class="size-3" />
+                                    }
+                                </ButtonCn>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 w-8 shrink-0 p-0" OnClick="() => CopyValue(secKey)">
+                                    @if (_copied == secKey)
+                                    {
+                                        <LucideCheckCn Size="12" Class="size-3" />
+                                    }
+                                    else
+                                    {
+                                        <LucideCopyCn Size="12" Class="size-3" />
+                                    }
+                                </ButtonCn>
+                            </div>
+                        </div>
+
+                        @* Webhook URL *@
+                        <div>
+                            <span class="mb-1 flex items-center gap-1 text-muted-foreground text-xs">
+                                <LucideLinkCn Size="12" Class="size-3" />
+                                Webhook URL
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <InputCn Value="@gateway.WebhookUrl" Class="h-8 flex-1 font-mono text-xs" Readonly="true" />
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 w-8 shrink-0 p-0" OnClick="() => CopyValue(hookKey)">
+                                    @if (_copied == hookKey)
+                                    {
+                                        <LucideCheckCn Size="12" Class="size-3" />
+                                    }
+                                    else
+                                    {
+                                        <LucideCopyCn Size="12" Class="size-3" />
+                                    }
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Save *@
+        <div class="flex items-center justify-end gap-2 px-4 py-3">
+            @if (_saved)
+            {
+                <span class="flex items-center gap-1 text-emerald-600 text-xs dark:text-emerald-400">
+                    <LucideCheckCn Size="12" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs" OnClick="HandleSave">
+                Save changes
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private bool _testMode = true;
+    private string? _copied;
+    private bool _saved;
+    private readonly Dictionary<string, bool> _showSecrets = new();
+
+    private record TransactionStat(string Label, string Value, string Change, string Trend);
+
+    private static readonly List<TransactionStat> _stats = new()
+    {
+        new("Monthly volume", "$48,230", "+12.3%", "up"),
+        new("Transactions", "1,247", "+8.1%", "up"),
+        new("Failed rate", "1.2%", "-0.3%", "down"),
+    };
+
+    private class GatewayConfig
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public bool Enabled { get; set; }
+        public string PublicKey { get; set; } = "";
+        public string SecretKey { get; set; } = "";
+        public string WebhookUrl { get; set; } = "";
+    }
+
+    private readonly List<GatewayConfig> _gateways = new()
+    {
+        new() { Id = "stripe", Name = "Stripe", Enabled = true, PublicKey = "pk_test_51NxR4kJf8mK2vLpQwXy9z", SecretKey = "sk_test_51NxR4kJf8mK2vLpQwXy9z", WebhookUrl = "https://acme.com/api/stripe/webhook" },
+        new() { Id = "paypal", Name = "PayPal", Enabled = false, PublicKey = "AZn4K8vR-sandbox-client-id", SecretKey = "EKj7pQ2w-sandbox-secret", WebhookUrl = "https://acme.com/api/paypal/webhook" },
+    };
+
+    private void ToggleSecret(string id)
+    {
+        if (_showSecrets.ContainsKey(id))
+            _showSecrets[id] = !_showSecrets[id];
+        else
+            _showSecrets[id] = true;
+    }
+
+    private void CopyValue(string id)
+    {
+        _copied = id;
+        _ = ResetCopied();
+    }
+
+    private async Task ResetCopied()
+    {
+        await Task.Delay(2000);
+        _copied = null;
+        StateHasChanged();
+    }
+
+    private static string MaskKey(string key)
+        => key.Length <= 8 ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : $"{key[..7]}{"".PadRight(12, '\u2022')}";
+
+    private void HandleSave()
+    {
+        _saved = true;
+        _ = ResetSaved();
+    }
+
+    private async Task ResetSaved()
+    {
+        await Task.Delay(2000);
+        _saved = false;
+        StateHasChanged();
+    }
+}

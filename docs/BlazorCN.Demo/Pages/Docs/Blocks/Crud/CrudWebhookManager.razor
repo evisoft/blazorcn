@@ -1,0 +1,178 @@
+@* ============================================================
+   Block: crud-webhook-manager
+   Title: Crud Webhook Manager
+   Description: Webhook endpoint configuration with event subscriptions, status monitoring, and testing capabilities
+   Dependencies: BadgeCn, ButtonCn, CheckboxCn, InputCn, LabelCn, LucideCheckCn, LucideCopyCn, LucidePlayCn, LucideSettingsCn, LucideTrash2Cn
+   Source: original/blocks/crud/crud-webhook-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Webhook Manager</h2>
+            <p class="mt-1 text-xs text-muted-foreground">
+                Configure and monitor webhook endpoints
+            </p>
+        </div>
+
+        @* Webhooks List *@
+        <div class="divide-y">
+            @foreach (var webhook in _webhooks)
+            {
+                var statusColor = webhook.Status switch { "active" => "bg-emerald-500", "paused" => "bg-amber-500", "failed" => "bg-red-500", _ => "bg-muted" };
+                var rateColor = webhook.SuccessRate >= 95 ? "text-emerald-600" : webhook.SuccessRate >= 80 ? "text-amber-600" : "text-red-600";
+                <div class="px-4 py-3 transition-colors hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@($"mt-1.5 size-1.5 shrink-0 rounded-full {statusColor}")"></span>
+
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="truncate font-mono text-xs">@TruncateUrl(webhook.Url)</span>
+                                        <button type="button" @onclick="() => HandleCopyUrl(webhook.Url, webhook.Id)"
+                                                class="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
+                                            @if (_copiedId == webhook.Id)
+                                            {
+                                                <LucideCheckCn Size="14" />
+                                            }
+                                            else
+                                            {
+                                                <LucideCopyCn Size="14" />
+                                            }
+                                        </button>
+                                    </div>
+
+                                    <div class="mt-2 flex flex-wrap gap-1.5">
+                                        @foreach (var evt in webhook.Events)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 text-xs">@evt</BadgeCn>
+                                        }
+                                    </div>
+
+                                    <div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                                        <span>Last: @webhook.LastTriggered</span>
+                                        <span class="@rateColor">@webhook.SuccessRate% success</span>
+                                        <span class="capitalize">@webhook.Status</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex shrink-0 items-center gap-1">
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 px-2 text-xs">
+                                        <LucidePlayCn Size="14" />
+                                        Test
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 px-2">
+                                        <LucideSettingsCn Size="14" />
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 px-2 text-red-600 hover:text-red-700"
+                                              @onclick="() => HandleDeleteWebhook(webhook.Id)">
+                                        <LucideTrash2Cn Size="14" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Add Webhook Section *@
+        <div class="border-t bg-muted/30 px-4 py-4">
+            <h3 class="text-sm font-medium">Add Webhook</h3>
+            <p class="mt-1 text-xs text-muted-foreground">Configure a new webhook endpoint</p>
+
+            <div class="mt-4 space-y-4">
+                <div class="space-y-2">
+                    <LabelCn For="webhook-url" Class="text-xs">Endpoint URL</LabelCn>
+                    <InputCn Id="webhook-url" Type="url" Placeholder="https://api.example.com/webhooks" @bind-Value="_newWebhookUrl" Class="h-8 text-xs" />
+                </div>
+
+                <div class="space-y-2">
+                    <LabelCn Class="text-xs">Events to Subscribe</LabelCn>
+                    <div class="grid grid-cols-2 gap-3 rounded-md border bg-card p-3">
+                        @foreach (var evt in _availableEvents)
+                        {
+                            <div class="flex items-center gap-2">
+                                <CheckboxCn Id="@($"event-{evt.Id}")" Checked="@_selectedEvents.Contains(evt.Id)"
+                                            CheckedChanged="@(() => HandleToggleEvent(evt.Id))" />
+                                <label for="@($"event-{evt.Id}")" class="cursor-pointer text-xs">@evt.Label</label>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs" @onclick="HandleCancelAdd">Cancel</ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs" @onclick="HandleAddWebhook"
+                              Disabled="@(string.IsNullOrWhiteSpace(_newWebhookUrl) || _selectedEvents.Count == 0)">Add Webhook</ButtonCn>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EventType(string Id, string Label);
+    private class WebhookItem
+    {
+        public string Id { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string[] Events { get; set; } = [];
+        public string Status { get; set; } = "active";
+        public string LastTriggered { get; set; } = "";
+        public double SuccessRate { get; set; }
+    }
+
+    private string _newWebhookUrl = "";
+    private string? _copiedId;
+    private readonly HashSet<string> _selectedEvents = new();
+
+    private readonly EventType[] _availableEvents = [
+        new("order.created", "Order Created"), new("order.updated", "Order Updated"),
+        new("order.cancelled", "Order Cancelled"), new("user.signup", "User Signup"),
+        new("user.updated", "User Updated"), new("payment.success", "Payment Success"),
+        new("payment.failed", "Payment Failed"), new("subscription.created", "Subscription Created"),
+    ];
+
+    private readonly List<WebhookItem> _webhooks = [
+        new() { Id = "wh_1", Url = "https://api.example.com/webhooks/orders", Events = ["order.created", "order.updated"], Status = "active", LastTriggered = "2 min ago", SuccessRate = 98.5 },
+        new() { Id = "wh_2", Url = "https://hooks.zapier.com/abc123def456", Events = ["user.signup", "payment.success"], Status = "active", LastTriggered = "1 hour ago", SuccessRate = 100 },
+        new() { Id = "wh_3", Url = "https://internal.company.com/events/webhook", Events = ["order.cancelled", "payment.failed"], Status = "failed", LastTriggered = "3 hours ago", SuccessRate = 45.2 },
+        new() { Id = "wh_4", Url = "https://notify.slack.com/services/xyz789", Events = ["subscription.created"], Status = "paused", LastTriggered = "Yesterday", SuccessRate = 95.8 },
+    ];
+
+    private static string TruncateUrl(string url) => url.Length <= 45 ? url : $"{url[..42]}...";
+
+    private void HandleCopyUrl(string url, string id) => _copiedId = id;
+
+    private void HandleDeleteWebhook(string id) => _webhooks.RemoveAll(w => w.Id == id);
+
+    private void HandleToggleEvent(string eventId)
+    {
+        if (!_selectedEvents.Remove(eventId)) _selectedEvents.Add(eventId);
+    }
+
+    private void HandleAddWebhook()
+    {
+        if (string.IsNullOrWhiteSpace(_newWebhookUrl) || _selectedEvents.Count == 0) return;
+        _webhooks.Add(new WebhookItem
+        {
+            Id = $"wh_{_webhooks.Count + 1}",
+            Url = _newWebhookUrl,
+            Events = _selectedEvents.ToArray(),
+            Status = "active",
+            LastTriggered = "Never",
+            SuccessRate = 100,
+        });
+        _newWebhookUrl = "";
+        _selectedEvents.Clear();
+    }
+
+    private void HandleCancelAdd()
+    {
+        _newWebhookUrl = "";
+        _selectedEvents.Clear();
+    }
+}

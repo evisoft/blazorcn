@@ -1,0 +1,189 @@
+@* ============================================================
+   Block: tables-subscription-plans
+   Title: Tables Subscription Plans
+   Description: Table component with subscription management showing plan details, billing cycles, renewal dates and usage for React SaaS dashboards
+   Long Description: Data table component with sticky header that stays fixed while scrolling for React long datasets
+   Dependencies: BadgeCn, ButtonCn, ProgressCn, TableCn, TooltipCn
+   Source: original/blocks/tables/tables-subscription-plans.tsx
+   ============================================================ *@
+
+<section class="container mx-auto py-16">
+    <div style="width: 900px">
+        <div class="space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold">Your Subscriptions</h3>
+                    <p class="text-sm text-muted-foreground">
+                        @activeCount active · $@(monthlyTotal.ToString("F2"))/month
+                    </p>
+                </div>
+                <ButtonCn Class="gap-1" Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                    <LucideArrowUpRightCn Size="14" />
+                    Upgrade
+                </ButtonCn>
+            </div>
+
+            <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <TableCn Class="table-fixed" style="width: 850px">
+                    <TableHeaderCn>
+                        <TableRowCn>
+                            <TableHeadCn Class="w-44 font-semibold text-foreground">Plan</TableHeadCn>
+                            <TableHeadCn Class="w-24 font-semibold text-foreground">Status</TableHeadCn>
+                            <TableHeadCn Class="w-24 font-semibold text-foreground text-right">Price</TableHeadCn>
+                            <TableHeadCn Class="w-28 font-semibold text-foreground">Next Billing</TableHeadCn>
+                            <TableHeadCn Class="w-40 font-semibold text-foreground">Usage</TableHeadCn>
+                            <TableHeadCn Class="w-28 font-semibold text-foreground">Payment</TableHeadCn>
+                        </TableRowCn>
+                    </TableHeaderCn>
+                    <TableBodyCn>
+                        @foreach (var sub in subscriptions)
+                        {
+                            var status = GetStatusConfig(sub.Status);
+                            var tierCfg = GetTierConfig(sub.Tier);
+
+                            <TableRowCn Class="@Cn.Merge(Cn.Merge(sub.Status == "past_due" ? "bg-red-50/50" : "", sub.Status == "paused" ? "opacity-60" : ""))">
+                                <TableCellCn>
+                                    <div class="flex items-center gap-2">
+                                        @if (tierCfg.Icon == "crown")
+                                        {
+                                            <LucideCrownCn Size="16" Class="@tierCfg.ClassName" />
+                                        }
+                                        else
+                                        {
+                                            <LucideZapCn Size="16" Class="@tierCfg.ClassName" />
+                                        }
+                                        <div>
+                                            <p class="font-medium text-sm">@sub.PlanName</p>
+                                            <p class="text-xs text-muted-foreground capitalize">@sub.Tier</p>
+                                        </div>
+                                    </div>
+                                </TableCellCn>
+                                <TableCellCn>
+                                    <div class="space-y-1">
+                                        <BadgeCn Class="@Cn.Merge(Cn.Merge("gap-1 text-xs", status.ClassName))" Variant="BadgeVariant.Secondary">
+                                            @status.Label
+                                        </BadgeCn>
+                                        @if (sub.TrialEndsIn.HasValue)
+                                        {
+                                            <p class="text-[10px] text-purple-600">@sub.TrialEndsIn days left</p>
+                                        }
+                                    </div>
+                                </TableCellCn>
+                                <TableCellCn Class="text-right">
+                                    <div>
+                                        <span class="font-mono font-bold">$@sub.Price</span>
+                                        <span class="text-xs text-muted-foreground">
+                                            /@(sub.BillingCycle == "monthly" ? "mo" : "yr")
+                                        </span>
+                                    </div>
+                                </TableCellCn>
+                                <TableCellCn>
+                                    <div class="flex items-center gap-1.5 text-sm">
+                                        <LucideCalendarCn Size="14" Class="text-muted-foreground" />
+                                        <span class="@(Cn.Merge(sub.Status == "past_due" ? "text-red-600 font-medium" : ""))">
+                                            @sub.NextBillingDate
+                                        </span>
+                                    </div>
+                                </TableCellCn>
+                                <TableCellCn>
+                                    <div class="space-y-2">
+                                        @foreach (var metric in sub.Usage.Take(2))
+                                        {
+                                            var pct = Math.Min((double)metric.Used / metric.Limit * 100, 100);
+                                            var isNearLimit = pct >= 80;
+                                            var isAtLimit = pct >= 100;
+
+                                            <div class="space-y-1">
+                                                <div class="flex items-center justify-between text-xs">
+                                                    <span class="text-muted-foreground">@metric.Name</span>
+                                                    <span class="@(Cn.Merge("font-mono", isAtLimit ? "text-red-600 font-medium" : "", isNearLimit && !isAtLimit ? "text-yellow-600" : ""))">
+                                                        @metric.Used/@metric.Limit
+                                                    </span>
+                                                </div>
+                                                <ProgressCn Class="@Cn.Merge(Cn.Merge("h-1.5", isAtLimit ? "[&>div]:bg-red-500" : "", isNearLimit && !isAtLimit ? "[&>div]:bg-yellow-500" : ""))"
+                                                            Value="@((int)pct)" />
+                                            </div>
+                                        }
+                                        @if (sub.Usage.Length > 2)
+                                        {
+                                            <p class="text-[10px] text-muted-foreground">
+                                                +@(sub.Usage.Length - 2) more metrics
+                                            </p>
+                                        }
+                                    </div>
+                                </TableCellCn>
+                                <TableCellCn>
+                                    <div class="flex items-center gap-1.5 text-xs">
+                                        <LucideCreditCardCn Size="14" Class="text-muted-foreground" />
+                                        <span class="@(Cn.Merge("truncate", sub.PaymentMethod == "Card expired" ? "text-red-600" : "", sub.PaymentMethod == "Not set" ? "text-yellow-600" : ""))">
+                                            @sub.PaymentMethod
+                                        </span>
+                                    </div>
+                                </TableCellCn>
+                            </TableRowCn>
+                        }
+                    </TableBodyCn>
+                </TableCn>
+            </div>
+
+            <div class="flex items-center gap-6 text-xs text-muted-foreground">
+                <div class="flex items-center gap-1.5">
+                    <LucideCheckCircle2Cn Size="14" Class="text-green-600" />
+                    <span>Active</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <LucideSparklesCn Size="14" Class="text-purple-600" />
+                    <span>Trial</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <LucideAlertCircleCn Size="14" Class="text-red-600" />
+                    <span>Payment required</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <LucideCrownCn Size="14" Class="text-yellow-600" />
+                    <span>Premium tier</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record UsageMetric(string Name, double Used, double Limit, string Unit);
+    private record Subscription(string Id, string PlanName, string Tier, string Status, int Price, string BillingCycle, string NextBillingDate, int? TrialEndsIn, UsageMetric[] Usage, string PaymentMethod);
+    private record StatusCfg(string Label, string ClassName);
+    private record TierCfg(string Icon, string ClassName);
+
+    private static readonly Subscription[] subscriptions = new[]
+    {
+        new Subscription("1", "Pro Plan", "pro", "active", 29, "monthly", "Apr 15, 2024", null, new[] { new UsageMetric("API Calls", 8420, 10000, "calls"), new UsageMetric("Storage", 3.2, 5, "GB"), new UsageMetric("Team Members", 4, 5, "users") }, "Visa •••• 4242"),
+        new Subscription("2", "Business Add-on", "business", "active", 49, "monthly", "Apr 15, 2024", null, new[] { new UsageMetric("Advanced Analytics", 1, 1, "enabled"), new UsageMetric("Custom Domains", 2, 5, "domains") }, "Visa •••• 4242"),
+        new Subscription("3", "Enterprise Trial", "enterprise", "trialing", 199, "annual", "Apr 28, 2024", 12, new[] { new UsageMetric("API Calls", 1250, 100000, "calls"), new UsageMetric("Storage", 0.8, 50, "GB") }, "Not set"),
+        new Subscription("4", "Starter Plan", "starter", "past_due", 9, "monthly", "Overdue", null, new[] { new UsageMetric("Projects", 3, 3, "projects") }, "Card expired"),
+        new Subscription("5", "Pro Plan (Paused)", "pro", "paused", 29, "monthly", "Paused", null, new[] { new UsageMetric("API Calls", 0, 10000, "calls") }, "Visa •••• 1234"),
+    };
+
+    private static readonly int activeCount = subscriptions.Count(s => s.Status == "active" || s.Status == "trialing");
+    private static readonly double monthlyTotal = subscriptions
+        .Where(s => s.Status == "active")
+        .Sum(s => s.BillingCycle == "monthly" ? s.Price : (double)s.Price / 12);
+
+    private static StatusCfg GetStatusConfig(string status) => status switch
+    {
+        "active" => new StatusCfg("Active", "bg-green-100 text-green-700 hover:bg-green-100"),
+        "trialing" => new StatusCfg("Trial", "bg-purple-100 text-purple-700 hover:bg-purple-100"),
+        "past_due" => new StatusCfg("Past Due", "bg-red-100 text-red-700 hover:bg-red-100"),
+        "cancelled" => new StatusCfg("Cancelled", "bg-muted text-muted-foreground hover:bg-muted"),
+        "paused" => new StatusCfg("Paused", "bg-yellow-100 text-yellow-700 hover:bg-yellow-100"),
+        _ => new StatusCfg(status, "bg-muted text-muted-foreground"),
+    };
+
+    private static TierCfg GetTierConfig(string tier) => tier switch
+    {
+        "starter" => new TierCfg("zap", "text-muted-foreground"),
+        "pro" => new TierCfg("zap", "text-blue-600"),
+        "business" => new TierCfg("crown", "text-purple-600"),
+        "enterprise" => new TierCfg("crown", "text-yellow-600"),
+        _ => new TierCfg("zap", "text-muted-foreground"),
+    };
+}

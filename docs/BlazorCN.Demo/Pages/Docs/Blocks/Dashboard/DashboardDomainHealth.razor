@@ -1,0 +1,190 @@
+@* ============================================================
+   Block: dashboard-domain-health
+   Title: Dashboard Domain Health
+   Description: Animated React domain health monitoring dashboard block for Next.js with DNS propagation status, WHOIS expiration alerts, blacklist checks, SSL validity, and overall domain score using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: DNS record management with type and TTL columns
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-domain-health.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideGlobeCn Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Domain Health</span>
+            </div>
+            @if (_criticalCount > 0)
+            {
+                <BadgeCn Variant="BadgeVariant.Secondary"
+                         Class="font-normal text-red-600 text-xs dark:text-red-400">
+                    <LucideShieldAlertCn Size="12" Class="mr-1 size-3" />
+                    @_criticalCount critical
+                </BadgeCn>
+            }
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-muted-foreground text-xs">Domains</p>
+                <p class="font-semibold text-2xl tabular-nums">@_domains.Length</p>
+            </div>
+            <div class="h-8 w-px bg-border"></div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    <span class="text-muted-foreground text-xs">@_healthyCount healthy</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    <span class="text-muted-foreground text-xs">@_warningCount warning</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    <span class="text-muted-foreground text-xs">@_criticalCount critical</span>
+                </div>
+            </div>
+        </div>
+
+        @* Domains list *@
+        <div>
+            @for (var i = 0; i < _domains.Length; i++)
+            {
+                var domain = _domains[i];
+                var isExpanded = _expanded == domain.Id;
+                var isLast = i == _domains.Length - 1;
+
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : domain.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", GetScoreDot(domain.Score)))"></span>
+                        <span class="min-w-0 flex-1 font-medium text-sm">@domain.Domain</span>
+                        @if (domain.BlacklistsFlagged > 0)
+                        {
+                            <span class="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+                                @domain.BlacklistsFlagged blacklist
+                            </span>
+                        }
+                        <span class="w-10 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                            SSL @(domain.SslDaysLeft)d
+                        </span>
+                        <span class="@(Cn.Merge("w-8 shrink-0 text-right font-semibold text-sm tabular-nums", GetScoreColor(domain.Score)))">
+                            @domain.Score
+                        </span>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-4 pt-1">
+                                <p class="mb-2 text-muted-foreground text-xs">Health checks</p>
+                                <div class="space-y-1.5">
+                                    @foreach (var check in domain.Checks)
+                                    {
+                                        <div class="flex items-center gap-2.5">
+                                            <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", GetCheckDot(check.Status)))"></span>
+                                            <span class="w-28 shrink-0 font-medium text-xs">
+                                                @check.Label
+                                            </span>
+                                            <span class="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+                                                @check.Detail
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="mt-3 flex items-center gap-3 text-muted-foreground text-xs">
+                                    <span>DNS: @domain.DnsStatus</span>
+                                    <span>·</span>
+                                    <span>WHOIS: @domain.WhoisExpiry</span>
+                                    <span>·</span>
+                                    <span>Blacklists: @domain.BlacklistsChecked checked</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "5";
+
+    private record DomainCheck(string Label, string Status, string Detail);
+    private record DomainData(string Id, string Domain, int Score, int SslDaysLeft, string WhoisExpiry, string DnsStatus, int BlacklistsChecked, int BlacklistsFlagged, DomainCheck[] Checks);
+
+    private int _healthyCount => _domains.Count(d => d.Score >= 80);
+    private int _warningCount => _domains.Count(d => d.Score >= 50 && d.Score < 80);
+    private int _criticalCount => _domains.Count(d => d.Score < 50);
+
+    private static string GetScoreColor(int score)
+    {
+        if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
+        if (score >= 50) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private static string GetScoreDot(int score)
+    {
+        if (score >= 80) return "bg-emerald-500";
+        if (score >= 50) return "bg-amber-500";
+        return "bg-red-500";
+    }
+
+    private static string GetCheckDot(string status) => status switch
+    {
+        "pass" => "bg-emerald-500",
+        "warn" => "bg-amber-500",
+        _ => "bg-red-500"
+    };
+
+    private readonly DomainData[] _domains = new[]
+    {
+        new DomainData("1", "acmecorp.com", 96, 218, "2027-08-14", "propagated", 84, 0, new[]
+        {
+            new DomainCheck("DNS A record", "pass", "Resolved on 4/4 nameservers"),
+            new DomainCheck("DNS MX record", "pass", "3 MX records configured"),
+            new DomainCheck("SSL certificate", "pass", "Valid for 218 more days"),
+            new DomainCheck("WHOIS expiry", "pass", "Expires Aug 14, 2027"),
+            new DomainCheck("Blacklist scan", "pass", "Clean on 84/84 lists")
+        }),
+        new DomainData("2", "app.acmecorp.com", 82, 12, "2027-08-14", "propagated", 84, 0, new[]
+        {
+            new DomainCheck("DNS A record", "pass", "Resolved on 4/4 nameservers"),
+            new DomainCheck("DNS CNAME", "pass", "Points to cdn.acmecorp.com"),
+            new DomainCheck("SSL certificate", "warn", "Expires in 12 days \u2014 renew now"),
+            new DomainCheck("WHOIS expiry", "pass", "Expires Aug 14, 2027"),
+            new DomainCheck("Blacklist scan", "pass", "Clean on 84/84 lists")
+        }),
+        new DomainData("3", "mail.acmecorp.com", 61, 145, "2027-08-14", "propagated", 84, 2, new[]
+        {
+            new DomainCheck("DNS A record", "pass", "Resolved on 4/4 nameservers"),
+            new DomainCheck("DNS MX record", "pass", "Priority 10 configured"),
+            new DomainCheck("SSL certificate", "pass", "Valid for 145 more days"),
+            new DomainCheck("SPF record", "warn", "Too permissive \u2014 uses +all"),
+            new DomainCheck("Blacklist scan", "fail", "Flagged on 2/84 lists (SORBS, Barracuda)")
+        }),
+        new DomainData("4", "api.acmecorp.com", 93, 218, "2027-08-14", "propagated", 84, 0, new[]
+        {
+            new DomainCheck("DNS A record", "pass", "Resolved on 4/4 nameservers"),
+            new DomainCheck("SSL certificate", "pass", "Valid for 218 more days"),
+            new DomainCheck("HSTS header", "pass", "max-age=31536000, includeSubDomains"),
+            new DomainCheck("WHOIS expiry", "pass", "Expires Aug 14, 2027"),
+            new DomainCheck("Blacklist scan", "pass", "Clean on 84/84 lists")
+        }),
+        new DomainData("5", "legacy.acmecorp.io", 38, 0, "2026-04-02", "partial", 84, 5, new[]
+        {
+            new DomainCheck("DNS A record", "warn", "Resolved on 2/4 nameservers"),
+            new DomainCheck("SSL certificate", "fail", "Expired \u2014 immediate renewal required"),
+            new DomainCheck("WHOIS expiry", "warn", "Expires in 15 days"),
+            new DomainCheck("DMARC record", "fail", "No DMARC record found"),
+            new DomainCheck("Blacklist scan", "fail", "Flagged on 5/84 lists")
+        })
+    };
+}

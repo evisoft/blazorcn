@@ -38,6 +38,7 @@ public class NavigationMenuCnTests : BunitContext
     {
         var cut = Render<NavigationMenuCn>(p => p.AddChildContent("Content"));
         var el = cut.Find("[data-slot='navigation-menu']");
+        el.ClassList.Should().Contain("group/navigation-menu");
         el.ClassList.Should().Contain("relative");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("items-center");
@@ -83,12 +84,12 @@ public class NavigationMenuCnTests : BunitContext
     {
         var cut = Render<NavigationMenuListCn>(p => p.AddChildContent("Items"));
         var el = cut.Find("[data-slot='navigation-menu-list']");
+        el.ClassList.Should().Contain("cn-navigation-menu-list");
         el.ClassList.Should().Contain("group");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("list-none");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-center");
-        el.ClassList.Should().Contain("gap-1");
     }
 
     [Fact]
@@ -193,17 +194,13 @@ public class NavigationMenuCnTests : BunitContext
             .AddChildContent<NavigationMenuTriggerCn>(t => t
                 .AddChildContent("Getting Started")));
         var el = cut.Find("[data-slot='navigation-menu-trigger']");
+        el.ClassList.Should().Contain("cn-navigation-menu-trigger");
         el.ClassList.Should().Contain("group");
         el.ClassList.Should().Contain("inline-flex");
         el.ClassList.Should().Contain("h-9");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-center");
-        el.ClassList.Should().Contain("rounded-md");
-        el.ClassList.Should().Contain("bg-background");
-        el.ClassList.Should().Contain("px-4");
-        el.ClassList.Should().Contain("py-2");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("font-medium");
+        el.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -294,10 +291,7 @@ public class NavigationMenuCnTests : BunitContext
 
         cut.Find("[data-slot='navigation-menu-item']").TriggerEvent("onmouseenter", new MouseEventArgs());
         var content = cut.Find("[data-slot='navigation-menu-content']");
-        content.ClassList.Should().Contain("absolute");
-        content.ClassList.Should().Contain("top-full");
-        content.ClassList.Should().Contain("left-0");
-        content.ClassList.Should().Contain("w-auto");
+        content.ClassList.Should().Contain("cn-navigation-menu-content");
     }
 
     [Fact]
@@ -357,35 +351,28 @@ public class NavigationMenuCnTests : BunitContext
             .Add(c => c.Href, "/about")
             .AddChildContent("About"));
         var el = cut.Find("[data-slot='navigation-menu-link']");
-        el.ClassList.Should().Contain("block");
-        el.ClassList.Should().Contain("select-none");
-        el.ClassList.Should().Contain("rounded-md");
-        el.ClassList.Should().Contain("p-3");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("leading-none");
-        el.ClassList.Should().Contain("no-underline");
-        el.ClassList.Should().Contain("outline-none");
-        el.ClassList.Should().Contain("transition-colors");
+        el.ClassList.Should().Contain("cn-navigation-menu-link");
+        el.ClassList.Should().Contain("flex-col");
+        el.ClassList.Should().Contain("gap-1");
+        el.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
-    public void NavigationMenuLink_Active_Has_AccentClass()
+    public void NavigationMenuLink_Active_Has_DataActive_Attribute()
     {
         var cut = Render<NavigationMenuLinkCn>(p => p
             .Add(c => c.Href, "/about")
             .Add(c => c.Active, true)
             .AddChildContent("About"));
-        cut.Find("[data-slot='navigation-menu-link']").ClassList.Should().Contain("bg-accent/50");
         cut.Find("[data-slot='navigation-menu-link']").GetAttribute("data-active").Should().Be("true");
     }
 
     [Fact]
-    public void NavigationMenuLink_NotActive_No_AccentClass()
+    public void NavigationMenuLink_NotActive_No_DataActive_Attribute()
     {
         var cut = Render<NavigationMenuLinkCn>(p => p
             .Add(c => c.Href, "/about")
             .AddChildContent("About"));
-        cut.Find("[data-slot='navigation-menu-link']").ClassList.Should().NotContain("bg-accent/50");
         cut.Find("[data-slot='navigation-menu-link']").GetAttribute("data-active").Should().BeNull();
     }
 
@@ -445,15 +432,11 @@ public class NavigationMenuCnTests : BunitContext
     {
         var cut = Render<NavigationMenuViewportCn>(p => p.AddChildContent("Viewport"));
         var el = cut.Find("[data-slot='navigation-menu-viewport']");
+        el.ClassList.Should().Contain("cn-navigation-menu-viewport");
         el.ClassList.Should().Contain("relative");
         el.ClassList.Should().Contain("mt-1.5");
         el.ClassList.Should().Contain("w-full");
         el.ClassList.Should().Contain("overflow-hidden");
-        el.ClassList.Should().Contain("rounded-md");
-        el.ClassList.Should().Contain("border");
-        el.ClassList.Should().Contain("bg-popover");
-        el.ClassList.Should().Contain("text-popover-foreground");
-        el.ClassList.Should().Contain("shadow-md");
     }
 
     [Fact]
@@ -463,6 +446,21 @@ public class NavigationMenuCnTests : BunitContext
             .Add(c => c.Class, "custom-viewport")
             .AddChildContent("Viewport"));
         cut.Find("[data-slot='navigation-menu-viewport']").ClassList.Should().Contain("custom-viewport");
+    }
+
+    // --- ARIA ---
+
+    [Fact]
+    public void NavigationMenuTrigger_AriaExpanded_Reflects_State()
+    {
+        var cut = Render<NavigationMenuItemCn>(p => p
+            .Add(c => c.OpenDelay, 0)
+            .AddChildContent<NavigationMenuTriggerCn>(t => t
+                .AddChildContent("Getting Started")));
+        var trigger = cut.Find("[data-slot='navigation-menu-trigger']");
+        trigger.GetAttribute("aria-expanded").Should().Be("false");
+        trigger.Click();
+        trigger.GetAttribute("aria-expanded").Should().Be("true");
     }
 
     // --- Integration ---

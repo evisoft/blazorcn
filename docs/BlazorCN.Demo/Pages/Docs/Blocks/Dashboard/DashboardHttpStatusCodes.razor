@@ -1,0 +1,128 @@
+@* ============================================================
+   Block: dashboard-http-status-codes
+   Title: Dashboard Http Status Codes
+   Description: Animated React HTTP status code distribution dashboard block for Next.js with 2xx, 3xx, 4xx, and 5xx response code groupings, request volume bars, percentage breakdowns, trend arrows, and top error endpoints using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: API request volume and rate limiting metrics
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-http-status-codes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">HTTP Status Codes</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Response code distribution \u2014 last 24 hours
+                </p>
+            </div>
+            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                @_totalRequests.ToString("N0") total requests
+            </span>
+        </div>
+
+        @* Status groups *@
+        <div>
+            @for (var i = 0; i < _groups.Length; i++)
+            {
+                var group = _groups[i];
+                var isExpanded = _expanded == group.Id;
+                var isLast = i == _groups.Length - 1;
+                var pct = ((double)group.Count / _totalRequests * 100).ToString("F1");
+                var barWidth = (double)group.Count / _totalRequests * 100;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : group.Id)"
+                        class="w-full px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="flex items-center gap-3">
+                            <span class="@(Cn.Merge("w-8 font-mono font-medium text-sm", group.Color))">
+                                @group.Range
+                            </span>
+                            <span class="text-muted-foreground text-xs">@group.Label</span>
+                            <span class="ml-auto font-semibold text-sm tabular-nums">
+                                @group.Count.ToString("N0")
+                            </span>
+                            <span class="w-12 text-right text-muted-foreground text-xs tabular-nums">
+                                @(pct)%
+                            </span>
+                            <span class="@(Cn.Merge("flex w-14 items-center justify-end gap-0.5 text-xs tabular-nums", GetTrendColor(group)))">
+                                @if (group.Trend > 0)
+                                {
+                                    <LucideArrowUpCn Size="12" Class="size-3" />
+                                }
+                                else
+                                {
+                                    <LucideArrowDownCn Size="12" Class="size-3" />
+                                }
+                                @(Math.Abs(group.Trend))%
+                            </span>
+                            <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                        </div>
+                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/50">
+                            <div class="@(Cn.Merge("h-full rounded-full", group.BarColor))"
+                                 style="@($"width: {barWidth:F2}%")">
+                            </div>
+                        </div>
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Top endpoints
+                                </span>
+                                <div class="space-y-2">
+                                    @foreach (var ep in group.TopEndpoints)
+                                    {
+                                        <div class="flex items-center gap-3">
+                                            <span class="@(Cn.Merge("font-mono text-xs tabular-nums", group.Color))">
+                                                @ep.Code
+                                            </span>
+                                            <span class="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
+                                                @ep.Path
+                                            </span>
+                                            <span class="text-xs tabular-nums">
+                                                @ep.Count.ToString("N0")
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "4xx";
+    private const int _totalRequests = 847293;
+
+    private record EndpointInfo(int Code, string Path, int Count);
+    private record StatusGroup(string Id, string Range, string Label, int Count, double Trend, string Color, string BarColor, EndpointInfo[] TopEndpoints);
+
+    private static string GetTrendColor(StatusGroup group)
+    {
+        if (group.Trend > 0 && group.Id != "2xx") return "text-red-600 dark:text-red-400";
+        if (group.Trend < 0 && group.Id != "2xx") return "text-emerald-600 dark:text-emerald-400";
+        return "text-muted-foreground";
+    }
+
+    private static readonly StatusGroup[] _groups =
+    [
+        new("2xx", "2xx", "Success", 798412, 2.1, "text-emerald-600 dark:text-emerald-400", "bg-emerald-500",
+            [new(200, "/api/v2/users", 342180), new(201, "/api/v2/orders", 89420), new(204, "/api/v2/sessions", 67310)]),
+        new("3xx", "3xx", "Redirect", 21847, -0.4, "text-blue-600 dark:text-blue-400", "bg-blue-500",
+            [new(301, "/old-dashboard", 12400), new(302, "/api/auth/callback", 8120), new(304, "/static/assets", 1327)]),
+        new("4xx", "4xx", "Client Error", 24189, 8.3, "text-amber-600 dark:text-amber-400", "bg-amber-500",
+            [new(404, "/api/v1/legacy/reports", 11240), new(401, "/api/v2/admin/settings", 7830), new(429, "/api/v2/search", 5119)]),
+        new("5xx", "5xx", "Server Error", 2845, 14.7, "text-red-600 dark:text-red-400", "bg-red-500",
+            [new(502, "/api/v2/payments/process", 1420), new(503, "/api/v2/search/reindex", 890), new(500, "/api/v2/webhooks/deliver", 535)]),
+    ];
+}

@@ -1,0 +1,195 @@
+@* ===========================================================
+   Block: ai-code-assistant
+   Title: Ai Code Assistant
+   Description: AI code assistant chat with reasoning trace, code blocks, and debug workflow
+   Dependencies: BadgeCn, ButtonCn, LucideArrowUpCn, LucideCheckCn, LucideChevronRightCn, LucideCopyCn
+   Source: original/blocks/ai/ai-code-assistant.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <span class="text-sm font-medium">Code Assistant</span>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="text-xs text-muted-foreground">Debug, refactor, explain</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-mono text-xs font-normal">
+                Debug Mode
+            </BadgeCn>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto">
+            <div class="flex flex-col">
+                @for (var i = 0; i < _messages.Length; i++)
+                {
+                    var msg = _messages[i];
+                    var isLast = i == _messages.Length - 1;
+                    var msgId = msg.Id;
+                    <div class="@(!isLast ? "border-b" : "")">
+                        <div class="px-4 py-3">
+                            <span class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                                @(msg.Role == "user" ? "You" : "AI")
+                            </span>
+
+                            @* Reasoning toggle *@
+                            @if (!string.IsNullOrEmpty(msg.Reasoning))
+                            {
+                                var isReasoningExpanded = _expandedReasoning == msgId;
+                                <div class="mb-3">
+                                    <button type="button"
+                                            class="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                                            @onclick="@(() => _expandedReasoning = isReasoningExpanded ? null : msgId)">
+                                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-3 transition-transform duration-200", isReasoningExpanded ? "rotate-90" : "")" />
+                                        Reasoning
+                                        @if (msg.ReasoningDuration > 0)
+                                        {
+                                            <span class="text-muted-foreground/40">&middot;</span>
+                                            <span class="font-mono text-[10px] text-muted-foreground/60">@(msg.ReasoningDuration)s</span>
+                                        }
+                                    </button>
+                                    @if (isReasoningExpanded)
+                                    {
+                                        <div class="mt-2 rounded-md bg-muted/50 p-3">
+                                            <p class="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                                                @msg.Reasoning
+                                            </p>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(msg.Content))
+                            {
+                                <p class="whitespace-pre-wrap text-sm leading-relaxed">@msg.Content</p>
+                            }
+
+                            @* Code blocks *@
+                            @if (msg.CodeBlocks != null)
+                            {
+                                <div class="mt-3 flex flex-col gap-2">
+                                    @foreach (var block in msg.CodeBlocks)
+                                    {
+                                        var key = $"{msgId}-{block.Label}";
+                                        <div class="overflow-hidden rounded-md bg-zinc-950">
+                                            <div class="flex items-center justify-between px-3 py-1.5">
+                                                <span class="font-mono text-xs text-zinc-500">@block.Label</span>
+                                                <ButtonCn Class="h-5 gap-1 px-1.5 text-[10px] text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                                                          Variant="ButtonVariant.Ghost"
+                                                          Size="ButtonSize.Sm"
+                                                          @onclick="@(() => HandleCopy(key))">
+                                                    @if (_copied == key)
+                                                    {
+                                                        <LucideCheckCn Size="16" Class="size-3" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <LucideCopyCn Size="16" Class="size-3" />
+                                                    }
+                                                </ButtonCn>
+                                            </div>
+                                            <pre class="overflow-x-auto px-3 pb-3 font-mono text-sm leading-relaxed"><code class="text-zinc-300">@block.Code</code></pre>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <div class="relative">
+                <textarea class="min-h-0 max-h-32 w-full resize-none border-0 bg-transparent pr-10 font-mono text-sm shadow-none focus:outline-none focus-visible:ring-0"
+                          rows="1"
+                          placeholder="Paste your code or describe the issue..."
+                          @bind="_input"></textarea>
+                <ButtonCn Class="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@(string.IsNullOrWhiteSpace(_input))">
+                    <LucideArrowUpCn Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CodeBlock(string Label, string Code);
+    private record ChatMessage(string Id, string Role, string Content, string? Reasoning = null, int ReasoningDuration = 0, CodeBlock[]? CodeBlocks = null);
+
+    private const string CodeBlock1 = @"function UserProfile({ userId }: { userId: string }) {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchUser(userId).then(data => {
+      setUser(data)
+      setLoading(false)
+    })
+  })
+
+  if (loading) return <Spinner />
+  return <div>{user.name}</div>
+}";
+
+    private const string CodeBlock2 = @"// Runs on EVERY render (no dependency array)
+useEffect(() => {
+  fetchUser(userId).then(data => {
+    setUser(data)       // triggers re-render
+    setLoading(false)   // triggers re-render
+  })
+})  // <- missing dependency array!";
+
+    private const string CodeBlock3 = @"// Only runs when userId changes
+useEffect(() => {
+  setLoading(true)
+  fetchUser(userId).then(data => {
+    setUser(data)
+    setLoading(false)
+  })
+}, [userId])  // <- add dependency array";
+
+    private const string CodeBlock4 = @"function UserProfile({ userId }: { userId: string }) {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetchUser(userId).then(data => {
+      setUser(data)
+      setLoading(false)
+    })
+  }, [userId])
+
+  if (loading) return <Spinner />
+  if (!user) return <div>User not found</div>
+  return <div>{user.name}</div>
+}";
+
+    private static readonly ChatMessage[] _messages =
+    {
+        new("1", "user", "I'm getting an infinite re-render loop in this React component. Can you find the bug?",
+            CodeBlocks: new[] { new CodeBlock("UserProfile.tsx", CodeBlock1) }),
+        new("2", "assistant",
+            "Found it! Your useEffect is missing a dependency array, so it runs after every render \u2014 causing an infinite fetch loop.",
+            Reasoning: "Looking at this component, the issue is in the useEffect hook.\n\nThe useEffect has no dependency array at all. This means it runs after every single render:\n\n1. Component mounts \u2014 useEffect fires \u2014 fetches data\n2. setUser(data) triggers re-render\n3. Re-render \u2014 useEffect fires again (no deps = runs every render)\n4. setUser(data) triggers another re-render\n5. Infinite loop\n\nThe fix is adding [userId] as the dependency array so it only refetches when userId changes.\n\nAlso, there's a potential null reference bug \u2014 if setLoading(false) runs before setUser, the component would try to access null.name. But since both setState calls are in the same .then(), React batches them, so this is actually fine in React 18+. Still, adding a null check is safer.",
+            ReasoningDuration: 5,
+            CodeBlocks: new[] { new CodeBlock("Bug", CodeBlock2), new CodeBlock("Fix", CodeBlock3), new CodeBlock("Full corrected component", CodeBlock4) })
+    };
+
+    private string _input = "";
+    private string? _expandedReasoning;
+    private string? _copied;
+
+    private async Task HandleCopy(string key)
+    {
+        _copied = key;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = null;
+    }
+}

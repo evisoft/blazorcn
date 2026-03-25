@@ -1,0 +1,221 @@
+@* ===========================================================
+   Block: settings-dns-settings
+   Title: Settings Dns Settings
+   Description: DNS record management with A, CNAME, MX, TXT record types, verification status, and add/remove records
+   Dependencies: BadgeCn, ButtonCn, InputCn, LucideCheckCn, LucideChevronRightCn, LucideCopyCn, LucidePlusCn, LucideTrashCn, SelectCn
+   Source: original/blocks/settings/settings-dns-settings.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">DNS Records</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Manage DNS records for your domain
+                </p>
+            </div>
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                      Class="h-7 gap-1 text-xs"
+                      @onclick="@(() => _showAdd = !_showAdd)">
+                <LucidePlusCn Size="16" Class="size-3" />
+                Add record
+            </ButtonCn>
+        </div>
+
+        @* Status *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <span class="text-xs text-muted-foreground">@_records.Count records</span>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @VerifiedCount verified
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @(_records.Count - VerifiedCount) pending
+            </span>
+        </div>
+
+        @* Add record form *@
+        @if (_showAdd)
+        {
+            <div class="border-b px-4 py-3">
+                <div class="space-y-3">
+                    <div class="grid grid-cols-4 gap-2">
+                        <SelectCn TValue="string" Value="@_newType" ValueChanged="v => _newType = v">
+                            <SelectTriggerCn Class="h-8 text-xs">
+                                <SelectValueCn />
+                            </SelectTriggerCn>
+                            <SelectContentCn>
+                                <SelectItemCn Value="A">A</SelectItemCn>
+                                <SelectItemCn Value="CNAME">CNAME</SelectItemCn>
+                                <SelectItemCn Value="MX">MX</SelectItemCn>
+                                <SelectItemCn Value="TXT">TXT</SelectItemCn>
+                            </SelectContentCn>
+                        </SelectCn>
+                        <InputCn @bind-Value="_newName" Placeholder="Name" Class="h-8 text-xs" />
+                        <InputCn @bind-Value="_newValue" Placeholder="Value" Class="col-span-2 h-8 text-xs" />
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                                  @onclick="@(() => _showAdd = false)">
+                            Cancel
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                                  @onclick="AddRecord">
+                            Add record
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Records list *@
+        <div>
+            @for (var i = 0; i < _records.Count; i++)
+            {
+                var record = _records[i];
+                var isExpanded = _expanded == record.Id;
+                var isLast = i == _records.Count - 1;
+                var recordId = record.Id;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            class="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => _expanded = isExpanded ? null : recordId)">
+                        <span class="@($"size-1.5 shrink-0 rounded-full {(record.Verified ? "bg-emerald-500" : "bg-amber-500")}")"></span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"shrink-0 border-0 font-mono text-xs {GetTypeColor(record.Type)}")">
+                            @record.Type
+                        </BadgeCn>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@record.Name</span>
+                            <p class="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                                @record.Value
+                            </p>
+                        </div>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-14">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-medium text-muted-foreground">Value</span>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-6 gap-1 px-2 text-xs"
+                                              @onclick="@(() => HandleCopy(recordId))">
+                                        @if (_copied == recordId)
+                                        {
+                                            <LucideCheckCn Size="16" Class="size-3" />
+                                            <text>Copied</text>
+                                        }
+                                        else
+                                        {
+                                            <LucideCopyCn Size="16" Class="size-3" />
+                                            <text>Copy</text>
+                                        }
+                                    </ButtonCn>
+                                </div>
+                                <p class="mt-1 break-all font-mono text-sm">@record.Value</p>
+                                <div class="mt-2 flex items-center gap-4">
+                                    <span class="text-xs text-muted-foreground">TTL: @(record.Ttl)s</span>
+                                    @if (record.Priority.HasValue)
+                                    {
+                                        <span class="text-xs text-muted-foreground">Priority: @record.Priority</span>
+                                    }
+                                    <span class="text-xs text-muted-foreground">
+                                        Status: @(record.Verified ? "Verified" : "Pending")
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mt-2 flex justify-end">
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                          Class="h-6 px-2 text-xs text-red-600 dark:text-red-400"
+                                          @onclick="@(() => RemoveRecord(recordId))">
+                                    <LucideTrashCn Size="16" Class="mr-1 size-3" />
+                                    Remove
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class DnsRecord
+    {
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Value { get; set; } = "";
+        public int Ttl { get; set; }
+        public bool Verified { get; set; }
+        public int? Priority { get; set; }
+    }
+
+    private string? _expanded = "2";
+    private string? _copied;
+    private bool _showAdd;
+    private string _newType = "A";
+    private string _newName = "";
+    private string _newValue = "";
+
+    private List<DnsRecord> _records = new()
+    {
+        new() { Id = "1", Type = "A", Name = "acme.com", Value = "76.76.21.21", Ttl = 300, Verified = true },
+        new() { Id = "2", Type = "CNAME", Name = "www", Value = "cname.vercel-dns.com", Ttl = 3600, Verified = true },
+        new() { Id = "3", Type = "MX", Name = "acme.com", Value = "mx1.mailprovider.com", Ttl = 3600, Verified = true, Priority = 10 },
+        new() { Id = "4", Type = "MX", Name = "acme.com", Value = "mx2.mailprovider.com", Ttl = 3600, Verified = false, Priority = 20 },
+        new() { Id = "5", Type = "TXT", Name = "acme.com", Value = "v=spf1 include:_spf.mailprovider.com ~all", Ttl = 3600, Verified = true },
+        new() { Id = "6", Type = "TXT", Name = "_dmarc", Value = "v=DMARC1; p=quarantine; rua=mailto:dmarc@@acme.com", Ttl = 3600, Verified = false },
+    };
+
+    private int VerifiedCount => _records.Count(r => r.Verified);
+
+    private static string GetTypeColor(string type) => type switch
+    {
+        "A" => "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        "CNAME" => "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+        "MX" => "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        "TXT" => "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+        _ => "",
+    };
+
+    private void AddRecord()
+    {
+        if (string.IsNullOrWhiteSpace(_newName) || string.IsNullOrWhiteSpace(_newValue)) return;
+        _records.Add(new DnsRecord
+        {
+            Id = (_records.Count + 1).ToString(),
+            Type = _newType,
+            Name = _newName,
+            Value = _newValue,
+            Ttl = 3600,
+            Verified = false,
+        });
+        _newType = "A";
+        _newName = "";
+        _newValue = "";
+        _showAdd = false;
+    }
+
+    private void RemoveRecord(string id)
+    {
+        _records.RemoveAll(r => r.Id == id);
+        if (_expanded == id) _expanded = null;
+    }
+
+    private async Task HandleCopy(string id)
+    {
+        _copied = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = null;
+    }
+}

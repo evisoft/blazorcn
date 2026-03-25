@@ -1,0 +1,270 @@
+@* ===========================================================
+   Block: settings-environment-variables
+   Title: Settings Environment Variables
+   Description: Environment variable management with key-value editor, encrypted secrets, per-environment overrides, and add/remove
+   Dependencies: ButtonCn, InputCn, LucideCheckCn, LucideChevronRightCn, LucideEyeCn, LucideEyeOffCn, LucideLockCn, LucidePlusCn, LucideTrashCn, SwitchCn
+   Source: original/blocks/settings/settings-environment-variables.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Environment Variables</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Manage secrets and configuration for each environment
+                </p>
+            </div>
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                      Class="h-7 gap-1 text-xs"
+                      @onclick="@(() => _showAdd = !_showAdd)">
+                <LucidePlusCn Size="16" Class="size-3" />
+                Add variable
+            </ButtonCn>
+        </div>
+
+        @* Status *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <span class="text-xs text-muted-foreground">@_variables.Count variables</span>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideLockCn Size="16" Class="size-3" />
+                @EncryptedCount encrypted
+            </span>
+        </div>
+
+        @* Add variable form *@
+        @if (_showAdd)
+        {
+            <div class="border-b px-4 py-3">
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <InputCn @bind-Value="_newKey" Placeholder="VARIABLE_NAME" Class="h-8 font-mono text-xs" />
+                        <InputCn @bind-Value="_newValue" Placeholder="Value" Class="h-8 text-xs" />
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                                  @onclick="@(() => _showAdd = false)">
+                            Cancel
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                                  @onclick="AddVariable">
+                            Add
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Variables list *@
+        <div>
+            @for (var i = 0; i < _variables.Count; i++)
+            {
+                var variable = _variables[i];
+                var isExpanded = _expanded == variable.Id;
+                var isRevealed = _revealed.Contains(variable.Id);
+                var isLast = i == _variables.Count - 1;
+                var varId = variable.Id;
+                var maskedValue = variable.Encrypted && !isRevealed
+                    ? new string('\u2022', 24)
+                    : variable.Value;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            class="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => _expanded = isExpanded ? null : varId)">
+                        @if (variable.Encrypted)
+                        {
+                            <LucideLockCn Size="16" Class="size-3.5 shrink-0 text-muted-foreground" />
+                        }
+                        else
+                        {
+                            <span class="size-3.5 shrink-0"></span>
+                        }
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-sm font-medium">@variable.Key</span>
+                                <div class="flex gap-1">
+                                    @foreach (var env in variable.Environments)
+                                    {
+                                        <span class="@($"inline-flex rounded px-1 py-0.5 font-mono text-xs {GetEnvColor(env)}")">
+                                            @env[..3]
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <p class="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                                @maskedValue
+                            </p>
+                        </div>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="space-y-3 px-4 pb-4 pl-10">
+                            @* Value *@
+                            <div>
+                                <span class="mb-1.5 block text-xs font-medium text-muted-foreground">Value</span>
+                                <div class="flex items-center gap-2">
+                                    <InputCn Value="@variable.Value" ValueChanged="@(v => variable.Value = v)"
+                                             Type="@(variable.Encrypted && !isRevealed ? "password" : "text")"
+                                             Class="h-8 font-mono text-xs" />
+                                    @if (variable.Encrypted)
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="h-8 shrink-0 px-2"
+                                                  @onclick="@(() => ToggleReveal(varId))">
+                                            @if (isRevealed)
+                                            {
+                                                <LucideEyeOffCn Size="16" Class="size-3.5" />
+                                            }
+                                            else
+                                            {
+                                                <LucideEyeCn Size="16" Class="size-3.5" />
+                                            }
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Environments *@
+                            <div>
+                                <span class="mb-1.5 block text-xs font-medium text-muted-foreground">Environments</span>
+                                <div class="flex items-center gap-3">
+                                    @foreach (var env in _allEnvironments)
+                                    {
+                                        var envName = env;
+                                        <span class="flex items-center gap-2">
+                                            <SwitchCn Checked="@variable.Environments.Contains(envName)"
+                                                      CheckedChanged="@(_ => ToggleEnvironment(varId, envName))" />
+                                            <span class="text-xs capitalize">@envName</span>
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Encrypted + delete *@
+                            <div class="flex items-center justify-between">
+                                <span class="flex items-center gap-2">
+                                    <SwitchCn Checked="@variable.Encrypted"
+                                              CheckedChanged="@(v => variable.Encrypted = v)" />
+                                    <span class="text-xs text-muted-foreground">Encrypted</span>
+                                </span>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                          Class="h-6 gap-1 px-2 text-xs text-red-600 dark:text-red-400"
+                                          @onclick="@(() => RemoveVariable(varId))">
+                                    <LucideTrashCn Size="16" Class="size-3" />
+                                    Remove
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Save *@
+        <div class="flex items-center justify-end gap-2 border-t px-4 py-3">
+            @if (_saved)
+            {
+                <span class="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                    <LucideCheckCn Size="16" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs"
+                      @onclick="HandleSave">
+                Save variables
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class EnvVariable
+    {
+        public string Id { get; set; } = "";
+        public string Key { get; set; } = "";
+        public string Value { get; set; } = "";
+        public bool Encrypted { get; set; }
+        public List<string> Environments { get; set; } = new();
+    }
+
+    private string? _expanded;
+    private HashSet<string> _revealed = new();
+    private bool _showAdd;
+    private string _newKey = "";
+    private string _newValue = "";
+    private bool _saved;
+
+    private static readonly string[] _allEnvironments = ["production", "staging", "development"];
+
+    private List<EnvVariable> _variables = new()
+    {
+        new() { Id = "1", Key = "DATABASE_URL", Value = "postgresql://user:pass@@db.acme.com:5432/production", Encrypted = true, Environments = new() { "production", "staging" } },
+        new() { Id = "2", Key = "NEXT_PUBLIC_API_URL", Value = "https://api.acme.com/v2", Encrypted = false, Environments = new() { "production", "staging", "development" } },
+        new() { Id = "3", Key = "STRIPE_SECRET_KEY", Value = "sk_live_4eC39HqLyjWDarjtT1zdp7dc", Encrypted = true, Environments = new() { "production" } },
+        new() { Id = "4", Key = "REDIS_URL", Value = "redis://cache.acme.com:6379", Encrypted = true, Environments = new() { "production", "staging" } },
+        new() { Id = "5", Key = "NEXT_PUBLIC_POSTHOG_KEY", Value = "phc_abc123def456ghi789jkl012mno345", Encrypted = false, Environments = new() { "production" } },
+        new() { Id = "6", Key = "SMTP_PASSWORD", Value = "smtp-secret-password-here", Encrypted = true, Environments = new() { "production", "staging", "development" } },
+        new() { Id = "7", Key = "NEXT_PUBLIC_APP_URL", Value = "https://app.acme.com", Encrypted = false, Environments = new() { "production", "staging", "development" } },
+    };
+
+    private int EncryptedCount => _variables.Count(v => v.Encrypted);
+
+    private static string GetEnvColor(string env) => env switch
+    {
+        "production" => "bg-red-500/10 text-red-700 dark:text-red-400",
+        "staging" => "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        "development" => "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        _ => "",
+    };
+
+    private void ToggleReveal(string id)
+    {
+        if (!_revealed.Add(id))
+            _revealed.Remove(id);
+    }
+
+    private void AddVariable()
+    {
+        if (string.IsNullOrWhiteSpace(_newKey) || string.IsNullOrWhiteSpace(_newValue)) return;
+        _variables.Add(new EnvVariable
+        {
+            Id = (_variables.Count + 1).ToString(),
+            Key = _newKey.Trim().ToUpperInvariant().Replace(" ", "_"),
+            Value = _newValue.Trim(),
+            Encrypted = false,
+            Environments = new() { "development" },
+        });
+        _newKey = "";
+        _newValue = "";
+        _showAdd = false;
+    }
+
+    private void RemoveVariable(string id)
+    {
+        _variables.RemoveAll(v => v.Id == id);
+        if (_expanded == id) _expanded = null;
+    }
+
+    private void ToggleEnvironment(string id, string env)
+    {
+        var variable = _variables.FirstOrDefault(v => v.Id == id);
+        if (variable == null) return;
+        if (variable.Environments.Contains(env))
+            variable.Environments.Remove(env);
+        else
+            variable.Environments.Add(env);
+    }
+
+    private async Task HandleSave()
+    {
+        _saved = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _saved = false;
+    }
+}

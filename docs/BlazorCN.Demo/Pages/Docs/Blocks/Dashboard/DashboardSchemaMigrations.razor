@@ -1,0 +1,151 @@
+@* ============================================================
+   Block: dashboard-schema-migrations
+   Title: Dashboard Schema Migrations
+   Description: Animated React database schema migration status dashboard block for Next.js with migration versions, rollback capability, execution timing, batch grouping, and status indicators using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Database performance monitoring with query stats
+   Dependencies: ButtonCn
+   Source: original/blocks/dashboard/dashboard-schema-migrations.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideArrowDownUpCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Schema Migrations</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        @_migrations.Length migrations across @_batchCount batches
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_appliedCount applied
+                </span>
+                @if (_pendingCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-blue-500"></span>
+                        @_pendingCount pending
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Migrations *@
+        <div>
+            @for (var i = 0; i < _migrations.Length; i++)
+            {
+                var migration = _migrations[i];
+                var isExpanded = _expanded == migration.Id;
+                var isLast = i == _migrations.Length - 1;
+                var config = _statusConfig[migration.Status];
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : migration.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-mono text-sm">@migration.Name</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                <span class="font-mono">@migration.Version</span>
+                                <span class="mx-1.5">·</span>
+                                @migration.Operation
+                                <span class="mx-1.5">·</span>
+                                Batch @migration.Batch
+                            </p>
+                        </div>
+                        <span class="@(Cn.Merge("shrink-0 font-mono text-xs tabular-nums", DurationColor(migration.Duration)))">
+                            @migration.Duration
+                        </span>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3 text-xs">
+                                        <span class="text-muted-foreground">
+                                            Status: <span class="font-medium text-foreground">@config.Label</span>
+                                        </span>
+                                        <span class="text-muted-foreground">·</span>
+                                        <span class="text-muted-foreground">@migration.AppliedAt</span>
+                                    </div>
+                                    @if (migration.Status == "applied")
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs">
+                                            <LucideRotateCcwCn Size="12" Class="size-3" />
+                                            Rollback
+                                        </ButtonCn>
+                                    }
+                                    @if (migration.Status == "pending")
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs">
+                                            <LucideCheckCn Size="12" Class="size-3" />
+                                            Run
+                                        </ButtonCn>
+                                    }
+                                    @if (migration.Status == "failed")
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs text-red-600 dark:text-red-400">
+                                            <LucideXCn Size="12" Class="size-3" />
+                                            View Error
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "m4";
+
+    private record Migration(string Id, string Version, string Name, string Operation, int Batch, string Status, string Duration, string AppliedAt);
+    private record StatusStyleConfig(string Dot, string Label);
+
+    private static string DurationColor(string duration)
+    {
+        if (duration == "\u2014") return "text-muted-foreground";
+        if (double.TryParse(duration.Replace("s", ""), out var seconds))
+        {
+            if (seconds > 30) return "text-red-600 dark:text-red-400";
+            if (seconds > 5) return "text-amber-600 dark:text-amber-400";
+        }
+        return "text-muted-foreground";
+    }
+
+    private static readonly int _appliedCount = _migrations.Count(m => m.Status == "applied");
+    private static readonly int _pendingCount = _migrations.Count(m => m.Status == "pending");
+    private static readonly int _batchCount = _migrations.Select(m => m.Batch).Distinct().Count();
+
+    private static readonly Dictionary<string, StatusStyleConfig> _statusConfig = new()
+    {
+        ["applied"] = new("bg-emerald-500", "Applied"),
+        ["pending"] = new("bg-blue-500", "Pending"),
+        ["failed"] = new("bg-red-500", "Failed"),
+        ["rolled_back"] = new("bg-muted-foreground/40", "Rolled back"),
+    };
+
+    private static readonly Migration[] _migrations =
+    [
+        new("m1", "20260317_001", "create_workspace_invitations_table", "CREATE TABLE", 5, "pending", "\u2014", "Pending"),
+        new("m2", "20260316_003", "add_stripe_subscription_metadata", "ALTER TABLE", 4, "applied", "0.82s", "Yesterday"),
+        new("m3", "20260316_002", "create_api_keys_table", "CREATE TABLE", 4, "applied", "1.24s", "Yesterday"),
+        new("m4", "20260316_001", "add_user_preferences_jsonb_column", "ALTER TABLE", 4, "applied", "6.41s", "Yesterday"),
+        new("m5", "20260312_002", "create_audit_log_partitions", "CREATE TABLE", 3, "applied", "34.12s", "5 days ago"),
+        new("m6", "20260312_001", "add_index_sessions_user_id", "CREATE INDEX", 3, "applied", "12.87s", "5 days ago"),
+        new("m7", "20260308_001", "drop_legacy_permissions_table", "DROP TABLE", 2, "failed", "0.03s", "Failed"),
+        new("m8", "20260305_001", "create_notifications_table", "CREATE TABLE", 1, "rolled_back", "1.10s", "Rolled back"),
+    ];
+}

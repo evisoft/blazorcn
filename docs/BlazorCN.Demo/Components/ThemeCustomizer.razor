@@ -1,0 +1,114 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="space-y-6">
+    <div>
+        <h3 class="text-sm font-medium mb-3">Color</h3>
+        <div class="flex flex-wrap gap-2">
+            @foreach (var color in _colors)
+            {
+                var c = color;
+                <ButtonCn Variant="@(c == _activeColor ? ButtonVariant.Default : ButtonVariant.Outline)"
+                          Size="ButtonSize.Sm"
+                          OnClick="@(() => SetColor(c))">
+                    @c
+                </ButtonCn>
+            }
+        </div>
+    </div>
+
+    <div>
+        <h3 class="text-sm font-medium mb-3">Radius</h3>
+        <div class="flex flex-wrap gap-2">
+            @foreach (var radius in _radii)
+            {
+                <ButtonCn Variant="@(radius.Value == _activeRadius ? ButtonVariant.Default : ButtonVariant.Outline)"
+                          Size="ButtonSize.Sm"
+                          OnClick="@(() => SetRadius(radius.Value))">
+                    @radius.Label
+                </ButtonCn>
+            }
+        </div>
+    </div>
+
+    <div>
+        <h3 class="text-sm font-medium mb-3">Mode</h3>
+        <div class="flex gap-2">
+            <ButtonCn Variant="@(_isDark ? ButtonVariant.Outline : ButtonVariant.Default)"
+                      Size="ButtonSize.Sm"
+                      OnClick="@(() => SetMode(false))">
+                Light
+            </ButtonCn>
+            <ButtonCn Variant="@(_isDark ? ButtonVariant.Default : ButtonVariant.Outline)"
+                      Size="ButtonSize.Sm"
+                      OnClick="@(() => SetMode(true))">
+                Dark
+            </ButtonCn>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IJSObjectReference? _module;
+    private string _activeColor = "Zinc";
+    private string _activeRadius = "0.5";
+    private bool _isDark;
+
+    private record RadiusOption(string Label, string Value);
+
+    private static readonly string[] _colors = ["Zinc", "Slate", "Stone", "Gray", "Neutral"];
+
+    private static readonly RadiusOption[] _radii =
+    [
+        new("0",     "0rem"),
+        new("0.25",  "0.25rem"),
+        new("0.5",   "0.5rem"),
+        new("0.625", "0.625rem"),
+        new("0.75",  "0.75rem"),
+    ];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./demo.js");
+            var theme = await _module.InvokeAsync<string>("getTheme");
+            _isDark = theme == "dark";
+            var savedColor = await _module.InvokeAsync<string>("getActiveTheme");
+            _activeColor = _colors.FirstOrDefault(c => c.Equals(savedColor, StringComparison.OrdinalIgnoreCase)) ?? "Zinc";
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetColor(string color)
+    {
+        if (_module is null) return;
+        _activeColor = color;
+        await _module.InvokeVoidAsync("applyTheme", color.ToLowerInvariant(), _isDark);
+    }
+
+    private async Task SetRadius(string value)
+    {
+        if (_module is null) return;
+        _activeRadius = value;
+        await _module.InvokeVoidAsync("setThemeColor", "--radius", value);
+    }
+
+    private async Task SetMode(bool dark)
+    {
+        if (_module is null) return;
+        if (_isDark != dark)
+        {
+            _isDark = await _module.InvokeAsync<bool>("toggleTheme");
+            await _module.InvokeVoidAsync("applyTheme", _activeColor.ToLowerInvariant(), _isDark);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.DisposeAsync();
+        }
+    }
+}

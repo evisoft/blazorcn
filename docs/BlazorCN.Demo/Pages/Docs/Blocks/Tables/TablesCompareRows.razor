@@ -1,0 +1,201 @@
+@* ============================================================
+   Block: tables-compare-rows
+   Title: Tables Compare Rows
+   Description: Table component with row comparison and difference highlighting for analytics dashboards
+   Dependencies: BadgeCn, ButtonCn, CheckboxCn, TableCn
+   Source: original/blocks/tables/tables-compare-rows.tsx
+   ============================================================ *@
+
+<div style="width: 900px">
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold">Monthly Performance</h3>
+                <p class="text-sm text-muted-foreground">Select two periods to compare metrics</p>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (_selectedRows.Count == 2 && !_isComparing)
+                {
+                    <ButtonCn Size="ButtonSize.Sm" @onclick="@(() => _isComparing = true)">
+                        <LucideScaleCn Size="16" Class="mr-2 h-4 w-4" />
+                        Compare
+                    </ButtonCn>
+                }
+                @if (_selectedRows.Count > 0)
+                {
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" @onclick="@ClearSelection">
+                        <LucideRotateCcwCn Size="16" Class="mr-2 h-4 w-4" />
+                        Clear
+                    </ButtonCn>
+                }
+                @if (_selectedRows.Count < 2)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary">@_selectedRows.Count/2 selected</BadgeCn>
+                }
+            </div>
+        </div>
+
+        @if (_isComparing && _baselineData != null && _comparisonData != null)
+        {
+            <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <TableCn Class="table-fixed" style="width: 850px">
+                    <TableHeaderCn>
+                        <TableRowCn>
+                            <TableHeadCn Class="w-36 font-semibold text-foreground">Metric</TableHeadCn>
+                            <TableHeadCn Class="w-36 font-semibold text-foreground text-right">
+                                <div class="flex flex-col items-end">
+                                    <span>Baseline</span>
+                                    <span class="text-xs font-normal text-muted-foreground">@_baselineData.Period</span>
+                                </div>
+                            </TableHeadCn>
+                            <TableHeadCn Class="w-36 font-semibold text-foreground text-right">
+                                <div class="flex flex-col items-end">
+                                    <span>Comparison</span>
+                                    <span class="text-xs font-normal text-muted-foreground">@_comparisonData.Period</span>
+                                </div>
+                            </TableHeadCn>
+                            <TableHeadCn Class="font-semibold text-foreground text-right">Change</TableHeadCn>
+                        </TableRowCn>
+                    </TableHeaderCn>
+                    <TableBodyCn>
+                        @foreach (var metric in GetComparisonMetrics())
+                        {
+                            <TableRowCn>
+                                <TableCellCn Class="font-medium">@metric.Label</TableCellCn>
+                                <TableCellCn Class="text-right tabular-nums">@metric.BaselineFormatted</TableCellCn>
+                                <TableCellCn Class="text-right tabular-nums">@metric.ComparisonFormatted</TableCellCn>
+                                <TableCellCn Class="text-right">
+                                    @{
+                                        var delta = metric.Comparison - metric.Baseline;
+                                        var pctChange = metric.Baseline != 0 ? (delta / metric.Baseline) * 100 : 0;
+                                        var isPositive = delta > 0;
+                                        var isNeutral = Math.Abs(delta) < 0.001;
+                                        var isGood = metric.HigherIsBetter ? isPositive : !isPositive;
+                                    }
+                                    @if (isNeutral)
+                                    {
+                                        <div class="flex items-center justify-end gap-1 text-muted-foreground">
+                                            <LucideMinusCn Size="12" Class="h-3 w-3" />
+                                            <span class="text-xs">0%</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="@Cn.Merge("flex items-center justify-end gap-1", isGood ? "text-green-600" : "text-red-600")">
+                                            @if (isPositive)
+                                            {
+                                                <LucideArrowUpCn Size="12" Class="h-3 w-3" />
+                                            }
+                                            else
+                                            {
+                                                <LucideArrowDownCn Size="12" Class="h-3 w-3" />
+                                            }
+                                            <span class="text-xs font-medium">@($"{(isPositive ? "+" : "")}{pctChange:F1}%")</span>
+                                        </div>
+                                    }
+                                </TableCellCn>
+                            </TableRowCn>
+                        }
+                    </TableBodyCn>
+                </TableCn>
+            </div>
+        }
+        else
+        {
+            <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <TableCn Class="table-fixed" style="width: 850px">
+                    <TableHeaderCn>
+                        <TableRowCn>
+                            <TableHeadCn Class="w-12"></TableHeadCn>
+                            <TableHeadCn Class="w-36 font-semibold text-foreground">Period</TableHeadCn>
+                            <TableHeadCn Class="w-28 font-semibold text-foreground text-right">Revenue</TableHeadCn>
+                            <TableHeadCn Class="w-20 font-semibold text-foreground text-right">Orders</TableHeadCn>
+                            <TableHeadCn Class="w-24 font-semibold text-foreground text-right">AOV</TableHeadCn>
+                            <TableHeadCn Class="w-24 font-semibold text-foreground text-right">Conv. Rate</TableHeadCn>
+                            <TableHeadCn Class="font-semibold text-foreground text-right">Visitors</TableHeadCn>
+                        </TableRowCn>
+                    </TableHeaderCn>
+                    <TableBodyCn>
+                        @foreach (var row in _metrics)
+                        {
+                            var isSelected = _selectedRows.Contains(row.Id);
+                            var isDisabled = _selectedRows.Count >= 2 && !isSelected;
+                            <TableRowCn Class="@Cn.Merge(isSelected ? "bg-primary/5" : "", isDisabled ? "opacity-50" : "")">
+                                <TableCellCn>
+                                    <CheckboxCn Checked="@isSelected"
+                                                Disabled="@isDisabled"
+                                                CheckedChanged="@(_ => ToggleRow(row.Id))" />
+                                </TableCellCn>
+                                <TableCellCn Class="font-medium">@row.Period</TableCellCn>
+                                <TableCellCn Class="text-right tabular-nums">@row.Revenue.ToString("C0")</TableCellCn>
+                                <TableCellCn Class="text-right tabular-nums">@row.Orders.ToString("N0")</TableCellCn>
+                                <TableCellCn Class="text-right tabular-nums">@row.AvgOrderValue.ToString("C2")</TableCellCn>
+                                <TableCellCn Class="text-right tabular-nums">@($"{row.ConversionRate:F1}%")</TableCellCn>
+                                <TableCellCn Class="text-right tabular-nums">@row.Visitors.ToString("N0")</TableCellCn>
+                            </TableRowCn>
+                        }
+                    </TableBodyCn>
+                </TableCn>
+            </div>
+        }
+
+        <p class="text-xs text-muted-foreground">
+            @if (_isComparing)
+            {
+                @:Green indicates improvement, red indicates decline. Click Clear to select different periods.
+            }
+            else
+            {
+                @:Select exactly two rows to enable comparison mode.
+            }
+        </p>
+    </div>
+</div>
+
+@code {
+    private record MetricRow(string Id, string Period, double Revenue, int Orders, double AvgOrderValue, double ConversionRate, int Visitors);
+    private record ComparisonMetric(string Label, double Baseline, double Comparison, string BaselineFormatted, string ComparisonFormatted, bool HigherIsBetter);
+
+    private static readonly MetricRow[] _metrics =
+    [
+        new("jan", "January 2024", 125_000, 842, 148.46, 3.2, 26_312),
+        new("feb", "February 2024", 142_000, 923, 153.85, 3.5, 26_371),
+        new("mar", "March 2024", 138_000, 895, 154.19, 3.4, 26_323),
+        new("apr", "April 2024", 156_000, 1021, 152.79, 3.7, 27_594),
+        new("may", "May 2024", 168_000, 1105, 152.04, 3.9, 28_333),
+        new("jun", "June 2024", 175_000, 1156, 151.38, 4.1, 28_195),
+    ];
+
+    private HashSet<string> _selectedRows = new();
+    private bool _isComparing;
+
+    private MetricRow? _baselineData => _selectedRows.Count >= 1 ? _metrics.FirstOrDefault(m => m.Id == _selectedRows.ElementAt(0)) : null;
+    private MetricRow? _comparisonData => _selectedRows.Count >= 2 ? _metrics.FirstOrDefault(m => m.Id == _selectedRows.ElementAt(1)) : null;
+
+    private void ToggleRow(string id)
+    {
+        if (!_selectedRows.Remove(id) && _selectedRows.Count < 2)
+            _selectedRows.Add(id);
+    }
+
+    private void ClearSelection()
+    {
+        _selectedRows.Clear();
+        _isComparing = false;
+    }
+
+    private ComparisonMetric[] GetComparisonMetrics()
+    {
+        if (_baselineData == null || _comparisonData == null) return [];
+        var b = _baselineData;
+        var c = _comparisonData;
+        return
+        [
+            new("Revenue", b.Revenue, c.Revenue, b.Revenue.ToString("C0"), c.Revenue.ToString("C0"), true),
+            new("Orders", b.Orders, c.Orders, b.Orders.ToString("N0"), c.Orders.ToString("N0"), true),
+            new("Avg Order Value", b.AvgOrderValue, c.AvgOrderValue, b.AvgOrderValue.ToString("C2"), c.AvgOrderValue.ToString("C2"), true),
+            new("Conversion Rate", b.ConversionRate, c.ConversionRate, $"{b.ConversionRate:F1}%", $"{c.ConversionRate:F1}%", true),
+            new("Visitors", b.Visitors, c.Visitors, b.Visitors.ToString("N0"), c.Visitors.ToString("N0"), true),
+        ];
+    }
+}

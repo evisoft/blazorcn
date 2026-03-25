@@ -1,0 +1,147 @@
+@* ============================================================
+   Block: dashboard-rollback-history
+   Title: Dashboard Rollback History
+   Description: Animated React deployment rollback history dashboard block for Next.js displaying a log of rollback events with reason, impact assessment, recovery time, affected services, and expandable incident details using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Recent deployment status tracker
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-rollback-history.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideRotateCcwCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Rollback History</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">Deployment reverts and recovery</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span class="tabular-nums">3 in 30d</span>
+                <span>·</span>
+                <span class="tabular-nums">12 total</span>
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="grid grid-cols-3 border-b">
+            @{
+                var summaryMetrics = new[] {
+                    ("Total Rollbacks", "12", ""),
+                    ("MTTR", "4m 18s", ""),
+                    ("Last 30 Days", "3", "text-amber-600 dark:text-amber-400"),
+                };
+            }
+            @for (var i = 0; i < summaryMetrics.Length; i++)
+            {
+                var (label, value, color) = summaryMetrics[i];
+                <div class="@(Cn.Merge("px-4 py-3", i < 2 ? "border-r" : ""))">
+                    <p class="text-muted-foreground text-xs">@label</p>
+                    <p class="@(Cn.Merge("mt-1 font-semibold text-lg tabular-nums", color))">@value</p>
+                </div>
+            }
+        </div>
+
+        @* Rollback entries *@
+        <div>
+            @for (var i = 0; i < _rollbacks.Length; i++)
+            {
+                var rb = _rollbacks[i];
+                var isExpanded = _expanded == rb.Id;
+                var config = _impactConfig[rb.Impact];
+                var isLast = i == _rollbacks.Length - 1;
+                <div class="@(!isLast || isExpanded ? "border-b" : "")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : rb.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@rb.Version</span>
+                                <span class="text-muted-foreground text-xs">\u2192 @rb.RolledBackTo</span>
+                            </div>
+                            <p class="mt-0.5 truncate text-muted-foreground text-xs">@rb.Reason</p>
+                        </div>
+                        <div class="shrink-0 text-right">
+                            <span class="block font-mono text-[10px] tabular-nums">@rb.RecoveryTime</span>
+                            <span class="block text-muted-foreground text-[10px]">@rb.Timestamp</span>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="space-y-3 px-4 pb-4 pl-9">
+                            <div class="flex items-center gap-4">
+                                <span class="flex items-center gap-1.5 text-xs">
+                                    <span class="@(Cn.Merge("size-1.5 rounded-full", config.Dot))"></span>
+                                    <span class="@config.Text">@config.Label impact</span>
+                                </span>
+                                <span class="text-muted-foreground text-xs">·</span>
+                                <span class="text-muted-foreground text-xs">by @rb.Operator</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="text-muted-foreground text-xs">Services:</span>
+                                @foreach (var service in rb.Services)
+                                {
+                                    <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                        @service
+                                    </span>
+                                }
+                            </div>
+                            <div class="rounded-md bg-zinc-950 px-3 py-2">
+                                <span class="font-mono text-xs text-zinc-300">@rb.Commit</span>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-1.5 block font-medium text-muted-foreground text-xs">Incident notes</span>
+                                <p class="text-sm leading-relaxed">@rb.Notes</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "r1";
+
+    private record RollbackEvent(string Id, string Version, string RolledBackTo, string Reason, string Impact, string RecoveryTime, string[] Services, string Operator, string Timestamp, string Notes, string Commit);
+    private record ImpactConfig(string Dot, string Text, string Label);
+
+    private static readonly Dictionary<string, ImpactConfig> _impactConfig = new()
+    {
+        ["critical"] = new("bg-red-500", "text-red-600 dark:text-red-400", "Critical"),
+        ["high"] = new("bg-amber-500", "text-amber-600 dark:text-amber-400", "High"),
+        ["medium"] = new("bg-blue-500", "text-blue-600 dark:text-blue-400", "Medium"),
+        ["low"] = new("bg-muted-foreground/40", "text-muted-foreground", "Low"),
+    };
+
+    private static readonly RollbackEvent[] _rollbacks =
+    [
+        new("r1", "v2.14.3", "v2.14.2", "Memory leak in connection pooling causing OOM kills", "critical", "6m 42s",
+            ["api-gateway", "auth-service", "user-service"], "Elena Vasquez", "2 days ago",
+            "Connection pool was not properly releasing connections after timeout. The leak caused memory to grow linearly with request count, eventually hitting the container memory limit. Root cause traced to a missing finally block in the connection wrapper.",
+            "a4f2b8c fix: connection pool timeout handling"),
+        new("r2", "v2.14.1", "v2.14.0", "Stripe webhook handler returning 500 on subscription updates", "high", "3m 15s",
+            ["payment-service", "webhook-processor"], "Marcus Chen", "8 days ago",
+            "A schema change in the Stripe event payload for subscription.updated events broke deserialization. The handler threw an unhandled exception, causing webhook retries to queue up. Approximately 340 subscription events were delayed.",
+            "e7d1a92 feat: update stripe SDK to v14"),
+        new("r3", "v2.13.8", "v2.13.7", "Database migration deadlock on users table ALTER", "critical", "12m 08s",
+            ["api-gateway", "auth-service", "user-service", "admin-panel"], "Priya Sharma", "15 days ago",
+            "The migration attempted to add a NOT NULL column with a default value to the users table during peak traffic. The ALTER TABLE acquired an ACCESS EXCLUSIVE lock that blocked all concurrent queries. All services dependent on the users table experienced request timeouts.",
+            "b3c9f41 chore: add phone_verified column to users"),
+        new("r4", "v2.13.5", "v2.13.4", "CDN cache invalidation caused 404s on static assets", "medium", "2m 30s",
+            ["cdn-edge", "static-assets"], "James Wright", "22 days ago",
+            "A deployment automation script incorrectly invalidated the entire CDN cache instead of only the changed paths. All static assets returned 404 until the origin could serve them again. Cache warm-up took approximately 90 seconds across all edge locations.",
+            "f8a2e15 fix: asset versioning for cache busting"),
+        new("r5", "v2.13.2", "v2.13.1", "Rate limiter configuration caused false positives", "low", "1m 45s",
+            ["api-gateway"], "Elena Vasquez", "29 days ago",
+            "The new rate limit configuration used per-IP counting instead of per-user, causing shared office IPs to hit limits prematurely. Approximately 2% of enterprise users were affected during peak hours. Reverted to user-based counting.",
+            "c9d4a78 feat: implement sliding window rate limiter"),
+    ];
+}

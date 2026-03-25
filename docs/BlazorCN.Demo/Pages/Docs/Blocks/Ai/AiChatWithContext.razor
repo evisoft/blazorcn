@@ -1,0 +1,135 @@
+@* ===========================================================
+   Block: ai-chat-with-context
+   Title: Ai Chat With Context
+   Description: AI chat with context panel, document snippets, relevance scores, and source cards
+   Dependencies: BadgeCn, ButtonCn, LucideArrowUpCn, LucideChevronRightCn
+   Source: original/blocks/ai/ai-chat-with-context.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    <div class="grid h-[700px] grid-cols-1 overflow-hidden rounded-lg border bg-card lg:grid-cols-[1fr_340px]">
+        @* Chat panel *@
+        <div class="flex flex-col border-r">
+            <div class="flex items-center gap-2 border-b px-4 py-3">
+                <span class="text-sm font-medium">Knowledge Assistant</span>
+                <span class="text-xs text-muted-foreground">&middot;</span>
+                <span class="text-xs text-muted-foreground">Answers with context sources</span>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <div class="flex flex-col">
+                    @for (var i = 0; i < _chatMessages.Length; i++)
+                    {
+                        var msg = _chatMessages[i];
+                        var isLast = i == _chatMessages.Length - 1;
+                        <div class="@(!isLast ? "border-b" : "")">
+                            <div class="px-4 py-3">
+                                <span class="mb-1 block text-xs font-medium text-muted-foreground">
+                                    @(msg.Role == "user" ? "You" : "AI")
+                                </span>
+                                <p class="whitespace-pre-wrap text-sm leading-relaxed">@msg.Content</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="border-t px-4 py-3">
+                <div class="relative">
+                    <textarea class="min-h-0 max-h-32 w-full resize-none border-0 bg-transparent pr-10 text-sm shadow-none focus:outline-none focus-visible:ring-0"
+                              rows="1"
+                              placeholder="Ask about your codebase..."
+                              @bind="_input"></textarea>
+                    <ButtonCn Class="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                              Size="ButtonSize.Icon"
+                              Variant="ButtonVariant.Ghost"
+                              Disabled="@(string.IsNullOrWhiteSpace(_input))">
+                        <LucideArrowUpCn Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+
+        @* Context panel *@
+        <div class="hidden flex-col lg:flex">
+            <div class="flex items-center gap-2 border-b px-4 py-3">
+                <span class="text-sm font-medium">Retrieved Context</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto text-xs font-normal">
+                    @_contextDocs.Length sources
+                </BadgeCn>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                @for (var i = 0; i < _contextDocs.Length; i++)
+                {
+                    var doc = _contextDocs[i];
+                    var isExpanded = _expanded == doc.Id;
+                    var isLast = i == _contextDocs.Length - 1;
+                    var docId = doc.Id;
+                    <div class="@(!isLast ? "border-b" : "")">
+                        <button type="button"
+                                class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                                @onclick="@(() => _expanded = isExpanded ? null : docId)">
+                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", GetTypeDot(doc.Type))"></span>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@doc.Title</span>
+                                <p class="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                                    @doc.Source
+                                </p>
+                            </div>
+                            <span class="shrink-0 text-xs font-semibold tabular-nums">
+                                @doc.Relevance%
+                            </span>
+                            <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        </button>
+
+                        @if (isExpanded)
+                        {
+                            <div class="px-4 pb-3 pl-9">
+                                <p class="text-sm leading-relaxed text-muted-foreground">@doc.Snippet</p>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Role, string Content);
+    private record ContextDoc(string Id, string Title, string Snippet, string Source, int Relevance, string Type);
+
+    private static readonly ChatMessage[] _chatMessages =
+    {
+        new("m1", "user", "How should I implement authentication middleware in my Next.js app?"),
+        new("m2", "assistant", "Based on the documentation, here's the recommended approach for authentication middleware in Next.js:\n\n1. Create middleware.ts at the project root \u2014 export a middleware function that checks the session cookie and redirects unauthenticated users.\n\n2. Configure the matcher to only run middleware on protected routes. This avoids unnecessary checks on public pages and static assets.\n\n3. Validate the session server-side in your layouts using auth.api.getSession() for an additional security layer beyond the middleware cookie check.\n\nThe session uses a 7-day expiry with 24-hour cookie cache for optimal performance.")
+    };
+
+    private static readonly ContextDoc[] _contextDocs =
+    {
+        new("d1", "Next.js Middleware Authentication",
+            "Middleware runs before every request. Use NextResponse.redirect() to protect routes. Check the session token from cookies and validate it against your auth provider...",
+            "docs/middleware.md", 96, "documentation"),
+        new("d2", "Better Auth Session Handling",
+            "Sessions use a 7-day expiry with 24-hour cookie cache. The session object contains user ID, email, role, and workspace memberships. Call auth.api.getSession() server-side...",
+            "auth/sessions.ts", 89, "code"),
+        new("d3", "Route Protection Patterns",
+            "For App Router, protect routes at the layout level using server-side session checks. Redirect unauthenticated users to /login. For API routes, validate the Bearer token in headers...",
+            "guides/auth-patterns.md", 82, "article"),
+        new("d4", "RBAC Implementation Guide",
+            "Define roles as a TypeScript enum: admin, member, viewer. Check permissions in middleware and server components. Use the hasPermission() utility for granular access control...",
+            "guides/rbac.md", 71, "article")
+    };
+
+    private string _input = "";
+    private string? _expanded = "d1";
+
+    private static string GetTypeDot(string type) => type switch
+    {
+        "documentation" => "bg-blue-500",
+        "article" => "bg-amber-500",
+        "code" => "bg-emerald-500",
+        _ => "bg-gray-500"
+    };
+}

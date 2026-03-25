@@ -1,0 +1,177 @@
+@* ============================================================
+   Block: dashboard-connection-pool
+   Title: Dashboard Connection Pool
+   Description: Animated React database connection pool dashboard block for Next.js with active idle and waiting connection counts per database, pool utilization bars, max connection limits, wait queue depth, and expandable pool configuration using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Database performance monitoring
+   Dependencies: BadgeCn, LucideDatabaseCn, LucideChevronRightCn
+   Source: original/blocks/dashboard/dashboard-connection-pool.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideDatabaseCn Class="size-3.5 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Connection Pools</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        @_pools.Length databases · @(_totalActive + _totalIdle)/@_totalMax connections
+                    </p>
+                </div>
+            </div>
+            @if (_totalWaiting > 0)
+            {
+                <div class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    <span class="text-red-600 text-xs dark:text-red-400">@_totalWaiting waiting</span>
+                </div>
+            }
+        </div>
+
+        @* Summary *@
+        <div class="grid grid-cols-3 border-b">
+            <div class="border-r px-4 py-3">
+                <span class="text-muted-foreground text-xs">Active</span>
+                <div class="flex items-baseline gap-1">
+                    <span class="font-semibold text-2xl tabular-nums">@_totalActive</span>
+                </div>
+            </div>
+            <div class="border-r px-4 py-3">
+                <span class="text-muted-foreground text-xs">Idle</span>
+                <div class="flex items-baseline gap-1">
+                    <span class="font-semibold text-2xl tabular-nums">@_totalIdle</span>
+                </div>
+            </div>
+            <div class="px-4 py-3">
+                <span class="text-muted-foreground text-xs">Waiting</span>
+                <div class="flex items-baseline gap-1">
+                    <span class="@(Cn.Merge("font-semibold text-2xl tabular-nums", _totalWaiting > 0 ? "text-red-600 dark:text-red-400" : ""))">
+                        @_totalWaiting
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        @* Pool rows *@
+        <div>
+            @for (var i = 0; i < _pools.Length; i++)
+            {
+                var pool = _pools[i];
+                var isExpanded = _expanded == pool.Id;
+                var isLast = i == _pools.Length - 1;
+                var activePct = (int)Math.Round((double)pool.Active / pool.MaxConnections * 100);
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => _expanded = isExpanded ? null : pool.Id)"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", GetHealthDot(pool.Health)))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@pool.Name</span>
+                                @if (pool.Waiting > 0)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="bg-red-500/10 text-[10px] font-normal text-red-600 dark:text-red-400">
+                                        @pool.Waiting queued
+                                    </BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-1.5 flex items-center gap-2">
+                                <div class="h-1.5 w-28 overflow-hidden rounded-full bg-muted">
+                                    <div class="@(Cn.Merge("h-full rounded-full", GetBarColor(activePct)))"
+                                         style="@($"width: {activePct}%")">
+                                    </div>
+                                </div>
+                                <span class="text-muted-foreground text-xs tabular-nums">
+                                    @pool.Active/@pool.MaxConnections
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <div class="text-right">
+                                <div class="flex items-center gap-2 text-xs">
+                                    <span class="flex items-center gap-1">
+                                        <span class="size-1.5 rounded-full bg-blue-500"></span>
+                                        <span class="tabular-nums">@pool.Active</span>
+                                    </span>
+                                    <span class="flex items-center gap-1 text-muted-foreground">
+                                        <span class="size-1.5 rounded-full bg-muted-foreground/30"></span>
+                                        <span class="tabular-nums">@pool.Idle</span>
+                                    </span>
+                                </div>
+                                <span class="block text-[10px] text-muted-foreground">avg @pool.AvgQueryTime</span>
+                            </div>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-4 pl-9">
+                                <div class="mb-3 rounded-md bg-muted/50 p-2.5">
+                                    <span class="font-mono text-muted-foreground text-xs">@pool.Host</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">Pool Range</span>
+                                        <span class="block font-mono text-xs tabular-nums">@pool.MinPool – @pool.MaxPool</span>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">Conn Timeout</span>
+                                        <span class="block font-mono text-xs">@pool.ConnectionTimeout</span>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">Idle Timeout</span>
+                                        <span class="block font-mono text-xs">@pool.IdleTimeout</span>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">Max Lifetime</span>
+                                        <span class="block font-mono text-xs">@pool.MaxLifetime</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded;
+
+    private record PoolItem(string Id, string Name, string Host, int Active, int Idle, int Waiting,
+        int MaxConnections, string Health, string AvgQueryTime, string ConnectionTimeout,
+        string IdleTimeout, string MaxLifetime, int MinPool, int MaxPool);
+
+    private static string GetHealthDot(string health) => health switch
+    {
+        "healthy" => "bg-emerald-500",
+        "warning" => "bg-amber-500",
+        "critical" => "bg-red-500",
+        _ => ""
+    };
+
+    private static string GetBarColor(int pct)
+    {
+        if (pct >= 90) return "bg-red-500";
+        if (pct >= 70) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    private static readonly PoolItem[] _pools =
+    [
+        new("db1", "Primary (Write)", "pg-primary.internal:5432", 42, 18, 0, 100, "healthy", "4.2ms", "5s", "300s", "3600s", 10, 100),
+        new("db2", "Read Replica 1", "pg-replica-1.internal:5432", 67, 8, 3, 80, "warning", "8.1ms", "5s", "300s", "3600s", 10, 80),
+        new("db3", "Read Replica 2", "pg-replica-2.internal:5432", 34, 26, 0, 80, "healthy", "5.7ms", "5s", "300s", "3600s", 10, 80),
+        new("db4", "Analytics", "pg-analytics.internal:5432", 78, 2, 12, 80, "critical", "342ms", "10s", "600s", "7200s", 5, 80),
+        new("db5", "Sessions (Redis)", "redis-sessions.internal:6379", 124, 76, 0, 500, "healthy", "0.3ms", "2s", "120s", "1800s", 20, 500),
+    ];
+
+    private static readonly int _totalActive = _pools.Sum(p => p.Active);
+    private static readonly int _totalIdle = _pools.Sum(p => p.Idle);
+    private static readonly int _totalWaiting = _pools.Sum(p => p.Waiting);
+    private static readonly int _totalMax = _pools.Sum(p => p.MaxConnections);
+}

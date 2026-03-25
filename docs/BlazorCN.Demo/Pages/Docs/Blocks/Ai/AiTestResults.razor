@@ -1,0 +1,198 @@
+@* ===========================================================
+   Block: ai-test-results
+   Title: Ai Test Results
+   Description: React AI test results display block for Next.js with summary bar, pass/fail indicators, duration tracking, and collapsible error details using shadcn/ui and Tailwind CSS
+   Long Description:
+   Dependencies: BadgeCn, ButtonCn, LucideCheckCn, LucideChevronRightCn, LucideCopyCn
+   Source: original/blocks/ai/ai-test-results.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-baseline gap-1">
+                <span class="@($"text-2xl font-semibold tabular-nums {_passRateColor}")">
+                    @(_passRate)%
+                </span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                @(_passRate >= 90 ? "Passing" : _passRate >= 50 ? "Needs work" : "Failing")
+            </BadgeCn>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="font-mono text-xs text-muted-foreground">@(_totalDuration)ms</span>
+            <div class="ml-auto flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_passed
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_failed
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_skipped
+                </span>
+            </div>
+        </div>
+
+        @* Filter *@
+        <div class="flex items-center gap-1 border-b px-4 py-2">
+            @foreach (var f in _filterOptions)
+            {
+                var filter = f;
+                var count = filter switch
+                {
+                    "all" => _total,
+                    "passed" => _passed,
+                    "failed" => _failed,
+                    _ => _skipped,
+                };
+                var label = filter == "all" ? $"All ({count})" : $"{char.ToUpper(filter[0])}{filter[1..]} ({count})";
+                <ButtonCn Variant="@(_filter == filter ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                          Size="ButtonSize.Sm"
+                          Class="h-7 text-xs"
+                          OnClick="@(() => _filter = filter)">
+                    @label
+                </ButtonCn>
+            }
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="ml-auto h-7 text-xs">
+                Re-run
+            </ButtonCn>
+        </div>
+
+        @* Test Cases *@
+        <div>
+            @for (var i = 0; i < FilteredTests.Length; i++)
+            {
+                var test = FilteredTests[i];
+                var isExpanded = _expandedTests.Contains(test.Id);
+                var hasError = test.Status == "failed" && test.Error != null;
+                var isLast = i == FilteredTests.Length - 1;
+                var testId = test.Id;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => { if (hasError) ToggleTest(testId); })"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors", hasError ? "cursor-pointer hover:bg-muted/50" : "cursor-default")">
+                        <span class="@($"size-2 shrink-0 rounded-full {_statusDot[test.Status]}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@test.Name</span>
+                            <p class="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                                @test.Suite
+                            </p>
+                        </div>
+                        @if (test.Duration > 0)
+                        {
+                            <span class="font-mono text-xs text-muted-foreground">
+                                @(test.Duration)ms
+                            </span>
+                        }
+                        @if (hasError)
+                        {
+                            <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        }
+                    </button>
+
+                    @if (hasError && isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-zinc-950 p-3">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-xs font-medium text-muted-foreground">
+                                        Error output
+                                    </span>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-6 gap-1 px-2 text-xs text-zinc-400 hover:text-zinc-200"
+                                              OnClick="@(() => HandleCopyError(testId))">
+                                        @if (_copied == testId)
+                                        {
+                                            <LucideCheckCn Size="12" Class="size-3" />
+                                            <text>Copied</text>
+                                        }
+                                        else
+                                        {
+                                            <LucideCopyCn Size="12" Class="size-3" />
+                                            <text>Copy</text>
+                                        }
+                                    </ButtonCn>
+                                </div>
+                                <pre class="overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-relaxed text-red-400">@test.Error</pre>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TestCase(string Id, string Name, string Suite, string Status, int Duration, string? Error = null);
+
+    private string _filter = "all";
+    private HashSet<string> _expandedTests = new() { "6" };
+    private string? _copied;
+
+    private static readonly string[] _filterOptions = ["all", "passed", "failed", "skipped"];
+
+    private static readonly Dictionary<string, string> _statusDot = new()
+    {
+        ["passed"] = "bg-emerald-500",
+        ["failed"] = "bg-red-500",
+        ["skipped"] = "bg-amber-500",
+    };
+
+    private static readonly TestCase[] _testCases =
+    [
+        new("1", "should create a new user with valid credentials", "auth/signup", "passed", 23),
+        new("2", "should reject duplicate email addresses", "auth/signup", "passed", 18),
+        new("3", "should hash password before storing", "auth/signup", "passed", 45),
+        new("4", "should return JWT token on successful login", "auth/login", "passed", 31),
+        new("5", "should invalidate token after logout", "auth/login", "passed", 12),
+        new("6", "should rate limit after 5 failed login attempts", "auth/login", "failed", 156,
+            "AssertionError: Expected status code 429 but received 200\n\n  at Object.<anonymous> (src/auth/login.test.ts:47:22)\n  at processTicksAndRejections (node:internal/process/task_queues:95:5)\n\n  Expected: { statusCode: 429, body: { error: \"Too many requests\" } }\n  Received: { statusCode: 200, body: { token: \"eyJhbG...\" } }\n\n  The rate limiter is not incrementing the counter for failed attempts.\n  Check the Redis connection in src/lib/rate-limiter.ts:23"),
+        new("7", "should paginate results with cursor", "api/users", "passed", 28),
+        new("8", "should filter users by role", "api/users", "passed", 15),
+        new("9", "should handle concurrent updates without data loss", "api/users", "failed", 312,
+            "Error: Transaction deadlock detected\n\n  at Pool.query (src/db/pool.ts:45:11)\n  at UserService.updateProfile (src/services/user.ts:78:5)\n\n  Two concurrent UPDATE queries on the same row caused a deadlock.\n  Consider using SELECT ... FOR UPDATE or optimistic locking."),
+        new("10", "should validate email format", "validation", "passed", 4),
+        new("11", "should sanitize HTML in user input", "validation", "passed", 7),
+        new("12", "should enforce maximum field lengths", "validation", "passed", 3),
+        new("13", "should accept international phone numbers", "validation", "skipped", 0),
+        new("14", "should process webhook payload correctly", "webhooks", "passed", 67),
+        new("15", "should verify webhook signature", "webhooks", "passed", 22),
+    ];
+
+    private static readonly int _passed = _testCases.Count(t => t.Status == "passed");
+    private static readonly int _failed = _testCases.Count(t => t.Status == "failed");
+    private static readonly int _skipped = _testCases.Count(t => t.Status == "skipped");
+    private static readonly int _total = _testCases.Length;
+    private static readonly int _passRate = (int)Math.Round((double)_passed / _total * 100);
+    private static readonly int _totalDuration = _testCases.Sum(t => t.Duration);
+
+    private static readonly string _passRateColor = _passRate >= 90
+        ? "text-emerald-600 dark:text-emerald-400"
+        : _passRate >= 50
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-red-600 dark:text-red-400";
+
+    private TestCase[] FilteredTests => _filter == "all"
+        ? _testCases
+        : _testCases.Where(t => t.Status == _filter).ToArray();
+
+    private void ToggleTest(string id)
+    {
+        if (!_expandedTests.Remove(id))
+            _expandedTests.Add(id);
+    }
+
+    private async Task HandleCopyError(string id)
+    {
+        _copied = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = null;
+    }
+}

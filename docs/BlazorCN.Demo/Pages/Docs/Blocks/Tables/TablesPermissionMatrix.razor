@@ -1,0 +1,145 @@
+@* ============================================================
+   Block: tables-permission-matrix
+   Title: Tables Permission Matrix
+   Description: Table component with role-permission matrix showing access levels across features
+   Dependencies: BadgeCn, CheckboxCn, TableCn
+   Source: original/blocks/tables/tables-permission-matrix.tsx
+   ============================================================ *@
+
+<div style="width: 900px">
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold">Role Permissions</h3>
+                <p class="text-sm text-muted-foreground">Configure access levels for each role</p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Outline">@_permissions.Length permissions</BadgeCn>
+        </div>
+
+        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <TableCn Class="table-fixed" style="width: 850px">
+                <TableHeaderCn>
+                    <TableRowCn>
+                        <TableHeadCn Class="w-48 font-semibold text-foreground">Permission</TableHeadCn>
+                        @foreach (var role in _roles)
+                        {
+                            <TableHeadCn Class="text-center font-semibold text-foreground">
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="flex items-center gap-1.5">
+                                        @GetRoleIcon(role.Id)
+                                        <span>@role.Name</span>
+                                    </div>
+                                    <span class="text-xs font-normal text-muted-foreground">
+                                        @GetPermissionCount(role.Id)/@_permissions.Length
+                                    </span>
+                                </div>
+                            </TableHeadCn>
+                        }
+                    </TableRowCn>
+                </TableHeaderCn>
+                <TableBodyCn>
+                    @foreach (var module in _modules)
+                    {
+                        <TableRowCn Class="bg-muted/30">
+                            <TableCellCn Class="font-semibold text-sm py-2" colspan="5">@module</TableCellCn>
+                        </TableRowCn>
+                        @foreach (var perm in _permissions.Where(p => p.Module == module))
+                        {
+                            <TableRowCn>
+                                <TableCellCn>
+                                    <span class="text-sm" title="@perm.Description">@perm.Name</span>
+                                </TableCellCn>
+                                @foreach (var role in _roles)
+                                {
+                                    var isChecked = _permissionState.ContainsKey(role.Id) && _permissionState[role.Id].Contains(perm.Id);
+
+                                    <TableCellCn Class="@(role.IsSystem ? "bg-muted/20" : "")">
+                                        <div class="flex items-center justify-center">
+                                            @if (role.IsSystem)
+                                            {
+                                                <div class="flex h-4 w-4 items-center justify-center rounded bg-primary/20" title="System role - permissions cannot be modified">
+                                                    <LucideLockCn Size="10" Class="h-2.5 w-2.5 text-primary" />
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <CheckboxCn Checked="isChecked" CheckedChanged="() => TogglePermission(role.Id, perm.Id)" />
+                                            }
+                                        </div>
+                                    </TableCellCn>
+                                }
+                            </TableRowCn>
+                        }
+                    }
+                </TableBodyCn>
+            </TableCn>
+        </div>
+
+        <div class="flex items-center gap-6 text-xs text-muted-foreground">
+            <div class="flex items-center gap-1.5">
+                <LucideCrownCn Size="14" Class="h-3.5 w-3.5" />
+                <span>System role (locked)</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private record Role(string Id, string Name, string Description, bool IsSystem);
+    private record Permission(string Id, string Name, string Description, string Module);
+
+    private static readonly Role[] _roles =
+    [
+        new("admin", "Admin", "Full system access", true),
+        new("manager", "Manager", "Team management access", false),
+        new("editor", "Editor", "Content editing access", false),
+        new("viewer", "Viewer", "Read-only access", false),
+    ];
+
+    private static readonly Permission[] _permissions =
+    [
+        new("users.view", "View users", "See user list and profiles", "User Management"),
+        new("users.create", "Create users", "Add new user accounts", "User Management"),
+        new("users.edit", "Edit users", "Modify user information", "User Management"),
+        new("users.delete", "Delete users", "Remove user accounts", "User Management"),
+        new("content.view", "View content", "Access published content", "Content"),
+        new("content.create", "Create content", "Add new content items", "Content"),
+        new("content.edit", "Edit content", "Modify existing content", "Content"),
+        new("content.publish", "Publish content", "Make content live", "Content"),
+        new("content.delete", "Delete content", "Remove content items", "Content"),
+        new("settings.view", "View settings", "See system configuration", "Settings"),
+        new("settings.edit", "Edit settings", "Modify system configuration", "Settings"),
+        new("analytics.view", "View analytics", "Access reports and dashboards", "Analytics"),
+        new("analytics.export", "Export data", "Download analytics data", "Analytics"),
+    ];
+
+    private static readonly string[] _modules = _permissions.Select(p => p.Module).Distinct().ToArray();
+
+    private Dictionary<string, HashSet<string>> _permissionState = new()
+    {
+        ["admin"] = new(_permissions.Select(p => p.Id)),
+        ["manager"] = new(["users.view", "users.create", "users.edit", "content.view", "content.create", "content.edit", "content.publish", "content.delete", "settings.view", "analytics.view", "analytics.export"]),
+        ["editor"] = new(["users.view", "content.view", "content.create", "content.edit", "analytics.view"]),
+        ["viewer"] = new(["users.view", "content.view", "analytics.view"]),
+    };
+
+    private int GetPermissionCount(string roleId) =>
+        _permissionState.ContainsKey(roleId) ? _permissionState[roleId].Count : 0;
+
+    private void TogglePermission(string roleId, string permId)
+    {
+        if (!_permissionState.ContainsKey(roleId)) return;
+        if (!_permissionState[roleId].Remove(permId))
+        {
+            _permissionState[roleId].Add(permId);
+        }
+    }
+
+    private static RenderFragment GetRoleIcon(string roleId) => roleId switch
+    {
+        "admin" => @<LucideCrownCn Size="16" Class="h-4 w-4" />,
+        "manager" => @<LucideShieldCheckCn Size="16" Class="h-4 w-4" />,
+        "editor" => @<LucideShieldCn Size="16" Class="h-4 w-4" />,
+        _ => @<LucideUserCn Size="16" Class="h-4 w-4" />,
+    };
+}

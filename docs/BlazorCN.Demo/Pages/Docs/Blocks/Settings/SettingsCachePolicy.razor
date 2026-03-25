@@ -1,0 +1,173 @@
+@* ===========================================================
+   Block: settings-cache-policy
+   Title: Settings Cache Policy
+   Description: Animated React cache policy configuration settings page for Next.js with per-resource TTL controls, CDN purge actions, and edge caching toggles using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Allowed origin domains and headers
+   Dependencies: BadgeCn, ButtonCn, InputCn, SwitchCn
+   Source: original/blocks/settings/settings-cache-policy.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <p class="font-medium text-sm">Cache policy</p>
+            <p class="mt-0.5 text-muted-foreground text-xs">Configure TTL, purge controls, and CDN edge settings</p>
+        </div>
+
+        @* Global toggles *@
+        <div class="border-b px-4 py-3">
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-sm">Edge caching</p>
+                        <p class="mt-0.5 text-muted-foreground text-xs">Cache responses at CDN edge nodes globally</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", _edgeEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                            <span class="@Cn.Merge("size-1.5 rounded-full", _edgeEnabled ? "bg-emerald-500" : "bg-muted-foreground/40")"></span>
+                            @(_edgeEnabled ? "Active" : "Disabled")
+                        </span>
+                        <SwitchCn @bind-Checked="_edgeEnabled" />
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-sm">Brotli compression</p>
+                        <p class="mt-0.5 text-muted-foreground text-xs">Compress responses before caching at the edge</p>
+                    </div>
+                    <SwitchCn @bind-Checked="_compressionEnabled" />
+                </div>
+            </div>
+        </div>
+
+        @* Per-resource rules *@
+        <div>
+            <div class="px-4 py-3">
+                <p class="font-medium text-sm">Resource rules</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">Set TTL and caching behavior per resource type</p>
+            </div>
+            @for (var i = 0; i < _rules.Count; i++)
+            {
+                var rule = _rules[i];
+                var isExpanded = _expanded == rule.Id;
+                var isLast = i == _rules.Count - 1;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button" @onclick="() => _expanded = isExpanded ? null : rule.Id"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        @if (rule.Icon == "image")
+                        {
+                            <LucideImageCn Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                        }
+                        else if (rule.Icon == "zap")
+                        {
+                            <LucideZapCn Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                        }
+                        else
+                        {
+                            <LucideFileCn Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                        }
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@rule.Resource</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">TTL: @rule.Unit &middot; Hit rate: @rule.Hits</p>
+                        </div>
+                        @if (rule.StaleWhileRevalidate)
+                        {
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">SWR</BadgeCn>
+                        }
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="space-y-3 px-4 pb-4 pl-11">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <span class="mb-1.5 block font-medium text-muted-foreground text-xs">TTL (seconds)</span>
+                                        <InputCn Value="@rule.Ttl" ValueChanged="@((string v) => { rule.Ttl = v; })" Class="h-8 font-mono text-xs" />
+                                    </div>
+                                    <div>
+                                        <span class="mb-1.5 block font-medium text-muted-foreground text-xs">Cache hit rate</span>
+                                        <div class="flex h-8 items-center">
+                                            <span class="flex items-center gap-1.5 text-sm">
+                                                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                @rule.Hits
+                                            </span>
+                                            <span class="mx-2 text-muted-foreground text-xs">&middot;</span>
+                                            <span class="text-muted-foreground text-xs">@rule.MissRate miss</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="font-medium text-xs">Stale-while-revalidate</p>
+                                        <p class="mt-0.5 text-muted-foreground text-xs">Serve stale while fetching fresh copy</p>
+                                    </div>
+                                    <SwitchCn Checked="rule.StaleWhileRevalidate" CheckedChanged="() => rule.StaleWhileRevalidate = !rule.StaleWhileRevalidate" />
+                                </div>
+                                <div>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" Disabled="@(_purging == rule.Id)" OnClick="() => _purging = rule.Id">
+                                        @if (_purging == rule.Id)
+                                        {
+                                            <LucideLoader2Cn Size="12" Class="size-3 animate-spin" />
+                                            <span>Purging</span>
+                                        }
+                                        else
+                                        {
+                                            <LucideRefreshCwCn Size="12" Class="size-3" />
+                                            <span>Purge cache</span>
+                                        }
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-end border-t px-4 py-3">
+            @if (_saved)
+            {
+                <span class="mr-2 flex items-center gap-1 text-emerald-600 text-xs dark:text-emerald-400">
+                    <LucideCheckCn Size="12" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs" OnClick="() => _saved = true">
+                Save policy
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private bool _edgeEnabled = true;
+    private bool _compressionEnabled = true;
+    private string? _expanded;
+    private string? _purging;
+    private bool _saved;
+
+    private class CacheRule
+    {
+        public string Id { get; set; } = "";
+        public string Resource { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public string Ttl { get; set; } = "";
+        public string Unit { get; set; } = "";
+        public bool StaleWhileRevalidate { get; set; }
+        public string Hits { get; set; } = "";
+        public string MissRate { get; set; } = "";
+    }
+
+    private readonly List<CacheRule> _rules =
+    [
+        new() { Id = "r1", Resource = "Static assets", Icon = "file", Ttl = "31536000", Unit = "1 year", StaleWhileRevalidate = false, Hits = "98.2%", MissRate = "1.8%" },
+        new() { Id = "r2", Resource = "Images", Icon = "image", Ttl = "2592000", Unit = "30 days", StaleWhileRevalidate = true, Hits = "94.7%", MissRate = "5.3%" },
+        new() { Id = "r3", Resource = "API responses", Icon = "zap", Ttl = "60", Unit = "1 minute", StaleWhileRevalidate = true, Hits = "72.1%", MissRate = "27.9%" },
+        new() { Id = "r4", Resource = "HTML pages", Icon = "file", Ttl = "300", Unit = "5 minutes", StaleWhileRevalidate = true, Hits = "85.4%", MissRate = "14.6%" },
+        new() { Id = "r5", Resource = "Fonts", Icon = "file", Ttl = "31536000", Unit = "1 year", StaleWhileRevalidate = false, Hits = "99.1%", MissRate = "0.9%" },
+    ];
+}

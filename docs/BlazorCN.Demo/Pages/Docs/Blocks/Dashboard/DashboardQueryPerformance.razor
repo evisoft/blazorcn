@@ -1,0 +1,143 @@
+@* ============================================================
+   Block: dashboard-query-performance
+   Title: Dashboard Query Performance
+   Description: Animated React slow query analyzer dashboard block for Next.js displaying query execution times, rows scanned, optimization suggestions, and query plan details with expandable rows using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Database performance metrics dashboard
+   Dependencies: ButtonCn
+   Source: original/blocks/dashboard/dashboard-query-performance.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideDatabaseCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Query Performance</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        Slow query analysis and optimization
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span>23 slow queries</span>
+            </div>
+        </div>
+
+        @* Summary metrics *@
+        <div class="grid grid-cols-3 border-b">
+            @for (var i = 0; i < _summaryMetrics.Length; i++)
+            {
+                var metric = _summaryMetrics[i];
+                <div class="@(Cn.Merge("px-4 py-3", i < 2 ? "border-r" : ""))">
+                    <p class="text-muted-foreground text-xs">@metric.Label</p>
+                    <p class="@(Cn.Merge("mt-1 font-semibold text-lg tabular-nums", metric.Color))">
+                        @metric.Value
+                    </p>
+                </div>
+            }
+        </div>
+
+        @* Query rows *@
+        <div>
+            @for (var i = 0; i < _queries.Length; i++)
+            {
+                var query = _queries[i];
+                var isExpanded = _expanded == query.Id;
+                var isLast = i == _queries.Length - 1;
+
+                <div class="@(!isLast || isExpanded ? "border-b" : "")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : query.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", _severityDot[query.Severity]))"></span>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate font-mono text-xs text-muted-foreground">
+                                @query.Query
+                            </p>
+                            <div class="mt-1 flex items-center gap-3">
+                                <span class="font-semibold text-sm tabular-nums">@query.AvgTime</span>
+                                <span class="text-muted-foreground text-xs">&middot;</span>
+                                <span class="text-muted-foreground text-xs tabular-nums">
+                                    @query.RowsScanned rows
+                                </span>
+                                <span class="text-muted-foreground text-xs">&middot;</span>
+                                <span class="text-muted-foreground text-xs tabular-nums">
+                                    @query.Calls calls
+                                </span>
+                            </div>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="space-y-3 px-4 pb-4 pl-9">
+                                @* Execution plan *@
+                                <div class="rounded-md bg-zinc-950 p-3">
+                                    <span class="font-medium text-muted-foreground text-xs">
+                                        Execution Plan
+                                    </span>
+                                    <p class="mt-1 font-mono text-sm text-zinc-300">@query.Plan</p>
+                                </div>
+
+                                @* Tables affected *@
+                                <div class="flex items-center gap-2">
+                                    <span class="text-muted-foreground text-xs">Tables:</span>
+                                    <span class="font-mono text-xs">@query.Table</span>
+                                </div>
+
+                                @* Suggestion *@
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <div class="mb-1.5 flex items-center justify-between">
+                                        <span class="font-medium text-muted-foreground text-xs">
+                                            Optimization suggestion
+                                        </span>
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs">
+                                            <LucideCopyCn Size="12" Class="size-3" />
+                                            Copy
+                                        </ButtonCn>
+                                    </div>
+                                    <p class="text-sm leading-relaxed">@query.Suggestion</p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "q1";
+
+    private record SummaryMetric(string Label, string Value, string Color);
+    private record SlowQuery(string Id, string Query, string AvgTime, int AvgTimeMs, string RowsScanned, string Calls, string Severity, string Table, string Suggestion, string Plan);
+
+    private readonly Dictionary<string, string> _severityDot = new()
+    {
+        ["critical"] = "bg-red-500",
+        ["warning"] = "bg-amber-500",
+        ["info"] = "bg-blue-500"
+    };
+
+    private readonly SummaryMetric[] _summaryMetrics = new[]
+    {
+        new SummaryMetric("Slow Queries", "23", "text-amber-600 dark:text-amber-400"),
+        new SummaryMetric("Avg Time", "34ms", ""),
+        new SummaryMetric("P99 Time", "892ms", "text-red-600 dark:text-red-400")
+    };
+
+    private readonly SlowQuery[] _queries = new[]
+    {
+        new SlowQuery("q1", "SELECT u.*, COUNT(o.id) FROM users u LEFT JOIN orders o ON u.id = o.user_id GROUP BY u.id ORDER BY ...", "1,247ms", 1247, "2.4M", "342", "critical", "users, orders", "Add composite index on orders(user_id, id). Consider materializing the count in a summary table updated via triggers.", "Seq Scan on orders \u2192 Hash Join \u2192 Sort \u2192 Aggregate"),
+        new SlowQuery("q2", "UPDATE products SET search_vector = to_tsvector('english', name || ' ' || description) WHERE updated_at > ...", "823ms", 823, "890K", "48", "critical", "products", "Batch updates using a background job instead of synchronous execution. Add partial index on updated_at for the WHERE clause.", "Seq Scan on products \u2192 Update \u2192 Trigger tsvector_update"),
+        new SlowQuery("q3", "SELECT * FROM events WHERE type = $1 AND created_at BETWEEN $2 AND $3 ORDER BY created_at DESC LIMIT 100", "412ms", 412, "1.8M", "1,205", "warning", "events", "Create index on events(type, created_at DESC). The current query performs a sequential scan because the existing index does not cover both columns.", "Seq Scan on events \u2192 Sort \u2192 Limit"),
+        new SlowQuery("q4", "SELECT p.*, c.name AS category FROM products p JOIN categories c ON p.category_id = c.id WHERE p.status = ...", "189ms", 189, "45K", "8,920", "warning", "products, categories", "Add index on products(status, category_id). High call count multiplies the impact. Consider caching results for 5 minutes.", "Index Scan on categories \u2192 Nested Loop \u2192 Filter on products.status"),
+        new SlowQuery("q5", "SELECT DISTINCT tag FROM product_tags WHERE product_id IN (SELECT id FROM products WHERE store_id = $1)", "78ms", 78, "12K", "3,410", "info", "product_tags, products", "Rewrite subquery as JOIN for better plan optimization. Add index on product_tags(product_id, tag) to enable index-only scan.", "Hash Semi Join \u2192 Seq Scan on product_tags \u2192 Index Scan on products")
+    };
+}

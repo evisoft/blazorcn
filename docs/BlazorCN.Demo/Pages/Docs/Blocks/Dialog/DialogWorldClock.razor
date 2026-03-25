@@ -1,0 +1,193 @@
+@* ========================================
+   Block: dialog-world-clock
+   Title: Dialog World Clock
+   Description: World clock dialog with multiple timezone display, time difference calculation, current time updates, and city search
+   Long Description: WiFi connect dialog with network selection, password input, and connection status for React IoT apps
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LucideGlobeCn, LucidePlusCn, LucideSearchCn, LucideXCn, ScrollAreaCn
+   Source: original/blocks/dialog/dialog-world-clock.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideGlobeCn Size="16" Class="mr-2 size-4" />
+                World Clock
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Style="max-width: 384px">
+        <DialogHeaderCn>
+            <DialogTitleCn>World Clock</DialogTitleCn>
+            <DialogDescriptionCn>Track time across cities.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="py-4">
+            @if (_showSearch)
+            {
+                <div class="space-y-3">
+                    <div class="relative">
+                        <LucideSearchCn Size="16" Class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <InputCn @bind-Value="_searchQuery"
+                                 Placeholder="Search cities..."
+                                 Class="pl-9" />
+                    </div>
+                    <ScrollAreaCn Class="h-[200px]">
+                        <div class="space-y-1">
+                            @foreach (var city in FilteredCities)
+                            {
+                                <button type="button"
+                                        class="w-full flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors text-left"
+                                        @onclick="@(() => HandleAddCity(city.Id))">
+                                    <span class="text-sm">@city.Name</span>
+                                    <span class="text-xs text-muted-foreground">
+                                        @GetTimeInTimezone(city.Timezone)
+                                    </span>
+                                </button>
+                            }
+                            @if (!FilteredCities.Any())
+                            {
+                                <p class="text-sm text-muted-foreground text-center py-4">
+                                    No cities found
+                                </p>
+                            }
+                        </div>
+                    </ScrollAreaCn>
+                    <ButtonCn Class="w-full"
+                              Variant="ButtonVariant.Outline"
+                              @onclick="@(() => { _showSearch = false; _searchQuery = ""; })">
+                        Cancel
+                    </ButtonCn>
+                </div>
+            }
+            else
+            {
+                <div class="space-y-2">
+                    @foreach (var city in SelectedCities)
+                    {
+                        <div class="group flex items-center justify-between p-2 rounded-md hover:bg-muted/50">
+                            <div class="flex items-center gap-3">
+                                <div>
+                                    <p class="text-sm font-medium">@city.Name</p>
+                                    <p class="text-xs text-muted-foreground">
+                                        @GetTimeDifference(city.Timezone)
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg font-mono tabular-nums">
+                                    @GetTimeInTimezone(city.Timezone)
+                                </span>
+                                <ButtonCn Class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          Size="ButtonSize.Icon"
+                                          Variant="ButtonVariant.Ghost"
+                                          @onclick="@(() => HandleRemoveCity(city.Id))">
+                                    <LucideXCn Size="12" Class="size-3" />
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+
+                    <ButtonCn Class="w-full mt-2"
+                              Size="ButtonSize.Sm"
+                              Variant="ButtonVariant.Outline"
+                              @onclick="@(() => _showSearch = true)">
+                        <LucidePlusCn Size="16" Class="mr-2 size-4" />
+                        Add City
+                    </ButtonCn>
+                </div>
+            }
+        </div>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private record City(string Id, string Name, string Country, string Timezone);
+
+    private static readonly City[] _availableCities =
+    {
+        new("nyc", "New York", "USA", "America/New_York"),
+        new("lon", "London", "UK", "Europe/London"),
+        new("par", "Paris", "France", "Europe/Paris"),
+        new("tok", "Tokyo", "Japan", "Asia/Tokyo"),
+        new("syd", "Sydney", "Australia", "Australia/Sydney"),
+        new("dub", "Dubai", "UAE", "Asia/Dubai"),
+        new("sin", "Singapore", "Singapore", "Asia/Singapore"),
+        new("ber", "Berlin", "Germany", "Europe/Berlin"),
+        new("lax", "Los Angeles", "USA", "America/Los_Angeles")
+    };
+
+    private static readonly string[] _defaultCityIds = { "lon", "tok", "syd" };
+
+    // Timezone offsets in minutes for static display (approximate)
+    private static readonly Dictionary<string, int> _tzOffsets = new()
+    {
+        ["America/New_York"] = -300,
+        ["Europe/London"] = 0,
+        ["Europe/Paris"] = 60,
+        ["Asia/Tokyo"] = 540,
+        ["Australia/Sydney"] = 660,
+        ["Asia/Dubai"] = 240,
+        ["Asia/Singapore"] = 480,
+        ["Europe/Berlin"] = 60,
+        ["America/Los_Angeles"] = -480
+    };
+
+    private bool _open;
+    private List<string> _selectedCityIds = new(_defaultCityIds);
+    private string _searchQuery = "";
+    private bool _showSearch;
+
+    private IEnumerable<City> SelectedCities =>
+        _selectedCityIds.Select(id => _availableCities.FirstOrDefault(c => c.Id == id)).Where(c => c is not null)!;
+
+    private IEnumerable<City> FilteredCities
+    {
+        get
+        {
+            var query = _searchQuery.ToLowerInvariant();
+            return _availableCities.Where(city =>
+                !_selectedCityIds.Contains(city.Id) &&
+                (city.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                 city.Country.Contains(query, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    private static string GetTimeInTimezone(string timezone)
+    {
+        if (_tzOffsets.TryGetValue(timezone, out var offsetMinutes))
+        {
+            var utcNow = DateTimeOffset.UtcNow;
+            var tzTime = utcNow.ToOffset(TimeSpan.FromMinutes(offsetMinutes));
+            return tzTime.ToString("h:mm tt");
+        }
+        return "--:--";
+    }
+
+    private static string GetTimeDifference(string timezone)
+    {
+        if (_tzOffsets.TryGetValue(timezone, out var offsetMinutes))
+        {
+            var localOffset = (int)DateTimeOffset.Now.Offset.TotalMinutes;
+            var diffHours = (int)Math.Round((offsetMinutes - localOffset) / 60.0);
+            if (diffHours == 0) return "Local";
+            return diffHours > 0 ? $"+{diffHours}h" : $"{diffHours}h";
+        }
+        return "";
+    }
+
+    private void HandleAddCity(string cityId)
+    {
+        if (!_selectedCityIds.Contains(cityId))
+        {
+            _selectedCityIds.Add(cityId);
+        }
+        _searchQuery = "";
+        _showSearch = false;
+    }
+
+    private void HandleRemoveCity(string cityId)
+    {
+        _selectedCityIds.Remove(cityId);
+    }
+}

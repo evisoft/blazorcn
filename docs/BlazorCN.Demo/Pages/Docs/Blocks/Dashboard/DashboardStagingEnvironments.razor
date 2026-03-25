@@ -1,0 +1,158 @@
+@* ============================================================
+   Block: dashboard-staging-environments
+   Title: Dashboard Staging Environments
+   Description: Animated React staging environment manager block for Next.js with preview branch deployments showing branch names, live URLs, resource usage bars, build status indicators, and expandable deployment details using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Recent deployment activity tracker
+   Dependencies: ButtonCn
+   Source: original/blocks/dashboard/dashboard-staging-environments.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Staging Environments</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_environments.Length environments \u00b7 @_runningCount active
+                </p>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_runningCount running
+                </span>
+                <span class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_failedCount failed
+                </span>
+            </div>
+        </div>
+
+        @* Environments *@
+        <div>
+            @for (var i = 0; i < _environments.Length; i++)
+            {
+                var env = _environments[i];
+                var isExpanded = _expanded == env.Id;
+                var config = _statusConfig[env.Status];
+                var isLast = i == _environments.Length - 1;
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : env.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5">
+                                <LucideGitBranchCn Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                <span class="truncate font-mono font-medium text-sm">@env.Branch</span>
+                            </div>
+                            <p class="mt-0.5 truncate text-muted-foreground text-xs">@env.Url</p>
+                        </div>
+                        <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-[10px] text-muted-foreground">
+                            @env.Initials
+                        </span>
+                        <span class="shrink-0 text-muted-foreground text-xs">
+                            @env.LastActivity
+                        </span>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            @* Last commit *@
+                            <div class="mb-3 rounded-md bg-muted/50 p-3">
+                                <span class="font-medium text-muted-foreground text-xs">
+                                    Last commit
+                                </span>
+                                <p class="mt-1 text-sm">@env.Commit</p>
+                                <p class="mt-0.5 text-muted-foreground text-xs">by @env.Author</p>
+                            </div>
+
+                            @* Resource usage *@
+                            @if (env.Status != "sleeping" && env.Status != "failed")
+                            {
+                                <div class="mb-3 grid grid-cols-2 gap-3">
+                                    <div>
+                                        <div class="mb-1 flex items-center justify-between">
+                                            <span class="text-muted-foreground text-xs">CPU</span>
+                                            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                                @env.Cpu%
+                                            </span>
+                                        </div>
+                                        <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                                            <div class="@(Cn.Merge("h-full rounded-full", GetBarColor(env.Cpu)))"
+                                                 style="@($"width: {env.Cpu}%")"></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="mb-1 flex items-center justify-between">
+                                            <span class="text-muted-foreground text-xs">Memory</span>
+                                            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                                @env.Memory%
+                                            </span>
+                                        </div>
+                                        <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                                            <div class="@(Cn.Merge("h-full rounded-full", GetBarColor(env.Memory)))"
+                                                 style="@($"width: {env.Memory}%")"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            @* Actions *@
+                            <div class="flex items-center gap-2">
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                                    <LucideExternalLinkCn Size="12" Class="size-3" />
+                                    Open
+                                </ButtonCn>
+                                @if (env.Status == "running")
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs text-muted-foreground">
+                                        <LucidePowerOffCn Size="12" Class="size-3" />
+                                        Teardown
+                                    </ButtonCn>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded;
+
+    private record StagingEnv(string Id, string Branch, string Url, string Status, int Cpu, int Memory, string LastActivity, string Commit, string Author, string Initials);
+    private record StatusStyleConfig(string Dot, string Label);
+
+    private static string GetBarColor(int value) =>
+        value >= 80 ? "bg-red-500/60"
+        : value >= 60 ? "bg-amber-500/60"
+        : "bg-emerald-500/40";
+
+    private static readonly int _runningCount = _environments.Count(e => e.Status == "running");
+    private static readonly int _failedCount = _environments.Count(e => e.Status == "failed");
+
+    private static readonly Dictionary<string, StatusStyleConfig> _statusConfig = new()
+    {
+        ["running"] = new("bg-emerald-500", "Running"),
+        ["building"] = new("bg-amber-500", "Building"),
+        ["sleeping"] = new("bg-muted-foreground/40", "Sleeping"),
+        ["failed"] = new("bg-red-500", "Failed"),
+    };
+
+    private static readonly StagingEnv[] _environments =
+    [
+        new("e1", "feat/checkout-redesign", "checkout-redesign.preview.acme.com", "running", 34, 52, "4 min ago", "fix: cart total calculation with discounts", "Sarah Chen", "SC"),
+        new("e2", "feat/ai-search", "ai-search.preview.acme.com", "building", 78, 61, "1 min ago", "feat: add embedding-based search results", "Alex Rivera", "AR"),
+        new("e3", "fix/auth-token-refresh", "auth-token.preview.acme.com", "running", 12, 28, "22 min ago", "fix: handle expired refresh tokens gracefully", "Jordan Park", "JP"),
+        new("e4", "feat/team-workspaces", "team-ws.preview.acme.com", "sleeping", 0, 8, "3 hours ago", "feat: workspace invitation flow", "Morgan Lee", "ML"),
+        new("e5", "fix/stripe-webhooks", "stripe-wh.preview.acme.com", "failed", 0, 0, "1 hour ago", "fix: webhook signature validation error", "Priya Sharma", "PS"),
+        new("e6", "feat/dashboard-v2", "dashboard-v2.preview.acme.com", "running", 45, 71, "8 min ago", "feat: add analytics widget grid layout", "Tom Bradley", "TB"),
+    ];
+}

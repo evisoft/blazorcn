@@ -12,8 +12,8 @@ public class BadgeCnTests : BunitContext
         var cut = Render<BadgeCn>(p => p.AddChildContent("New"));
         var span = cut.Find("span");
         span.GetAttribute("data-slot").Should().Be("badge");
-        span.ClassList.Should().Contain("bg-primary");
-        span.ClassList.Should().Contain("text-primary-foreground");
+        span.ClassList.Should().Contain("cn-badge");
+        span.ClassList.Should().Contain("cn-badge-variant-default");
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class BadgeCnTests : BunitContext
             .Add(c => c.Variant, BadgeVariant.Destructive)
             .AddChildContent("Error"));
         var span = cut.Find("span");
-        span.ClassList.Should().Contain("bg-destructive");
+        span.ClassList.Should().Contain("cn-badge-variant-destructive");
         span.GetAttribute("data-variant").Should().Be("destructive");
     }
 
@@ -34,8 +34,7 @@ public class BadgeCnTests : BunitContext
             .Add(c => c.Variant, BadgeVariant.Outline)
             .AddChildContent("Outline"));
         var span = cut.Find("span");
-        span.ClassList.Should().Contain("border-border");
-        span.ClassList.Should().Contain("text-foreground");
+        span.ClassList.Should().Contain("cn-badge-variant-outline");
     }
 
     [Fact]
@@ -65,7 +64,6 @@ public class BadgeCnTests : BunitContext
             .Add(c => c.Variant, BadgeVariant.Secondary)
             .AddChildContent("Sec"));
         var span = cut.Find("span");
-        span.ClassList.Should().Contain("bg-secondary");
-        span.ClassList.Should().Contain("text-secondary-foreground");
+        span.ClassList.Should().Contain("cn-badge-variant-secondary");
     }
 }

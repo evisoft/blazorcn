@@ -1,0 +1,170 @@
+@* ============================================================
+   Block: dashboard-latency-map
+   Title: Dashboard Latency Map
+   Description: Animated React regional latency monitoring dashboard block for Next.js with city-level p50 and p99 response times, geographic region grouping, latency threshold indicators, expandable endpoint breakdowns, and staggered framer-motion entrance animations using shadcn/ui and Tailwind CSS
+   Long Description: API endpoint health and latency metrics
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-latency-map.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideGlobeCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Latency Map</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        Regional response times \u2014 @_regions.Length locations
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @* Summary stats *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            <div>
+                <span class="text-muted-foreground text-xs">Global p50</span>
+                <p class="@(Cn.Merge("font-semibold text-2xl tabular-nums", GetLatencyColor(_globalP50)))">
+                    @(_globalP50)ms
+                </p>
+            </div>
+            <div>
+                <span class="text-muted-foreground text-xs">Slowest region</span>
+                <p class="font-semibold text-2xl tabular-nums text-red-600 dark:text-red-400">
+                    @_worstCity
+                </p>
+            </div>
+            <div>
+                <span class="text-muted-foreground text-xs">Total RPM</span>
+                <p class="font-semibold text-2xl tabular-nums">@(((double)_totalRpm / 1000).ToString("F1"))K</p>
+            </div>
+        </div>
+
+        @* Regions *@
+        <div>
+            @for (var i = 0; i < _regions.Length; i++)
+            {
+                var region = _regions[i];
+                var isExpanded = _expanded == region.Id;
+                var isLast = i == _regions.Length - 1;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : region.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", GetLatencyDot(region.P99)))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">
+                                    @region.City, @region.Country
+                                </span>
+                                <span class="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                    @region.RegionCode
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-4">
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">p50</span>
+                                <span class="@(Cn.Merge("block font-mono text-xs font-medium tabular-nums", GetLatencyColor(region.P50)))">
+                                    @(region.P50)ms
+                                </span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-muted-foreground text-[10px]">p99</span>
+                                <span class="@(Cn.Merge("block font-mono text-xs font-medium tabular-nums", GetLatencyColor(region.P99)))">
+                                    @(region.P99)ms
+                                </span>
+                            </div>
+                            <span class="w-14 text-right font-mono text-muted-foreground text-[10px] tabular-nums">
+                                @region.RequestsPerMin.ToString("N0") rpm
+                            </span>
+                            <LucideChevronRightCn Class="@(Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                        </div>
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Endpoint breakdown
+                                </span>
+                                <div class="space-y-2">
+                                    @foreach (var ep in region.Endpoints)
+                                    {
+                                        <div class="flex items-center gap-3">
+                                            <span class="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
+                                                @ep.Path
+                                            </span>
+                                            <span class="@(Cn.Merge("w-14 text-right font-mono text-xs tabular-nums", GetLatencyColor(ep.P50)))">
+                                                @(ep.P50)ms
+                                            </span>
+                                            <span class="@(Cn.Merge("w-16 text-right font-mono text-xs tabular-nums", GetLatencyColor(ep.P99)))">
+                                                @(ep.P99)ms
+                                            </span>
+                                            <span class="w-14 text-right font-mono text-muted-foreground text-[10px] tabular-nums">
+                                                @ep.Rpm.ToString("N0")
+                                            </span>
+                                        </div>
+                                    }
+                                    <div class="flex items-center gap-3 border-t pt-2 text-muted-foreground text-[10px]">
+                                        <span class="flex-1"></span>
+                                        <span class="w-14 text-right">p50</span>
+                                        <span class="w-16 text-right">p99</span>
+                                        <span class="w-14 text-right">rpm</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "r4";
+
+    private record EndpointLatency(string Path, int P50, int P99, int Rpm);
+    private record Region(string Id, string City, string Country, string RegionCode, int P50, int P99, int RequestsPerMin, EndpointLatency[] Endpoints);
+
+    private static string GetLatencyColor(int ms)
+    {
+        if (ms > 500) return "text-red-600 dark:text-red-400";
+        if (ms > 250) return "text-amber-600 dark:text-amber-400";
+        if (ms > 100) return "text-foreground";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+
+    private static string GetLatencyDot(int ms)
+    {
+        if (ms > 500) return "bg-red-500";
+        if (ms > 250) return "bg-amber-500";
+        if (ms > 100) return "bg-foreground/40";
+        return "bg-emerald-500";
+    }
+
+    private static readonly int _globalP50 = (int)Math.Round(_regions.Average(r => r.P50));
+    private static readonly string _worstCity = _regions.OrderByDescending(r => r.P99).First().City;
+    private static readonly int _totalRpm = _regions.Sum(r => r.RequestsPerMin);
+
+    private static readonly Region[] _regions =
+    [
+        new("r1", "Ashburn", "US", "us-east-1", 12, 48, 24800,
+            [new("/api/v2/users", 8, 32, 8400), new("/api/v2/orders", 14, 58, 6200), new("/api/v2/search", 18, 72, 10200)]),
+        new("r2", "Frankfurt", "DE", "eu-west-1", 34, 124, 18400,
+            [new("/api/v2/users", 28, 98, 6100), new("/api/v2/orders", 38, 142, 4800), new("/api/v2/search", 42, 168, 7500)]),
+        new("r3", "Tokyo", "JP", "ap-northeast-1", 86, 284, 12600,
+            [new("/api/v2/users", 72, 210, 4200), new("/api/v2/orders", 94, 320, 3100), new("/api/v2/search", 104, 380, 5300)]),
+        new("r4", "Sao Paulo", "BR", "sa-east-1", 142, 480, 6800,
+            [new("/api/v2/users", 118, 390, 2400), new("/api/v2/orders", 156, 520, 1800), new("/api/v2/search", 178, 610, 2600)]),
+        new("r5", "Mumbai", "IN", "ap-south-1", 168, 542, 9200,
+            [new("/api/v2/users", 140, 420, 3200), new("/api/v2/orders", 182, 580, 2400), new("/api/v2/search", 198, 680, 3600)]),
+        new("r6", "Sydney", "AU", "ap-southeast-2", 124, 398, 4200,
+            [new("/api/v2/users", 102, 320, 1400), new("/api/v2/orders", 138, 440, 1100), new("/api/v2/search", 152, 490, 1700)]),
+    ];
+}

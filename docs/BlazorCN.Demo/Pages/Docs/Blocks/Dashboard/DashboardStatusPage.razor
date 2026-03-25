@@ -1,0 +1,165 @@
+@* ============================================================
+   Block: dashboard-status-page
+   Title: Dashboard Status Page
+   Description: Animated React public status page block for Next.js with service component health indicators, active incident timeline, overall uptime percentage, and 30-day uptime history bars using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Service availability with 30-day bar charts
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-status-page.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Overall status banner *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">System Status</span>
+                <p class="@(Cn.Merge("mt-0.5 font-medium text-xs", _overallStatus.Color))">@_overallStatus.Label</p>
+            </div>
+            <div class="text-right">
+                <span class="font-semibold text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
+                    99.94%
+                </span>
+                <p class="mt-0.5 text-muted-foreground text-xs">30-day uptime</p>
+            </div>
+        </div>
+
+        @* Service components *@
+        <div>
+            @foreach (var service in _services)
+            {
+                var config = _statusConfig[service.Status];
+                <div class="border-b px-4 py-3">
+                    <div class="flex items-center gap-3">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <span class="min-w-0 flex-1 font-medium text-sm">@service.Name</span>
+                        <span class="text-muted-foreground text-xs">@config.Label</span>
+                        <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                            @service.Uptime%
+                        </span>
+                    </div>
+
+                    @* 30-day uptime bars *@
+                    <div class="mt-2 flex gap-px pl-5">
+                        @foreach (var day in service.UptimeHistory)
+                        {
+                            var barColor = day >= 1 ? "bg-emerald-500" : day >= 0.5 ? "bg-amber-500" : "bg-red-500";
+                            var opacity = day >= 1 ? "0.4" : "0.8";
+                            <div class="@(Cn.Merge("h-3 flex-1 rounded-[1px]", barColor))"
+                                 style="@($"opacity: {opacity}")"></div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Active incidents *@
+        @if (_incidents.Length > 0)
+        {
+            <div class="border-b bg-muted/30 px-4 py-2">
+                <span class="font-medium text-muted-foreground text-xs">Active Incidents</span>
+            </div>
+
+            @foreach (var incident in _incidents)
+            {
+                var isExpanded = _expandedIncident == incident.Id;
+                <div>
+                    <button
+                        type="button"
+                        @onclick="@(() => _expandedIncident = isExpanded ? null : incident.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", _severityDot[incident.Severity]))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@incident.Title</span>
+                            <div class="mt-0.5 flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">
+                                    @incident.Severity
+                                </BadgeCn>
+                                <span class="text-muted-foreground text-xs">
+                                    @string.Join(", ", incident.AffectedServices)
+                                </span>
+                            </div>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="space-y-2 px-4 pb-4 pl-9">
+                                @for (var ui = 0; ui < incident.Updates.Length; ui++)
+                                {
+                                    var update = incident.Updates[ui];
+                                    <div class="rounded-md bg-muted/50 p-3">
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-medium text-xs">@update.Status</span>
+                                            <span class="text-muted-foreground text-xs">
+                                                @update.Timestamp
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-muted-foreground text-sm leading-relaxed">
+                                            @update.Message
+                                        </p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    private string? _expandedIncident = "i1";
+
+    private record ServiceComponent(string Id, string Name, string Status, double Uptime, double[] UptimeHistory);
+    private record IncidentUpdate(string Status, string Message, string Timestamp);
+    private record IncidentData(string Id, string Title, string Severity, string[] AffectedServices, IncidentUpdate[] Updates);
+    private record StatusConfig(string Dot, string Label);
+    private record OverallStatus(string Label, string Color);
+
+    private OverallStatus _overallStatus
+    {
+        get
+        {
+            if (_services.Any(s => s.Status == "outage")) return new OverallStatus("Major Outage", "text-red-600 dark:text-red-400");
+            if (_services.Any(s => s.Status == "degraded")) return new OverallStatus("Partial Disruption", "text-amber-600 dark:text-amber-400");
+            return new OverallStatus("All Systems Operational", "text-emerald-600 dark:text-emerald-400");
+        }
+    }
+
+    private readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["operational"] = new StatusConfig("bg-emerald-500", "Operational"),
+        ["degraded"] = new StatusConfig("bg-amber-500", "Degraded"),
+        ["outage"] = new StatusConfig("bg-red-500", "Outage"),
+        ["maintenance"] = new StatusConfig("bg-blue-500", "Maintenance")
+    };
+
+    private readonly Dictionary<string, string> _severityDot = new()
+    {
+        ["minor"] = "bg-amber-500",
+        ["major"] = "bg-red-500",
+        ["critical"] = "bg-red-500"
+    };
+
+    private readonly ServiceComponent[] _services = new[]
+    {
+        new ServiceComponent("s1", "Web Application", "operational", 99.99, new[] { 1.0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.0 }),
+        new ServiceComponent("s2", "REST API", "operational", 99.97, new[] { 1.0, 1, 1, 1, 1, 1, 1, 0.5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.0 }),
+        new ServiceComponent("s3", "Database Cluster", "operational", 99.99, new[] { 1.0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.0 }),
+        new ServiceComponent("s4", "Authentication", "degraded", 99.82, new[] { 1.0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.5, 1, 0.5, 0.5 }),
+        new ServiceComponent("s5", "CDN / Static Assets", "operational", 100.0, new[] { 1.0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.0 }),
+        new ServiceComponent("s6", "Webhooks", "operational", 99.91, new[] { 1.0, 1, 1, 0.0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.0 })
+    };
+
+    private readonly IncidentData[] _incidents = new[]
+    {
+        new IncidentData("i1", "Elevated authentication latency", "minor", new[] { "Authentication" }, new[]
+        {
+            new IncidentUpdate("Investigating", "We are investigating reports of increased login times for some users.", "14 min ago"),
+            new IncidentUpdate("Identified", "The issue has been traced to a slow database replica. Failover in progress.", "8 min ago")
+        })
+    };
+}

@@ -13,22 +13,31 @@
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
     [Parameter] public bool Open { get; set; }
     [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public bool Multiple { get; set; }
+    [Parameter] public List<string> SelectedValues { get; set; } = [];
+    [Parameter] public EventCallback<List<string>> SelectedValuesChanged { get; set; }
 
     internal bool IsOpen { get; private set; }
     internal ElementReference TriggerElement { get; set; }
     internal string? SelectedValue { get; private set; }
     internal string? SelectedText { get; private set; }
+    internal IReadOnlyList<string> SelectedItems => _selectedItems;
+
+    private List<string> _selectedItems = [];
 
     protected override void OnInitialized()
     {
         IsOpen = Open;
         SelectedValue = Value;
+        _selectedItems = [..SelectedValues];
     }
 
     protected override void OnParametersSet()
     {
-        IsOpen = Open;
+        if (Open != IsOpen)
+            IsOpen = Open;
         SelectedValue = Value;
+        _selectedItems = [..SelectedValues];
     }
 
     internal async Task SetOpen(bool open)
@@ -45,10 +54,45 @@
 
     internal async Task SelectItem(string value, string? text)
     {
-        SelectedValue = value;
-        SelectedText = text;
-        await ValueChanged.InvokeAsync(value);
-        await SetOpen(false);
+        if (Multiple)
+        {
+            if (_selectedItems.Contains(value))
+                _selectedItems.Remove(value);
+            else
+                _selectedItems.Add(value);
+            await SelectedValuesChanged.InvokeAsync([.._selectedItems]);
+            StateHasChanged();
+        }
+        else
+        {
+            SelectedValue = value;
+            SelectedText = text;
+            await ValueChanged.InvokeAsync(value);
+            await SetOpen(false);
+        }
+    }
+
+    internal async Task ClearSelection()
+    {
+        if (Multiple)
+        {
+            _selectedItems.Clear();
+            await SelectedValuesChanged.InvokeAsync([.._selectedItems]);
+        }
+        else
+        {
+            SelectedValue = null;
+            SelectedText = null;
+            await ValueChanged.InvokeAsync(null);
+        }
+        StateHasChanged();
+    }
+
+    internal bool IsItemSelected(string value)
+    {
+        if (Multiple)
+            return _selectedItems.Contains(value);
+        return SelectedValue == value;
     }
 
     internal void RegisterItemText(string value, string? text)

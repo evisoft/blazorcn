@@ -1,0 +1,106 @@
+@* ============================================================
+   Block: carousel-migration-steps
+   Title: Carousel Migration Steps
+   Description: Database migration wizard carousel with step progress indicators, SQL code preview blocks, risk level dots, estimated duration, and rollback availability.
+   Dependencies: CarouselCn, CarouselContentCn, CarouselItemCn, CarouselNextCn, CarouselPreviousCn, ButtonCn
+   Source: original/blocks/carousel/carousel-migration-steps.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideDatabaseCn Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Migration wizard</span>
+            </div>
+            <span class="text-xs text-muted-foreground">
+                Step @(_currentStep + 1) of @_steps.Length
+            </span>
+        </div>
+
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="h-1.5 flex-1 rounded-full bg-muted">
+                    <div class="h-full rounded-full bg-foreground" style="@($"width: {(double)_completedCount / _steps.Length * 100:F0}%")"></div>
+                </div>
+                <span class="font-semibold text-xs tabular-nums">@_completedCount/@_steps.Length</span>
+            </div>
+        </div>
+
+        <div class="px-4 py-4">
+            <CarouselCn>
+                <CarouselContentCn Class="-ml-3">
+                    @for (var i = 0; i < _steps.Length; i++)
+                    {
+                        var step = _steps[i];
+                        var idx = i;
+                        <CarouselItemCn Class="basis-full pl-3">
+                            <div class="rounded-md border">
+                                <div class="flex items-center justify-between border-b px-4 py-3">
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium", step.Status == "completed" ? "bg-foreground text-background" : step.Status == "current" ? "border-2 border-foreground" : "border border-muted-foreground/30")">
+                                            @(step.Status == "completed" ? "\u2713" : $"{idx + 1}")
+                                        </span>
+                                        <span class="font-medium text-sm">@step.Title</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", _riskDot[step.Risk])"></span>
+                                        <span class="text-xs text-muted-foreground">@_riskLabel[step.Risk]</span>
+                                    </div>
+                                </div>
+                                <div class="px-4 py-3">
+                                    <p class="mb-3 text-xs text-muted-foreground leading-relaxed">@step.Description</p>
+                                    <div class="rounded-md bg-zinc-950 p-3">
+                                        <pre class="overflow-x-auto font-mono text-xs text-zinc-100 leading-relaxed">@step.Sql</pre>
+                                    </div>
+                                    <div class="mt-3 flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-xs text-muted-foreground">Duration: @step.EstimatedDuration</span>
+                                            <span class="text-xs text-muted-foreground">@(step.HasRollback ? "Rollback available" : "No rollback")</span>
+                                        </div>
+                                        @if (step.Status == "current")
+                                        {
+                                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">Run step</ButtonCn>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </CarouselItemCn>
+                    }
+                </CarouselContentCn>
+                <div class="mt-3 flex items-center justify-center gap-2">
+                    <CarouselPreviousCn Class="static translate-y-0" />
+                    <CarouselNextCn Class="static translate-y-0" />
+                </div>
+            </CarouselCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record MigrationStep(string Id, string Title, string Description, string Sql, string EstimatedDuration, string Risk, bool HasRollback, string Status);
+
+    private int _currentStep = 2;
+
+    private static readonly Dictionary<string, string> _riskDot = new()
+    {
+        ["low"] = "bg-emerald-500", ["medium"] = "bg-amber-500", ["high"] = "bg-red-500"
+    };
+
+    private static readonly Dictionary<string, string> _riskLabel = new()
+    {
+        ["low"] = "Low risk", ["medium"] = "Medium risk", ["high"] = "High risk"
+    };
+
+    private readonly MigrationStep[] _steps =
+    [
+        new("s1", "Create users_v2 table", "Creates the new users table with updated schema including JSON metadata column and composite indexes", "CREATE TABLE users_v2 (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  email VARCHAR(255) UNIQUE NOT NULL,\n  metadata JSONB DEFAULT '{}',\n  created_at TIMESTAMPTZ DEFAULT now()\n);", "~2s", "low", true, "completed"),
+        new("s2", "Migrate existing user data", "Copies all records from users to users_v2 with data transformation for the new metadata column format", "INSERT INTO users_v2 (id, email, metadata, created_at)\nSELECT id, email,\n  jsonb_build_object('legacy', true, 'plan', plan),\n  created_at\nFROM users;", "~45s", "high", true, "completed"),
+        new("s3", "Add workspace_id foreign key", "Adds a nullable foreign key column referencing the workspaces table with cascade delete behavior", "ALTER TABLE users_v2\n  ADD COLUMN workspace_id UUID\n  REFERENCES workspaces(id)\n  ON DELETE CASCADE;", "~3s", "medium", true, "current"),
+        new("s4", "Backfill workspace assignments", "Updates workspace_id for all users based on existing workspace_members join table relationships", "UPDATE users_v2 u\nSET workspace_id = wm.workspace_id\nFROM workspace_members wm\nWHERE wm.user_id = u.id;", "~30s", "medium", true, "pending"),
+        new("s5", "Create composite indexes", "Adds performance indexes on frequently queried column combinations for the dashboard queries", "CREATE INDEX CONCURRENTLY idx_users_v2_ws\n  ON users_v2(workspace_id, created_at DESC);", "~15s", "low", true, "pending"),
+        new("s6", "Drop legacy users table", "Removes the original users table after verifying all data has been successfully migrated to users_v2", "-- Verify row counts match before dropping\nDROP TABLE users;\nALTER TABLE users_v2 RENAME TO users;", "~5s", "high", false, "pending")
+    ];
+
+    private int _completedCount => _steps.Count(s => s.Status == "completed");
+}

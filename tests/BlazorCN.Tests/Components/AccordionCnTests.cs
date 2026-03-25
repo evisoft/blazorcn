@@ -95,4 +95,26 @@ public class AccordionCnTests : BunitContext
         trigger.Click();
         trigger.GetAttribute("aria-expanded").Should().Be("true");
     }
+
+    [Fact]
+    public void AccordionContent_AriaLabelledby_Matches_Trigger_Id()
+    {
+        var cut = Render<AccordionCn>(p => p
+            .AddChildContent<AccordionItemCn>(item => item
+                .Add(c => c.DefaultOpen, true)
+                .AddChildContent(builder =>
+                {
+                    builder.OpenComponent<AccordionTriggerCn>(0);
+                    builder.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b => b.AddContent(0, "Section 1")));
+                    builder.CloseComponent();
+                    builder.OpenComponent<AccordionContentCn>(2);
+                    builder.AddAttribute(3, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b => b.AddContent(0, "Content 1")));
+                    builder.CloseComponent();
+                })));
+        var trigger = cut.Find("[data-slot='accordion-trigger']");
+        var content = cut.Find("[data-slot='accordion-content']");
+        var triggerId = trigger.GetAttribute("id");
+        triggerId.Should().NotBeNullOrEmpty();
+        content.GetAttribute("aria-labelledby").Should().Be(triggerId);
+    }
 }

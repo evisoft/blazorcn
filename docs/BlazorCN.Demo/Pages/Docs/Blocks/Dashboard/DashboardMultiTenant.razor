@@ -1,0 +1,185 @@
+@* ============================================================
+   Block: dashboard-multi-tenant
+   Title: Dashboard Multi Tenant
+   Description: Animated React multi-tenant resource usage dashboard for Next.js with per-tenant quota consumption, storage and compute limits, usage progress bars, and overage alerts using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Resource quota consumption tracking
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-multi-tenant.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideBuildingCn Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Tenant Usage</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-muted-foreground text-xs">@_tenants.Length tenants</span>
+                @if (_exceededCount > 0)
+                {
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @_exceededCount at limit
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Tenant rows *@
+        <div>
+            @for (var i = 0; i < _tenants.Length; i++)
+            {
+                var tenant = _tenants[i];
+                var isExpanded = _expanded == tenant.Id;
+                var isLast = i == _tenants.Length - 1;
+                var config = _statusConfig[tenant.Status];
+                var barPercent = Math.Min(tenant.OverallPercent, 100);
+
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : tenant.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@tenant.Name</span>
+                                <span class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                                    @tenant.Plan
+                                </span>
+                            </div>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @tenant.Users users · @tenant.MonthlySpend/mo
+                            </p>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <div class="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                                <div class="@(Cn.Merge("h-full rounded-full", config.BarColor))"
+                                     style="@($"width: {barPercent}%")">
+                                </div>
+                            </div>
+                            <span class="@(Cn.Merge("w-10 text-right font-mono text-xs tabular-nums", tenant.OverallPercent >= 100 ? "text-red-600 dark:text-red-400" : tenant.OverallPercent >= 85 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"))">
+                                @tenant.OverallPercent%
+                            </span>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-4 pl-9">
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                        Resource breakdown
+                                    </span>
+                                    <div class="space-y-3">
+                                        @foreach (var resource in tenant.Resources)
+                                        {
+                                            var resConfig = _statusConfig[GetStatusFromPercent(resource.Percent)];
+                                            var resBarPercent = Math.Min(resource.Percent, 100);
+                                            <div>
+                                                <div class="flex items-center justify-between">
+                                                    <span class="text-sm">@resource.Name</span>
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-muted-foreground text-xs tabular-nums">
+                                                            @resource.Used
+                                                        </span>
+                                                        <span class="text-muted-foreground text-[10px]">/</span>
+                                                        <span class="text-muted-foreground text-xs tabular-nums">
+                                                            @resource.Limit
+                                                        </span>
+                                                        @if (resource.Percent >= 100)
+                                                        {
+                                                            <BadgeCn Variant="BadgeVariant.Secondary"
+                                                                     Class="font-normal text-[10px] text-red-600 dark:text-red-400">
+                                                                exceeded
+                                                            </BadgeCn>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <div class="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                                                    <div class="@(Cn.Merge("h-full rounded-full transition-all", resConfig.BarColor))"
+                                                         style="@($"width: {resBarPercent}%")">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "t2";
+
+    private record ResourceUsage(string Name, string Used, string Limit, int Percent, string Status);
+    private record TenantData(string Id, string Name, string Plan, int OverallPercent, string Status, string MonthlySpend, int Users, ResourceUsage[] Resources);
+    private record StatusConfig(string Dot, string BarColor);
+
+    private int _exceededCount => _tenants.Count(t => t.Status == "exceeded" || t.Status == "critical");
+
+    private static string GetStatusFromPercent(int percent)
+    {
+        if (percent >= 100) return "exceeded";
+        if (percent >= 85) return "critical";
+        if (percent >= 70) return "warning";
+        return "normal";
+    }
+
+    private readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["normal"] = new StatusConfig("bg-emerald-500", "bg-emerald-500"),
+        ["warning"] = new StatusConfig("bg-amber-500", "bg-amber-500"),
+        ["critical"] = new StatusConfig("bg-red-500", "bg-red-500"),
+        ["exceeded"] = new StatusConfig("bg-red-500", "bg-red-500")
+    };
+
+    private readonly TenantData[] _tenants = new[]
+    {
+        new TenantData("t1", "Acme Corp", "Enterprise", 72, "normal", "$4,200", 148, new[]
+        {
+            new ResourceUsage("API Calls", "7.2M", "10M", 72, "normal"),
+            new ResourceUsage("Storage", "340 GB", "500 GB", 68, "normal"),
+            new ResourceUsage("Compute", "1,420h", "2,000h", 71, "normal"),
+            new ResourceUsage("Bandwidth", "2.1 TB", "3 TB", 70, "normal")
+        }),
+        new TenantData("t2", "TechStart Inc", "Growth", 91, "critical", "$1,850", 42, new[]
+        {
+            new ResourceUsage("API Calls", "4.6M", "5M", 92, "critical"),
+            new ResourceUsage("Storage", "180 GB", "200 GB", 90, "critical"),
+            new ResourceUsage("Compute", "680h", "750h", 91, "critical"),
+            new ResourceUsage("Bandwidth", "920 GB", "1 TB", 92, "critical")
+        }),
+        new TenantData("t3", "DataFlow Labs", "Enterprise", 45, "normal", "$3,600", 86, new[]
+        {
+            new ResourceUsage("API Calls", "4.5M", "10M", 45, "normal"),
+            new ResourceUsage("Storage", "210 GB", "500 GB", 42, "normal"),
+            new ResourceUsage("Compute", "920h", "2,000h", 46, "normal"),
+            new ResourceUsage("Bandwidth", "1.4 TB", "3 TB", 47, "normal")
+        }),
+        new TenantData("t4", "CloudNine SaaS", "Growth", 105, "exceeded", "$2,340", 58, new[]
+        {
+            new ResourceUsage("API Calls", "5.8M", "5M", 116, "exceeded"),
+            new ResourceUsage("Storage", "195 GB", "200 GB", 98, "critical"),
+            new ResourceUsage("Compute", "780h", "750h", 104, "exceeded"),
+            new ResourceUsage("Bandwidth", "840 GB", "1 TB", 84, "warning")
+        }),
+        new TenantData("t5", "Nexus Digital", "Starter", 58, "normal", "$420", 12, new[]
+        {
+            new ResourceUsage("API Calls", "580K", "1M", 58, "normal"),
+            new ResourceUsage("Storage", "28 GB", "50 GB", 56, "normal"),
+            new ResourceUsage("Compute", "145h", "250h", 58, "normal"),
+            new ResourceUsage("Bandwidth", "120 GB", "200 GB", 60, "normal")
+        })
+    };
+}

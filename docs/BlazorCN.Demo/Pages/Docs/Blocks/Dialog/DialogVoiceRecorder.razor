@@ -1,0 +1,183 @@
+@* ========================================
+   Block: dialog-voice-recorder
+   Title: Dialog Voice Recorder
+   Description: Voice recorder dialog with recording controls, waveform visualization, timer display, playback preview, and save options
+   Long Description: Voice command dialog with listening animation, transcript display, and action confirmation for React voice apps
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCheckCn, LucideMicCn, LucidePauseCn, LucidePlayCn, LucideRotateCcwCn, LucideSquareCn
+   Source: original/blocks/dialog/dialog-voice-recorder.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideMicCn Size="16" Class="mr-2 size-4" />
+                Record Voice
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Style="max-width: 384px">
+        @if (_saved)
+        {
+            @* Saved confirmation *@
+            <div class="flex flex-col items-center justify-center py-6 text-center">
+                <LucideCheckCn Size="32" Class="size-8 text-primary" />
+                <h3 class="mt-4 text-lg font-medium">Recording Saved</h3>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    @(string.IsNullOrEmpty(_fileName) ? "Voice memo" : _fileName) &middot; @FormatTime(_duration)
+                </p>
+                <ButtonCn Class="mt-6" @onclick="HandleClose">
+                    Done
+                </ButtonCn>
+            </div>
+        }
+        else
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn>Voice Recorder</DialogTitleCn>
+                <DialogDescriptionCn>Record a voice memo.</DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="py-6">
+                @* Timer and controls *@
+                <div class="flex flex-col items-center">
+                    <p class="text-4xl font-mono font-semibold tabular-nums">@FormatTime(_duration)</p>
+
+                    @* Waveform *@
+                    <div class="flex items-center justify-center gap-0.5 h-12 my-6">
+                        @for (int i = 0; i < _waveformBars.Length; i++)
+                        {
+                            var height = _waveformBars[i];
+                            <div class="@Cn.Merge("w-1.5 rounded-full transition-all duration-100", _state == "recording" ? "bg-primary" : "bg-muted-foreground/30")"
+                                 style="height: @(height)%"></div>
+                        }
+                    </div>
+
+                    @* Main control button *@
+                    @if (_state == "idle")
+                    {
+                        <ButtonCn Class="h-14 w-14 rounded-full" Size="ButtonSize.Lg"
+                                  @onclick="StartRecording">
+                            <LucideMicCn Size="24" Class="size-6" />
+                        </ButtonCn>
+                    }
+                    else if (_state == "recording")
+                    {
+                        <ButtonCn Class="h-14 w-14 rounded-full" Size="ButtonSize.Lg"
+                                  Variant="ButtonVariant.Destructive"
+                                  @onclick="StopRecording">
+                            <LucideSquareCn Size="20" Class="size-5" />
+                        </ButtonCn>
+                    }
+                    else if (_state == "recorded" || _state == "playing")
+                    {
+                        <div class="flex items-center gap-3">
+                            <ButtonCn Class="h-10 w-10 rounded-full" Size="ButtonSize.Icon"
+                                      Variant="ButtonVariant.Outline"
+                                      @onclick="DiscardRecording">
+                                <LucideRotateCcwCn Size="16" Class="size-4" />
+                            </ButtonCn>
+                            <ButtonCn Class="h-14 w-14 rounded-full" Size="ButtonSize.Lg"
+                                      @onclick="@(() => _state = _state == "playing" ? "recorded" : "playing")">
+                                @if (_state == "playing")
+                                {
+                                    <LucidePauseCn Size="24" Class="size-6" />
+                                }
+                                else
+                                {
+                                    <LucidePlayCn Size="24" Class="size-6 ml-0.5" />
+                                }
+                            </ButtonCn>
+                            <div class="w-10"></div>
+                        </div>
+                    }
+                </div>
+
+                @* File name input *@
+                @if (_state == "recorded" || _state == "playing")
+                {
+                    <div class="mt-6 space-y-2">
+                        <LabelCn Class="text-sm" For="filename">Name (optional)</LabelCn>
+                        <InputCn Id="filename"
+                                 @bind-Value="_fileName"
+                                 Placeholder="Voice memo" />
+                    </div>
+                }
+            </div>
+
+            <DialogFooterCn>
+                @if (_state == "idle")
+                {
+                    <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">Cancel</ButtonCn>
+                }
+                else if (_state == "recording")
+                {
+                    <ButtonCn Variant="ButtonVariant.Outline" @onclick="DiscardRecording">Cancel</ButtonCn>
+                }
+                else if (_state == "recorded" || _state == "playing")
+                {
+                    <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">Cancel</ButtonCn>
+                    <ButtonCn @onclick="SaveRecording">Save</ButtonCn>
+                }
+            </DialogFooterCn>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _state = "idle"; // idle, recording, recorded, playing
+    private int _duration;
+    private string _fileName = "";
+    private bool _saved;
+
+    // Static waveform bars for display
+    private static readonly int[] _idleBars = { 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10 };
+    private static readonly int[] _recordingBars = { 45, 72, 33, 88, 55, 67, 40, 90, 35, 78, 50, 65, 42, 85, 58, 70 };
+    private static readonly int[] _recordedBars = { 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25 };
+
+    private int[] _waveformBars = _idleBars;
+
+    private static string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    private void StartRecording()
+    {
+        _state = "recording";
+        _duration = 5; // Show a realistic static snapshot at 5 seconds
+        _waveformBars = _recordingBars;
+    }
+
+    private void StopRecording()
+    {
+        _state = "recorded";
+        _waveformBars = _recordedBars;
+    }
+
+    private void DiscardRecording()
+    {
+        _state = "idle";
+        _duration = 0;
+        _fileName = "";
+        _waveformBars = _idleBars;
+    }
+
+    private void SaveRecording()
+    {
+        _saved = true;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _state = "idle";
+        _duration = 0;
+        _fileName = "";
+        _waveformBars = _idleBars;
+        _saved = false;
+    }
+}

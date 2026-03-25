@@ -1,0 +1,145 @@
+@* ===========================================================
+   Block: ai-rag-search
+   Title: Ai Rag Search
+   Description: AI retrieval-augmented generation search with document chunks, relevance scores, and synthesized answers with inline citations
+   Dependencies: BadgeCn, ButtonCn, InputCn, LucideCheckCn, LucideChevronRightCn, LucideCopyCn, LucideSearchCn
+   Source: original/blocks/ai/ai-rag-search.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Search input *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideSearchCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+            <InputCn @bind-Value="_query"
+                     Placeholder="Ask a question about your documents..."
+                     Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 shrink-0 text-xs">
+                Search
+            </ButtonCn>
+        </div>
+
+        @* Results summary *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <span class="text-xs text-muted-foreground">@_chunks.Length chunks retrieved</span>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="text-xs text-muted-foreground">Answer synthesized</span>
+        </div>
+
+        @* Synthesized answer *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2 flex items-center justify-between">
+                <span class="text-xs font-medium text-muted-foreground">Synthesized answer</span>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs"
+                          @onclick="HandleCopy">
+                    @if (_copied)
+                    {
+                        <LucideCheckCn Size="16" Class="size-3" />
+                        <text>Copied</text>
+                    }
+                    else
+                    {
+                        <LucideCopyCn Size="16" Class="size-3" />
+                        <text>Copy</text>
+                    }
+                </ButtonCn>
+            </div>
+            <div class="rounded-md bg-muted/50 p-3">
+                @foreach (var paragraph in _answerParagraphs)
+                {
+                    <p class="text-sm leading-relaxed [&:not(:first-child)]:mt-3">@paragraph</p>
+                }
+            </div>
+        </div>
+
+        @* Retrieved chunks *@
+        <div>
+            @for (var i = 0; i < _chunks.Length; i++)
+            {
+                var chunk = _chunks[i];
+                var isExpanded = _expanded == chunk.Id;
+                var isLast = i == _chunks.Length - 1;
+                var chunkId = chunk.Id;
+                <div class="@(!isLast ? "border-b" : "")">
+                    <button type="button"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => _expanded = isExpanded ? null : chunkId)">
+                        <span class="flex h-5 shrink-0 items-center rounded bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
+                            @chunk.Relevance%
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@chunk.Title</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">Page @chunk.Page</p>
+                        </div>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-[4.5rem]">
+                            <p class="text-sm leading-relaxed text-muted-foreground">
+                                @RenderHighlightedContent(chunk)
+                            </p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DocumentChunk(string Id, string Title, string Content, int Relevance, int Page, string Highlight);
+
+    private static readonly DocumentChunk[] _chunks =
+    {
+        new("1", "React Server Components RFC",
+            "Server Components allow developers to build apps that span the server and client, combining the rich interactivity of client-side apps with the improved performance of traditional server rendering.",
+            96, 12, "Server Components"),
+        new("2", "Next.js App Router Documentation",
+            "The App Router uses React Server Components by default, enabling you to easily render components on the server and reduce the amount of JavaScript sent to the client.",
+            91, 3, "React Server Components by default"),
+        new("3", "Vercel AI SDK Guide",
+            "When building AI applications with Server Components, you can stream responses from the server directly to the client without needing client-side JavaScript for the initial render.",
+            84, 27, "stream responses from the server"),
+        new("4", "React 19 Release Notes",
+            "React 19 stabilizes Server Components and introduces the use() hook for reading resources like promises and context during render, simplifying data fetching patterns.",
+            78, 1, "stabilizes Server Components")
+    };
+
+    private static readonly string[] _answerParagraphs =
+    {
+        "React Server Components (RSC) fundamentally change how React applications handle rendering by allowing components to execute on the server [1].",
+        "Unlike traditional SSR, Server Components never ship JavaScript to the client \u2014 they render on the server and send only the resulting UI. This reduces bundle size significantly and improves initial load performance [2].",
+        "Key benefits include: direct database access from components without API routes, zero client-side JavaScript for static content, streaming support for progressive rendering [3], and automatic code splitting at the component boundary.",
+        "React 19 officially stabilized the Server Components API and introduced complementary features like the use() hook for resource reading [4]."
+    };
+
+    private string _query = "How do React Server Components work?";
+    private string? _expanded = "1";
+    private bool _copied;
+
+    private async Task HandleCopy()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+
+    private static RenderFragment RenderHighlightedContent(DocumentChunk chunk) => builder =>
+    {
+        var parts = chunk.Content.Split(chunk.Highlight);
+        for (var i = 0; i < parts.Length; i++)
+        {
+            builder.AddContent(i * 3, parts[i]);
+            if (i < parts.Length - 1)
+            {
+                builder.OpenElement(i * 3 + 1, "span");
+                builder.AddAttribute(i * 3 + 2, "class", "rounded bg-amber-500/10 px-0.5 font-medium text-foreground");
+                builder.AddContent(i * 3 + 3, chunk.Highlight);
+                builder.CloseElement();
+            }
+        }
+    };
+}

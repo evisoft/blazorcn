@@ -56,6 +56,8 @@ public static partial class Cn
 
     private static string? GetBaseUtilityKey(string baseClass)
     {
+        if (baseClass.StartsWith('!'))
+            baseClass = baseClass[1..];
         var arbitraryMatch = ArbitraryRegex().Match(baseClass);
         if (arbitraryMatch.Success)
             return arbitraryMatch.Groups[1].Value;

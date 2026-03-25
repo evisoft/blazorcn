@@ -1,0 +1,141 @@
+@* ===========================================================
+   Block: ai-prompt-with-mentions
+   Title: Ai Prompt With Mentions
+   Description: AI prompt with @@mentions, inline context badges, and autocomplete popover
+   Dependencies: ButtonCn, LucideArrowUpCn, LucideBookOpenCn, LucideCodeCn, LucideDatabaseCn, LucideFileCn, LucideGlobeCn, LucideSearchCn, LucideXCn
+   Source: original/blocks/ai/ai-prompt-with-mentions.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Mention badges *@
+        @if (_mentions.Count > 0)
+        {
+            <div class="flex flex-wrap items-center gap-1.5 border-b px-4 py-3">
+                <span class="text-xs font-medium text-muted-foreground">Context:</span>
+                @foreach (var mention in _mentions.ToList())
+                {
+                    var m = mention;
+                    <span class="flex h-6 items-center gap-1 rounded border bg-muted/50 pl-1.5 pr-1 text-xs">
+                        @GetMentionIcon(m.Type)
+                        <span>@m.Label</span>
+                        <button type="button"
+                                class="ml-0.5 rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                                @onclick="@(() => _mentions.Remove(m))">
+                            <LucideXCn Size="16" Class="size-2.5" />
+                        </button>
+                    </span>
+                }
+            </div>
+        }
+
+        @* Textarea *@
+        <div class="relative px-4 py-3">
+            <textarea @bind="_input" @bind:event="oninput"
+                      placeholder="Ask a question... Type &quot;@@&quot; to add context sources"
+                      rows="3"
+                      class="min-h-[72px] max-h-40 w-full resize-none border-0 bg-transparent p-0 text-sm shadow-none outline-none focus-visible:ring-0"></textarea>
+
+            @* Mention autocomplete *@
+            @if (_showMentionPopover && FilteredOptions.Length > 0)
+            {
+                <div class="absolute inset-x-4 bottom-full z-20 mb-2 overflow-hidden rounded-lg border bg-popover shadow-md">
+                    <div class="border-b px-4 py-2">
+                        <span class="text-xs font-medium text-muted-foreground">
+                            Add context source
+                        </span>
+                    </div>
+                    <div class="max-h-48 overflow-y-auto">
+                        @for (var i = 0; i < FilteredOptions.Length; i++)
+                        {
+                            var option = FilteredOptions[i];
+                            var idx = i;
+                            <button type="button"
+                                    class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors", idx == _selectedIndex ? "bg-muted/50" : "hover:bg-muted/50")"
+                                    @onclick="@(() => AddMention(option))"
+                                    @onmouseenter="@(() => _selectedIndex = idx)">
+                                @GetMentionIcon(option.Type, "size-4 shrink-0 text-muted-foreground")
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-sm font-medium">@@@option.Label</span>
+                                    <p class="truncate text-xs text-muted-foreground">
+                                        @option.Description
+                                    </p>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-xs text-muted-foreground">
+                Type <kbd class="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">@@</kbd>
+                to mention a context source
+            </span>
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Default"
+                      Disabled="@(string.IsNullOrWhiteSpace(_input) && _mentions.Count == 0)"
+                      Class="h-7 gap-1.5 text-xs"
+                      @onclick="HandleSubmit">
+                <LucideArrowUpCn Size="16" Class="size-3.5" />
+                Send
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record MentionOption(string Id, string Label, string Type, string Description);
+
+    private static readonly MentionOption[] _mentionOptions =
+    {
+        new("docs", "Documentation", "document", "Search project docs and READMEs"),
+        new("codebase", "Codebase", "code", "Reference source code files"),
+        new("web", "Web Search", "web", "Search the internet for context"),
+        new("database", "Database", "data", "Query connected databases"),
+        new("files", "Files", "file", "Attach local or cloud files"),
+        new("knowledge", "Knowledge Base", "knowledge", "Search internal wiki and notes")
+    };
+
+    private string _input = "";
+    private readonly List<MentionOption> _mentions = new()
+    {
+        _mentionOptions[0],
+        _mentionOptions[1]
+    };
+    private bool _showMentionPopover;
+    private string _mentionFilter = "";
+    private int _selectedIndex;
+
+    private MentionOption[] FilteredOptions => _mentionOptions
+        .Where(opt => !_mentions.Any(m => m.Id == opt.Id) &&
+            opt.Label.Contains(_mentionFilter, StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    private void AddMention(MentionOption option)
+    {
+        _mentions.Add(option);
+        var lastAt = _input.LastIndexOf("@@");
+        _input = lastAt > 0 ? _input[..lastAt].TrimEnd() + " " : "";
+        _showMentionPopover = false;
+        _mentionFilter = "";
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input) && _mentions.Count == 0) return;
+        _input = "";
+        _mentions.Clear();
+    }
+
+    private RenderFragment GetMentionIcon(string type, string className = "size-3 text-muted-foreground") => type switch
+    {
+        "document" => builder => { builder.OpenComponent<LucideBookOpenCn>(0); builder.AddAttribute(1, "Size", 16); builder.AddAttribute(2, "Class", className); builder.CloseComponent(); },
+        "code" => builder => { builder.OpenComponent<LucideCodeCn>(0); builder.AddAttribute(1, "Size", 16); builder.AddAttribute(2, "Class", className); builder.CloseComponent(); },
+        "web" => builder => { builder.OpenComponent<LucideGlobeCn>(0); builder.AddAttribute(1, "Size", 16); builder.AddAttribute(2, "Class", className); builder.CloseComponent(); },
+        "data" => builder => { builder.OpenComponent<LucideDatabaseCn>(0); builder.AddAttribute(1, "Size", 16); builder.AddAttribute(2, "Class", className); builder.CloseComponent(); },
+        "file" => builder => { builder.OpenComponent<LucideFileCn>(0); builder.AddAttribute(1, "Size", 16); builder.AddAttribute(2, "Class", className); builder.CloseComponent(); },
+        _ => builder => { builder.OpenComponent<LucideSearchCn>(0); builder.AddAttribute(1, "Size", 16); builder.AddAttribute(2, "Class", className); builder.CloseComponent(); }
+    };
+}

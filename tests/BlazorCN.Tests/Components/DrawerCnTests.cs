@@ -178,16 +178,15 @@ public class DrawerCnTests : BunitContext
                 .AddChildContent("Body")));
         var el = cut.Find("[data-slot='drawer-content']");
         el.GetAttribute("data-direction").Should().Be("bottom");
-        el.ClassList.Should().Contain("border-t");
-        el.ClassList.Should().Contain("rounded-t-lg");
+        el.ClassList.Should().Contain("cn-drawer-content");
     }
 
     [Theory]
-    [InlineData(DrawerDirection.Bottom, "bottom", "border-t")]
-    [InlineData(DrawerDirection.Top, "top", "border-b")]
-    [InlineData(DrawerDirection.Left, "left", "border-r")]
-    [InlineData(DrawerDirection.Right, "right", "border-l")]
-    public void DrawerContent_Renders_Correct_Classes_For_Direction(DrawerDirection direction, string expectedDataDir, string expectedBorderClass)
+    [InlineData(DrawerDirection.Bottom, "bottom")]
+    [InlineData(DrawerDirection.Top, "top")]
+    [InlineData(DrawerDirection.Left, "left")]
+    [InlineData(DrawerDirection.Right, "right")]
+    public void DrawerContent_Renders_Correct_DataDirection(DrawerDirection direction, string expectedDataDir)
     {
         SetupJsInterop();
         var cut = Render<DrawerCn>(p => p
@@ -197,7 +196,7 @@ public class DrawerCnTests : BunitContext
                 .AddChildContent("Body")));
         var el = cut.Find("[data-slot='drawer-content']");
         el.GetAttribute("data-direction").Should().Be(expectedDataDir);
-        el.ClassList.Should().Contain(expectedBorderClass);
+        el.ClassList.Should().Contain("cn-drawer-content");
     }
 
     [Fact]
@@ -209,11 +208,9 @@ public class DrawerCnTests : BunitContext
             .AddChildContent<DrawerContentCn>(c => c
                 .AddChildContent("Body")));
         var el = cut.Find("[data-slot='drawer-content']");
+        el.ClassList.Should().Contain("cn-drawer-content");
         el.ClassList.Should().Contain("fixed");
         el.ClassList.Should().Contain("z-50");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("bg-background");
     }
 
     [Fact]
@@ -264,6 +261,35 @@ public class DrawerCnTests : BunitContext
         cut.Find("[data-slot='drawer-content']").GetAttribute("role").Should().Be("dialog");
     }
 
+    [Fact]
+    public void DrawerContent_AriaLabelledby_Matches_Title_Id()
+    {
+        SetupJsInterop();
+        var cut = Render<DrawerCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<DrawerContentCn>(c => c
+                .AddChildContent<DrawerTitleCn>(t => t
+                    .AddChildContent("Drawer Title"))));
+        var content = cut.Find("[data-slot='drawer-content']");
+        var title = cut.Find("[data-slot='drawer-title']");
+        var labelledBy = content.GetAttribute("aria-labelledby");
+        labelledBy.Should().NotBeNullOrEmpty();
+        title.GetAttribute("id").Should().Be(labelledBy);
+    }
+
+    [Fact]
+    public void DrawerContent_Without_Title_Has_AriaLabel_Fallback()
+    {
+        SetupJsInterop();
+        var cut = Render<DrawerCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<DrawerContentCn>(c => c
+                .AddChildContent("Body without title")));
+        var content = cut.Find("[data-slot='drawer-content']");
+        content.GetAttribute("aria-labelledby").Should().BeNull();
+        content.GetAttribute("aria-label").Should().Be("Drawer");
+    }
+
     // --- DrawerHeaderCn ---
 
     [Fact]
@@ -278,8 +304,8 @@ public class DrawerCnTests : BunitContext
     {
         var cut = Render<DrawerHeaderCn>(p => p.AddChildContent("Header"));
         var el = cut.Find("[data-slot='drawer-header']");
+        el.ClassList.Should().Contain("cn-drawer-header");
         el.ClassList.Should().Contain("grid");
-        el.ClassList.Should().Contain("p-4");
     }
 
     [Fact]
@@ -305,11 +331,10 @@ public class DrawerCnTests : BunitContext
     {
         var cut = Render<DrawerFooterCn>(p => p.AddChildContent("Footer"));
         var el = cut.Find("[data-slot='drawer-footer']");
+        el.ClassList.Should().Contain("cn-drawer-footer");
         el.ClassList.Should().Contain("mt-auto");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("gap-2");
-        el.ClassList.Should().Contain("p-4");
     }
 
     [Fact]
@@ -335,10 +360,7 @@ public class DrawerCnTests : BunitContext
     {
         var cut = Render<DrawerTitleCn>(p => p.AddChildContent("Title"));
         var el = cut.Find("[data-slot='drawer-title']");
-        el.ClassList.Should().Contain("text-lg");
-        el.ClassList.Should().Contain("font-semibold");
-        el.ClassList.Should().Contain("leading-none");
-        el.ClassList.Should().Contain("tracking-tight");
+        el.ClassList.Should().Contain("cn-drawer-title");
     }
 
     [Fact]
@@ -364,8 +386,7 @@ public class DrawerCnTests : BunitContext
     {
         var cut = Render<DrawerDescriptionCn>(p => p.AddChildContent("Description"));
         var el = cut.Find("[data-slot='drawer-description']");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("text-muted-foreground");
+        el.ClassList.Should().Contain("cn-drawer-description");
     }
 
     [Fact]

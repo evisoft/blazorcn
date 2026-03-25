@@ -1,0 +1,126 @@
+@* ============================================================
+   Block: dashboard-data-pipeline
+   Title: Dashboard Data Pipeline
+   Description: Animated React data pipeline monitoring dashboard block for Next.js with five ETL pipelines displaying names, source to destination labels with arrow flow visualization, records processed with tabular number formatting, throughput rates, last run timestamps, status dots for running completed and failed states, and error counts with red highlighting using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Message queue depth and processing rates
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-data-pipeline.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Data Pipelines</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    ETL workflow status and throughput
+                </p>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                @{ var runningCount = _pipelines.Count(p => p.Status == "running"); }
+                @{ var failedCount = _pipelines.Count(p => p.Status == "failed"); }
+                @if (runningCount > 0)
+                {
+                    <span class="flex items-center gap-1.5">
+                        <span class="size-1.5 rounded-full bg-blue-500"></span>
+                        @runningCount running
+                    </span>
+                }
+                @if (failedCount > 0)
+                {
+                    <span class="flex items-center gap-1.5">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @failedCount failed
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Pipelines *@
+        <div>
+            @for (var i = 0; i < _pipelines.Length; i++)
+            {
+                var pipeline = _pipelines[i];
+                var isLast = i == _pipelines.Length - 1;
+                <div class="@(Cn.Merge("px-4 py-3 transition-colors hover:bg-muted/50", isLast ? "" : "border-b"))">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", _statusDot[pipeline.Status]))"></span>
+                            <span class="font-medium text-sm">@pipeline.Name</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-muted-foreground text-xs">
+                                @_statusLabel[pipeline.Status]
+                            </span>
+                            <span class="text-muted-foreground text-xs">@pipeline.LastRun</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-2 flex items-center justify-between">
+                        @* Source -> Destination *@
+                        <div class="flex items-center gap-2">
+                            <span class="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                @pipeline.Source
+                            </span>
+                            <LucideArrowRightCn Size="12" Class="size-3 text-muted-foreground/60" />
+                            <span class="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                @pipeline.Destination
+                            </span>
+                        </div>
+
+                        @* Metrics *@
+                        <div class="flex items-center gap-4">
+                            <span class="font-mono text-xs tabular-nums">
+                                @FormatRecords(pipeline.RecordsProcessed) records
+                            </span>
+                            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                @pipeline.Throughput
+                            </span>
+                            @if (pipeline.Errors > 0)
+                            {
+                                <span class="font-mono text-xs font-medium tabular-nums text-red-600 dark:text-red-400">
+                                    @pipeline.Errors errors
+                                </span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Pipeline(string Name, string Source, string Destination, int RecordsProcessed, string Throughput, string LastRun, string Status, int Errors);
+
+    private static readonly Dictionary<string, string> _statusDot = new()
+    {
+        ["running"] = "bg-blue-500",
+        ["completed"] = "bg-emerald-500",
+        ["failed"] = "bg-red-500",
+    };
+
+    private static readonly Dictionary<string, string> _statusLabel = new()
+    {
+        ["running"] = "Running",
+        ["completed"] = "Completed",
+        ["failed"] = "Failed",
+    };
+
+    private static string FormatRecords(int n)
+    {
+        if (n >= 1_000_000) return $"{n / 1_000_000.0:F1}M";
+        if (n >= 1_000) return $"{n / 1_000.0:F1}K";
+        return n.ToString();
+    }
+
+    private static readonly Pipeline[] _pipelines =
+    [
+        new("User event ingestion", "Kafka", "BigQuery", 2_847_000, "12.4K/s", "2 min ago", "running", 0),
+        new("Product catalog sync", "PostgreSQL", "Elasticsearch", 148_200, "3.2K/s", "15 min ago", "completed", 0),
+        new("Financial reconciliation", "Stripe API", "Snowflake", 42_800, "890/s", "1h ago", "completed", 3),
+        new("Log aggregation", "CloudWatch", "S3 Parquet", 8_420_000, "28.1K/s", "5 min ago", "completed", 0),
+        new("Customer data platform", "Segment", "Redshift", 0, "0/s", "3h ago", "failed", 142),
+    ];
+}

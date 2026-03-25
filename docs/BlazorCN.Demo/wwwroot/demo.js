@@ -1,0 +1,414 @@
+const ALL_THEME_KEYS = [
+    "background", "foreground", "card", "card-foreground",
+    "popover", "popover-foreground", "primary", "primary-foreground",
+    "secondary", "secondary-foreground", "muted", "muted-foreground",
+    "accent", "accent-foreground", "destructive", "border", "input", "ring",
+    "chart-1", "chart-2", "chart-3", "chart-4", "chart-5",
+    "sidebar", "sidebar-foreground", "sidebar-primary", "sidebar-primary-foreground",
+    "sidebar-accent", "sidebar-accent-foreground", "sidebar-border", "sidebar-ring"
+];
+
+const THEMES = {
+    zinc: {
+        light: {
+            "background": "oklch(1 0 0)",
+            "foreground": "oklch(0.141 0.005 285.823)",
+            "card": "oklch(1 0 0)",
+            "card-foreground": "oklch(0.141 0.005 285.823)",
+            "popover": "oklch(1 0 0)",
+            "popover-foreground": "oklch(0.141 0.005 285.823)",
+            "primary": "oklch(0.21 0.006 285.885)",
+            "primary-foreground": "oklch(0.985 0 0)",
+            "secondary": "oklch(0.967 0.001 286.375)",
+            "secondary-foreground": "oklch(0.21 0.006 285.885)",
+            "muted": "oklch(0.967 0.001 286.375)",
+            "muted-foreground": "oklch(0.552 0.016 285.938)",
+            "accent": "oklch(0.967 0.001 286.375)",
+            "accent-foreground": "oklch(0.21 0.006 285.885)",
+            "destructive": "oklch(0.577 0.245 27.325)",
+            "border": "oklch(0.92 0.004 286.32)",
+            "input": "oklch(0.92 0.004 286.32)",
+            "ring": "oklch(0.705 0.015 286.067)",
+            "chart-1": "oklch(0.871 0.006 286.286)",
+            "chart-2": "oklch(0.552 0.016 285.938)",
+            "chart-3": "oklch(0.442 0.017 285.786)",
+            "chart-4": "oklch(0.37 0.013 285.805)",
+            "chart-5": "oklch(0.274 0.006 286.033)",
+            "sidebar": "oklch(0.985 0 0)",
+            "sidebar-foreground": "oklch(0.141 0.005 285.823)",
+            "sidebar-primary": "oklch(0.21 0.006 285.885)",
+            "sidebar-primary-foreground": "oklch(0.985 0 0)",
+            "sidebar-accent": "oklch(0.967 0.001 286.375)",
+            "sidebar-accent-foreground": "oklch(0.21 0.006 285.885)",
+            "sidebar-border": "oklch(0.92 0.004 286.32)",
+            "sidebar-ring": "oklch(0.705 0.015 286.067)"
+        },
+        dark: {
+            "background": "oklch(0.141 0.005 285.823)",
+            "foreground": "oklch(0.985 0 0)",
+            "card": "oklch(0.21 0.006 285.885)",
+            "card-foreground": "oklch(0.985 0 0)",
+            "popover": "oklch(0.21 0.006 285.885)",
+            "popover-foreground": "oklch(0.985 0 0)",
+            "primary": "oklch(0.92 0.004 286.32)",
+            "primary-foreground": "oklch(0.21 0.006 285.885)",
+            "secondary": "oklch(0.274 0.006 286.033)",
+            "secondary-foreground": "oklch(0.985 0 0)",
+            "muted": "oklch(0.274 0.006 286.033)",
+            "muted-foreground": "oklch(0.705 0.015 286.067)",
+            "accent": "oklch(0.274 0.006 286.033)",
+            "accent-foreground": "oklch(0.985 0 0)",
+            "destructive": "oklch(0.704 0.191 22.216)",
+            "border": "oklch(1 0 0 / 10%)",
+            "input": "oklch(1 0 0 / 15%)",
+            "ring": "oklch(0.552 0.016 285.938)",
+            "chart-1": "oklch(0.871 0.006 286.286)",
+            "chart-2": "oklch(0.552 0.016 285.938)",
+            "chart-3": "oklch(0.442 0.017 285.786)",
+            "chart-4": "oklch(0.37 0.013 285.805)",
+            "chart-5": "oklch(0.274 0.006 286.033)",
+            "sidebar": "oklch(0.21 0.006 285.885)",
+            "sidebar-foreground": "oklch(0.985 0 0)",
+            "sidebar-primary": "oklch(0.488 0.243 264.376)",
+            "sidebar-primary-foreground": "oklch(0.985 0 0)",
+            "sidebar-accent": "oklch(0.274 0.006 286.033)",
+            "sidebar-accent-foreground": "oklch(0.985 0 0)",
+            "sidebar-border": "oklch(1 0 0 / 10%)",
+            "sidebar-ring": "oklch(0.552 0.016 285.938)"
+        }
+    },
+    slate: {
+        light: {
+            "background": "hsl(0 0% 100%)",
+            "foreground": "hsl(222.2 84% 4.9%)",
+            "card": "hsl(0 0% 100%)",
+            "card-foreground": "hsl(222.2 84% 4.9%)",
+            "popover": "hsl(0 0% 100%)",
+            "popover-foreground": "hsl(222.2 84% 4.9%)",
+            "primary": "hsl(222.2 47.4% 11.2%)",
+            "primary-foreground": "hsl(210 40% 98%)",
+            "secondary": "hsl(210 40% 96.1%)",
+            "secondary-foreground": "hsl(222.2 47.4% 11.2%)",
+            "muted": "hsl(210 40% 96.1%)",
+            "muted-foreground": "hsl(215.4 16.3% 46.9%)",
+            "accent": "hsl(210 40% 96.1%)",
+            "accent-foreground": "hsl(222.2 47.4% 11.2%)",
+            "destructive": "hsl(0 84.2% 60.2%)",
+            "border": "hsl(214.3 31.8% 91.4%)",
+            "input": "hsl(214.3 31.8% 91.4%)",
+            "ring": "hsl(222.2 84% 4.9%)",
+            "chart-1": "hsl(12 76% 61%)",
+            "chart-2": "hsl(173 58% 39%)",
+            "chart-3": "hsl(197 37% 24%)",
+            "chart-4": "hsl(43 74% 66%)",
+            "chart-5": "hsl(27 87% 67%)",
+            "sidebar": "hsl(0 0% 100%)",
+            "sidebar-foreground": "hsl(222.2 84% 4.9%)",
+            "sidebar-primary": "hsl(222.2 47.4% 11.2%)",
+            "sidebar-primary-foreground": "hsl(210 40% 98%)",
+            "sidebar-accent": "hsl(210 40% 96.1%)",
+            "sidebar-accent-foreground": "hsl(222.2 47.4% 11.2%)",
+            "sidebar-border": "hsl(214.3 31.8% 91.4%)",
+            "sidebar-ring": "hsl(222.2 84% 4.9%)"
+        },
+        dark: {
+            "background": "hsl(222.2 84% 4.9%)",
+            "foreground": "hsl(210 40% 98%)",
+            "card": "hsl(222.2 84% 4.9%)",
+            "card-foreground": "hsl(210 40% 98%)",
+            "popover": "hsl(222.2 84% 4.9%)",
+            "popover-foreground": "hsl(210 40% 98%)",
+            "primary": "hsl(210 40% 98%)",
+            "primary-foreground": "hsl(222.2 47.4% 11.2%)",
+            "secondary": "hsl(217.2 32.6% 17.5%)",
+            "secondary-foreground": "hsl(210 40% 98%)",
+            "muted": "hsl(217.2 32.6% 17.5%)",
+            "muted-foreground": "hsl(215 20.2% 65.1%)",
+            "accent": "hsl(217.2 32.6% 17.5%)",
+            "accent-foreground": "hsl(210 40% 98%)",
+            "destructive": "hsl(0 62.8% 30.6%)",
+            "border": "hsl(217.2 32.6% 17.5%)",
+            "input": "hsl(217.2 32.6% 17.5%)",
+            "ring": "hsl(212.7 26.8% 83.9%)",
+            "chart-1": "hsl(220 70% 50%)",
+            "chart-2": "hsl(160 60% 45%)",
+            "chart-3": "hsl(30 80% 55%)",
+            "chart-4": "hsl(280 65% 60%)",
+            "chart-5": "hsl(340 75% 55%)",
+            "sidebar": "hsl(222.2 84% 4.9%)",
+            "sidebar-foreground": "hsl(210 40% 98%)",
+            "sidebar-primary": "hsl(210 40% 98%)",
+            "sidebar-primary-foreground": "hsl(222.2 47.4% 11.2%)",
+            "sidebar-accent": "hsl(217.2 32.6% 17.5%)",
+            "sidebar-accent-foreground": "hsl(210 40% 98%)",
+            "sidebar-border": "hsl(217.2 32.6% 17.5%)",
+            "sidebar-ring": "hsl(212.7 26.8% 83.9%)"
+        }
+    },
+    stone: {
+        light: {
+            "background": "oklch(1 0 0)",
+            "foreground": "oklch(0.147 0.004 49.25)",
+            "card": "oklch(1 0 0)",
+            "card-foreground": "oklch(0.147 0.004 49.25)",
+            "popover": "oklch(1 0 0)",
+            "popover-foreground": "oklch(0.147 0.004 49.25)",
+            "primary": "oklch(0.216 0.006 56.043)",
+            "primary-foreground": "oklch(0.985 0.001 106.423)",
+            "secondary": "oklch(0.97 0.001 106.424)",
+            "secondary-foreground": "oklch(0.216 0.006 56.043)",
+            "muted": "oklch(0.97 0.001 106.424)",
+            "muted-foreground": "oklch(0.553 0.013 58.071)",
+            "accent": "oklch(0.97 0.001 106.424)",
+            "accent-foreground": "oklch(0.216 0.006 56.043)",
+            "destructive": "oklch(0.577 0.245 27.325)",
+            "border": "oklch(0.923 0.003 48.717)",
+            "input": "oklch(0.923 0.003 48.717)",
+            "ring": "oklch(0.709 0.01 56.259)",
+            "chart-1": "oklch(0.869 0.005 56.366)",
+            "chart-2": "oklch(0.553 0.013 58.071)",
+            "chart-3": "oklch(0.444 0.011 73.639)",
+            "chart-4": "oklch(0.374 0.01 67.558)",
+            "chart-5": "oklch(0.268 0.007 34.298)",
+            "sidebar": "oklch(0.985 0.001 106.423)",
+            "sidebar-foreground": "oklch(0.147 0.004 49.25)",
+            "sidebar-primary": "oklch(0.216 0.006 56.043)",
+            "sidebar-primary-foreground": "oklch(0.985 0.001 106.423)",
+            "sidebar-accent": "oklch(0.97 0.001 106.424)",
+            "sidebar-accent-foreground": "oklch(0.216 0.006 56.043)",
+            "sidebar-border": "oklch(0.923 0.003 48.717)",
+            "sidebar-ring": "oklch(0.709 0.01 56.259)"
+        },
+        dark: {
+            "background": "oklch(0.147 0.004 49.25)",
+            "foreground": "oklch(0.985 0.001 106.423)",
+            "card": "oklch(0.216 0.006 56.043)",
+            "card-foreground": "oklch(0.985 0.001 106.423)",
+            "popover": "oklch(0.216 0.006 56.043)",
+            "popover-foreground": "oklch(0.985 0.001 106.423)",
+            "primary": "oklch(0.923 0.003 48.717)",
+            "primary-foreground": "oklch(0.216 0.006 56.043)",
+            "secondary": "oklch(0.268 0.007 34.298)",
+            "secondary-foreground": "oklch(0.985 0.001 106.423)",
+            "muted": "oklch(0.268 0.007 34.298)",
+            "muted-foreground": "oklch(0.709 0.01 56.259)",
+            "accent": "oklch(0.268 0.007 34.298)",
+            "accent-foreground": "oklch(0.985 0.001 106.423)",
+            "destructive": "oklch(0.704 0.191 22.216)",
+            "border": "oklch(1 0 0 / 10%)",
+            "input": "oklch(1 0 0 / 15%)",
+            "ring": "oklch(0.553 0.013 58.071)",
+            "chart-1": "oklch(0.869 0.005 56.366)",
+            "chart-2": "oklch(0.553 0.013 58.071)",
+            "chart-3": "oklch(0.444 0.011 73.639)",
+            "chart-4": "oklch(0.374 0.01 67.558)",
+            "chart-5": "oklch(0.268 0.007 34.298)",
+            "sidebar": "oklch(0.216 0.006 56.043)",
+            "sidebar-foreground": "oklch(0.985 0.001 106.423)",
+            "sidebar-primary": "oklch(0.488 0.243 264.376)",
+            "sidebar-primary-foreground": "oklch(0.985 0.001 106.423)",
+            "sidebar-accent": "oklch(0.268 0.007 34.298)",
+            "sidebar-accent-foreground": "oklch(0.985 0.001 106.423)",
+            "sidebar-border": "oklch(1 0 0 / 10%)",
+            "sidebar-ring": "oklch(0.553 0.013 58.071)"
+        }
+    },
+    gray: {
+        light: {
+            "background": "hsl(0 0% 100%)",
+            "foreground": "hsl(224 71.4% 4.1%)",
+            "card": "hsl(0 0% 100%)",
+            "card-foreground": "hsl(224 71.4% 4.1%)",
+            "popover": "hsl(0 0% 100%)",
+            "popover-foreground": "hsl(224 71.4% 4.1%)",
+            "primary": "hsl(220.9 39.3% 11%)",
+            "primary-foreground": "hsl(210 20% 98%)",
+            "secondary": "hsl(220 14.3% 95.9%)",
+            "secondary-foreground": "hsl(220.9 39.3% 11%)",
+            "muted": "hsl(220 14.3% 95.9%)",
+            "muted-foreground": "hsl(220 8.9% 46.1%)",
+            "accent": "hsl(220 14.3% 95.9%)",
+            "accent-foreground": "hsl(220.9 39.3% 11%)",
+            "destructive": "hsl(0 84.2% 60.2%)",
+            "border": "hsl(220 13% 91%)",
+            "input": "hsl(220 13% 91%)",
+            "ring": "hsl(224 71.4% 4.1%)",
+            "chart-1": "hsl(12 76% 61%)",
+            "chart-2": "hsl(173 58% 39%)",
+            "chart-3": "hsl(197 37% 24%)",
+            "chart-4": "hsl(43 74% 66%)",
+            "chart-5": "hsl(27 87% 67%)",
+            "sidebar": "hsl(0 0% 100%)",
+            "sidebar-foreground": "hsl(224 71.4% 4.1%)",
+            "sidebar-primary": "hsl(220.9 39.3% 11%)",
+            "sidebar-primary-foreground": "hsl(210 20% 98%)",
+            "sidebar-accent": "hsl(220 14.3% 95.9%)",
+            "sidebar-accent-foreground": "hsl(220.9 39.3% 11%)",
+            "sidebar-border": "hsl(220 13% 91%)",
+            "sidebar-ring": "hsl(224 71.4% 4.1%)"
+        },
+        dark: {
+            "background": "hsl(224 71.4% 4.1%)",
+            "foreground": "hsl(210 20% 98%)",
+            "card": "hsl(224 71.4% 4.1%)",
+            "card-foreground": "hsl(210 20% 98%)",
+            "popover": "hsl(224 71.4% 4.1%)",
+            "popover-foreground": "hsl(210 20% 98%)",
+            "primary": "hsl(210 20% 98%)",
+            "primary-foreground": "hsl(220.9 39.3% 11%)",
+            "secondary": "hsl(215 27.9% 16.9%)",
+            "secondary-foreground": "hsl(210 20% 98%)",
+            "muted": "hsl(215 27.9% 16.9%)",
+            "muted-foreground": "hsl(217.9 10.6% 64.9%)",
+            "accent": "hsl(215 27.9% 16.9%)",
+            "accent-foreground": "hsl(210 20% 98%)",
+            "destructive": "hsl(0 62.8% 30.6%)",
+            "border": "hsl(215 27.9% 16.9%)",
+            "input": "hsl(215 27.9% 16.9%)",
+            "ring": "hsl(216 12.2% 83.9%)",
+            "chart-1": "hsl(220 70% 50%)",
+            "chart-2": "hsl(160 60% 45%)",
+            "chart-3": "hsl(30 80% 55%)",
+            "chart-4": "hsl(280 65% 60%)",
+            "chart-5": "hsl(340 75% 55%)",
+            "sidebar": "hsl(224 71.4% 4.1%)",
+            "sidebar-foreground": "hsl(210 20% 98%)",
+            "sidebar-primary": "hsl(210 20% 98%)",
+            "sidebar-primary-foreground": "hsl(220.9 39.3% 11%)",
+            "sidebar-accent": "hsl(215 27.9% 16.9%)",
+            "sidebar-accent-foreground": "hsl(210 20% 98%)",
+            "sidebar-border": "hsl(215 27.9% 16.9%)",
+            "sidebar-ring": "hsl(216 12.2% 83.9%)"
+        }
+    },
+    neutral: {
+        light: {
+            "background": "oklch(1 0 0)",
+            "foreground": "oklch(0.145 0 0)",
+            "card": "oklch(1 0 0)",
+            "card-foreground": "oklch(0.145 0 0)",
+            "popover": "oklch(1 0 0)",
+            "popover-foreground": "oklch(0.145 0 0)",
+            "primary": "oklch(0.205 0 0)",
+            "primary-foreground": "oklch(0.985 0 0)",
+            "secondary": "oklch(0.97 0 0)",
+            "secondary-foreground": "oklch(0.205 0 0)",
+            "muted": "oklch(0.97 0 0)",
+            "muted-foreground": "oklch(0.556 0 0)",
+            "accent": "oklch(0.97 0 0)",
+            "accent-foreground": "oklch(0.205 0 0)",
+            "destructive": "oklch(0.577 0.245 27.325)",
+            "border": "oklch(0.922 0 0)",
+            "input": "oklch(0.922 0 0)",
+            "ring": "oklch(0.708 0 0)",
+            "chart-1": "oklch(0.87 0 0)",
+            "chart-2": "oklch(0.556 0 0)",
+            "chart-3": "oklch(0.439 0 0)",
+            "chart-4": "oklch(0.371 0 0)",
+            "chart-5": "oklch(0.269 0 0)",
+            "sidebar": "oklch(0.985 0 0)",
+            "sidebar-foreground": "oklch(0.145 0 0)",
+            "sidebar-primary": "oklch(0.205 0 0)",
+            "sidebar-primary-foreground": "oklch(0.985 0 0)",
+            "sidebar-accent": "oklch(0.97 0 0)",
+            "sidebar-accent-foreground": "oklch(0.205 0 0)",
+            "sidebar-border": "oklch(0.922 0 0)",
+            "sidebar-ring": "oklch(0.708 0 0)"
+        },
+        dark: {
+            "background": "oklch(0.145 0 0)",
+            "foreground": "oklch(0.985 0 0)",
+            "card": "oklch(0.205 0 0)",
+            "card-foreground": "oklch(0.985 0 0)",
+            "popover": "oklch(0.205 0 0)",
+            "popover-foreground": "oklch(0.985 0 0)",
+            "primary": "oklch(0.922 0 0)",
+            "primary-foreground": "oklch(0.205 0 0)",
+            "secondary": "oklch(0.269 0 0)",
+            "secondary-foreground": "oklch(0.985 0 0)",
+            "muted": "oklch(0.269 0 0)",
+            "muted-foreground": "oklch(0.708 0 0)",
+            "accent": "oklch(0.269 0 0)",
+            "accent-foreground": "oklch(0.985 0 0)",
+            "destructive": "oklch(0.704 0.191 22.216)",
+            "border": "oklch(1 0 0 / 10%)",
+            "input": "oklch(1 0 0 / 15%)",
+            "ring": "oklch(0.556 0 0)",
+            "chart-1": "oklch(0.87 0 0)",
+            "chart-2": "oklch(0.556 0 0)",
+            "chart-3": "oklch(0.439 0 0)",
+            "chart-4": "oklch(0.371 0 0)",
+            "chart-5": "oklch(0.269 0 0)",
+            "sidebar": "oklch(0.205 0 0)",
+            "sidebar-foreground": "oklch(0.985 0 0)",
+            "sidebar-primary": "oklch(0.488 0.243 264.376)",
+            "sidebar-primary-foreground": "oklch(0.985 0 0)",
+            "sidebar-accent": "oklch(0.269 0 0)",
+            "sidebar-accent-foreground": "oklch(0.985 0 0)",
+            "sidebar-border": "oklch(1 0 0 / 10%)",
+            "sidebar-ring": "oklch(0.556 0 0)"
+        }
+    }
+};
+
+export function applyTheme(themeName, isDark) {
+    const theme = THEMES[themeName];
+    if (!theme) return;
+    const vars = isDark ? theme.dark : theme.light;
+    const style = document.documentElement.style;
+    for (const key of ALL_THEME_KEYS) {
+        style.removeProperty(`--${key}`);
+    }
+    for (const [key, value] of Object.entries(vars)) {
+        style.setProperty(`--${key}`, value);
+    }
+    localStorage.setItem('blazorcn-theme', themeName);
+}
+
+export function getActiveTheme() {
+    return localStorage.getItem('blazorcn-theme') || 'zinc';
+}
+
+export function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    return isDark;
+}
+
+export function getTheme() {
+    return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+}
+
+export function copyToClipboard(text) {
+    return navigator.clipboard.writeText(text);
+}
+
+export function highlightAll() {
+    if (window.Prism) {
+        Prism.highlightAll();
+    }
+}
+
+export function setThemeColor(name, value) {
+    document.documentElement.style.setProperty(name, value);
+}
+
+export function removeThemeColor(name) {
+    document.documentElement.style.removeProperty(name);
+}
+
+export function registerKeyboardShortcut(dotnetRef, methodName) {
+    const handler = (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            dotnetRef.invokeMethodAsync(methodName);
+        }
+    };
+    document.addEventListener('keydown', handler);
+    return handler;
+}
+
+export function unregisterKeyboardShortcut(handler) {
+    document.removeEventListener('keydown', handler);
+}

@@ -1,0 +1,222 @@
+@* ===========================================================
+   Block: settings-ip-allowlist
+   Title: Settings Ip Allowlist
+   Description: IP allowlist and blocklist settings with CIDR range entries, labels, expiry dates, enable toggle, and rule management
+   Dependencies: BadgeCn, ButtonCn, InputCn, LucideCheckCn, LucidePlusCn, LucideShieldCn, LucideTrash2Cn, LucideXCn, SwitchCn
+   Source: original/blocks/settings/settings-ip-allowlist.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideShieldCn Size="16" Class="size-4 text-muted-foreground" />
+                <p class="text-sm font-medium">IP Allowlist</p>
+            </div>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Restrict access to specific IP addresses and CIDR ranges
+            </p>
+        </div>
+
+        @* Enforcement toggle *@
+        <div class="flex items-center justify-between border-b px-4 py-4">
+            <div>
+                <p class="text-sm font-medium">Enforce allowlist</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Only allow connections from listed IP addresses
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (_enforced)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                        Enforced
+                    </BadgeCn>
+                }
+                <SwitchCn @bind-Checked="_enforced" />
+            </div>
+        </div>
+
+        @* Stats *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @AllowRules.Count(r => r.Active) allowed
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @BlockRules.Count(r => r.Active) blocked
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-muted-foreground/30"></span>
+                @_rules.Count(r => !r.Active) disabled
+            </span>
+        </div>
+
+        @* Allow rules label *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-medium text-muted-foreground">Allow rules</p>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                          Class="h-6 gap-1 px-2 text-xs"
+                          @onclick="@(() => _showAdd = !_showAdd)">
+                    <LucidePlusCn Size="16" Class="size-3" />
+                    Add rule
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Add rule form *@
+        @if (_showAdd)
+        {
+            <div class="flex items-end gap-2 border-b px-4 py-3">
+                <div class="flex-1">
+                    <span class="mb-1 block text-xs text-muted-foreground">IP / CIDR</span>
+                    <InputCn @bind-Value="_newIp" Placeholder="192.168.1.0/24"
+                             Class="h-8 font-mono text-sm" />
+                </div>
+                <div class="flex-1">
+                    <span class="mb-1 block text-xs text-muted-foreground">Label</span>
+                    <InputCn @bind-Value="_newLabel" Placeholder="Office network"
+                             Class="h-8 text-sm" />
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 text-xs"
+                          @onclick="AddRule">
+                    Add
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 px-2"
+                          @onclick="@(() => _showAdd = false)">
+                    <LucideXCn Size="16" Class="size-3.5" />
+                </ButtonCn>
+            </div>
+        }
+
+        @* Allow rules list *@
+        @foreach (var rule in AllowRules)
+        {
+            var ruleId = rule.Id;
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <span class="@($"size-1.5 shrink-0 rounded-full {(rule.Active ? "bg-emerald-500" : "bg-muted-foreground/30")}")"></span>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono text-sm">@rule.Ip</span>
+                        <span class="truncate text-xs text-muted-foreground">@rule.Label</span>
+                    </div>
+                    <p class="mt-0.5 text-xs text-muted-foreground">@rule.Expiry</p>
+                </div>
+                <SwitchCn Checked="@rule.Active"
+                          CheckedChanged="@(_ => ToggleRule(ruleId))" />
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                          Class="h-6 px-1.5 text-muted-foreground hover:text-red-600 dark:hover:text-red-400"
+                          @onclick="@(() => RemoveRule(ruleId))">
+                    <LucideTrash2Cn Size="16" Class="size-3" />
+                </ButtonCn>
+            </div>
+        }
+
+        @* Block rules label *@
+        <div class="border-b px-4 py-3">
+            <p class="text-xs font-medium text-muted-foreground">Block rules</p>
+        </div>
+
+        @* Block rules list *@
+        @foreach (var rule in BlockRules)
+        {
+            var ruleId = rule.Id;
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <span class="size-1.5 shrink-0 rounded-full bg-red-500"></span>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono text-sm">@rule.Ip</span>
+                        <span class="truncate text-xs text-muted-foreground">@rule.Label</span>
+                    </div>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                          Class="h-6 px-1.5 text-muted-foreground hover:text-red-600 dark:hover:text-red-400"
+                          @onclick="@(() => RemoveRule(ruleId))">
+                    <LucideTrash2Cn Size="16" Class="size-3" />
+                </ButtonCn>
+            </div>
+        }
+
+        @* Save *@
+        <div class="flex items-center justify-end gap-2 px-4 py-3">
+            @if (_saved)
+            {
+                <span class="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                    <LucideCheckCn Size="16" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs"
+                      @onclick="HandleSave">
+                Save changes
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class IpRule
+    {
+        public string Id { get; set; } = "";
+        public string Ip { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Expiry { get; set; } = "";
+        public bool Active { get; set; }
+    }
+
+    private bool _enforced = true;
+    private string _newIp = "";
+    private string _newLabel = "";
+    private bool _showAdd;
+    private bool _saved;
+
+    private List<IpRule> _rules = new()
+    {
+        new() { Id = "1", Ip = "203.0.113.0/24", Label = "Office network", Type = "allow", Expiry = "No expiry", Active = true },
+        new() { Id = "2", Ip = "198.51.100.42", Label = "CI/CD runner", Type = "allow", Expiry = "Expires Apr 15, 2026", Active = true },
+        new() { Id = "3", Ip = "10.0.0.0/8", Label = "Internal VPN", Type = "allow", Expiry = "No expiry", Active = true },
+        new() { Id = "4", Ip = "192.0.2.100", Label = "Contractor access", Type = "allow", Expiry = "Expires Mar 31, 2026", Active = false },
+        new() { Id = "5", Ip = "198.18.0.0/15", Label = "Known scanner", Type = "block", Expiry = "No expiry", Active = true },
+        new() { Id = "6", Ip = "100.64.0.0/10", Label = "Suspicious range", Type = "block", Expiry = "No expiry", Active = true },
+    };
+
+    private IEnumerable<IpRule> AllowRules => _rules.Where(r => r.Type == "allow");
+    private IEnumerable<IpRule> BlockRules => _rules.Where(r => r.Type == "block");
+
+    private void RemoveRule(string id) => _rules.RemoveAll(r => r.Id == id);
+
+    private void ToggleRule(string id)
+    {
+        var rule = _rules.FirstOrDefault(r => r.Id == id);
+        if (rule != null) rule.Active = !rule.Active;
+    }
+
+    private void AddRule()
+    {
+        if (string.IsNullOrWhiteSpace(_newIp)) return;
+        _rules.Add(new IpRule
+        {
+            Id = $"new-{_rules.Count + 1}",
+            Ip = _newIp.Trim(),
+            Label = string.IsNullOrWhiteSpace(_newLabel) ? "Untitled rule" : _newLabel.Trim(),
+            Type = "allow",
+            Expiry = "No expiry",
+            Active = true,
+        });
+        _newIp = "";
+        _newLabel = "";
+        _showAdd = false;
+    }
+
+    private async Task HandleSave()
+    {
+        _saved = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _saved = false;
+    }
+}

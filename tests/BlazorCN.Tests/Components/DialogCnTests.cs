@@ -189,12 +189,9 @@ public class DialogCnTests : BunitContext
             .AddChildContent<DialogContentCn>(c => c
                 .AddChildContent("Dialog body")));
         var content = cut.Find("[data-slot='dialog-content']");
+        content.ClassList.Should().Contain("cn-dialog-content");
         content.ClassList.Should().Contain("fixed");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("max-w-lg");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-background");
-        content.ClassList.Should().Contain("shadow-lg");
     }
 
     [Fact]
@@ -249,9 +246,9 @@ public class DialogCnTests : BunitContext
     {
         var cut = Render<DialogHeaderCn>(p => p.AddChildContent("Header"));
         var el = cut.Find("[data-slot='dialog-header']");
+        el.ClassList.Should().Contain("cn-dialog-header");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("gap-2");
     }
 
     [Fact]
@@ -277,9 +274,9 @@ public class DialogCnTests : BunitContext
     {
         var cut = Render<DialogFooterCn>(p => p.AddChildContent("Footer"));
         var el = cut.Find("[data-slot='dialog-footer']");
+        el.ClassList.Should().Contain("cn-dialog-footer");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("flex-col-reverse");
-        el.ClassList.Should().Contain("gap-2");
     }
 
     [Fact]
@@ -305,10 +302,7 @@ public class DialogCnTests : BunitContext
     {
         var cut = Render<DialogTitleCn>(p => p.AddChildContent("Title"));
         var el = cut.Find("[data-slot='dialog-title']");
-        el.ClassList.Should().Contain("text-lg");
-        el.ClassList.Should().Contain("font-semibold");
-        el.ClassList.Should().Contain("leading-none");
-        el.ClassList.Should().Contain("tracking-tight");
+        el.ClassList.Should().Contain("cn-dialog-title");
     }
 
     [Fact]
@@ -334,8 +328,7 @@ public class DialogCnTests : BunitContext
     {
         var cut = Render<DialogDescriptionCn>(p => p.AddChildContent("Description"));
         var el = cut.Find("[data-slot='dialog-description']");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("text-muted-foreground");
+        el.ClassList.Should().Contain("cn-dialog-description");
     }
 
     [Fact]
@@ -382,6 +375,52 @@ public class DialogCnTests : BunitContext
         cut.Find("[data-slot='dialog-close']").GetAttribute("type").Should().Be("button");
     }
 
+    // --- Focus Trap JS Interop ---
+
+    [Fact]
+    public void DialogContent_TrapFocus_Called_When_Open()
+    {
+        var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");
+        var trapFocusHandler = module.SetupVoid("trapFocus", _ => true);
+        trapFocusHandler.SetVoidResult();
+        module.SetupVoid("lockScroll", _ => true).SetVoidResult();
+        module.SetupVoid("cleanup", _ => true).SetVoidResult();
+        Services.AddScoped<JsInteropCn>();
+
+        Render<DialogCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<DialogContentCn>(c => c
+                .AddChildContent("Dialog body")));
+
+        trapFocusHandler.Invocations.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void DialogContent_Cleanup_Called_When_Closed()
+    {
+        var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");
+        module.SetupVoid("trapFocus", _ => true).SetVoidResult();
+        module.SetupVoid("lockScroll", _ => true).SetVoidResult();
+        var cleanupHandler = module.SetupVoid("cleanup", _ => true);
+        cleanupHandler.SetVoidResult();
+        Services.AddScoped<JsInteropCn>();
+
+        var isOpen = true;
+        var cut = Render<DialogCn>(p => p
+            .Add(c => c.Open, true)
+            .Add(c => c.OpenChanged, EventCallback.Factory.Create<bool>(this, v => isOpen = v))
+            .AddChildContent<DialogContentCn>(c => c
+                .AddChildContent("Dialog body")));
+
+        var countBefore = cleanupHandler.Invocations.Count;
+
+        // Close the dialog
+        cut.Find("[data-slot='dialog-content'] [data-slot='dialog-close']").Click();
+        isOpen.Should().BeFalse();
+
+        cleanupHandler.Invocations.Count.Should().BeGreaterThan(countBefore);
+    }
+
     // --- Integration ---
 
     [Fact]
@@ -413,5 +452,34 @@ public class DialogCnTests : BunitContext
                 .Add(x => x.AdditionalAttributes, new Dictionary<string, object?> { { "role", "dialog" } })
                 .AddChildContent("Body")));
         cut.Find("[data-slot='dialog-content']").GetAttribute("role").Should().Be("dialog");
+    }
+
+    [Fact]
+    public void DialogContent_AriaLabelledby_Matches_Title_Id()
+    {
+        SetupJsInterop();
+        var cut = Render<DialogCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<DialogContentCn>(c => c
+                .AddChildContent<DialogTitleCn>(t => t
+                    .AddChildContent("My Title"))));
+        var content = cut.Find("[data-slot='dialog-content']");
+        var title = cut.Find("[data-slot='dialog-title']");
+        var labelledBy = content.GetAttribute("aria-labelledby");
+        labelledBy.Should().NotBeNullOrEmpty();
+        title.GetAttribute("id").Should().Be(labelledBy);
+    }
+
+    [Fact]
+    public void DialogContent_Without_Title_Has_AriaLabel_Fallback()
+    {
+        SetupJsInterop();
+        var cut = Render<DialogCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<DialogContentCn>(c => c
+                .AddChildContent("Body without title")));
+        var content = cut.Find("[data-slot='dialog-content']");
+        content.GetAttribute("aria-labelledby").Should().BeNull();
+        content.GetAttribute("aria-label").Should().Be("Dialog");
     }
 }

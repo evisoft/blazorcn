@@ -1,0 +1,118 @@
+namespace BlazorCN.Demo.Data;
+
+public static class NavData
+{
+    public static readonly NavSection[] GettingStarted =
+    [
+        new("Getting Started", [
+            new("Introduction", "/docs/getting-started"),
+            new("Installation", "/docs/installation"),
+            new("Theming", "/docs/theming"),
+            new("Dark Mode", "/docs/dark-mode"),
+        ]),
+    ];
+
+    public static readonly NavSection[] Components =
+    [
+        new("Components", [
+            new("Accordion", "/docs/components/accordion"),
+            new("Alert", "/docs/components/alert"),
+            new("Alert Dialog", "/docs/components/alert-dialog"),
+            new("Aspect Ratio", "/docs/components/aspect-ratio"),
+            new("Avatar", "/docs/components/avatar"),
+            new("Badge", "/docs/components/badge"),
+            new("Breadcrumb", "/docs/components/breadcrumb"),
+            new("Button", "/docs/components/button"),
+            new("Button Group", "/docs/components/button-group"),
+            new("Calendar", "/docs/components/calendar"),
+            new("Card", "/docs/components/card"),
+            new("Carousel", "/docs/components/carousel"),
+            new("Chart", "/docs/components/chart"),
+            new("Checkbox", "/docs/components/checkbox"),
+            new("Collapsible", "/docs/components/collapsible"),
+            new("Combobox", "/docs/components/combobox"),
+            new("Command", "/docs/components/command"),
+            new("Context Menu", "/docs/components/context-menu"),
+            new("Data Table", "/docs/components/data-table"),
+            new("Date Picker", "/docs/components/date-picker"),
+            new("Dialog", "/docs/components/dialog"),
+            new("Drawer", "/docs/components/drawer"),
+            new("Dropdown Menu", "/docs/components/dropdown-menu"),
+            new("Empty", "/docs/components/empty"),
+            new("Field", "/docs/components/field"),
+            new("File Upload", "/docs/components/file-upload"),
+            new("Form", "/docs/components/form"),
+            new("Hover Card", "/docs/components/hover-card"),
+            new("Input", "/docs/components/input"),
+            new("Input Group", "/docs/components/input-group"),
+            new("Input OTP", "/docs/components/input-otp"),
+            new("Item", "/docs/components/item"),
+            new("Kbd", "/docs/components/kbd"),
+            new("Label", "/docs/components/label"),
+            new("Lucide Icon", "/docs/components/lucide-icon"),
+            new("Menubar", "/docs/components/menubar"),
+            new("Native Select", "/docs/components/native-select"),
+            new("Navigation Menu", "/docs/components/navigation-menu"),
+            new("Pagination", "/docs/components/pagination"),
+            new("Popover", "/docs/components/popover"),
+            new("Progress", "/docs/components/progress"),
+            new("Radio Group", "/docs/components/radio-group"),
+            new("Resizable", "/docs/components/resizable"),
+            new("Scroll Area", "/docs/components/scroll-area"),
+            new("Select", "/docs/components/select"),
+            new("Separator", "/docs/components/separator"),
+            new("Sheet", "/docs/components/sheet"),
+            new("Sidebar", "/docs/components/sidebar"),
+            new("Skeleton", "/docs/components/skeleton"),
+            new("Slider", "/docs/components/slider"),
+            new("Spinner", "/docs/components/spinner"),
+            new("Switch", "/docs/components/switch"),
+            new("Table", "/docs/components/table"),
+            new("Tabs", "/docs/components/tabs"),
+            new("Textarea", "/docs/components/textarea"),
+            new("Toast", "/docs/components/toast"),
+            new("Toggle", "/docs/components/toggle"),
+            new("Toggle Group", "/docs/components/toggle-group"),
+            new("Tooltip", "/docs/components/tooltip"),
+            new("Typography", "/docs/components/typography"),
+        ]),
+    ];
+
+    public static readonly NavSection[] Blocks =
+    [
+        new("Blocks", [
+            new("About", "/docs/blocks/about"),
+            new("Account", "/docs/blocks/account"),
+            new("AI", "/docs/blocks/ai"),
+            new("Awards", "/docs/blocks/awards"),
+            new("Blog", "/docs/blocks/blog"),
+            new("Calendar", "/docs/blocks/calendar"),
+            new("Carousel", "/docs/blocks/carousel"),
+            new("Command Menu", "/docs/blocks/command-menu"),
+            new("Contact", "/docs/blocks/contact"),
+            new("CRUD", "/docs/blocks/crud"),
+            new("Dashboard", "/docs/blocks/dashboard"),
+            new("Dialog", "/docs/blocks/dialog"),
+            new("Features", "/docs/blocks/features"),
+            new("Footer", "/docs/blocks/footer"),
+            new("Hero", "/docs/blocks/hero"),
+            new("Login", "/docs/blocks/login"),
+            new("NFT", "/docs/blocks/nft"),
+            new("Onboarding", "/docs/blocks/onboarding"),
+            new("Pricing", "/docs/blocks/pricing"),
+            new("Product Card", "/docs/blocks/product-card"),
+            new("Product Cards", "/docs/blocks/product-cards"),
+            new("Profile", "/docs/blocks/profile"),
+            new("Reviews", "/docs/blocks/reviews"),
+            new("Settings", "/docs/blocks/settings"),
+            new("Stats", "/docs/blocks/stats"),
+            new("Storefront", "/docs/blocks/storefront"),
+            new("Tables", "/docs/blocks/tables"),
+            new("Team", "/docs/blocks/team"),
+            new("Testimonials", "/docs/blocks/testimonials"),
+        ]),
+    ];
+}
+
+public record NavSection(string Title, NavItem[] Items);
+public record NavItem(string Label, string Href);

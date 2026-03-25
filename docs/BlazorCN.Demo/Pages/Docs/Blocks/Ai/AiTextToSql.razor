@@ -1,0 +1,198 @@
+@* ===========================================================
+   Block: ai-text-to-sql
+   Title: Ai Text To Sql
+   Description: React AI natural language to SQL query block for Next.js with query input, generated SQL display, result table preview, and tab toggle using shadcn/ui and Tailwind CSS
+   Long Description:
+   Dependencies: BadgeCn, ButtonCn, InputCn, LucideCheckCn, LucideCopyCn
+   Source: original/blocks/ai/ai-text-to-sql.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Query input *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <InputCn @bind-Value="_query"
+                     Placeholder="Describe what data you want to see..."
+                     Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 shrink-0 text-xs">
+                Generate
+            </ButtonCn>
+        </div>
+
+        @* Suggestions *@
+        <div class="flex flex-wrap gap-1.5 border-b px-4 py-2.5">
+            @foreach (var s in _suggestions)
+            {
+                var suggestion = s;
+                <BadgeCn Variant="BadgeVariant.Outline"
+                         Class="cursor-pointer text-xs font-normal transition-colors hover:bg-muted/50"
+                         @onclick="@(() => _query = suggestion)">
+                    @s
+                </BadgeCn>
+            }
+        </div>
+
+        @* Status + tabs *@
+        <div class="flex items-center justify-between border-b px-4 py-2.5">
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    PostgreSQL
+                </BadgeCn>
+                <span class="text-xs text-muted-foreground">&middot;</span>
+                <span class="text-xs text-muted-foreground">@_resultData.Length rows</span>
+            </div>
+            <div class="flex items-center gap-0.5 rounded-md border p-0.5">
+                <button type="button"
+                        @onclick="@(() => _activeTab = "sql")"
+                        class="@Cn.Merge("rounded px-2.5 py-1 text-xs font-medium transition-colors", _activeTab == "sql" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                    SQL
+                </button>
+                <button type="button"
+                        @onclick="@(() => _activeTab = "results")"
+                        class="@Cn.Merge("rounded px-2.5 py-1 text-xs font-medium transition-colors", _activeTab == "results" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                    Results
+                </button>
+            </div>
+        </div>
+
+        @* SQL View *@
+        @if (_activeTab == "sql")
+        {
+            <div>
+                <div class="flex items-center justify-end border-b px-4 py-1.5">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                              Class="h-6 gap-1 px-2 text-xs"
+                              OnClick="HandleCopy">
+                        @if (_copied)
+                        {
+                            <LucideCheckCn Size="12" Class="size-3" />
+                            <text>Copied</text>
+                        }
+                        else
+                        {
+                            <LucideCopyCn Size="12" Class="size-3" />
+                            <text>Copy</text>
+                        }
+                    </ButtonCn>
+                </div>
+                <div class="bg-zinc-950 p-4">
+                    <pre class="overflow-x-auto font-mono text-sm leading-relaxed text-zinc-100">@foreach (var line in _sqlLines)
+{<div class="flex"><span class="mr-4 inline-block w-6 select-none text-right text-zinc-600">@line.Number</span><span>@((MarkupString)line.Html)</span></div>}</pre>
+                </div>
+            </div>
+        }
+
+        @* Results View *@
+        @if (_activeTab == "results")
+        {
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b bg-muted/50">
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">ID</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Name</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Email</th>
+                            <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Signed Up</th>
+                            <th class="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground">Orders</th>
+                            <th class="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground">Total Spent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < _resultData.Length; i++)
+                        {
+                            var row = _resultData[i];
+                            var isLast = i == _resultData.Length - 1;
+                            <tr class="@($"transition-colors hover:bg-muted/30 {(isLast ? "" : "border-b")}")">
+                                <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">@row.Id</td>
+                                <td class="px-4 py-2.5 text-sm font-medium">@row.Name</td>
+                                <td class="px-4 py-2.5 text-sm text-muted-foreground">@row.Email</td>
+                                <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">@row.CreatedAt</td>
+                                <td class="px-4 py-2.5 text-right font-mono text-sm">@row.OrderCount</td>
+                                <td class="px-4 py-2.5 text-right text-sm font-medium">@row.TotalSpent</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record ResultRow(int Id, string Name, string Email, string CreatedAt, int OrderCount, string TotalSpent);
+    private record SqlLine(int Number, string Html);
+
+    private string _query = "Show me all users who signed up last month with their order counts";
+    private string _activeTab = "sql";
+    private bool _copied;
+
+    private static readonly string[] _suggestions =
+    [
+        "Show top 10 customers by revenue",
+        "Count active users per month",
+        "Find orders without payments",
+        "Average order value by category",
+    ];
+
+    private const string _generatedSql = @"SELECT
+  u.id,
+  u.name,
+  u.email,
+  u.created_at,
+  COUNT(o.id) AS order_count,
+  SUM(o.total) AS total_spent
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+WHERE u.created_at >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+  AND u.created_at < DATE_TRUNC('month', CURRENT_DATE)
+GROUP BY u.id, u.name, u.email, u.created_at
+ORDER BY u.created_at DESC
+LIMIT 50;";
+
+    private static readonly HashSet<string> _sqlKeywords = new(StringComparer.Ordinal)
+    {
+        "SELECT", "FROM", "LEFT JOIN", "WHERE", "AND", "GROUP BY", "ORDER BY", "LIMIT",
+        "ON", "AS", "COUNT", "SUM", "DATE_TRUNC", "CURRENT_DATE", "INTERVAL", "DESC",
+    };
+
+    private static readonly SqlLine[] _sqlLines = BuildSqlLines();
+
+    private static SqlLine[] BuildSqlLines()
+    {
+        var lines = _generatedSql.Split('\n');
+        var result = new SqlLine[lines.Length];
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var parts = System.Text.RegularExpressions.Regex.Split(lines[i],
+                @"(\b(?:SELECT|FROM|LEFT JOIN|WHERE|AND|GROUP BY|ORDER BY|LIMIT|ON|AS|COUNT|SUM|DATE_TRUNC|CURRENT_DATE|INTERVAL|DESC)\b)");
+            var sb = new System.Text.StringBuilder();
+            foreach (var part in parts)
+            {
+                if (_sqlKeywords.Contains(part))
+                    sb.Append($"<span class=\"text-blue-400\">{System.Net.WebUtility.HtmlEncode(part)}</span>");
+                else
+                    sb.Append(System.Net.WebUtility.HtmlEncode(part));
+            }
+            result[i] = new SqlLine(i + 1, sb.ToString());
+        }
+        return result;
+    }
+
+    private static readonly ResultRow[] _resultData =
+    [
+        new(1042, "Sarah Chen", "sarah.chen@example.com", "2026-02-28", 5, "$1,247.00"),
+        new(1039, "Marcus Johnson", "m.johnson@example.com", "2026-02-25", 3, "$689.50"),
+        new(1036, "Emily Park", "emily.park@example.com", "2026-02-22", 8, "$2,103.75"),
+        new(1033, "David Rodriguez", "d.rodriguez@example.com", "2026-02-18", 1, "$89.99"),
+        new(1028, "Aisha Patel", "a.patel@example.com", "2026-02-14", 4, "$956.20"),
+        new(1025, "James Wilson", "j.wilson@example.com", "2026-02-09", 2, "$347.00"),
+    ];
+
+    private async Task HandleCopy()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

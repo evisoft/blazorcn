@@ -124,4 +124,25 @@ public class CnTests
         var result = Cn.Merge("custom-class", "custom-class");
         result.Should().Be("custom-class");
     }
+
+    [Fact]
+    public void Merge_Important_Conflicts_With_Regular()
+    {
+        var result = Cn.Merge("!bg-red-500", "bg-blue-500");
+        result.Should().Be("bg-blue-500");
+    }
+
+    [Fact]
+    public void Merge_Regular_Conflicts_With_Important()
+    {
+        var result = Cn.Merge("bg-red-500", "!bg-blue-500");
+        result.Should().Be("!bg-blue-500");
+    }
+
+    [Fact]
+    public void Merge_Important_Spacing_Conflict()
+    {
+        var result = Cn.Merge("!p-2", "p-4");
+        result.Should().Be("p-4");
+    }
 }

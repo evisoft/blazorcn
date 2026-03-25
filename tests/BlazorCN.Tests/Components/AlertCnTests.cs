@@ -13,10 +13,8 @@ public class AlertCnTests : BunitContext
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("alert");
         div.GetAttribute("role").Should().Be("alert");
-        div.ClassList.Should().Contain("rounded-lg");
-        div.ClassList.Should().Contain("border");
-        div.ClassList.Should().Contain("bg-card");
-        div.ClassList.Should().Contain("text-card-foreground");
+        div.ClassList.Should().Contain("cn-alert");
+        div.ClassList.Should().Contain("cn-alert-variant-default");
     }
 
     [Fact]
@@ -26,8 +24,7 @@ public class AlertCnTests : BunitContext
             .Add(c => c.Variant, AlertVariant.Destructive)
             .AddChildContent("Error"));
         var div = cut.Find("div");
-        div.ClassList.Should().Contain("text-destructive");
-        div.ClassList.Should().Contain("bg-card");
+        div.ClassList.Should().Contain("cn-alert-variant-destructive");
     }
 
     [Fact]
@@ -56,8 +53,7 @@ public class AlertCnTests : BunitContext
         var cut = Render<AlertTitleCn>(p => p.AddChildContent("Warning"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("alert-title");
-        div.ClassList.Should().Contain("font-medium");
-        div.ClassList.Should().Contain("tracking-tight");
+        div.ClassList.Should().Contain("cn-alert-title");
     }
 
     [Fact]
@@ -66,8 +62,7 @@ public class AlertCnTests : BunitContext
         var cut = Render<AlertDescriptionCn>(p => p.AddChildContent("Details here"));
         var div = cut.Find("div");
         div.GetAttribute("data-slot").Should().Be("alert-description");
-        div.ClassList.Should().Contain("text-muted-foreground");
-        div.ClassList.Should().Contain("gap-1");
+        div.ClassList.Should().Contain("cn-alert-description");
     }
 
     [Fact]

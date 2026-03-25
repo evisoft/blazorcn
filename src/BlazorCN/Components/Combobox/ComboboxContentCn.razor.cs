@@ -24,18 +24,27 @@ public partial class ComboboxContentCn : IAsyncDisposable
     {
         if (Combobox?.IsOpen == true && !_jsInitialized)
         {
-            _dotnetRef = DotNetObjectReference.Create(this);
-            await JsInterop.CreateFloatingAsync(Combobox.TriggerElement, _contentRef, _id,
-                new FloatingOptions
-                {
-                    Side = Side,
-                    SideOffset = SideOffset,
-                    Align = Align,
-                    AlignOffset = AlignOffset
-                });
-            await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick");
-            await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
             _jsInitialized = true;
+            try
+            {
+                _dotnetRef = DotNetObjectReference.Create(this);
+                await JsInterop.CreateFloatingAsync(Combobox.TriggerElement, _contentRef, _id,
+                    new FloatingOptions
+                    {
+                        Side = Side,
+                        SideOffset = SideOffset,
+                        Align = Align,
+                        AlignOffset = AlignOffset
+                    });
+                await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick");
+                await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
+            }
+            catch
+            {
+                _jsInitialized = false;
+                _dotnetRef?.Dispose();
+                _dotnetRef = null;
+            }
         }
         else if (Combobox?.IsOpen != true && _jsInitialized)
         {

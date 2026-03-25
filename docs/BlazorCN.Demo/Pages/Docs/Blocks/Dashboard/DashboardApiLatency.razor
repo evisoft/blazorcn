@@ -1,0 +1,209 @@
+@* ============================================================
+   Block: dashboard-api-latency
+   Title: Dashboard Api Latency
+   Description: Animated React API latency percentiles dashboard block for Next.js with p50, p95, p99 metrics, expandable endpoint breakdown, response time distribution bars, and trend indicators using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Endpoint health check with uptime tracking
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-api-latency.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">API Latency</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                Last 30 min
+            </BadgeCn>
+        </div>
+
+        @* Global percentiles *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-muted-foreground text-xs">p50</p>
+                <p class="@(Cn.Merge("font-semibold text-2xl tabular-nums", GetLatencyColor(_globalP50)))">
+                    @(FormatMs(_globalP50))
+                </p>
+            </div>
+            <div class="h-8 w-px bg-border"></div>
+            <div>
+                <p class="text-muted-foreground text-xs">p95</p>
+                <p class="@(Cn.Merge("font-semibold text-sm tabular-nums", GetLatencyColor(_globalP95)))">
+                    @(FormatMs(_globalP95))
+                </p>
+            </div>
+            <div class="h-8 w-px bg-border"></div>
+            <div>
+                <p class="text-muted-foreground text-xs">p99</p>
+                <p class="@(Cn.Merge("font-semibold text-sm tabular-nums", GetLatencyColor(_globalP99)))">
+                    @(FormatMs(_globalP99))
+                </p>
+            </div>
+            <div class="ml-auto flex items-center gap-1.5">
+                <span class="@(Cn.Merge("size-1.5 rounded-full", GetLatencyDot(_globalP95)))"></span>
+                <span class="text-muted-foreground text-xs">Acceptable</span>
+            </div>
+        </div>
+
+        @* Endpoints *@
+        <div>
+            @for (var i = 0; i < _endpoints.Length; i++)
+                        {
+                var endpoint = _endpoints[i];
+                var endpointIndex = i;
+                var isExpanded = _expanded == endpoint.Id;
+                var isLast = endpointIndex == _endpoints.Length - 1;
+
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : endpoint.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", GetLatencyDot(endpoint.P95)))"></span>
+                        <span class="inline-flex w-12 shrink-0 items-center rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+                            @endpoint.Method
+                        </span>
+                        <span class="min-w-0 flex-1 truncate font-mono text-xs">@endpoint.Path</span>
+                        <span class="w-14 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                            @endpoint.Rpm rpm
+                        </span>
+                        <span class="@(Cn.Merge("w-14 shrink-0 text-right text-xs tabular-nums", GetLatencyColor(endpoint.P50)))">
+                            @(FormatMs(endpoint.P50))
+                        </span>
+                        <span class="@(Cn.Merge("w-14 shrink-0 text-right font-medium text-xs tabular-nums", GetLatencyColor(endpoint.P95)))">
+                            @(FormatMs(endpoint.P95))
+                        </span>
+                        <span class="@(Cn.Merge("w-14 shrink-0 text-right text-xs tabular-nums", GetLatencyColor(endpoint.P99)))">
+                            @(FormatMs(endpoint.P99))
+                        </span>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                                {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-4 pt-1">
+                                <p class="mb-3 text-muted-foreground text-xs">
+                                    Response time distribution
+                                </p>
+                                <div class="space-y-2">
+                                    @foreach (var bucket in endpoint.Buckets)
+                                                {
+                                        <div class="flex items-center gap-3">
+                                            <span class="w-16 shrink-0 font-mono text-muted-foreground text-xs">
+                                                @bucket.Range
+                                            </span>
+                                            <div class="h-5 flex-1 overflow-hidden rounded bg-muted/30">
+                                                <div class="h-full rounded bg-foreground/15"
+                                                     style="@($"width: {bucket.Percentage}%")">
+                                                </div>
+                                            </div>
+                                            <span class="w-14 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                                                @bucket.Percentage%
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="mt-3 flex items-center gap-3 text-muted-foreground text-xs">
+                                    <span>Trend: @(_trendLabel[endpoint.Trend])</span>
+                                    <span>·</span>
+                                    <span>@endpoint.Rpm requests/min</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "3";
+
+    private record LatencyBucket(string Range, int Count, double Percentage);
+    private record EndpointLatency(string Id, string Path, string Method, int P50, int P95, int P99, string Rpm, string Trend, LatencyBucket[] Buckets);
+
+    private static string GetLatencyColor(int ms)
+    {
+        if (ms < 100) return "text-emerald-600 dark:text-emerald-400";
+        if (ms < 500) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private static string GetLatencyDot(int ms)
+    {
+        if (ms < 100) return "bg-emerald-500";
+        if (ms < 500) return "bg-amber-500";
+        return "bg-red-500";
+    }
+
+    private static string FormatMs(int ms)
+    {
+        if (ms >= 1000) return $"{ms / 1000.0:F1}s";
+        return $"{ms}ms";
+    }
+
+    private readonly Dictionary<string, string> _trendLabel = new()
+    {
+        ["up"] = "+12%",
+        ["down"] = "-8%",
+        ["flat"] = "0%"
+    };
+
+    private const int _globalP50 = 42;
+    private const int _globalP95 = 189;
+    private const int _globalP99 = 620;
+
+    private readonly EndpointLatency[] _endpoints = new[]
+    {
+        new EndpointLatency("1", "/api/v2/users/me", "GET", 12, 34, 89, "2.4K", "flat", new[]
+        {
+            new LatencyBucket("0-25ms", 1840, 76.7),
+            new LatencyBucket("25-50ms", 420, 17.5),
+            new LatencyBucket("50-100ms", 112, 4.7),
+            new LatencyBucket("100-250ms", 24, 1.0),
+            new LatencyBucket("250ms+", 4, 0.2)
+        }),
+        new EndpointLatency("2", "/api/v2/orders", "POST", 45, 189, 420, "890", "up", new[]
+        {
+            new LatencyBucket("0-25ms", 180, 20.2),
+            new LatencyBucket("25-50ms", 310, 34.8),
+            new LatencyBucket("50-100ms", 195, 21.9),
+            new LatencyBucket("100-250ms", 156, 17.5),
+            new LatencyBucket("250ms+", 49, 5.5)
+        }),
+        new EndpointLatency("3", "/api/v2/search", "GET", 78, 340, 1240, "1.6K", "up", new[]
+        {
+            new LatencyBucket("0-25ms", 160, 10.0),
+            new LatencyBucket("25-50ms", 240, 15.0),
+            new LatencyBucket("50-100ms", 480, 30.0),
+            new LatencyBucket("100-250ms", 400, 25.0),
+            new LatencyBucket("250ms+", 320, 20.0)
+        }),
+        new EndpointLatency("4", "/api/v2/products", "GET", 18, 52, 110, "3.1K", "down", new[]
+        {
+            new LatencyBucket("0-25ms", 2200, 71.0),
+            new LatencyBucket("25-50ms", 620, 20.0),
+            new LatencyBucket("50-100ms", 210, 6.8),
+            new LatencyBucket("100-250ms", 58, 1.9),
+            new LatencyBucket("250ms+", 12, 0.4)
+        }),
+        new EndpointLatency("5", "/api/v2/analytics/query", "POST", 156, 890, 2400, "420", "up", new[]
+        {
+            new LatencyBucket("0-25ms", 8, 1.9),
+            new LatencyBucket("25-50ms", 25, 6.0),
+            new LatencyBucket("50-100ms", 67, 16.0),
+            new LatencyBucket("100-250ms", 168, 40.0),
+            new LatencyBucket("250ms+", 152, 36.2)
+        }),
+        new EndpointLatency("6", "/api/v2/auth/refresh", "POST", 22, 68, 145, "1.8K", "flat", new[]
+        {
+            new LatencyBucket("0-25ms", 980, 54.4),
+            new LatencyBucket("25-50ms", 520, 28.9),
+            new LatencyBucket("50-100ms", 210, 11.7),
+            new LatencyBucket("100-250ms", 78, 4.3),
+            new LatencyBucket("250ms+", 12, 0.7)
+        })
+    };
+}

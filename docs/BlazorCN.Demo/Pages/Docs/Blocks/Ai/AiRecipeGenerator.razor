@@ -1,0 +1,263 @@
+@* ===========================================================
+   Block: ai-recipe-generator
+   Title: Ai Recipe Generator
+   Description: AI recipe generator with ingredient tag input, dietary restriction filters, and structured recipe output
+   Dependencies: ButtonCn, CheckboxCn, InputCn, LucideCheckCn, LucideChevronRightCn, LucideCopyCn, LucideXCn
+   Source: original/blocks/ai/ai-recipe-generator.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Ingredient input *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs font-medium text-muted-foreground">Ingredients</span>
+            <div class="flex min-h-8 flex-wrap items-center gap-1.5">
+                @foreach (var ing in _ingredients.ToList())
+                {
+                    var ingredient = ing;
+                    <span class="flex h-6 items-center gap-1 rounded border bg-muted/50 pl-2 pr-1 text-xs capitalize">
+                        @ingredient
+                        <button type="button"
+                                class="rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                                @onclick="@(() => _ingredients.Remove(ingredient))">
+                            <LucideXCn Size="16" Class="size-3" />
+                        </button>
+                    </span>
+                }
+                <InputCn @bind-Value="_inputValue"
+                         Placeholder="@(_ingredients.Count == 0 ? "Add ingredients..." : "Add more...")"
+                         Class="h-7 min-w-24 flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                         OnKeyDown="HandleKeyDown" />
+            </div>
+            <span class="mt-1.5 block text-xs text-muted-foreground">
+                Press Enter or comma to add
+            </span>
+        </div>
+
+        @* Dietary restrictions *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs font-medium text-muted-foreground">
+                Dietary restrictions
+            </span>
+            <div class="flex flex-wrap gap-2">
+                @foreach (var option in _dietaryOptions)
+                {
+                    var optId = option.Id;
+                    var isChecked = _dietaryRestrictions.Contains(optId);
+                    <div role="button" tabindex="0"
+                         class="@Cn.Merge("flex h-7 cursor-pointer items-center gap-1.5 rounded border px-2.5 text-xs transition-colors", isChecked ? "border-foreground/20 bg-muted/50" : "hover:bg-muted/50")"
+                         @onclick="@(() => ToggleDietary(optId))">
+                        <CheckboxCn Checked="@isChecked" CheckedChanged="@(_ => ToggleDietary(optId))" Class="size-3" />
+                        @option.Label
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Generate button *@
+        <div class="border-b px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                      Class="h-7 w-full text-xs"
+                      Disabled="@(_ingredients.Count == 0)"
+                      @onclick="@(() => _recipe = _sampleRecipe)">
+                Generate Recipe
+            </ButtonCn>
+        </div>
+
+        @* Recipe result *@
+        @if (_recipe != null)
+        {
+            @* Recipe header *@
+            <div class="border-b px-4 py-3">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <span class="text-sm font-medium">@_recipe.Title</span>
+                        <div class="mt-1.5 flex items-center gap-2">
+                            <span class="text-xs text-muted-foreground">Prep @_recipe.PrepTime</span>
+                            <span class="text-xs text-muted-foreground">&middot;</span>
+                            <span class="text-xs text-muted-foreground">Cook @_recipe.CookTime</span>
+                            <span class="text-xs text-muted-foreground">&middot;</span>
+                            <span class="text-xs text-muted-foreground">@_recipe.Servings servings</span>
+                            <span class="text-xs text-muted-foreground">&middot;</span>
+                            <span class="text-xs text-muted-foreground">@_recipe.Calories cal</span>
+                        </div>
+                    </div>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                              Class="h-6 gap-1 px-2 text-xs"
+                              @onclick="HandleCopy">
+                        @if (_copied)
+                        {
+                            <LucideCheckCn Size="16" Class="size-3" />
+                            <text>Copied</text>
+                        }
+                        else
+                        {
+                            <LucideCopyCn Size="16" Class="size-3" />
+                            <text>Copy</text>
+                        }
+                    </ButtonCn>
+                </div>
+            </div>
+
+            @* Ingredients list *@
+            <div class="border-b">
+                <button type="button"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                        @onclick="@(() => _expandedSection = _expandedSection == "ingredients" ? null : "ingredients")">
+                    <span class="flex-1 text-sm font-medium">
+                        Ingredients
+                        <span class="ml-1.5 text-xs font-normal text-muted-foreground">
+                            (@_recipe.Ingredients.Length)
+                        </span>
+                    </span>
+                    <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", _expandedSection == "ingredients" ? "rotate-90" : "")" />
+                </button>
+
+                @if (_expandedSection == "ingredients")
+                {
+                    <div class="px-4 pb-3">
+                        <div class="space-y-1">
+                            @for (var i = 0; i < _recipe.Ingredients.Length; i++)
+                            {
+                                var idx = i;
+                                var ing = _recipe.Ingredients[i];
+                                var isChecked = _checkedIngredients.Contains(idx);
+                                <label class="flex w-full cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/50">
+                                    <CheckboxCn Checked="@isChecked" CheckedChanged="@(_ => ToggleIngredientCheck(idx))" Class="mt-0.5 size-3.5" />
+                                    <span class="@Cn.Merge("text-sm", isChecked ? "text-muted-foreground line-through" : "")">
+                                        @ing
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Steps *@
+            <div>
+                <button type="button"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                        @onclick="@(() => _expandedSection = _expandedSection == "steps" ? null : "steps")">
+                    <span class="flex-1 text-sm font-medium">
+                        Instructions
+                        <span class="ml-1.5 text-xs font-normal text-muted-foreground">
+                            (@_recipe.Steps.Length steps)
+                        </span>
+                    </span>
+                    <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", _expandedSection == "steps" ? "rotate-90" : "")" />
+                </button>
+
+                @if (_expandedSection == "steps")
+                {
+                    <div class="px-4 pb-4">
+                        <ol class="space-y-3">
+                            @for (var i = 0; i < _recipe.Steps.Length; i++)
+                            {
+                                var step = _recipe.Steps[i];
+                                <li class="flex gap-3">
+                                    <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-[10px] text-muted-foreground">
+                                        @(i + 1)
+                                    </span>
+                                    <p class="text-sm leading-relaxed">@step</p>
+                                </li>
+                            }
+                        </ol>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record RecipeResult(string Title, string PrepTime, string CookTime, int Servings, int Calories, string[] Ingredients, string[] Steps);
+    private record DietaryOption(string Id, string Label);
+
+    private static readonly DietaryOption[] _dietaryOptions =
+    [
+        new("vegetarian", "Vegetarian"),
+        new("vegan", "Vegan"),
+        new("gluten-free", "Gluten-Free"),
+        new("dairy-free", "Dairy-Free"),
+        new("keto", "Keto"),
+        new("nut-free", "Nut-Free"),
+    ];
+
+    private static readonly RecipeResult _sampleRecipe = new(
+        "Mediterranean Chickpea Bowl with Lemon Tahini Dressing",
+        "15 min", "20 min", 4, 420,
+        [
+            "2 cans (15 oz) chickpeas, drained and rinsed",
+            "2 cups cherry tomatoes, halved",
+            "1 large cucumber, diced",
+            "1 red onion, thinly sliced",
+            "1 cup kalamata olives, pitted",
+            "200g feta cheese, crumbled",
+            "3 tbsp olive oil",
+            "2 tbsp tahini",
+            "1 lemon, juiced",
+            "2 cloves garlic, minced",
+            "Salt and pepper to taste",
+            "Fresh parsley for garnish",
+        ],
+        [
+            "Preheat oven to 425F. Toss chickpeas with 1 tbsp olive oil, salt, and pepper. Roast on a baking sheet for 20 minutes until crispy.",
+            "While chickpeas roast, prepare the dressing: whisk together tahini, lemon juice, remaining olive oil, minced garlic, and 2 tbsp warm water until smooth.",
+            "Combine cherry tomatoes, cucumber, red onion, and olives in a large bowl. Toss gently to mix.",
+            "Add the roasted chickpeas to the vegetable mixture while still warm.",
+            "Drizzle the lemon tahini dressing over the bowl and toss to coat evenly.",
+            "Top with crumbled feta cheese and fresh parsley. Serve immediately or refrigerate for up to 2 days.",
+        ]
+    );
+
+    private List<string> _ingredients = new() { "chickpeas", "tomatoes", "cucumber", "feta cheese" };
+    private string _inputValue = "";
+    private List<string> _dietaryRestrictions = new() { "vegetarian" };
+    private RecipeResult? _recipe = _sampleRecipe;
+    private HashSet<int> _checkedIngredients = new();
+    private string? _expandedSection = "ingredients";
+    private bool _copied;
+
+    private void AddIngredient(string value)
+    {
+        var trimmed = value.Trim().ToLowerInvariant();
+        if (!string.IsNullOrEmpty(trimmed) && !_ingredients.Contains(trimmed))
+            _ingredients.Add(trimmed);
+        _inputValue = "";
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or ",")
+        {
+            AddIngredient(_inputValue);
+        }
+        else if (e.Key == "Backspace" && string.IsNullOrEmpty(_inputValue) && _ingredients.Count > 0)
+        {
+            _ingredients.RemoveAt(_ingredients.Count - 1);
+        }
+    }
+
+    private void ToggleDietary(string id)
+    {
+        if (_dietaryRestrictions.Contains(id))
+            _dietaryRestrictions.Remove(id);
+        else
+            _dietaryRestrictions.Add(id);
+    }
+
+    private void ToggleIngredientCheck(int index)
+    {
+        if (!_checkedIngredients.Add(index))
+            _checkedIngredients.Remove(index);
+    }
+
+    private async Task HandleCopy()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

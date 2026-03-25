@@ -1,0 +1,158 @@
+@* ===========================================================
+   Block: settings-usage-limits
+   Title: Settings Usage Limits
+   Description: Per-resource limits, current usage bars, overage policy, alert thresholds
+   Dependencies: BadgeCn, ButtonCn, InputCn, SelectCn, SwitchCn
+   Source: original/blocks/settings/settings-usage-limits.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="font-medium text-sm">Usage limits</p>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        Configure per-resource limits, overage policies, and alerts
+                    </p>
+                </div>
+                @{ var nearLimitCount = _resources.Count(r => (double)r.Current / r.Limit * 100 >= 80); }
+                @if (nearLimitCount > 0)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 font-normal text-xs text-amber-600 dark:text-amber-400">
+                        <LucideTriangleAlertCn Size="12" Class="size-3" />
+                        @nearLimitCount near limit
+                    </BadgeCn>
+                }
+            </div>
+        </div>
+
+        @* Default overage policy *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Default overage policy</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">Applied when no per-resource policy is set</p>
+            </div>
+            <SelectCn @bind-Value="_globalOverage">
+                <SelectTriggerCn Class="h-8 w-44 text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="block">Block requests</SelectItemCn>
+                    <SelectItemCn Value="throttle">Throttle requests</SelectItemCn>
+                    <SelectItemCn Value="charge">Charge overage</SelectItemCn>
+                    <SelectItemCn Value="notify">Notify only</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Resource list *@
+        <div class="border-b px-4 py-2">
+            <span class="font-medium text-muted-foreground text-xs uppercase tracking-wide">Resources</span>
+        </div>
+
+        <div>
+            @for (var i = 0; i < _resources.Count; i++)
+            {
+                var resource = _resources[i];
+                var isLast = i == _resources.Count - 1;
+                var isExpanded = _expanded == resource.Id;
+                var usagePercent = (int)((double)resource.Current / resource.Limit * 100);
+                var dotClass = usagePercent >= 95 ? "bg-red-500" : usagePercent >= 80 ? "bg-amber-500" : "bg-emerald-500";
+                var barClass = usagePercent >= 95 ? "bg-red-500" : usagePercent >= 80 ? "bg-amber-500" : "bg-emerald-500";
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : resource.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", dotClass)"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@resource.Label</span>
+                                <span class="font-mono text-muted-foreground text-xs">
+                                    @resource.Current.ToString("N0")/@resource.Limit.ToString("N0")
+                                </span>
+                            </div>
+                            <div class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted/50">
+                                <div class="@Cn.Merge("h-full rounded-full transition-all", barClass)" style="width: @(Math.Min(usagePercent, 100))%"></div>
+                            </div>
+                        </div>
+                        <span class="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">@(usagePercent)%</span>
+                        <LucideChevronRightCn Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="space-y-3 px-4 pb-3 pl-9">
+                                <p class="text-muted-foreground text-xs">@resource.Description</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <span class="mb-1 block text-muted-foreground text-xs">Limit (@resource.Unit)</span>
+                                        <InputCn type="number" Value="@resource.Limit.ToString()" Class="h-7 font-mono text-xs" />
+                                    </div>
+                                    <div>
+                                        <span class="mb-1 block text-muted-foreground text-xs">Overage policy</span>
+                                        <SelectCn Value="@resource.OveragePolicy">
+                                            <SelectTriggerCn Class="h-7 text-xs">
+                                                <SelectValueCn />
+                                            </SelectTriggerCn>
+                                            <SelectContentCn>
+                                                <SelectItemCn Value="block">Block requests</SelectItemCn>
+                                                <SelectItemCn Value="throttle">Throttle requests</SelectItemCn>
+                                                <SelectItemCn Value="charge">Charge overage</SelectItemCn>
+                                                <SelectItemCn Value="notify">Notify only</SelectItemCn>
+                                            </SelectContentCn>
+                                        </SelectCn>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <SwitchCn Checked="@resource.AlertEnabled" />
+                                        <span class="text-muted-foreground text-xs">Alert at</span>
+                                        @if (resource.AlertEnabled)
+                                        {
+                                            <InputCn type="number" Value="@resource.AlertThreshold.ToString()" Class="h-7 w-16 font-mono text-xs" />
+                                            <span class="text-muted-foreground text-xs">%</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Save *@
+        <div class="flex items-center justify-end gap-2 border-t px-4 py-3">
+            @if (_saved)
+            {
+                <span class="flex items-center gap-1 text-emerald-600 text-xs dark:text-emerald-400">
+                    <LucideCheckCn Size="12" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs">
+                Save changes
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record UsageResource(string Id, string Label, string Description, string Unit, int Current, int Limit, string OveragePolicy, bool AlertEnabled, int AlertThreshold);
+
+    private static readonly List<UsageResource> _resources =
+    [
+        new("api", "API Requests", "Monthly API call limit across all endpoints", "requests", 847000, 1000000, "throttle", true, 80),
+        new("storage", "Storage", "Total file storage across all projects", "GB", 42, 50, "block", true, 90),
+        new("bandwidth", "Bandwidth", "Monthly data transfer for all assets", "GB", 180, 500, "charge", true, 80),
+        new("members", "Team Members", "Maximum workspace members", "users", 12, 15, "block", true, 80),
+        new("projects", "Projects", "Maximum number of active projects", "projects", 8, 10, "notify", false, 80),
+    ];
+
+    private string? _expanded = null;
+    private bool _saved = false;
+    private string _globalOverage = "throttle";
+}

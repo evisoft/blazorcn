@@ -1,0 +1,177 @@
+@* ===========================================================
+   Block: ai-agent-multi-step
+   Title: Ai Agent Multi Step
+   Description: React AI agent multi-step block for Next.js with nested sub-tasks, tree-style display, indented levels, and status tracking using shadcn/ui and Tailwind CSS
+   Long Description: React AI Accessibility Checker Block
+   Dependencies: BadgeCn
+   Source: original/blocks/ai/ai-agent-multi-step.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex-1">
+                <span class="font-medium text-sm">Deploy to Production</span>
+                <p class="text-muted-foreground text-xs">Multi-step deployment pipeline</p>
+            </div>
+            <span class="font-mono text-muted-foreground text-xs">
+                @_completedCount/@_totalCount
+            </span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                @(_progressPercent)%
+            </BadgeCn>
+        </div>
+
+        @* Progress bar *@
+        <div class="border-b px-4 py-2">
+            <div class="h-1 w-full overflow-hidden rounded-full bg-muted">
+                <div class="h-full rounded-full bg-foreground transition-all duration-300"
+                     style="width: @(_progressPercent)%" />
+            </div>
+        </div>
+
+        @* Task tree *@
+        <div class="py-1">
+            @for (int i = 0; i < _deploymentTasks.Length; i++)
+            {
+                var task = _deploymentTasks[i];
+                var isLast = i == _deploymentTasks.Length - 1;
+                <div class="@(isLast ? "" : "border-b")">
+                    @RenderTaskNode(task, 0)
+                </div>
+            }
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-3 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @(_deploymentTasks.Count(t => t.Status == "completed")) done
+            </span>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                @(_deploymentTasks.Count(t => t.Status == "running")) running
+            </span>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-muted-foreground/30"></span>
+                @(_deploymentTasks.Count(t => t.Status == "pending")) pending
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SubTask(string Id, string Title, string Status, string? Duration = null, SubTask[]? Children = null);
+
+    private static string StatusDot(string status) => status switch
+    {
+        "completed" => "bg-emerald-500",
+        "running" => "bg-blue-500",
+        _ => "bg-muted-foreground/30"
+    };
+
+    private static readonly SubTask[] _deploymentTasks =
+    {
+        new("d1", "Pre-flight checks", "completed", "4s", new SubTask[]
+        {
+            new("d1a", "Validate environment variables", "completed", "1s"),
+            new("d1b", "Check database connectivity", "completed", "2s"),
+            new("d1c", "Verify Docker registry access", "completed", "1s"),
+        }),
+        new("d2", "Build application", "completed", "45s", new SubTask[]
+        {
+            new("d2a", "Install dependencies", "completed", "12s"),
+            new("d2b", "Run TypeScript compiler", "completed", "8s"),
+            new("d2c", "Bundle with esbuild", "completed", "3s"),
+            new("d2d", "Build Docker image", "completed", "22s"),
+        }),
+        new("d3", "Run test suite", "running", null, new SubTask[]
+        {
+            new("d3a", "Unit tests (248 tests)", "completed", "18s"),
+            new("d3b", "Integration tests (67 tests)", "running"),
+            new("d3c", "E2E tests (23 scenarios)", "pending"),
+        }),
+        new("d4", "Deploy to staging", "pending", null, new SubTask[]
+        {
+            new("d4a", "Push image to registry", "pending"),
+            new("d4b", "Rolling update Kubernetes pods", "pending"),
+            new("d4c", "Health check verification", "pending"),
+        }),
+        new("d5", "Promote to production", "pending", null, new SubTask[]
+        {
+            new("d5a", "Blue-green deployment switch", "pending"),
+            new("d5b", "CDN cache invalidation", "pending"),
+            new("d5c", "Smoke test production endpoints", "pending"),
+        })
+    };
+
+    private HashSet<string> _collapsedIds = new();
+
+    private static (int Total, int Completed) CountLeafTasks(SubTask[] tasks)
+    {
+        int total = 0, completed = 0;
+        foreach (var task in tasks)
+        {
+            if (task.Children is { Length: > 0 })
+            {
+                var (ct, cc) = CountLeafTasks(task.Children);
+                total += ct;
+                completed += cc;
+            }
+            else
+            {
+                total++;
+                if (task.Status == "completed") completed++;
+            }
+        }
+        return (total, completed);
+    }
+
+    private int _totalCount => CountLeafTasks(_deploymentTasks).Total;
+    private int _completedCount => CountLeafTasks(_deploymentTasks).Completed;
+    private int _progressPercent => _totalCount > 0 ? (int)Math.Round((double)_completedCount / _totalCount * 100) : 0;
+
+    private RenderFragment RenderTaskNode(SubTask task, int depth) => __builder =>
+    {
+        var hasChildren = task.Children is { Length: > 0 };
+        var isExpanded = !_collapsedIds.Contains(task.Id);
+
+        <button type="button"
+                @onclick="@(() => { if (hasChildren) { if (isExpanded) _collapsedIds.Add(task.Id); else _collapsedIds.Remove(task.Id); } })"
+                class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-muted/50", depth > 0 ? "ml-6 border-l border-border pl-4" : "")">
+            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", StatusDot(task.Status))"></span>
+
+            @if (hasChildren)
+            {
+                <LucideChevronRightCn Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+            }
+
+            <span class="@Cn.Merge("flex-1 text-sm", task.Status == "completed" ? "text-muted-foreground" : "", task.Status == "pending" ? "text-muted-foreground/60" : "", task.Status == "running" ? "font-medium" : "")">
+                @task.Title
+            </span>
+
+            @if (task.Duration is not null)
+            {
+                <span class="font-mono text-muted-foreground text-xs">@task.Duration</span>
+            }
+            @if (task.Status == "running" && task.Duration is null)
+            {
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 animate-pulse rounded-full bg-blue-500"></span>
+                    Running
+                </span>
+            }
+        </button>
+
+        @if (hasChildren && isExpanded)
+        {
+            <div>
+                @foreach (var child in task.Children!)
+                {
+                    @RenderTaskNode(child, depth + 1)
+                }
+            </div>
+        }
+    };
+}

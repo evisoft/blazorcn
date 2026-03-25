@@ -23,17 +23,26 @@ public partial class MenubarSubContentCn : IAsyncDisposable
     {
         if (Sub?.IsOpen == true && !_jsInitialized)
         {
-            _dotnetRef = DotNetObjectReference.Create(this);
-            await JsInterop.CreateFloatingAsync(Sub.TriggerElement, _contentRef, _id,
-                new FloatingOptions
-                {
-                    Side = Side,
-                    SideOffset = SideOffset,
-                    Align = Align,
-                    AlignOffset = AlignOffset
-                });
-            await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
             _jsInitialized = true;
+            try
+            {
+                _dotnetRef = DotNetObjectReference.Create(this);
+                await JsInterop.CreateFloatingAsync(Sub.TriggerElement, _contentRef, _id,
+                    new FloatingOptions
+                    {
+                        Side = Side,
+                        SideOffset = SideOffset,
+                        Align = Align,
+                        AlignOffset = AlignOffset
+                    });
+                await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
+            }
+            catch
+            {
+                _jsInitialized = false;
+                _dotnetRef?.Dispose();
+                _dotnetRef = null;
+            }
         }
         else if (Sub?.IsOpen != true && _jsInitialized)
         {

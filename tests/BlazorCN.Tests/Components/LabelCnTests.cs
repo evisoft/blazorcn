@@ -12,8 +12,7 @@ public class LabelCnTests : BunitContext
         var cut = Render<LabelCn>(p => p.AddChildContent("Username"));
         var label = cut.Find("label");
         label.GetAttribute("data-slot").Should().Be("label");
-        label.ClassList.Should().Contain("text-sm");
-        label.ClassList.Should().Contain("font-medium");
+        label.ClassList.Should().Contain("cn-label");
         label.ClassList.Should().Contain("select-none");
     }
 

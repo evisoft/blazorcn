@@ -1,0 +1,191 @@
+@* ===========================================================
+   Block: settings-backup-schedule
+   Title: Settings Backup Schedule
+   Description: Automated backup with frequency, destinations, last run status
+   Dependencies: BadgeCn, ButtonCn, InputCn, SelectCn, SwitchCn
+   Source: original/blocks/settings/settings-backup-schedule.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Backup schedule</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">Configure automated backups and retention policies</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", _enabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", _enabled ? "bg-emerald-500" : "bg-muted-foreground/40")"></span>
+                    @(_enabled ? "Active" : "Paused")
+                </span>
+                <SwitchCn @bind-Checked="_enabled" />
+            </div>
+        </div>
+
+        @* Frequency and time *@
+        <div class="border-b px-4 py-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <span class="mb-1.5 block font-medium text-muted-foreground text-xs">Frequency</span>
+                    <SelectCn @bind-Value="_frequency">
+                        <SelectTriggerCn Class="h-8 text-sm">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            <SelectItemCn Value="hourly">Every hour</SelectItemCn>
+                            <SelectItemCn Value="every6h">Every 6 hours</SelectItemCn>
+                            <SelectItemCn Value="every12h">Every 12 hours</SelectItemCn>
+                            <SelectItemCn Value="daily">Daily</SelectItemCn>
+                            <SelectItemCn Value="weekly">Weekly</SelectItemCn>
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+                <div>
+                    <span class="mb-1.5 block font-medium text-muted-foreground text-xs">Retention count</span>
+                    <InputCn Class="h-8 text-sm" type="number" @bind-Value="_retention" />
+                    <p class="mt-1 text-muted-foreground text-xs">Snapshots to keep before oldest is deleted</p>
+                </div>
+            </div>
+        </div>
+
+        @* Destination *@
+        <div class="border-b px-4 py-4">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">Destination</span>
+            <div class="flex gap-2">
+                @foreach (var dest in _destinations)
+                {
+                    var isSelected = _selectedDest == dest.Id;
+                    <button type="button"
+                        @onclick="@(() => _selectedDest = dest.Id)"
+                        class="@Cn.Merge("flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors", isSelected ? "border-foreground/20 bg-muted/50" : "hover:bg-muted/30")">
+                        <LucideCloudCn Size="14" Class="size-3.5 text-muted-foreground" />
+                        <div>
+                            <p class="font-medium text-sm">@dest.Label</p>
+                            @if (dest.Connected)
+                            {
+                                <p class="text-muted-foreground text-xs">Connected</p>
+                            }
+                        </div>
+                    </button>
+                }
+            </div>
+
+            @{ var activeDest = _destinations.FirstOrDefault(d => d.Id == _selectedDest); }
+            @if (activeDest is not null && activeDest.Id != "local")
+            {
+                <div class="mt-3 grid grid-cols-2 gap-4">
+                    <div>
+                        <span class="mb-1.5 block font-medium text-muted-foreground text-xs">Bucket</span>
+                        <InputCn Class="h-8 font-mono text-xs" Value="@activeDest.Bucket" ReadOnly="true" />
+                    </div>
+                    <div>
+                        <span class="mb-1.5 block font-medium text-muted-foreground text-xs">Region</span>
+                        <InputCn Class="h-8 font-mono text-xs" Value="@activeDest.Region" ReadOnly="true" />
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Last run summary *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="font-medium text-sm">Last run</p>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        @_recentRuns[0].Timestamp · @_recentRuns[0].Size · @_recentRuns[0].Duration
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                        <span class="@Cn.Merge("mr-1.5 inline-block size-1.5 rounded-full", _recentRuns[0].Status == "success" ? "bg-emerald-500" : _recentRuns[0].Status == "failed" ? "bg-red-500" : "bg-amber-500")"></span>
+                        @(_recentRuns[0].Status == "success" ? "Completed" : _recentRuns[0].Status == "failed" ? "Failed" : "Running")
+                    </BadgeCn>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs" Disabled="@_isRunning">
+                        @if (_isRunning)
+                        {
+                            <LucideLoaderCircleCn Size="12" Class="mr-1 size-3 animate-spin" />
+                            <span>Running</span>
+                        }
+                        else
+                        {
+                            <span>Run now</span>
+                        }
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+
+        @* Backup history *@
+        <div>
+            <button type="button"
+                @onclick="@(() => _showHistory = !_showHistory)"
+                class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                <div>
+                    <p class="font-medium text-sm">Backup history</p>
+                    <p class="mt-0.5 text-muted-foreground text-xs">@_recentRuns.Count recent runs</p>
+                </div>
+                <LucideChevronRightCn Class="@Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", _showHistory ? "rotate-90" : "")" />
+            </button>
+            @if (_showHistory)
+            {
+                <div>
+                    @foreach (var run in _recentRuns)
+                    {
+                        var dotClass = run.Status == "success" ? "bg-emerald-500" : run.Status == "failed" ? "bg-red-500" : "bg-amber-500";
+                        <div class="flex items-center gap-3 border-t px-4 py-3">
+                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", dotClass)"></span>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm">@run.Timestamp</p>
+                                <p class="mt-0.5 text-muted-foreground text-xs">@run.Size · @run.Duration</p>
+                            </div>
+                            <span class="shrink-0 text-muted-foreground text-xs">@run.Status</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-end border-t px-4 py-3">
+            @if (_saved)
+            {
+                <span class="mr-2 flex items-center gap-1 text-emerald-600 text-xs dark:text-emerald-400">
+                    <LucideCheckCn Size="12" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs">
+                Save schedule
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DestinationItem(string Id, string Label, bool Connected, string? Bucket, string? Region);
+    private record RunItem(string Timestamp, string Size, string Duration, string Status);
+
+    private static readonly List<DestinationItem> _destinations =
+    [
+        new("s3", "Amazon S3", true, "acme-backups-prod", "us-east-1"),
+        new("gcs", "Google Cloud", true, "acme-gcs-backup", "us-central1"),
+        new("local", "Local", false, null, null),
+    ];
+
+    private static readonly List<RunItem> _recentRuns =
+    [
+        new("Mar 18, 3:00 AM", "1.8 GB", "4m 12s", "success"),
+        new("Mar 17, 3:00 AM", "1.7 GB", "3m 58s", "success"),
+        new("Mar 16, 3:00 AM", "1.7 GB", "4m 05s", "success"),
+        new("Mar 15, 3:00 AM", "1.6 GB", "12m 30s", "failed"),
+    ];
+
+    private bool _enabled = true;
+    private string _frequency = "daily";
+    private string _retention = "30";
+    private string _selectedDest = "s3";
+    private bool _showHistory = false;
+    private bool _saved = false;
+    private bool _isRunning = false;
+}

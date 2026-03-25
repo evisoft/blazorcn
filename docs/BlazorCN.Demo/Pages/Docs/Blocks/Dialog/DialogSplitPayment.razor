@@ -1,0 +1,162 @@
+@* ========================================
+   Block: dialog-split-payment
+   Title: Dialog Split Payment
+   Description: Split payment dialog with multiple payment methods, amount allocation, and balance calculation
+   Long Description: Split bill dialog with item assignment and per-person totals for React restaurant apps
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LucideCheckCn, LucideCreditCardCn, LucideDollarSignCn, LucideLoader2Cn, LucidePlusCn, LucideSplitCn, LucideWalletCn, LucideXCn, SeparatorCn
+   Source: original/blocks/dialog/dialog-split-payment.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideSplitCn Class="mr-2 h-4 w-4" Size="16" />
+                Split Payment
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn>Split Payment</DialogTitleCn>
+            <DialogDescriptionCn>
+                Split $@(_orderTotal.ToString("F2")) across multiple methods.
+            </DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            <div class="space-y-3">
+                @foreach (var split in _splits)
+                {
+                    <div class="flex items-center gap-3 rounded-lg border p-3">
+                        @if (split.Icon == "credit-card")
+                        {
+                            <LucideCreditCardCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                        }
+                        else if (split.Icon == "wallet")
+                        {
+                            <LucideWalletCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                        }
+                        else
+                        {
+                            <LucideDollarSignCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                        }
+
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium">@split.Label</p>
+                            <p class="text-xs text-muted-foreground">@split.Detail</p>
+                        </div>
+
+                        <div class="flex items-center gap-1">
+                            <div class="relative">
+                                <span class="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                                <InputCn
+                                    Class="w-24 pl-6 text-right"
+                                    Type="number"
+                                    Value="@split.Amount.ToString("F2")"
+                                    ValueChanged="@(v => HandleAmountChange(split.Id, v))" />
+                            </div>
+
+                            @if (_splits.Length > 1)
+                            {
+                                <ButtonCn
+                                    Class="h-8 w-8"
+                                    @onclick="@(() => HandleRemoveMethod(split.Id))"
+                                    Size="ButtonSize.Icon"
+                                    Variant="ButtonVariant.Ghost">
+                                    <LucideXCn Class="h-4 w-4" Size="16" />
+                                </ButtonCn>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <SeparatorCn />
+
+            <div class="space-y-1.5 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-muted-foreground">Order Total</span>
+                    <span>$@(_orderTotal.ToString("F2"))</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted-foreground">Allocated</span>
+                    <span>$@(TotalAllocated.ToString("F2"))</span>
+                </div>
+                <div class="flex justify-between pt-1.5 border-t font-medium">
+                    <span>Remaining</span>
+                    <span class="@(IsFullyPaid ? "text-primary" : "")">
+                        @if (IsFullyPaid)
+                        {
+                            <span class="flex items-center gap-1">
+                                <LucideCheckCn Class="h-3 w-3" Size="12" />
+                                Paid
+                            </span>
+                        }
+                        else
+                        {
+                            <span>$@(Remaining.ToString("F2"))</span>
+                        }
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn Disabled="@_isProcessing" @onclick="@(() => _open = false)" Variant="ButtonVariant.Outline">
+                Cancel
+            </ButtonCn>
+            <ButtonCn Disabled="@(!IsFullyPaid || _isProcessing)" @onclick="HandleProcess">
+                @if (_isProcessing)
+                {
+                    <LucideLoader2Cn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                    <span>Processing...</span>
+                }
+                else
+                {
+                    <span>Pay $@(_orderTotal.ToString("F2"))</span>
+                }
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private bool _isProcessing;
+    private decimal _orderTotal = 149.99m;
+
+    private record PaymentSplit(string Id, string Label, string Detail, string Icon, decimal Amount);
+
+    private PaymentSplit[] _splits =
+    [
+        new("card", "Credit Card", "Visa ending 4242", "credit-card", 100.00m),
+        new("wallet", "Digital Wallet", "Apple Pay", "wallet", 49.99m)
+    ];
+
+    private decimal TotalAllocated => _splits.Sum(s => s.Amount);
+    private decimal Remaining => _orderTotal - TotalAllocated;
+    private bool IsFullyPaid => Remaining <= 0;
+
+    private void HandleAmountChange(string id, string value)
+    {
+        if (decimal.TryParse(value, out var amount))
+        {
+            _splits = _splits.Select(s => s.Id == id ? s with { Amount = amount } : s).ToArray();
+        }
+    }
+
+    private void HandleRemoveMethod(string id)
+    {
+        _splits = _splits.Where(s => s.Id != id).ToArray();
+    }
+
+    private async Task HandleProcess()
+    {
+        _isProcessing = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _isProcessing = false;
+        _open = false;
+    }
+}

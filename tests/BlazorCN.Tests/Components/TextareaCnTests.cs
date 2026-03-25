@@ -12,10 +12,9 @@ public class TextareaCnTests : BunitContext
         var cut = Render<TextareaCn>();
         var textarea = cut.Find("textarea");
         textarea.GetAttribute("data-slot").Should().Be("textarea");
+        textarea.ClassList.Should().Contain("cn-textarea");
         textarea.ClassList.Should().Contain("min-h-16");
         textarea.ClassList.Should().Contain("w-full");
-        textarea.ClassList.Should().Contain("rounded-md");
-        textarea.ClassList.Should().Contain("border-input");
     }
 
     [Fact]

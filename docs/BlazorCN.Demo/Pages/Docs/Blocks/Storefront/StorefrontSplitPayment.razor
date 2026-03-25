@@ -1,0 +1,219 @@
+@* ============================================================
+   Block: storefront-split-payment
+   Title: Storefront Split Payment
+   Description: Split payment across multiple methods including credit card, gift card, and store credit with balance allocation and remaining total
+   Dependencies: ButtonCn, InputCn, LucideCreditCardCn, LucideGiftCn, LucideTagCn, LucideWalletCn
+   Source: original/blocks/storefront/storefront-split-payment.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideTagCn Size="16" Class="size-4 text-muted-foreground" />
+                <h2 class="text-sm font-medium">Split Payment</h2>
+            </div>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Divide your total across multiple payment methods
+            </p>
+        </div>
+
+        @* Order Total *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-medium text-muted-foreground">Order Total</span>
+                <span class="text-2xl font-semibold tabular-nums">$@OrderTotal.ToString("F2")</span>
+            </div>
+        </div>
+
+        @* Payment Methods *@
+        @for (var i = 0; i < _methods.Count; i++)
+        {
+            var method = _methods[i];
+            var allocation = GetAllocation(method.Id);
+            var isLast = i == _methods.Count - 1;
+            <div class="@(!isLast ? "border-b" : "")">
+                <button class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                        type="button"
+                        @onclick="@(() => { if (method.Id != "card") ToggleMethod(method.Id); })">
+                    @switch (method.Type)
+                    {
+                        case "card":
+                            <LucideCreditCardCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                            break;
+                        case "gift-card":
+                            <LucideGiftCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                            break;
+                        case "store-credit":
+                            <LucideWalletCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                            break;
+                    }
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium">@method.Label</span>
+                            @if (method.Enabled && allocation > 0)
+                            {
+                                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                            }
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            @method.Detail
+                            @if (method.Type != "card")
+                            {
+                                @($" \u00b7 ${method.Available:F2} available")
+                            }
+                        </p>
+                    </div>
+                    @if (method.Id == "card")
+                    {
+                        <span class="shrink-0 font-mono text-sm tabular-nums">
+                            $@_allocations["card"]
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="@Cn.Merge("shrink-0 text-xs", method.Enabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                            @(method.Enabled ? "Applied" : "Add")
+                        </span>
+                    }
+                </button>
+
+                @* Allocation Input *@
+                @if (method.Enabled && method.Id != "card")
+                {
+                    <div class="px-4 pb-3 pl-11">
+                        @if (method.Type == "gift-card")
+                        {
+                            <div class="mb-2">
+                                <span class="mb-1 block text-xs text-muted-foreground">Gift card code</span>
+                                <InputCn Class="h-7 font-mono text-xs"
+                                         Placeholder="Enter code"
+                                         @bind-Value="_giftCode" />
+                            </div>
+                        }
+                        <div>
+                            <span class="mb-1 block text-xs text-muted-foreground">Amount to apply</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-muted-foreground">$</span>
+                                <InputCn Class="h-7 w-28 text-xs tabular-nums"
+                                         Type="number"
+                                         Value="@_allocations[method.Id]"
+                                         ValueChanged="@(v => UpdateAllocation(method.Id, v))" />
+                                <button class="text-xs text-muted-foreground hover:text-foreground"
+                                        type="button"
+                                        @onclick="@(() => UpdateAllocation(method.Id, Math.Min(method.Available, OrderTotal).ToString("F2")))">
+                                    Use max
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Allocation Summary *@
+        <div class="border-t px-4 py-3">
+            <div class="space-y-1">
+                @foreach (var method in _methods.Where(m => m.Enabled || m.Id == "card"))
+                {
+                    var amount = GetAllocation(method.Id);
+                    @if (amount > 0 || method.Id == "card")
+                    {
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-muted-foreground">@method.Label</span>
+                            <span class="text-xs tabular-nums">$@amount.ToString("F2")</span>
+                        </div>
+                    }
+                }
+                @if (Remaining > 0.01m)
+                {
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-red-600 dark:text-red-400">Remaining</span>
+                        <span class="text-xs tabular-nums text-red-600 dark:text-red-400">
+                            $@Remaining.ToString("F2")
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Submit *@
+        <div class="border-t px-4 py-3">
+            <ButtonCn Class="h-9 w-full text-sm" Disabled="@(Remaining > 0.01m)" Variant="ButtonVariant.Outline">
+                Pay $@OrderTotal.ToString("F2")
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class PaymentMethod
+    {
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string Detail { get; set; } = "";
+        public decimal Available { get; set; }
+        public bool Enabled { get; set; }
+    }
+
+    private const decimal OrderTotal = 341.04m;
+
+    private List<PaymentMethod> _methods = new()
+    {
+        new() { Id = "card", Type = "card", Label = "Visa \u2022\u2022\u2022\u2022 4242", Detail = "Expires 09/27", Available = 999999m, Enabled = true },
+        new() { Id = "gift", Type = "gift-card", Label = "Gift Card", Detail = "GC-7X29-MKPL", Available = 75m, Enabled = false },
+        new() { Id = "credit", Type = "store-credit", Label = "Store Credit", Detail = "Available balance", Available = 42.5m, Enabled = false }
+    };
+
+    private Dictionary<string, string> _allocations = new()
+    {
+        ["card"] = OrderTotal.ToString("F2"),
+        ["gift"] = "",
+        ["credit"] = ""
+    };
+
+    private string _giftCode = "GC-7X29-MKPL";
+
+    private decimal GetAllocation(string id) =>
+        decimal.TryParse(_allocations.GetValueOrDefault(id, ""), out var v) ? v : 0m;
+
+    private decimal TotalAllocated => _allocations.Values.Sum(v => decimal.TryParse(v, out var d) ? d : 0m);
+    private decimal Remaining => Math.Max(0m, OrderTotal - TotalAllocated);
+
+    private void ToggleMethod(string id)
+    {
+        var method = _methods.First(m => m.Id == id);
+        method.Enabled = !method.Enabled;
+        if (!method.Enabled)
+        {
+            _allocations[id] = "";
+            RecalculateCard();
+        }
+    }
+
+    private void UpdateAllocation(string id, string value)
+    {
+        var method = _methods.First(m => m.Id == id);
+        if (decimal.TryParse(value, out var numValue))
+        {
+            var capped = Math.Min(numValue, Math.Min(method.Available, OrderTotal));
+            _allocations[id] = capped.ToString("F2");
+        }
+        else
+        {
+            _allocations[id] = "";
+        }
+        RecalculateCard();
+    }
+
+    private void RecalculateCard()
+    {
+        var nonCardTotal = _allocations
+            .Where(kv => kv.Key != "card")
+            .Sum(kv => decimal.TryParse(kv.Value, out var d) ? d : 0m);
+        var cardAmount = Math.Max(0m, OrderTotal - nonCardTotal);
+        _allocations["card"] = cardAmount.ToString("F2");
+    }
+}

@@ -1,0 +1,207 @@
+@* ===========================================================
+   Block: settings-api-rate-tiers
+   Title: Settings Api Rate Tiers
+   Description: Animated React API rate limit tier configuration settings page for Next.js with per-plan rate limits, burst allowance, cooldown periods, and usage monitoring using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Audit log retention and archival settings
+   Dependencies: BadgeCn, ButtonCn, InputCn, SelectCn, SwitchCn
+   Source: original/blocks/settings/settings-api-rate-tiers.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">API Rate Limits</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Per-plan rate limits, burst policies, and monitoring
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (_rateLimitEnabled)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                        <span class="mr-1.5 size-1.5 rounded-full bg-emerald-500"></span>
+                        Enforcing
+                    </BadgeCn>
+                }
+                else
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                        Disabled
+                    </BadgeCn>
+                }
+                <SwitchCn @bind-Checked="_rateLimitEnabled" />
+            </div>
+        </div>
+
+        @* Global settings *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-3 flex items-center gap-2">
+                <LucideGaugeCn Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-muted-foreground text-xs">Global policy</span>
+            </div>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-sm">Algorithm</p>
+                        <p class="mt-0.5 text-muted-foreground text-xs">Rate limiting strategy for counting requests</p>
+                    </div>
+                    <SelectCn @bind-Value="_algorithm">
+                        <SelectTriggerCn Class="h-8 w-40 text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            <SelectItemCn Value="sliding-window">Sliding window</SelectItemCn>
+                            <SelectItemCn Value="fixed-window">Fixed window</SelectItemCn>
+                            <SelectItemCn Value="token-bucket">Token bucket</SelectItemCn>
+                            <SelectItemCn Value="leaky-bucket">Leaky bucket</SelectItemCn>
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-sm">Include Retry-After headers</p>
+                        <p class="mt-0.5 text-muted-foreground text-xs">Add Retry-After and X-RateLimit headers to responses</p>
+                    </div>
+                    <SwitchCn @bind-Checked="_includeRetryHeaders" />
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-sm">Log exceeded requests</p>
+                        <p class="mt-0.5 text-muted-foreground text-xs">Record rate-limited requests in the audit log</p>
+                    </div>
+                    <SwitchCn @bind-Checked="_logExceeded" />
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-sm">Threshold alert</p>
+                        <p class="mt-0.5 text-muted-foreground text-xs">Notify when usage exceeds a percentage of the limit</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <InputCn @bind-Value="_thresholdPercent" Class="h-7 w-14 text-center text-xs" />
+                        <span class="text-muted-foreground text-xs">%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Tier list *@
+        <div>
+            @for (var i = 0; i < _tiers.Count; i++)
+            {
+                var tier = _tiers[i];
+                var isExpanded = _expandedTier == tier.Id;
+                var isLast = i == _tiers.Count - 1;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button" @onclick="() => _expandedTier = isExpanded ? null : tier.Id"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", UsageDot(tier.CurrentUsagePercent))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@tier.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                    @tier.ActiveKeys keys
+                                </BadgeCn>
+                            </div>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @tier.RequestsPerMinute req/min &middot; @tier.RequestsPerDay req/day &middot;
+                                <span class="@UsageColor(tier.CurrentUsagePercent)">@tier.CurrentUsagePercent% usage</span>
+                            </p>
+                        </div>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="grid grid-cols-2 gap-3 px-4 pb-4 pl-8">
+                                <div>
+                                    <span class="mb-1 block font-medium text-muted-foreground text-xs">Requests / minute</span>
+                                    <InputCn Value="@tier.RequestsPerMinute" ValueChanged="@((string v) => { tier.RequestsPerMinute = v; })" Class="h-7 text-xs" />
+                                </div>
+                                <div>
+                                    <span class="mb-1 block font-medium text-muted-foreground text-xs">Requests / day</span>
+                                    <InputCn Value="@tier.RequestsPerDay" ValueChanged="@((string v) => { tier.RequestsPerDay = v; })" Class="h-7 text-xs" />
+                                </div>
+                                <div>
+                                    <span class="mb-1 block font-medium text-muted-foreground text-xs">Burst allowance</span>
+                                    <InputCn Value="@tier.BurstAllowance" ValueChanged="@((string v) => { tier.BurstAllowance = v; })" Class="h-7 text-xs" />
+                                </div>
+                                <div>
+                                    <span class="mb-1 block font-medium text-muted-foreground text-xs">Cooldown (seconds)</span>
+                                    <InputCn Value="@tier.CooldownSeconds" ValueChanged="@((string v) => { tier.CooldownSeconds = v; })" Class="h-7 text-xs" />
+                                </div>
+                                <div>
+                                    <span class="mb-1 block font-medium text-muted-foreground text-xs">Concurrent connections</span>
+                                    <InputCn Value="@tier.ConcurrentConnections" ValueChanged="@((string v) => { tier.ConcurrentConnections = v; })" Class="h-7 text-xs" />
+                                </div>
+                                <div class="flex items-end">
+                                    <div class="flex items-center gap-2">
+                                        <LucideActivityCn Size="12" Class="size-3 text-muted-foreground" />
+                                        <span class="text-muted-foreground text-xs">
+                                            <span class="@Cn.Merge("font-medium tabular-nums", UsageColor(tier.CurrentUsagePercent))">@tier.CurrentUsagePercent%</span>
+                                            avg utilization
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Save *@
+        <div class="flex items-center justify-end gap-2 border-t px-4 py-3">
+            @if (_saved)
+            {
+                <span class="flex items-center gap-1 text-emerald-600 text-xs dark:text-emerald-400">
+                    <LucideCheckCn Size="12" Class="size-3" />
+                    Saved
+                </span>
+            }
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs" OnClick="() => _saved = true">
+                Save changes
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private bool _rateLimitEnabled = true;
+    private string _algorithm = "sliding-window";
+    private bool _includeRetryHeaders = true;
+    private bool _logExceeded = true;
+    private string _thresholdPercent = "90";
+    private string? _expandedTier = "free";
+    private bool _saved;
+
+    private class RateTier
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string RequestsPerMinute { get; set; } = "";
+        public string RequestsPerDay { get; set; } = "";
+        public string BurstAllowance { get; set; } = "";
+        public string CooldownSeconds { get; set; } = "";
+        public string ConcurrentConnections { get; set; } = "";
+        public int ActiveKeys { get; set; }
+        public int CurrentUsagePercent { get; set; }
+    }
+
+    private readonly List<RateTier> _tiers =
+    [
+        new() { Id = "free", Name = "Free", RequestsPerMinute = "60", RequestsPerDay = "1000", BurstAllowance = "10", CooldownSeconds = "60", ConcurrentConnections = "5", ActiveKeys = 342, CurrentUsagePercent = 78 },
+        new() { Id = "starter", Name = "Starter", RequestsPerMinute = "300", RequestsPerDay = "10000", BurstAllowance = "50", CooldownSeconds = "30", ConcurrentConnections = "20", ActiveKeys = 156, CurrentUsagePercent = 45 },
+        new() { Id = "pro", Name = "Pro", RequestsPerMinute = "1000", RequestsPerDay = "100000", BurstAllowance = "200", CooldownSeconds = "15", ConcurrentConnections = "50", ActiveKeys = 89, CurrentUsagePercent = 32 },
+        new() { Id = "enterprise", Name = "Enterprise", RequestsPerMinute = "5000", RequestsPerDay = "unlimited", BurstAllowance = "1000", CooldownSeconds = "5", ConcurrentConnections = "200", ActiveKeys = 12, CurrentUsagePercent = 15 },
+    ];
+
+    private static string UsageColor(int p) => p >= 80 ? "text-red-600 dark:text-red-400" : p >= 50 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+    private static string UsageDot(int p) => p >= 80 ? "bg-red-500" : p >= 50 ? "bg-amber-500" : "bg-emerald-500";
+}

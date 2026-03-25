@@ -210,15 +210,9 @@ public class HoverCardCnTests : BunitContext
 
         await cut.Find("[data-slot='hover-card-trigger']").TriggerEventAsync("onmouseenter", new MouseEventArgs());
         var content = cut.Find("[data-slot='hover-card-content']");
+        content.ClassList.Should().Contain("cn-hover-card-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("w-64");
-        content.ClassList.Should().Contain("rounded-md");
-        content.ClassList.Should().Contain("border");
-        content.ClassList.Should().Contain("bg-popover");
-        content.ClassList.Should().Contain("p-4");
-        content.ClassList.Should().Contain("text-popover-foreground");
-        content.ClassList.Should().Contain("shadow-md");
-        content.ClassList.Should().Contain("outline-none");
+        content.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]

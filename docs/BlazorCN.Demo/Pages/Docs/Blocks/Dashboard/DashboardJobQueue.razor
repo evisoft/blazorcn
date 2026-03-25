@@ -1,0 +1,163 @@
+@* ============================================================
+   Block: dashboard-job-queue
+   Title: Dashboard Job Queue
+   Description: Animated React background job processing dashboard block for Next.js with queue depth tracking, throughput rates, failure rate percentages, worker counts, animated progress bars, and expandable job details showing recent failures using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Message queue depth and processing rates
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-job-queue.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Job Queue</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Background job processing across @_queues.Length queues
+                </p>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span class="tabular-nums">@_totalThroughput total</span>
+                @{
+                    var elevatedQueues = _queues.Count(q => q.FailureRate >= 1);
+                }
+                @if (elevatedQueues > 0)
+                {
+                    <span class="flex items-center gap-1.5">
+                        <span class="size-1.5 rounded-full bg-amber-500"></span>
+                        @elevatedQueues elevated
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Column headers *@
+        <div class="flex items-center gap-3 border-b bg-muted/30 px-4 py-2 text-muted-foreground text-xs">
+            <span class="min-w-0 flex-1">Queue</span>
+            <span class="w-20 shrink-0 text-right">Pending</span>
+            <span class="hidden w-14 shrink-0 text-right sm:block">Rate</span>
+            <span class="w-16 shrink-0 text-right">Failures</span>
+            <span class="hidden w-20 shrink-0 text-right sm:block">Workers</span>
+            <span class="w-5 shrink-0"></span>
+        </div>
+
+        @* Queues *@
+        <div>
+            @for (var i = 0; i < _queues.Length; i++)
+            {
+                var queue = _queues[i];
+                var isExpanded = _expanded == queue.Id;
+                var isLast = i == _queues.Length - 1;
+                var barPct = (double)queue.Pending / _maxPending * 100;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : queue.Id)"
+                        class="w-full px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="flex items-center gap-3">
+                            <div class="min-w-0 flex-1">
+                                <span class="font-mono text-sm">@queue.Name</span>
+                            </div>
+                            <span class="w-20 shrink-0 text-right font-semibold text-sm tabular-nums">
+                                @queue.Pending.ToString("N0")
+                            </span>
+                            <span class="hidden w-14 shrink-0 text-right font-mono text-muted-foreground text-xs tabular-nums sm:block">
+                                @queue.Throughput
+                            </span>
+                            <span class="@(Cn.Merge("w-16 shrink-0 text-right text-xs tabular-nums", GetFailureColor(queue.FailureRate)))">
+                                @(queue.FailureRate)%
+                            </span>
+                            <span class="hidden w-20 shrink-0 text-right text-muted-foreground text-xs tabular-nums sm:block">
+                                @queue.Workers/@queue.MaxWorkers
+                            </span>
+                            <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                        </div>
+                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/50">
+                            <div class="h-full rounded-full bg-foreground/70"
+                                 style="@($"width: {barPct:F1}%")">
+                            </div>
+                        </div>
+                    </button>
+
+                    @if (isExpanded && queue.RecentFailures.Length > 0)
+                    {
+                        <div class="px-4 pb-4">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Recent failures
+                                </span>
+                                <div class="space-y-2">
+                                    @foreach (var failure in queue.RecentFailures)
+                                    {
+                                        <div class="flex items-start gap-3">
+                                            <span class="mt-0.5 size-1.5 shrink-0 rounded-full bg-red-500"></span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="font-mono text-xs">@failure.JobId</span>
+                                                    <span class="text-muted-foreground text-[10px]">
+                                                        @failure.FailedAt
+                                                    </span>
+                                                    <span class="text-muted-foreground text-[10px]">
+                                                        · @failure.Retries retries
+                                                    </span>
+                                                </div>
+                                                <p class="mt-0.5 font-mono text-muted-foreground text-xs">
+                                                    @failure.Error
+                                                </p>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (isExpanded && queue.RecentFailures.Length == 0)
+                    {
+                        <div class="px-4 pb-4">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-muted-foreground text-xs">
+                                    No recent failures in this queue
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "jq4";
+    private const int _maxPending = 18420;
+    private const string _totalThroughput = "3.1K/s";
+
+    private record FailedJob(string JobId, string Error, int Retries, string FailedAt);
+    private record JobQueue(string Id, string Name, int Pending, string Throughput, double FailureRate, int Workers, int MaxWorkers, FailedJob[] RecentFailures);
+
+    private static string GetFailureColor(double rate)
+    {
+        if (rate >= 5) return "text-red-600 dark:text-red-400";
+        if (rate >= 1) return "text-amber-600 dark:text-amber-400";
+        return "text-muted-foreground";
+    }
+
+    private static readonly JobQueue[] _queues =
+    [
+        new("jq1", "invoice.generate", 342, "86/s", 0.3, 6, 8,
+            [new("inv-88214", "PDF rendering timeout after 30s", 2, "4 min ago")]),
+        new("jq2", "email.transactional", 1247, "210/s", 1.2, 12, 12,
+            [new("email-441092", "SMTP connection refused: smtp.provider.io:587", 3, "2 min ago"),
+             new("email-441087", "Template 'welcome-v3' not found", 0, "8 min ago")]),
+        new("jq3", "image.resize", 4820, "340/s", 0.1, 16, 20, []),
+        new("jq4", "report.export", 89, "12/s", 8.4, 4, 4,
+            [new("rpt-7741", "OutOfMemoryError: heap space exceeded processing 2.4M row dataset", 1, "1 min ago"),
+             new("rpt-7738", "Query timeout: aggregate query exceeded 120s limit", 2, "6 min ago"),
+             new("rpt-7735", "S3 upload failed: access denied for bucket reports-prod", 3, "14 min ago")]),
+        new("jq5", "webhook.fanout", 2140, "420/s", 2.8, 8, 10,
+            [new("wh-992104", "Target endpoint returned 503: https://partner.io/hooks", 4, "3 min ago")]),
+        new("jq6", "search.reindex", 18420, "1.8K/s", 0.0, 24, 24, []),
+    ];
+}

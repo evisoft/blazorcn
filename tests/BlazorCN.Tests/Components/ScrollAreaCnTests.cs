@@ -139,10 +139,7 @@ public class ScrollAreaCnTests : BunitContext
         var cut = Render<ScrollBarCn>(p => p
             .Add(c => c.Orientation, ScrollOrientation.Vertical));
         var bar = cut.Find("[data-slot='scroll-area-scrollbar']");
-        bar.ClassList.Should().Contain("h-full");
-        bar.ClassList.Should().Contain("w-2.5");
-        bar.ClassList.Should().Contain("border-l");
-        bar.ClassList.Should().Contain("border-l-transparent");
+        bar.ClassList.Should().Contain("cn-scroll-area-scrollbar");
     }
 
     [Fact]
@@ -151,10 +148,7 @@ public class ScrollAreaCnTests : BunitContext
         var cut = Render<ScrollBarCn>(p => p
             .Add(c => c.Orientation, ScrollOrientation.Horizontal));
         var bar = cut.Find("[data-slot='scroll-area-scrollbar']");
-        bar.ClassList.Should().Contain("h-2.5");
-        bar.ClassList.Should().Contain("flex-col");
-        bar.ClassList.Should().Contain("border-t");
-        bar.ClassList.Should().Contain("border-t-transparent");
+        bar.ClassList.Should().Contain("cn-scroll-area-scrollbar");
     }
 
     [Fact]
@@ -162,8 +156,7 @@ public class ScrollAreaCnTests : BunitContext
     {
         var cut = Render<ScrollBarCn>();
         var thumb = cut.Find("[data-slot='scroll-area-scrollbar'] > div");
-        thumb.ClassList.Should().Contain("rounded-full");
-        thumb.ClassList.Should().Contain("bg-border");
+        thumb.ClassList.Should().Contain("cn-scroll-area-thumb");
     }
 
     [Fact]

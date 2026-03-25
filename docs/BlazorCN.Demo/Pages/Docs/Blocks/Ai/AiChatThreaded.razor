@@ -1,0 +1,135 @@
+@* ===========================================================
+   Block: ai-chat-threaded
+   Title: Ai Chat Threaded
+   Description: React AI threaded chat block for Next.js with nested reply threads, visual indentation, and collapsible sub-conversations using shadcn/ui and Tailwind CSS
+   Long Description: React AI Chat Split Panel Block
+   Dependencies: BadgeCn, ButtonCn, TextareaCn
+   Source: original/blocks/ai/ai-chat-threaded.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <span class="font-medium text-sm">Threaded Discussion</span>
+            <span class="text-muted-foreground text-xs">&middot;</span>
+            <span class="text-muted-foreground text-xs">API design</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs">
+                @_threadMessages.Count messages
+            </BadgeCn>
+        </div>
+
+        <div class="flex-1 overflow-y-auto">
+            <div class="flex flex-col">
+                @{
+                    var topLevel = _threadMessages.Where(m => m.ParentId == null).ToList();
+                }
+                @for (var idx = 0; idx < topLevel.Count; idx++)
+                {
+                    var msg = topLevel[idx];
+                    var isLast = idx == topLevel.Count - 1;
+                    <div class="@(isLast ? "" : "border-b")">
+                        @RenderMessage(msg, false)
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="border-t px-4 py-3">
+            <div class="relative">
+                <textarea @bind="_input" rows="1"
+                    placeholder="Reply to thread..."
+                    class="w-full min-h-0 max-h-32 resize-none border-0 bg-transparent pr-10 text-sm shadow-none focus-visible:ring-0 focus:outline-none"></textarea>
+                <ButtonCn
+                    type="submit"
+                    Size="ButtonSize.Icon"
+                    Variant="ButtonVariant.Ghost"
+                    Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                    Class="absolute top-1/2 right-1 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <LucideArrowUpCn Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _input = "";
+    private HashSet<string> _collapsedThreads = new();
+
+    private record ThreadMessage(string Id, string Role, string Content, string? ParentId = null);
+
+    private List<ThreadMessage> _threadMessages = new()
+    {
+        new("1", "user", "What's the best approach for designing a REST API for a multi-tenant SaaS product?"),
+        new("2", "assistant", "Here are the key considerations for multi-tenant REST API design:\n\nTenant isolation \u2014 Use a tenant identifier in every request. The two common approaches are subdomain-based (acme.api.com) or header-based (X-Tenant-ID). Header-based is simpler to implement.\n\nURL structure \u2014 Keep tenant context implicit rather than in the path. Use /api/v1/users instead of /api/v1/tenants/{id}/users. The middleware resolves the tenant from the auth token.\n\nRate limiting \u2014 Implement per-tenant rate limits, not just per-user. This prevents one tenant from consuming all resources.\n\nData partitioning \u2014 Choose between shared database with tenant column, schema-per-tenant, or database-per-tenant based on your isolation requirements."),
+        new("3", "user", "Can you go deeper on the data partitioning options?", "2"),
+        new("4", "assistant", "Shared database (row-level isolation)\n- Add a tenant_id column to every table\n- Enforce via row-level security policies\n- Simplest to manage, cheapest to run\n- Risk: query bugs can leak data across tenants\n\nSchema-per-tenant\n- Each tenant gets their own database schema\n- Good balance of isolation and cost\n- Migrations must run across all schemas\n\nDatabase-per-tenant\n- Complete isolation, strongest security\n- Expensive at scale, complex connection management\n- Best for regulated industries (healthcare, finance)", "2"),
+        new("5", "user", "How should I handle database schema migrations across tenants?"),
+        new("6", "assistant", "Schema migrations in multi-tenant systems require careful orchestration:\n\nRolling migrations \u2014 Apply changes tenant-by-tenant instead of all at once. If migration fails for one tenant, others are unaffected. Use a migration queue with retry logic.\n\nBackward-compatible changes \u2014 Always make migrations additive. Add new columns as nullable, create new tables rather than altering existing ones, and use feature flags to switch between old and new schemas.\n\nMigration tracking \u2014 Maintain a per-tenant migration version table. This lets you run different schema versions simultaneously during rollout and rollback quickly if needed."),
+        new("7", "user", "What tools work well for this?", "6"),
+        new("8", "assistant", "For Node.js / TypeScript stacks:\n\n- Prisma with prisma migrate \u2014 Works well for schema-per-tenant. Use the datasourceUrl override to point at different schemas.\n- Drizzle ORM \u2014 Lighter weight, great TypeScript inference. Use drizzle-kit for migrations.\n- graphile-migrate \u2014 Excellent for PostgreSQL, supports idempotent migrations.\n- Custom scripts \u2014 For database-per-tenant, you'll likely need custom orchestration that iterates through tenant connection strings and applies migrations sequentially.", "6"),
+    };
+
+    private List<ThreadMessage> GetReplies(string parentId) =>
+        _threadMessages.Where(m => m.ParentId == parentId).ToList();
+
+    private void ToggleThread(string id)
+    {
+        if (!_collapsedThreads.Remove(id))
+            _collapsedThreads.Add(id);
+    }
+
+    private RenderFragment RenderMessage(ThreadMessage msg, bool isReply) => __builder =>
+    {
+        var replies = GetReplies(msg.Id);
+        var isCollapsed = _collapsedThreads.Contains(msg.Id);
+
+        <div class="@(isReply ? "ml-4 border-l-2 border-muted pl-4" : "")">
+            <div class="px-4 py-3">
+                <span class="mb-1 block font-medium text-muted-foreground text-xs">
+                    @(msg.Role == "user" ? "You" : "AI")
+                </span>
+                <p class="whitespace-pre-wrap text-sm leading-relaxed">@msg.Content</p>
+
+                <div class="mt-2 flex items-center gap-1">
+                    <ButtonCn
+                        Variant="ButtonVariant.Ghost"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+                        <LucideReplyCn Size="12" Class="size-3" />
+                        Reply
+                    </ButtonCn>
+                    <ButtonCn
+                        Variant="ButtonVariant.Ghost"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+                        <LucideCopyCn Size="12" Class="size-3" />
+                        Copy
+                    </ButtonCn>
+                    @if (replies.Count > 0)
+                    {
+                        <ButtonCn
+                            Variant="ButtonVariant.Ghost"
+                            Size="ButtonSize.Sm"
+                            OnClick="() => ToggleThread(msg.Id)"
+                            Class="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+                            <LucideChevronRightCn Size="12" Class="@Cn.Merge("size-3 transition-transform duration-200", isCollapsed ? "" : "rotate-90")" />
+                            @replies.Count @(replies.Count == 1 ? "reply" : "replies")
+                        </ButtonCn>
+                    }
+                </div>
+            </div>
+
+            @if (replies.Count > 0 && !isCollapsed)
+            {
+                <div class="flex flex-col">
+                    @foreach (var reply in replies)
+                    {
+                        @RenderMessage(reply, true)
+                    }
+                </div>
+            }
+        </div>
+    };
+}

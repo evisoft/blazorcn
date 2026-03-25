@@ -1,0 +1,197 @@
+@* ============================================================
+   Block: crud-changelog
+   Title: Crud Changelog
+   Description: Manage product changelog entries with version tracking and type filtering
+   Long Description: A comprehensive changelog management interface for tracking product updates and releases. Features version numbering, release type classification, expandable descriptions, and type-based filtering. Perfect for SaaS products, API documentation, or release management systems.
+   Dependencies: BadgeCn, ButtonCn, InputCn, SelectCn, TextareaCn
+   Source: original/blocks/crud/crud-changelog.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <h2 class="font-medium text-sm">Changelog</h2>
+                    <p class="mt-0.5 text-muted-foreground text-xs">@_entries.Count releases</p>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                          Class="h-7 gap-1 text-xs" @onclick="@(() => _showNewForm = !_showNewForm)">
+                    <LucidePlusCn Size="12" Class="size-3" />
+                    New Entry
+                </ButtonCn>
+            </div>
+        </div>
+
+        @if (_showNewForm)
+        {
+            <div class="border-b bg-muted/50 px-4 py-3">
+                <div class="space-y-3">
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <InputCn Placeholder="Version (e.g., v2.5.0)"
+                                 Value="@_newVersion"
+                                 Class="border-0 bg-background shadow-none focus-visible:ring-0" />
+                        <SelectCn Value="@_newType">
+                            <SelectTriggerCn Class="border-0 bg-background shadow-none focus-visible:ring-0">
+                                <SelectValueCn />
+                            </SelectTriggerCn>
+                            <SelectContentCn>
+                                <SelectItemCn Value="Feature">Feature</SelectItemCn>
+                                <SelectItemCn Value="Fix">Fix</SelectItemCn>
+                                <SelectItemCn Value="Breaking">Breaking</SelectItemCn>
+                                <SelectItemCn Value="Security">Security</SelectItemCn>
+                                <SelectItemCn Value="Deprecation">Deprecation</SelectItemCn>
+                            </SelectContentCn>
+                        </SelectCn>
+                    </div>
+                    <InputCn Placeholder="Title"
+                             Value="@_newTitle"
+                             Class="border-0 bg-background shadow-none focus-visible:ring-0" />
+                    <TextareaCn Placeholder="Description (optional)"
+                                Value="@_newDescription"
+                                Class="min-h-20 resize-none border-0 bg-background shadow-none focus-visible:ring-0" />
+                    <div class="flex items-center gap-2">
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                  Class="h-7 text-xs" @onclick="AddEntry">
+                            Add Entry
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                  Class="h-7 text-xs" @onclick="@(() => _showNewForm = false)">
+                            Cancel
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="border-b px-4 py-2">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-muted-foreground text-xs">Filter:</span>
+                @foreach (var filterOption in _filterOptions)
+                {
+                    <button type="button"
+                            @onclick="@(() => _filterType = filterOption)"
+                            class="@Cn.Merge("rounded-md px-2 py-1 text-xs transition-colors", _filterType == filterOption ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50")">
+                        @filterOption
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @{ var filteredEntries = _filterType == "All" ? _entries : _entries.Where(e => e.Type == _filterType).ToList(); }
+            @if (filteredEntries.Count == 0)
+            {
+                <div class="px-4 py-12 text-center">
+                    <p class="text-muted-foreground text-sm">No entries found</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var entry in filteredEntries)
+                {
+                    var isExpanded = _expanded.Contains(entry.Id);
+                    <div class="border-b transition-colors last:border-0">
+                        <div role="button"
+                             tabindex="0"
+                             @onclick="@(() => ToggleExpand(entry.Id))"
+                             class="flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                            <LucideChevronRightCn Size="16" Class="@Cn.Merge("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-mono font-medium text-sm">@entry.Version</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary"
+                                             Class="@($"{GetTypeColor(entry.Type)} border-0 text-xs")">
+                                        @entry.Type
+                                    </BadgeCn>
+                                    <span class="text-muted-foreground text-xs">@entry.Date</span>
+                                </div>
+                                <p class="mt-1 text-sm">@entry.Title</p>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-1" @onclick:stopPropagation="true">
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0">
+                                    <LucideEdit2Cn Size="12" Class="size-3 text-muted-foreground" />
+                                </ButtonCn>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0"
+                                          @onclick="@(() => DeleteEntry(entry.Id))">
+                                    <LucideTrash2Cn Size="12" Class="size-3 text-muted-foreground" />
+                                </ButtonCn>
+                            </div>
+                        </div>
+                        @if (isExpanded && !string.IsNullOrEmpty(entry.Description))
+                        {
+                            <div class="border-t bg-muted/50 px-4 py-3">
+                                <p class="text-muted-foreground text-sm">@entry.Description</p>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class ChangelogEntry
+    {
+        public string Id { get; set; } = "";
+        public string Version { get; set; } = "";
+        public string Date { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+    }
+
+    private readonly HashSet<string> _expanded = ["1"];
+    private string _filterType = "All";
+    private bool _showNewForm;
+    private string _newVersion = "";
+    private string _newType = "Feature";
+    private string _newTitle = "";
+    private string _newDescription = "";
+    private int _nextId = 6;
+
+    private static readonly string[] _filterOptions = ["All", "Feature", "Fix", "Breaking", "Security", "Deprecation"];
+
+    private readonly List<ChangelogEntry> _entries =
+    [
+        new() { Id = "1", Version = "v2.4.0", Date = "Mar 15, 2026", Type = "Feature", Title = "Advanced filtering and search", Description = "Added multi-field filtering with operators (equals, contains, starts with). Search now supports regex patterns and highlights matching terms in results." },
+        new() { Id = "2", Version = "v2.3.1", Date = "Mar 10, 2026", Type = "Fix", Title = "Resolved pagination bug in data exports", Description = "Fixed issue where CSV exports only included the first page of results. All matching records now export correctly regardless of pagination state." },
+        new() { Id = "3", Version = "v2.3.0", Date = "Mar 5, 2026", Type = "Breaking", Title = "API authentication updated to OAuth 2.0", Description = "Legacy API key authentication has been removed. All integrations must migrate to OAuth 2.0 with PKCE flow. Migration guide available in documentation." },
+        new() { Id = "4", Version = "v2.2.3", Date = "Feb 28, 2026", Type = "Security", Title = "Patched XSS vulnerability in comment rendering", Description = "Fixed stored XSS issue where malicious scripts could be injected via comment fields. All user-generated content now properly sanitized." },
+        new() { Id = "5", Version = "v2.2.0", Date = "Feb 20, 2026", Type = "Deprecation", Title = "Legacy widget API scheduled for removal", Description = "The /v1/widgets endpoint is deprecated and will be removed in v3.0. Please migrate to /v2/components before June 2026." },
+    ];
+
+    private void ToggleExpand(string id) { if (!_expanded.Remove(id)) _expanded.Add(id); }
+
+    private void DeleteEntry(string id) { _entries.RemoveAll(e => e.Id == id); }
+
+    private void AddEntry()
+    {
+        if (string.IsNullOrWhiteSpace(_newVersion) || string.IsNullOrWhiteSpace(_newTitle)) return;
+        _entries.Insert(0, new ChangelogEntry
+        {
+            Id = (_nextId++).ToString(),
+            Version = _newVersion,
+            Date = "Today",
+            Type = _newType,
+            Title = _newTitle,
+            Description = _newDescription,
+        });
+        _newVersion = "";
+        _newType = "Feature";
+        _newTitle = "";
+        _newDescription = "";
+        _showNewForm = false;
+    }
+
+    private static string GetTypeColor(string type) => type switch
+    {
+        "Feature" => "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        "Fix" => "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+        "Breaking" => "bg-red-500/10 text-red-700 dark:text-red-400",
+        "Security" => "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        "Deprecation" => "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+        _ => "bg-muted text-muted-foreground",
+    };
+}

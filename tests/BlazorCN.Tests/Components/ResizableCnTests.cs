@@ -181,6 +181,23 @@ public class ResizableCnTests : BunitContext
     }
 
     [Fact]
+    public void Handle_Has_Default_AriaLabel()
+    {
+        var cut = Render<ResizablePanelGroupCn>(p => p
+            .AddChildContent<ResizableHandleCn>());
+        cut.Find("[data-slot='resizable-handle']").GetAttribute("aria-label").Should().Be("Resize");
+    }
+
+    [Fact]
+    public void Handle_AriaLabel_Override_Via_AdditionalAttributes()
+    {
+        var cut = Render<ResizablePanelGroupCn>(p => p
+            .AddChildContent<ResizableHandleCn>(h => h
+                .Add(c => c.AdditionalAttributes, new Dictionary<string, object?> { { "aria-label", "Drag to resize" } })));
+        cut.Find("[data-slot='resizable-handle']").GetAttribute("aria-label").Should().Be("Drag to resize");
+    }
+
+    [Fact]
     public void Handle_Without_Grip_Has_No_Inner_Div()
     {
         var cut = Render<ResizablePanelGroupCn>(p => p
@@ -197,10 +214,10 @@ public class ResizableCnTests : BunitContext
                 .Add(c => c.WithHandle, true)));
         var inner = cut.Find("[data-slot='resizable-handle'] > div");
         inner.Should().NotBeNull();
+        inner.ClassList.Should().Contain("cn-resizable-handle-icon");
         inner.ClassList.Should().Contain("z-10");
-        inner.ClassList.Should().Contain("rounded-sm");
+        inner.ClassList.Should().Contain("rounded-xs");
         inner.ClassList.Should().Contain("border");
-        inner.ClassList.Should().Contain("bg-border");
     }
 
     [Fact]

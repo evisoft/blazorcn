@@ -13,10 +13,8 @@ public class InputCnTests : BunitContext
         var input = cut.Find("input");
         input.GetAttribute("data-slot").Should().Be("input");
         input.GetAttribute("type").Should().Be("text");
-        input.ClassList.Should().Contain("h-9");
+        input.ClassList.Should().Contain("cn-input");
         input.ClassList.Should().Contain("w-full");
-        input.ClassList.Should().Contain("rounded-md");
-        input.ClassList.Should().Contain("border-input");
     }
 
     [Fact]

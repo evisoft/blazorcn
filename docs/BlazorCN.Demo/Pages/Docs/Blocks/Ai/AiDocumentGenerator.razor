@@ -1,0 +1,194 @@
+@* ===========================================================
+   Block: ai-document-generator
+   Title: Ai Document Generator
+   Description: AI document generation with document type selector, tone controls, length slider, and formatted preview
+   Dependencies: BadgeCn, ButtonCn, LucideCheckCn, LucideCopyCn, LucideDownloadCn, LucideRefreshCwCn, SelectCn, SliderCn
+   Source: original/blocks/ai/ai-document-generator.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Config bar *@
+        <div class="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+            <SelectCn TValue="string" Value="@_docType" ValueChanged="v => _docType = v">
+                <SelectTriggerCn Class="h-7 w-[140px] border-0 bg-muted/50 text-xs shadow-none">
+                    <SelectValueCn Placeholder="Type" />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="@("blog")">Blog Post</SelectItemCn>
+                    <SelectItemCn Value="@("report")">Technical Report</SelectItemCn>
+                    <SelectItemCn Value="@("email")">Professional Email</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+
+            <SelectCn TValue="string" Value="@_tone" ValueChanged="v => _tone = v">
+                <SelectTriggerCn Class="h-7 w-[130px] border-0 bg-muted/50 text-xs shadow-none">
+                    <SelectValueCn Placeholder="Tone" />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="@("professional")">Professional</SelectItemCn>
+                    <SelectItemCn Value="@("casual")">Casual</SelectItemCn>
+                    <SelectItemCn Value="@("technical")">Technical</SelectItemCn>
+                    <SelectItemCn Value="@("persuasive")">Persuasive</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="ml-auto h-7 text-xs">
+                Generate
+            </ButtonCn>
+        </div>
+
+        @* Length slider *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <span class="text-xs text-muted-foreground">Length</span>
+            <SliderCn Value="@_length" ValueChanged="v => _length = v" Min="100" Max="2000" Step="50" Class="flex-1" />
+            <span class="font-mono text-xs text-muted-foreground">
+                @_length words (@LengthLabel)
+            </span>
+        </div>
+
+        @* Document header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <span class="text-sm font-medium">@CurrentDoc.Title</span>
+            <div class="ml-auto flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    @CurrentDoc.Type
+                </BadgeCn>
+                <span class="text-xs text-muted-foreground">@CurrentDoc.WordCount words</span>
+            </div>
+        </div>
+
+        @* Document body *@
+        <div class="max-h-[400px] overflow-y-auto px-4 py-4">
+            <div class="space-y-3 text-sm leading-relaxed">
+                @foreach (var paragraph in GetParagraphs())
+                {
+                    @if (paragraph.Kind == "heading")
+                    {
+                        <p class="font-medium text-foreground">@paragraph.Text</p>
+                    }
+                    else if (paragraph.Kind == "bullets")
+                    {
+                        <ul class="space-y-1 pl-4">
+                            @foreach (var item in paragraph.Items!)
+                            {
+                                <li class="flex items-start gap-2 text-sm text-muted-foreground">
+                                    <span class="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground/40"></span>
+                                    @item
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else if (paragraph.Kind == "numbered")
+                    {
+                        <ol class="space-y-1 pl-4">
+                            @foreach (var item in paragraph.Items!)
+                            {
+                                <li class="text-sm text-muted-foreground">@item</li>
+                            }
+                        </ol>
+                    }
+                    else
+                    {
+                        <p class="text-muted-foreground">@paragraph.Text</p>
+                    }
+                }
+            </div>
+        </div>
+
+        @* Actions *@
+        <div class="flex items-center gap-2 border-t px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs text-muted-foreground"
+                      @onclick="HandleCopy">
+                @if (_copied)
+                {
+                    <LucideCheckCn Size="16" Class="size-3" />
+                    <text>Copied</text>
+                }
+                else
+                {
+                    <LucideCopyCn Size="16" Class="size-3" />
+                    <text>Copy</text>
+                }
+            </ButtonCn>
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs text-muted-foreground">
+                <LucideDownloadCn Size="16" Class="size-3" />
+                Download
+            </ButtonCn>
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs text-muted-foreground">
+                <LucideRefreshCwCn Size="16" Class="size-3" />
+                Regenerate
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record GeneratedDocument(string Title, string Content, int WordCount, string Type);
+    private record DocParagraph(string Kind, string? Text = null, string[]? Items = null);
+
+    private static readonly Dictionary<string, GeneratedDocument> _documents = new()
+    {
+        ["blog"] = new("Why TypeScript Is Winning the Enterprise",
+            "The enterprise adoption of TypeScript has accelerated dramatically over the past three years. What started as a Microsoft side project has become the default choice for large-scale JavaScript applications.\n\nTeams at companies like Airbnb, Slack, and Bloomberg have reported significant improvements after migrating to TypeScript. Airbnb documented a 38% reduction in production bugs after their migration, while Slack's team noted that onboarding new developers became measurably faster.\n\nThe key advantages driving adoption include:\n\nType Safety at Scale\n\nAs codebases grow beyond 100,000 lines, the absence of types becomes a liability. TypeScript catches entire categories of bugs at compile time that would otherwise surface in production.\n\nBetter Developer Experience\n\nModern editors like VS Code provide intelligent autocompletion, inline documentation, and refactoring tools that rely on type information. This alone saves hours of developer time per week.\n\nIncremental Adoption\n\nUnlike previous attempts at typed JavaScript, TypeScript can be adopted file-by-file. Teams don't need to rewrite their entire codebase to start seeing benefits.\n\nThe data speaks clearly: according to the 2025 State of JS survey, 89% of developers who use TypeScript would use it again, making it the most-loved language in the JavaScript ecosystem.\n\nFor teams still on the fence, the question is no longer \"Should we adopt TypeScript?\" but rather \"How quickly can we migrate?\"",
+            342, "Blog Post"),
+        ["report"] = new("Q4 2025 Engineering Productivity Report",
+            "Executive Summary\n\nThis report analyzes engineering team productivity metrics for Q4 2025, covering deployment frequency, incident response times, and code quality indicators across all product teams.\n\nKey Findings\n\nDeployment Frequency: Teams averaged 47 deployments per week, a 23% increase from Q3. The platform team led with 12 daily deployments following their migration to trunk-based development.\n\nMean Time to Recovery (MTTR): Average MTTR decreased from 42 minutes to 28 minutes, attributed to improved observability tooling and automated rollback procedures implemented in October.\n\nCode Review Turnaround: PR review times averaged 3.2 hours, down from 5.1 hours in Q3. The introduction of AI-assisted code review reduced initial review overhead by approximately 40%.\n\nIncident Volume: Total P1 incidents decreased by 31% compared to Q3. The most significant improvement came from the payments team, which eliminated an entire class of race conditions through database-level constraints.\n\nRecommendations\n\n1. Expand trunk-based development practices to remaining teams\n2. Invest in automated testing coverage for critical paths (currently at 78%, target 90%)\n3. Standardize on the new incident response playbook across all teams\n4. Continue AI-assisted code review rollout to the mobile team\n\nNext Steps\n\nSchedule Q1 planning reviews with engineering managers by January 15th to align on targets and resource allocation.",
+            298, "Technical Report"),
+        ["email"] = new("Partnership Proposal: DevTools Integration",
+            "Hi Sarah,\n\nI hope this message finds you well. I wanted to follow up on our conversation at React Summit about a potential integration between our platforms.\n\nAfter discussing with our engineering team, we believe there's a strong opportunity to integrate your analytics SDK directly into our component library. This would give your users instant access to performance metrics for every component they ship.\n\nHere's what we're proposing:\n\n- A lightweight wrapper component that automatically instruments renders\n- Dashboard integration showing component-level performance data\n- Shared documentation and co-marketing for the launch\n\nBased on our estimates, this integration could reach approximately 45,000 developers in the first quarter alone. We've seen similar partnerships drive 3-4x increases in SDK adoption.\n\nI'd love to schedule a 30-minute call next week to walk through the technical details and discuss timelines. Would Tuesday or Wednesday afternoon work for your team?\n\nLooking forward to exploring this together.\n\nBest regards,\nAlex Chen\nHead of Partnerships",
+            187, "Professional Email")
+    };
+
+    private string _docType = "blog";
+    private string _tone = "professional";
+    private double _length = 500;
+    private bool _copied;
+
+    private GeneratedDocument CurrentDoc => _documents[_docType];
+    private string LengthLabel => _length < 300 ? "Short" : _length < 800 ? "Medium" : "Long";
+
+    private DocParagraph[] GetParagraphs()
+    {
+        var result = new List<DocParagraph>();
+        var parts = CurrentDoc.Content.Split("\n\n");
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (string.IsNullOrEmpty(trimmed)) continue;
+
+            if (trimmed.Length < 50 && !trimmed.Contains('.') && !trimmed.StartsWith("- "))
+            {
+                result.Add(new DocParagraph("heading", trimmed));
+            }
+            else if (trimmed.StartsWith("- ") || trimmed.Contains("\n- "))
+            {
+                var items = trimmed.Split('\n')
+                    .Where(l => l.StartsWith("- "))
+                    .Select(l => l[2..])
+                    .ToArray();
+                result.Add(new DocParagraph("bullets", Items: items));
+            }
+            else if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d+\."))
+            {
+                var items = trimmed.Split('\n')
+                    .Where(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"^\d+\."))
+                    .ToArray();
+                result.Add(new DocParagraph("numbered", Items: items));
+            }
+            else
+            {
+                result.Add(new DocParagraph("body", trimmed));
+            }
+        }
+        return result.ToArray();
+    }
+
+    private async Task HandleCopy()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

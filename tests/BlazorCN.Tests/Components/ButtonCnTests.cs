@@ -13,8 +13,9 @@ public class ButtonCnTests : BunitContext
         var cut = Render<ButtonCn>(p => p.AddChildContent("Click me"));
         var button = cut.Find("button");
         button.GetAttribute("data-slot").Should().Be("button");
-        button.ClassList.Should().Contain("bg-primary");
-        button.ClassList.Should().Contain("text-primary-foreground");
+        button.ClassList.Should().Contain("cn-button");
+        button.ClassList.Should().Contain("cn-button-variant-default");
+        button.ClassList.Should().Contain("cn-button-size-default");
     }
 
     [Fact]
@@ -24,7 +25,7 @@ public class ButtonCnTests : BunitContext
             .Add(c => c.Variant, ButtonVariant.Destructive)
             .AddChildContent("Delete"));
         var button = cut.Find("button");
-        button.ClassList.Should().Contain("bg-destructive");
+        button.ClassList.Should().Contain("cn-button-variant-destructive");
         button.GetAttribute("data-variant").Should().Be("destructive");
     }
 
@@ -35,8 +36,7 @@ public class ButtonCnTests : BunitContext
             .Add(c => c.Variant, ButtonVariant.Outline)
             .AddChildContent("Outline"));
         var button = cut.Find("button");
-        button.ClassList.Should().Contain("border");
-        button.ClassList.Should().Contain("bg-background");
+        button.ClassList.Should().Contain("cn-button-variant-outline");
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class ButtonCnTests : BunitContext
             .Add(c => c.Size, ButtonSize.Sm)
             .AddChildContent("Small"));
         var button = cut.Find("button");
-        button.ClassList.Should().Contain("h-8");
+        button.ClassList.Should().Contain("cn-button-size-sm");
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class ButtonCnTests : BunitContext
         var anchor = cut.Find("a");
         anchor.GetAttribute("href").Should().Be("https://example.com");
         anchor.GetAttribute("data-slot").Should().Be("button");
-        anchor.ClassList.Should().Contain("bg-primary");
+        anchor.ClassList.Should().Contain("cn-button-variant-default");
     }
 
     [Fact]

@@ -1,0 +1,157 @@
+@* ============================================================
+   Block: dashboard-cluster-nodes
+   Title: Dashboard Cluster Nodes
+   Description: Animated React cluster node dashboard block for Next.js with per-node CPU memory and disk utilization bars, drain and cordon status indicators, pod counts, uptime tracking, and expandable node details using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: CPU memory and disk utilization
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-cluster-nodes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideHardDriveCn Size="12" Class="size-3.5 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Cluster Nodes</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        @_clusterNodes.Length nodes · @_totalPods pods running
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                <span class="text-muted-foreground text-xs">
+                    @_readyCount/@_clusterNodes.Length ready
+                </span>
+            </div>
+        </div>
+
+        @* Node rows *@
+        <div>
+            @for (var i = 0; i < _clusterNodes.Length; i++)
+                        {
+                var node = _clusterNodes[i];
+                var index = i;
+                var isExpanded = _expanded == node.Id;
+                var config = _statusConfig[node.Status];
+
+                <div class="@(index < _clusterNodes.Length - 1 ? "border-b" : "")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : node.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="truncate font-mono font-medium text-sm">@node.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary"
+                                         Class="@(Cn.Merge("shrink-0 text-[10px] font-normal", config.Badge))">
+                                    @node.Status
+                                </BadgeCn>
+                                @if (node.Role == "control-plane")
+                                            {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal">
+                                        control-plane
+                                    </BadgeCn>
+                                }
+                            </div>
+                            @* Resource bars *@
+                            <div class="mt-2 flex items-center gap-3">
+                                @foreach (var resource in _resources)
+                                            {
+                                    var usage = resource == "cpu" ? node.Usage.Cpu : resource == "memory" ? node.Usage.Memory : node.Usage.Disk;
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="w-6 text-[10px] text-muted-foreground uppercase">
+                                            @(resource == "memory" ? "mem" : resource)
+                                        </span>
+                                        <div class="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+                                            <div class="@(Cn.Merge("h-full rounded-full", GetBarColor(usage)))"
+                                                 style="@($"width: {usage}%")">
+                                            </div>
+                                        </div>
+                                        <span class="w-7 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+                                            @usage%
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="shrink-0 text-right">
+                            <span class="block text-xs tabular-nums">
+                                @node.Pods/@node.PodCapacity
+                            </span>
+                            <span class="block text-[10px] text-muted-foreground">pods</span>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                                {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-4 pl-9">
+                                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">Instance</span>
+                                        <span class="block font-mono text-xs">@node.InstanceType</span>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">Kubelet</span>
+                                        <span class="block font-mono text-xs">@node.KubeletVersion</span>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">OS / Arch</span>
+                                        <span class="block font-mono text-xs">@node.Arch</span>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="text-muted-foreground text-xs">Uptime</span>
+                                        <span class="block font-medium text-xs">@node.Uptime</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded;
+
+    private readonly string[] _resources = new[] { "cpu", "memory", "disk" };
+
+    private record ResourceUsage(int Cpu, int Memory, int Disk);
+    private record ClusterNode(string Id, string Name, string Status, string Role, ResourceUsage Usage, int Pods, int PodCapacity, string Uptime, string KubeletVersion, string Os, string Arch, string InstanceType);
+    private record StatusConfig(string Dot, string Badge);
+
+    private static string GetBarColor(int pct)
+    {
+        if (pct >= 80) return "bg-red-500";
+        if (pct >= 60) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    private int _readyCount => _clusterNodes.Count(n => n.Status == "Ready");
+    private int _totalPods => _clusterNodes.Sum(n => n.Pods);
+
+    private readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["Ready"] = new("bg-emerald-500", "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"),
+        ["Cordoned"] = new("bg-amber-500", "bg-amber-500/10 text-amber-600 dark:text-amber-400"),
+        ["Draining"] = new("bg-blue-500", "bg-blue-500/10 text-blue-600 dark:text-blue-400"),
+        ["NotReady"] = new("bg-red-500", "bg-red-500/10 text-red-600 dark:text-red-400")
+    };
+
+    private readonly ClusterNode[] _clusterNodes = new[]
+    {
+        new ClusterNode("n1", "node-us-east-1a-01", "Ready", "worker", new ResourceUsage(42, 68, 35), 28, 110, "45 days", "v1.29.2", "Ubuntu 22.04", "amd64", "m6i.2xlarge"),
+        new ClusterNode("n2", "node-us-east-1a-02", "Ready", "worker", new ResourceUsage(78, 82, 41), 45, 110, "45 days", "v1.29.2", "Ubuntu 22.04", "amd64", "m6i.2xlarge"),
+        new ClusterNode("n3", "node-us-east-1b-01", "Cordoned", "worker", new ResourceUsage(23, 34, 28), 12, 110, "90 days", "v1.28.6", "Ubuntu 22.04", "amd64", "m6i.xlarge"),
+        new ClusterNode("n4", "node-us-east-1b-02", "Ready", "worker", new ResourceUsage(55, 61, 52), 34, 110, "30 days", "v1.29.2", "Ubuntu 22.04", "amd64", "m6i.2xlarge"),
+        new ClusterNode("n5", "node-us-east-1c-01", "Draining", "worker", new ResourceUsage(15, 22, 18), 6, 110, "120 days", "v1.28.4", "Ubuntu 22.04", "amd64", "m6i.xlarge"),
+        new ClusterNode("n6", "node-ctrl-01", "Ready", "control-plane", new ResourceUsage(31, 45, 22), 18, 110, "90 days", "v1.29.2", "Ubuntu 22.04", "amd64", "m6i.xlarge")
+    };
+}

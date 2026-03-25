@@ -1,0 +1,154 @@
+@* ============================================================
+   Block: tables-row-highlight
+   Title: Tables Row Highlight
+   Description: Table component with conditional row highlighting based on data values for alert dashboards
+   Dependencies: BadgeCn, TableCn
+   Source: original/blocks/tables/tables-row-highlight.tsx
+   ============================================================ *@
+
+<div style="width: 900px">
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold">Server Health</h3>
+                <p class="text-sm text-muted-foreground">
+                    @if (_criticalCount > 0)
+                    {
+                        <span class="text-destructive font-medium">@_criticalCount critical</span>
+                    }
+                    @if (_criticalCount > 0 && _warningCount > 0)
+                    {
+                        @(" · ")
+                    }
+                    @if (_warningCount > 0)
+                    {
+                        <span class="text-yellow-600 font-medium">@_warningCount warning</span>
+                    }
+                    @if (_criticalCount == 0 && _warningCount == 0)
+                    {
+                        @:All systems healthy
+                    }
+                </p>
+            </div>
+            <div class="flex items-center gap-4 text-sm">
+                <div class="flex items-center gap-1.5">
+                    <div class="h-3 w-3 rounded bg-destructive/20"></div>
+                    <span class="text-muted-foreground">Critical</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="h-3 w-3 rounded bg-yellow-500/20"></div>
+                    <span class="text-muted-foreground">Warning</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="h-3 w-3 rounded bg-muted"></div>
+                    <span class="text-muted-foreground">Healthy</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <TableCn Class="table-fixed" style="width: 850px">
+                <TableHeaderCn>
+                    <TableRowCn>
+                        <TableHeadCn Class="w-8"></TableHeadCn>
+                        <TableHeadCn Class="w-32 font-semibold text-foreground">Server</TableHeadCn>
+                        <TableHeadCn Class="w-24 font-semibold text-foreground">Region</TableHeadCn>
+                        <TableHeadCn Class="w-20 font-semibold text-foreground text-right">CPU</TableHeadCn>
+                        <TableHeadCn Class="w-20 font-semibold text-foreground text-right">Memory</TableHeadCn>
+                        <TableHeadCn Class="w-20 font-semibold text-foreground text-right">Disk</TableHeadCn>
+                        <TableHeadCn Class="w-24 font-semibold text-foreground">Status</TableHeadCn>
+                        <TableHeadCn Class="font-semibold text-foreground">Last Check</TableHeadCn>
+                    </TableRowCn>
+                </TableHeaderCn>
+                <TableBodyCn>
+                    @foreach (var server in _servers)
+                    {
+                        var severity = GetRowSeverity(server);
+                        var (severityBg, severityIcon) = GetSeverityConfig(severity);
+
+                        <TableRowCn Class="@Cn.Merge(severityBg, severity == "critical" ? "animate-pulse" : "")">
+                            <TableCellCn Class="text-center">
+                                @severityIcon
+                            </TableCellCn>
+                            <TableCellCn Class="font-mono text-sm font-medium">@server.ServerName</TableCellCn>
+                            <TableCellCn Class="text-muted-foreground">@server.Region</TableCellCn>
+                            <TableCellCn Class="text-right">
+                                @RenderMetric(server.Cpu, 80, 95)
+                            </TableCellCn>
+                            <TableCellCn Class="text-right">
+                                @RenderMetric(server.Memory, 80, 95)
+                            </TableCellCn>
+                            <TableCellCn Class="text-right">
+                                @RenderMetric(server.Disk, 85, 95)
+                            </TableCellCn>
+                            <TableCellCn>
+                                @{ var (statusLabel, statusVariant, statusClass) = GetServerStatusConfig(server.Status); }
+                                <BadgeCn Class="@statusClass" Variant="@statusVariant">@statusLabel</BadgeCn>
+                            </TableCellCn>
+                            <TableCellCn Class="text-muted-foreground">@server.LastCheck</TableCellCn>
+                        </TableRowCn>
+                    }
+                </TableBodyCn>
+            </TableCn>
+        </div>
+
+        <p class="text-xs text-muted-foreground">
+            Rows highlight based on CPU, memory thresholds (80% warning, 95% critical) and status
+        </p>
+    </div>
+</div>
+
+@code {
+    private record ServerMetric(string Id, string ServerName, string Region, int Cpu, int Memory, int Disk, string Status, string LastCheck);
+
+    private static readonly ServerMetric[] _servers =
+    [
+        new("1", "prod-web-01", "us-east-1", 45, 62, 54, "online", "2 min ago"),
+        new("2", "prod-web-02", "us-east-1", 92, 88, 71, "degraded", "1 min ago"),
+        new("3", "prod-api-01", "us-west-2", 38, 45, 32, "online", "3 min ago"),
+        new("4", "prod-api-02", "us-west-2", 78, 82, 65, "online", "1 min ago"),
+        new("5", "prod-db-01", "eu-west-1", 95, 94, 89, "degraded", "30 sec ago"),
+        new("6", "prod-db-02", "eu-west-1", 22, 35, 28, "online", "2 min ago"),
+        new("7", "prod-cache-01", "ap-south-1", 15, 42, 18, "online", "4 min ago"),
+        new("8", "prod-worker-01", "us-east-1", 100, 98, 92, "offline", "5 min ago"),
+    ];
+
+    private static readonly int _criticalCount = _servers.Count(s => GetRowSeverity(s) == "critical");
+    private static readonly int _warningCount = _servers.Count(s => GetRowSeverity(s) == "warning");
+
+    private static string GetRowSeverity(ServerMetric server)
+    {
+        if (server.Status == "offline" || server.Cpu >= 95 || server.Memory >= 95)
+            return "critical";
+        if (server.Status == "degraded" || server.Cpu >= 80 || server.Memory >= 80 || server.Disk >= 85)
+            return "warning";
+        return "healthy";
+    }
+
+    private static (string Bg, RenderFragment Icon) GetSeverityConfig(string severity) => severity switch
+    {
+        "critical" => ("bg-destructive/10 hover:bg-destructive/15", @<LucideXCircleCn Size="16" Class="h-4 w-4 text-destructive" />),
+        "warning" => ("bg-yellow-500/10 hover:bg-yellow-500/15", @<LucideAlertTriangleCn Size="16" Class="h-4 w-4 text-yellow-600" />),
+        _ => ("hover:bg-muted/50", @<LucideCheckCircle2Cn Size="16" Class="h-4 w-4 text-muted-foreground" />),
+    };
+
+    private static RenderFragment RenderMetric(int value, int warning, int critical)
+    {
+        var metricSeverity = value >= critical ? "critical" : value >= warning ? "warning" : "healthy";
+        var cssClass = metricSeverity switch
+        {
+            "critical" => "text-destructive font-semibold",
+            "warning" => "text-yellow-600 font-medium",
+            _ => "",
+        };
+        return @<span class="@Cn.Merge("font-mono", cssClass)">@value%</span>;
+    }
+
+    private static (string Label, BadgeVariant Variant, string ClassName) GetServerStatusConfig(string status) => status switch
+    {
+        "online" => ("Online", BadgeVariant.Default, ""),
+        "degraded" => ("Degraded", BadgeVariant.Outline, "border-yellow-300 text-yellow-700"),
+        "offline" => ("Offline", BadgeVariant.Destructive, ""),
+        _ => (status, BadgeVariant.Secondary, ""),
+    };
+}

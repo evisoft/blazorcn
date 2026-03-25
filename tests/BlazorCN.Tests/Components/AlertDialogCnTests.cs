@@ -178,12 +178,9 @@ public class AlertDialogCnTests : BunitContext
             .AddChildContent<AlertDialogContentCn>(c => c
                 .AddChildContent("Body")));
         var el = cut.Find("[data-slot='alert-dialog-content']");
+        el.ClassList.Should().Contain("cn-alert-dialog-content");
         el.ClassList.Should().Contain("fixed");
         el.ClassList.Should().Contain("z-50");
-        el.ClassList.Should().Contain("max-w-lg");
-        el.ClassList.Should().Contain("border");
-        el.ClassList.Should().Contain("bg-background");
-        el.ClassList.Should().Contain("shadow-lg");
     }
 
     [Fact]
@@ -222,6 +219,35 @@ public class AlertDialogCnTests : BunitContext
         cut.Find("[data-slot='alert-dialog-content']").GetAttribute("role").Should().Be("alertdialog");
     }
 
+    [Fact]
+    public void AlertDialogContent_AriaLabelledby_Matches_Title_Id()
+    {
+        SetupJsInterop();
+        var cut = Render<AlertDialogCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<AlertDialogContentCn>(c => c
+                .AddChildContent<AlertDialogTitleCn>(t => t
+                    .AddChildContent("Alert Title"))));
+        var content = cut.Find("[data-slot='alert-dialog-content']");
+        var title = cut.Find("[data-slot='alert-dialog-title']");
+        var labelledBy = content.GetAttribute("aria-labelledby");
+        labelledBy.Should().NotBeNullOrEmpty();
+        title.GetAttribute("id").Should().Be(labelledBy);
+    }
+
+    [Fact]
+    public void AlertDialogContent_Without_Title_Has_AriaLabel_Fallback()
+    {
+        SetupJsInterop();
+        var cut = Render<AlertDialogCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<AlertDialogContentCn>(c => c
+                .AddChildContent("Body without title")));
+        var content = cut.Find("[data-slot='alert-dialog-content']");
+        content.GetAttribute("aria-labelledby").Should().BeNull();
+        content.GetAttribute("aria-label").Should().Be("Alert");
+    }
+
     // --- AlertDialogHeaderCn ---
 
     [Fact]
@@ -236,9 +262,7 @@ public class AlertDialogCnTests : BunitContext
     {
         var cut = Render<AlertDialogHeaderCn>(p => p.AddChildContent("Header"));
         var el = cut.Find("[data-slot='alert-dialog-header']");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("gap-2");
+        el.ClassList.Should().Contain("cn-alert-dialog-header");
     }
 
     [Fact]
@@ -292,8 +316,7 @@ public class AlertDialogCnTests : BunitContext
     {
         var cut = Render<AlertDialogTitleCn>(p => p.AddChildContent("Title"));
         var el = cut.Find("[data-slot='alert-dialog-title']");
-        el.ClassList.Should().Contain("text-lg");
-        el.ClassList.Should().Contain("font-semibold");
+        el.ClassList.Should().Contain("cn-alert-dialog-title");
     }
 
     [Fact]
@@ -319,8 +342,7 @@ public class AlertDialogCnTests : BunitContext
     {
         var cut = Render<AlertDialogDescriptionCn>(p => p.AddChildContent("Description"));
         var el = cut.Find("[data-slot='alert-dialog-description']");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("text-muted-foreground");
+        el.ClassList.Should().Contain("cn-alert-dialog-description");
     }
 
     [Fact]

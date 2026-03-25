@@ -1,0 +1,158 @@
+@* ============================================================
+   Block: dashboard-sla-compliance
+   Title: Dashboard Sla Compliance
+   Description: Animated React SLA compliance tracking dashboard block for Next.js with target versus actual uptime percentages per service tier, remaining error budget, monthly trend bars, and color-coded adherence indicators using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Service availability with 30-day charts
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-sla-compliance.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideShieldCheckCn Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">SLA Compliance</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        @_tiers.Length service level agreements
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_meetingCount meeting
+                </span>
+                @if (_breachedCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @_breachedCount breached
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* SLA Tiers *@
+        <div>
+            @for (var i = 0; i < _tiers.Length; i++)
+            {
+                var tier = _tiers[i];
+                var isExpanded = _expanded == tier.Id;
+                var isLast = i == _tiers.Length - 1;
+                var config = _statusConfig[tier.Status];
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? null : tier.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@(Cn.Merge("size-2 shrink-0 rounded-full", config.Dot))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@tier.Service</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @tier.Tier
+                                <span class="mx-1.5">\u00b7</span>
+                                Target: @tier.TargetUptime%
+                            </p>
+                        </div>
+                        <div class="shrink-0 text-right">
+                            <span class="block font-semibold text-sm tabular-nums">
+                                @tier.ActualUptime%
+                            </span>
+                            <span class="block text-muted-foreground text-[10px]">actual</span>
+                        </div>
+                        <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium text-muted-foreground text-xs">
+                                        Error Budget
+                                    </span>
+                                    <span class="@(Cn.Merge("rounded-full px-2 py-0.5 text-xs", config.Badge))">
+                                        @config.Label
+                                    </span>
+                                </div>
+                                <div class="mt-2 flex items-center gap-3">
+                                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                        <div class="@(Cn.Merge("h-full rounded-full", BudgetBarColor(tier.ErrorBudgetPercent)))"
+                                             style="@($"width: {tier.ErrorBudgetPercent}%")"></div>
+                                    </div>
+                                    <span class="shrink-0 font-mono text-xs tabular-nums">
+                                        @tier.ErrorBudgetRemaining
+                                    </span>
+                                </div>
+                                <p class="mt-2 text-muted-foreground text-xs">
+                                    @tier.ErrorBudgetRemaining of @tier.ErrorBudgetTotal remaining
+                                    <span class="mx-1.5">\u00b7</span>
+                                    @tier.Incidents incidents this period
+                                </p>
+
+                                @* Monthly trend *@
+                                <div class="mt-3 border-t border-border/50 pt-3">
+                                    <span class="mb-2 block text-muted-foreground text-xs">
+                                        Monthly trend
+                                    </span>
+                                    <div class="space-y-1">
+                                        @foreach (var m in tier.Monthly)
+                                        {
+                                            <div class="flex items-center gap-2 text-xs">
+                                                <span class="w-8 shrink-0 text-muted-foreground">
+                                                    @m.Month
+                                                </span>
+                                                <span class="@(Cn.Merge("size-1.5 rounded-full", m.Actual >= m.Target ? "bg-emerald-500" : "bg-red-500"))"></span>
+                                                <span class="font-mono tabular-nums">@m.Actual%</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "t2";
+
+    private record MonthlyRecord(string Month, double Actual, double Target);
+    private record SlaTier(string Id, string Service, string Tier, double TargetUptime, double ActualUptime, string ErrorBudgetTotal, string ErrorBudgetRemaining, int ErrorBudgetPercent, string Status, int Incidents, MonthlyRecord[] Monthly);
+    private record StatusConfig(string Dot, string Label, string Badge);
+
+    private static string BudgetBarColor(int percent) =>
+        percent <= 0 ? "bg-red-500"
+        : percent < 30 ? "bg-amber-500"
+        : "bg-emerald-500";
+
+    private static readonly int _meetingCount = _tiers.Count(t => t.Status == "meeting");
+    private static readonly int _breachedCount = _tiers.Count(t => t.Status == "breached");
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["meeting"] = new("bg-emerald-500", "Meeting", "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"),
+        ["at_risk"] = new("bg-amber-500", "At Risk", "bg-amber-500/10 text-amber-700 dark:text-amber-400"),
+        ["breached"] = new("bg-red-500", "Breached", "bg-red-500/10 text-red-700 dark:text-red-400"),
+    };
+
+    private static readonly SlaTier[] _tiers =
+    [
+        new("t1", "Payment Processing", "Platinum", 99.99, 99.997, "4.3 min", "4.1 min", 95, "meeting", 0,
+            [new("Jan", 99.999, 99.99), new("Feb", 99.995, 99.99), new("Mar", 99.997, 99.99)]),
+        new("t2", "API Gateway", "Gold", 99.95, 99.92, "21.6 min", "8.2 min", 38, "at_risk", 2,
+            [new("Jan", 99.98, 99.95), new("Feb", 99.96, 99.95), new("Mar", 99.92, 99.95)]),
+        new("t3", "Web Application", "Gold", 99.95, 99.97, "21.6 min", "18.4 min", 85, "meeting", 1,
+            [new("Jan", 99.99, 99.95), new("Feb", 99.95, 99.95), new("Mar", 99.97, 99.95)]),
+        new("t4", "Search Service", "Silver", 99.9, 99.72, "43.2 min", "0 min", 0, "breached", 5,
+            [new("Jan", 99.94, 99.9), new("Feb", 99.85, 99.9), new("Mar", 99.72, 99.9)]),
+        new("t5", "Internal Tools", "Bronze", 99.5, 99.88, "216 min", "198 min", 92, "meeting", 0,
+            [new("Jan", 99.92, 99.5), new("Feb", 99.95, 99.5), new("Mar", 99.88, 99.5)]),
+    ];
+}

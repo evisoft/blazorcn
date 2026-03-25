@@ -1,0 +1,198 @@
+@* ===========================================================
+   Block: ai-changelog-generator
+   Title: Ai Changelog Generator
+   Description: AI changelog generator with commit list, categorized output sections, formatted descriptions, and copy-as-markdown
+   Dependencies: BadgeCn, ButtonCn, LucideCheckCn, LucideChevronRightCn, LucideCopyCn
+   Source: original/blocks/ai/ai-changelog-generator.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex-1">
+                <span class="text-sm font-medium">Changelog Generator</span>
+                <p class="text-xs text-muted-foreground">
+                    @_commits.Length commits &middot; March 15, 2026
+                </p>
+            </div>
+            <ButtonCn Class="h-6 gap-1 px-2 text-xs"
+                      Variant="ButtonVariant.Ghost"
+                      Size="ButtonSize.Sm"
+                      @onclick="HandleCopyMarkdown">
+                @if (_copied)
+                {
+                    <LucideCheckCn Size="16" Class="size-3" />
+                    <text>Copied</text>
+                }
+                else
+                {
+                    <LucideCopyCn Size="16" Class="size-3" />
+                    <text>Copy MD</text>
+                }
+            </ButtonCn>
+        </div>
+
+        @* View tabs *@
+        <div class="flex items-center gap-0 border-b">
+            <button type="button"
+                    class="@Cn.Merge("px-4 py-2 text-xs transition-colors", _view == "commits" ? "border-b-2 border-foreground font-medium text-foreground" : "text-muted-foreground hover:text-foreground")"
+                    @onclick="@(() => _view = "commits")">
+                Commits
+            </button>
+            <button type="button"
+                    class="@Cn.Merge("px-4 py-2 text-xs transition-colors", _view == "changelog" ? "border-b-2 border-foreground font-medium text-foreground" : "text-muted-foreground hover:text-foreground")"
+                    @onclick="@(() => _view = "changelog")">
+                Release Notes
+            </button>
+            <div class="flex-1"></div>
+            <div class="flex items-center gap-3 pr-4">
+                @foreach (var kvp in _sectionDot)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", kvp.Value)"></span>
+                        @(_changelog.FirstOrDefault(s => s.Type == kvp.Key)?.Entries.Length ?? 0)
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Commits view *@
+        @if (_view == "commits")
+        {
+            <div>
+                @for (var i = 0; i < _commits.Length; i++)
+                {
+                    var commit = _commits[i];
+                    var isLast = i == _commits.Length - 1;
+                    <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", !isLast ? "border-b" : "")">
+                        <span class="font-mono text-xs text-muted-foreground">@commit.Hash</span>
+                        <span class="min-w-0 flex-1 truncate text-sm">@commit.Message</span>
+                        <span class="shrink-0 text-xs text-muted-foreground">@commit.Author</span>
+                    </div>
+                }
+                <div class="border-t px-4 py-3">
+                    <ButtonCn Class="h-7 w-full text-xs" Variant="ButtonVariant.Outline" Size="ButtonSize.Sm">
+                        Generate Changelog
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Changelog view *@
+        @if (_view == "changelog")
+        {
+            <div>
+                @for (var sIdx = 0; sIdx < _changelog.Length; sIdx++)
+                {
+                    var sec = _changelog[sIdx];
+                    var isExpanded = _expanded == sec.Type;
+                    var isLast = sIdx == _changelog.Length - 1;
+                    var sectionType = sec.Type;
+                    <div class="@(!isLast ? "border-b" : "")">
+                        <button type="button"
+                                class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                                @onclick="@(() => _expanded = isExpanded ? null : sectionType)">
+                            <span class="@Cn.Merge("size-2 shrink-0 rounded-full", GetSectionDot(sec.Type))"></span>
+                            <span class="flex-1 text-sm font-medium">@GetSectionLabel(sec.Type)</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                @sec.Entries.Length
+                            </BadgeCn>
+                            <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        </button>
+
+                        @if (isExpanded)
+                        {
+                            <div class="px-4 pb-3 pl-9">
+                                <div class="space-y-2">
+                                    @foreach (var entry in sec.Entries)
+                                    {
+                                        <div class="rounded-md bg-muted/50 p-3">
+                                            <p class="text-sm leading-relaxed">@entry.Description</p>
+                                            <span class="mt-1.5 inline-block font-mono text-xs text-muted-foreground">
+                                                @entry.Commit
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record CommitInfo(string Hash, string Message, string Author, string Date);
+    private record ChangelogEntry(string Description, string Commit);
+    private record ChangelogSection(string Type, ChangelogEntry[] Entries);
+
+    private static readonly CommitInfo[] _commits =
+    {
+        new("a3f7b2c", "feat: add real-time collaboration cursors to canvas editor", "Sarah Chen", "2 hours ago"),
+        new("e91d4f0", "fix: resolve memory leak in WebSocket connection handler", "Marcus Rodriguez", "3 hours ago"),
+        new("c28a1e5", "feat: implement file upload progress with resumable uploads", "Priya Patel", "5 hours ago"),
+        new("f4e0c83", "fix: correct timezone offset calculation for recurring events", "James Wilson", "6 hours ago"),
+        new("b72d9a1", "breaking: migrate authentication from JWT to session-based tokens", "Sarah Chen", "8 hours ago"),
+        new("d15f8e4", "refactor: optimize database queries for dashboard analytics", "Marcus Rodriguez", "10 hours ago"),
+        new("9a3c2b7", "feat: add keyboard shortcuts for all editor actions", "Priya Patel", "12 hours ago"),
+        new("e7f1d06", "fix: prevent duplicate notifications on rapid status changes", "James Wilson", "14 hours ago")
+    };
+
+    private static readonly ChangelogSection[] _changelog =
+    {
+        new("features", new ChangelogEntry[]
+        {
+            new("Real-time collaboration cursors now show other users' positions in the canvas editor with color-coded avatars and smooth animations", "a3f7b2c"),
+            new("File uploads now display progress bars and support resumable uploads for large files up to 5GB, automatically retrying failed chunks", "c28a1e5"),
+            new("Added comprehensive keyboard shortcuts for all editor actions including Cmd+K for command palette, Cmd+/ for comments, and Cmd+Shift+P for formatting", "9a3c2b7")
+        }),
+        new("fixes", new ChangelogEntry[]
+        {
+            new("Fixed a memory leak in the WebSocket connection handler that caused increasing RAM usage during long sessions. Connections are now properly cleaned up on unmount", "e91d4f0"),
+            new("Corrected timezone offset calculation for recurring calendar events, resolving issues where events appeared on wrong days for users in UTC+/- timezones", "f4e0c83"),
+            new("Resolved an issue where rapid status changes could trigger duplicate push notifications. Added debouncing and idempotency checks to the notification queue", "e7f1d06")
+        }),
+        new("breaking", new ChangelogEntry[]
+        {
+            new("Authentication has been migrated from JWT to session-based tokens. All API clients must update their auth headers. See the migration guide for details", "b72d9a1")
+        }),
+        new("improvements", new ChangelogEntry[]
+        {
+            new("Dashboard analytics queries are now 3x faster thanks to optimized database indexes and query restructuring. P95 response time reduced from 1.2s to 380ms", "d15f8e4")
+        })
+    };
+
+    private static readonly Dictionary<string, string> _sectionDot = new()
+    {
+        ["features"] = "bg-emerald-500",
+        ["fixes"] = "bg-blue-500",
+        ["breaking"] = "bg-red-500",
+        ["improvements"] = "bg-amber-500"
+    };
+
+    private string _view = "changelog";
+    private string? _expanded = "features";
+    private bool _copied;
+
+    private static string GetSectionDot(string type) => _sectionDot.GetValueOrDefault(type, "bg-gray-500");
+
+    private static string GetSectionLabel(string type) => type switch
+    {
+        "features" => "Features",
+        "fixes" => "Bug Fixes",
+        "breaking" => "Breaking Changes",
+        "improvements" => "Improvements",
+        _ => type
+    };
+
+    private async Task HandleCopyMarkdown()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

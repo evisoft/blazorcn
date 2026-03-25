@@ -1,0 +1,177 @@
+@* ============================================================
+   Block: dashboard-infrastructure-cost
+   Title: Dashboard Infrastructure Cost
+   Description: Animated React infrastructure billing dashboard block for Next.js with multi-provider cost breakdown, service-level expense tracking, month-over-month comparison bars, budget utilization, and expandable provider details using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Cost allocation by team and department
+   Dependencies: None
+   Source: original/blocks/dashboard/dashboard-infrastructure-cost.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Infrastructure Cost</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Multi-provider billing — current month
+                </p>
+            </div>
+            <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                <span class="tabular-nums">Budget: @FormatCurrency(_monthlyBudget)</span>
+            </div>
+        </div>
+
+        @* Summary stats *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            <div>
+                <span class="text-muted-foreground text-xs">Total spend</span>
+                <p class="font-semibold text-2xl tabular-nums">@FormatCurrency(_totalCurrent)</p>
+            </div>
+            <div>
+                <span class="text-muted-foreground text-xs">Budget used</span>
+                <p class="@(Cn.Merge("font-semibold text-2xl tabular-nums", _budgetPct >= 100 ? "text-red-600 dark:text-red-400" : _budgetPct >= 80 ? "text-amber-600 dark:text-amber-400" : ""))">
+                    @(_budgetPct)%
+                </p>
+            </div>
+            <div>
+                <span class="text-muted-foreground text-xs">vs last month</span>
+                <p class="flex items-center gap-1 font-semibold text-2xl tabular-nums">
+                    @if (_totalChange > 0)
+                                {
+                        <LucideArrowUpCn Size="16" Class="size-4 text-red-500" />
+                    }
+                    else
+                    {
+                        <LucideArrowDownCn Size="16" Class="size-4 text-emerald-500" />
+                    }
+                    <span class="@(_totalChange > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")">
+                        @($"{Math.Abs(_totalChange):F1}%")
+                    </span>
+                </p>
+            </div>
+        </div>
+
+        @* Provider rows *@
+        <div>
+            @for (var i = 0; i < _providers.Length; i++)
+                        {
+                var provider = _providers[i];
+                var isExpanded = _expanded == provider.Id;
+                var isLast = i == _providers.Length - 1;
+                var change = ((double)(provider.CurrentMonth - provider.PreviousMonth) / provider.PreviousMonth) * 100;
+                var barWidth = (double)provider.CurrentMonth / _maxCost * 100;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => _expanded = isExpanded ? null : provider.Id)"
+                            class="w-full px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="flex items-center gap-3">
+                            <span class="min-w-0 flex-1 font-medium text-sm">@provider.Name</span>
+                            <span class="font-semibold text-sm tabular-nums">
+                                @FormatCurrency(provider.CurrentMonth)
+                            </span>
+                            <span class="@(Cn.Merge("flex w-14 items-center justify-end gap-0.5 text-xs tabular-nums", change > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"))">
+                                @if (change > 0)
+                                            {
+                                    <LucideArrowUpCn Size="12" Class="size-3" />
+                                }
+                                else
+                                {
+                                    <LucideArrowDownCn Size="12" Class="size-3" />
+                                }
+                                @($"{Math.Abs(change):F1}%")
+                            </span>
+                            <LucideChevronRightCn Class="@(Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : ""))" />
+                        </div>
+                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/50">
+                            <div class="h-full rounded-full bg-foreground/70"
+                                 style="@($"width: {barWidth:F1}%")">
+                            </div>
+                        </div>
+                    </button>
+
+                    @if (isExpanded)
+                                {
+                        <div class="px-4 pb-4">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Service breakdown
+                                </span>
+                                <div class="space-y-1.5">
+                                    @foreach (var service in provider.Services)
+                                                {
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-sm">@service.Name</span>
+                                            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                                @FormatCurrency(service.Cost)
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="mt-2 flex items-center justify-between border-t pt-2">
+                                    <span class="text-muted-foreground text-xs">Previous month</span>
+                                    <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                        @FormatCurrency(provider.PreviousMonth)
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ServiceCost(string Name, int Cost);
+    private record Provider(string Id, string Name, int CurrentMonth, int PreviousMonth, ServiceCost[] Services);
+
+    private string? _expanded = "aws";
+
+    private static string FormatCurrency(int amount) => $"${amount:N0}";
+
+    private readonly int _monthlyBudget = 48000;
+
+    private readonly Provider[] _providers = new[]
+    {
+        new Provider("aws", "Amazon Web Services", 21480, 19820, new[]
+        {
+            new ServiceCost("EC2 Compute", 8940),
+            new ServiceCost("RDS PostgreSQL", 4280),
+            new ServiceCost("S3 Storage", 2180),
+            new ServiceCost("CloudFront CDN", 3420),
+            new ServiceCost("Lambda Functions", 1640),
+            new ServiceCost("Other services", 1020)
+        }),
+        new Provider("gcp", "Google Cloud Platform", 12640, 13180, new[]
+        {
+            new ServiceCost("GKE Clusters", 5820),
+            new ServiceCost("BigQuery", 3140),
+            new ServiceCost("Cloud Storage", 1480),
+            new ServiceCost("Cloud Run", 1240),
+            new ServiceCost("Other services", 960)
+        }),
+        new Provider("vercel", "Vercel", 4890, 4420, new[]
+        {
+            new ServiceCost("Edge Functions", 2140),
+            new ServiceCost("Bandwidth", 1580),
+            new ServiceCost("Build minutes", 890),
+            new ServiceCost("Observability", 280)
+        }),
+        new Provider("other", "Other Services", 3240, 3080, new[]
+        {
+            new ServiceCost("Datadog", 1420),
+            new ServiceCost("Stripe fees (infra)", 840),
+            new ServiceCost("PlanetScale", 580),
+            new ServiceCost("Resend", 400)
+        })
+    };
+
+    private int _totalCurrent => _providers.Sum(p => p.CurrentMonth);
+    private int _totalPrevious => _providers.Sum(p => p.PreviousMonth);
+    private int _budgetPct => (int)Math.Round((double)_totalCurrent / _monthlyBudget * 100);
+    private int _maxCost => _providers.Max(p => p.CurrentMonth);
+    private double _totalChange => ((double)(_totalCurrent - _totalPrevious) / _totalPrevious) * 100;
+}

@@ -1,0 +1,246 @@
+@* ============================================================
+   Block: account-developer
+   Title: Account Developer
+   Description: Developer settings dashboard with API rate limits, request logs, SDK tokens, environment configuration, and debugging tools for building integrations
+   Dependencies: BadgeCn, ButtonCn, ProgressCn, TabsCn
+   Source: original/blocks/account/account-developer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Developer Settings</h2>
+                    <p class="text-xs text-muted-foreground">API usage, request logs, and debugging tools</p>
+                </div>
+                <div class="flex items-center gap-1 rounded-md border p-0.5">
+                    <button type="button" class="@Cn.Merge("rounded px-2.5 py-1 text-xs font-medium transition-colors", _environment == "sandbox" ? "bg-amber-500/10 text-amber-700" : "text-muted-foreground hover:text-foreground")"
+                            @onclick="@(() => _environment = "sandbox")">Sandbox</button>
+                    <button type="button" class="@Cn.Merge("rounded px-2.5 py-1 text-xs font-medium transition-colors", _environment == "production" ? "bg-emerald-500/10 text-emerald-700" : "text-muted-foreground hover:text-foreground")"
+                            @onclick="@(() => _environment = "production")">Production</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4">
+            <div class="mb-4 flex items-center gap-3 rounded-md border p-3">
+                <LucideGlobeCn Class="h-4 w-4 shrink-0 text-muted-foreground" Size="16" />
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs text-muted-foreground">Base URL</p>
+                    <p class="truncate font-mono text-xs font-medium">@BaseUrl</p>
+                </div>
+                <ButtonCn Class="h-7 gap-1.5 text-xs" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                          OnClick="@(() => _copiedId = "baseUrl")">
+                    @if (_copiedId == "baseUrl")
+                    {
+                        <LucideCheckCn Class="h-3 w-3" Size="12" />
+                        <text>Copied</text>
+                    }
+                    else
+                    {
+                        <LucideCopyCn Class="h-3 w-3" Size="12" />
+                        <text>Copy</text>
+                    }
+                </ButtonCn>
+                <ButtonCn Class="h-7 gap-1.5 text-xs" Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                    <LucideBookOpenCn Class="h-3 w-3" Size="12" />
+                    Docs
+                    <LucideExternalLinkCn Class="h-3 w-3" Size="12" />
+                </ButtonCn>
+            </div>
+
+            <TabsCn DefaultValue="overview">
+                <TabsListCn Class="grid w-full grid-cols-3">
+                    <TabsTriggerCn Value="overview" Class="gap-1.5 text-xs">Rate Limits</TabsTriggerCn>
+                    <TabsTriggerCn Value="requests" Class="gap-1.5 text-xs">Request Log</TabsTriggerCn>
+                    <TabsTriggerCn Value="tokens" Class="gap-1.5 text-xs">SDK Tokens</TabsTriggerCn>
+                </TabsListCn>
+
+                <TabsContentCn Value="overview" Class="mt-4 space-y-3">
+                    <span class="text-xs font-medium text-muted-foreground">CURRENT RATE LIMITS</span>
+                    <div class="space-y-2">
+                        @foreach (var limit in _rateLimits)
+                        {
+                            var percentage = (double)limit.Current / limit.Limit * 100;
+                            <div class="rounded-md border p-3">
+                                <div class="mb-2 flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@limit.Name</p>
+                                        <p class="font-mono text-xs text-muted-foreground">@limit.Endpoint</p>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        <LucideClockCn Class="h-3 w-3" Size="12" />
+                                        Resets in @limit.ResetIn
+                                    </div>
+                                </div>
+                                <ProgressCn Class="@Cn.Merge("h-1.5", GetProgressColor(percentage))" Value="@percentage" />
+                                <div class="mt-1.5 flex items-center justify-between">
+                                    <span class="text-xs text-muted-foreground">
+                                        <span class="font-mono font-medium">@limit.Current.ToString("N0")</span> / @limit.Limit.ToString("N0")
+                                    </span>
+                                    <span class="@Cn.Merge("text-xs font-medium", GetUsageColor(percentage))">@percentage.ToString("F0")%</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (_rateLimits.Any(l => (double)l.Current / l.Limit * 100 >= 80))
+                    {
+                        <div class="flex items-start gap-2 rounded-md bg-amber-500/10 p-3">
+                            <LucideAlertTriangleCn Class="mt-0.5 h-4 w-4 shrink-0 text-amber-700" Size="16" />
+                            <div class="flex-1">
+                                <p class="text-sm font-medium">Approaching rate limit</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">Consider upgrading your plan for higher limits.</p>
+                            </div>
+                            <ButtonCn Class="h-7 shrink-0 text-xs" Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">Upgrade</ButtonCn>
+                        </div>
+                    }
+                </TabsContentCn>
+
+                <TabsContentCn Value="requests" Class="mt-4 space-y-3">
+                    <span class="text-xs font-medium text-muted-foreground">RECENT API REQUESTS</span>
+                    <div class="divide-y rounded-md border">
+                        @foreach (var request in _recentRequests)
+                        {
+                            <div class="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50">
+                                <span class="@Cn.Merge("w-12 font-mono text-xs font-medium", GetMethodColor(request.Method))">@request.Method</span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate font-mono text-xs">@request.Endpoint</p>
+                                    <p class="text-xs text-muted-foreground">@request.Timestamp</p>
+                                </div>
+                                <span class="@Cn.Merge("font-mono text-xs font-medium", GetStatusColor(request.Status))">@request.Status</span>
+                                <span class="w-12 text-right font-mono text-xs text-muted-foreground">@(request.Duration)ms</span>
+                                <ButtonCn Class="h-6 w-6 p-0" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                          OnClick="@(() => _copiedId = request.Id)">
+                                    @if (_copiedId == request.Id)
+                                    {
+                                        <LucideCheckCn Class="h-3 w-3 text-emerald-600" Size="12" />
+                                    }
+                                    else
+                                    {
+                                        <LucideCopyCn Class="h-3 w-3 text-muted-foreground" Size="12" />
+                                    }
+                                </ButtonCn>
+                            </div>
+                        }
+                    </div>
+                </TabsContentCn>
+
+                <TabsContentCn Value="tokens" Class="mt-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-muted-foreground">SDK TOKENS</span>
+                        <ButtonCn Class="h-7 gap-1.5 text-xs" Size="ButtonSize.Sm">
+                            <LucideKeyCn Class="h-3 w-3" Size="12" />
+                            Generate Token
+                        </ButtonCn>
+                    </div>
+                    <div class="space-y-2">
+                        @foreach (var token in _sdkTokens)
+                        {
+                            <div class="rounded-md border p-3">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@token.Name</p>
+                                        <p class="font-mono text-xs text-muted-foreground">@(token.Prefix)...</p>
+                                    </div>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("h-4 px-1.5 text-[10px]", token.Environment == "production" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")">@token.Environment</BadgeCn>
+                                </div>
+                                <div class="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <div class="flex items-center gap-1">
+                                        <LucideClockCn Class="h-3 w-3" Size="12" />
+                                        Expires in @token.ExpiresIn
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <LucideActivityCn Class="h-3 w-3" Size="12" />
+                                        Last used @token.LastUsed
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach (var scope in token.Scopes)
+                                        {
+                                            <BadgeCn Class="h-4 px-1.5 text-[10px]" Variant="BadgeVariant.Secondary">@scope</BadgeCn>
+                                        }
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <ButtonCn Class="h-6 gap-1 text-xs" Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                                            <LucideRefreshCwCn Class="h-3 w-3" Size="12" />
+                                            Rotate
+                                        </ButtonCn>
+                                        <ButtonCn Class="h-6 gap-1 text-xs text-destructive hover:text-destructive" Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                                            <LucideCircleXCn Class="h-3 w-3" Size="12" />
+                                            Revoke
+                                        </ButtonCn>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </TabsContentCn>
+            </TabsCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record RateLimit(string Name, int Current, int Limit, string ResetIn, string Endpoint);
+    private record RequestLog(string Id, string Method, string Endpoint, int Status, int Duration, string Timestamp, string RequestId);
+    private record SdkToken(string Id, string Name, string Prefix, string Environment, string ExpiresIn, string LastUsed, string[] Scopes);
+
+    private string _environment = "sandbox";
+    private string? _copiedId;
+
+    private string BaseUrl => _environment == "production" ? "https://api.yourapp.com" : "https://sandbox.yourapp.com";
+
+    private static string GetMethodColor(string method) => method switch
+    {
+        "GET" => "text-blue-700",
+        "POST" => "text-emerald-700",
+        "PUT" or "PATCH" => "text-amber-700",
+        "DELETE" => "text-red-700",
+        _ => "text-muted-foreground",
+    };
+
+    private static string GetStatusColor(int status) => status switch
+    {
+        >= 200 and < 300 => "text-emerald-700",
+        >= 400 and < 500 => "text-amber-700",
+        >= 500 => "text-red-700",
+        _ => "text-muted-foreground",
+    };
+
+    private static string GetUsageColor(double percentage) => percentage switch
+    {
+        >= 90 => "text-red-600",
+        >= 70 => "text-amber-600",
+        _ => "text-emerald-600",
+    };
+
+    private static string GetProgressColor(double percentage) => percentage switch
+    {
+        >= 90 => "[&>div]:bg-red-500",
+        >= 70 => "[&>div]:bg-amber-500",
+        _ => "[&>div]:bg-emerald-500",
+    };
+
+    private static readonly RateLimit[] _rateLimits =
+    [
+        new("API Requests", 8420, 10000, "45 min", "/api/*"),
+        new("Webhook Deliveries", 234, 1000, "45 min", "/webhooks/*"),
+        new("File Uploads", 45, 100, "45 min", "/upload/*"),
+    ];
+
+    private static readonly RequestLog[] _recentRequests =
+    [
+        new("req_1", "GET", "/api/v1/users", 200, 45, "2 min ago", "req_abc123"),
+        new("req_2", "POST", "/api/v1/orders", 201, 128, "5 min ago", "req_def456"),
+        new("req_3", "DELETE", "/api/v1/sessions/old", 404, 18, "12 min ago", "req_jkl012"),
+    ];
+
+    private static readonly SdkToken[] _sdkTokens =
+    [
+        new("tok_1", "Mobile App Token", "sk_live_aBc", "production", "23 hours", "2 min ago", ["read:users", "write:orders"]),
+        new("tok_2", "Web Client Token", "sk_test_xYz", "sandbox", "6 hours", "1 hour ago", ["read:products", "read:users"]),
+    ];
+}

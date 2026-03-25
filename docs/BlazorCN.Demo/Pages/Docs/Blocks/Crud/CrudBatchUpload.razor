@@ -1,0 +1,186 @@
+@* ============================================================
+   Block: crud-batch-upload
+   Title: Crud Batch Upload
+   Description: Batch file upload interface with processing status, progress tracking, and retry capabilities
+   Long Description: Upload multiple files with real-time processing status, progress indicators, and automatic retry for failed uploads.
+   Dependencies: BadgeCn, ButtonCn, ProgressCn
+   Source: original/blocks/crud/crud-batch-upload.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Batch File Upload</h2>
+            <p class="mt-1 text-xs text-muted-foreground">Upload and process multiple files</p>
+        </div>
+
+        <div class="border-b px-4 py-6">
+            <div class="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/20 px-6 py-8 transition-colors hover:border-muted-foreground/40 hover:bg-muted/30">
+                <div class="flex size-12 items-center justify-center rounded-full bg-muted">
+                    <LucideUploadCn Size="20" Class="size-5 text-muted-foreground" />
+                </div>
+                <p class="mt-3 text-sm font-medium">Drop files here or click to browse</p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Support for PDF, XLSX, CSV, ZIP up to 100MB each
+                </p>
+                <ButtonCn Size="ButtonSize.Sm" Class="mt-4 h-7 text-xs">
+                    Select Files
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="divide-y">
+            @foreach (var file in _files)
+            {
+                <div class="px-4 py-3">
+                    <div class="flex items-start gap-3">
+                        <div class="mt-0.5 shrink-0">
+                            <LucideFileCn Size="16" Class="size-4 text-muted-foreground" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="truncate text-sm font-medium">@file.Name</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary"
+                                                 Class="@Cn.Merge("h-5 text-xs", GetTypeColor(file.Type))">
+                                            @GetTypeLabel(file.Type)
+                                        </BadgeCn>
+                                    </div>
+                                    <div class="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span>@FormatFileSize(file.Size)</span>
+                                        @if (file.Status == "complete")
+                                        {
+                                            <span class="flex items-center gap-1 text-emerald-600">
+                                                <LucideCheckCn Size="12" Class="size-3" />
+                                                Complete
+                                            </span>
+                                        }
+                                        else if (file.Status == "processing")
+                                        {
+                                            <span class="flex items-center gap-1 text-blue-600">
+                                                <LucideLoaderCircleCn Size="12" Class="size-3 animate-spin" />
+                                                Processing
+                                            </span>
+                                        }
+                                        else if (file.Status == "failed")
+                                        {
+                                            <span class="flex items-center gap-1 text-red-600">
+                                                <LucideCircleAlertCn Size="12" Class="size-3" />
+                                                Failed
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (file.Status == "processing")
+                                    {
+                                        <div class="mt-2">
+                                            <ProgressCn Value="@file.Progress" Class="h-1.5" />
+                                            <span class="mt-1 block text-xs text-muted-foreground">
+                                                @(file.Progress)%
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="flex shrink-0 items-center gap-1">
+                                    @if (file.Status == "failed")
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="h-7 gap-1.5 px-2 text-xs"
+                                                  @onclick="@(() => HandleRetry(file.Id))">
+                                            <LucideRefreshCwCn Size="12" Class="size-3.5" />
+                                            Retry
+                                        </ButtonCn>
+                                    }
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-7 px-2 text-muted-foreground hover:text-foreground"
+                                              @onclick="@(() => HandleRemove(file.Id))">
+                                        <LucideXCn Size="12" Class="size-3.5" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="border-t bg-muted/30 px-4 py-3">
+            <div class="flex items-center justify-between text-xs">
+                <span class="text-muted-foreground">
+                    @_completeCount of @_files.Count files processed
+                </span>
+                <div class="flex items-center gap-4">
+                    @if (_processingCount > 0)
+                    {
+                        <span class="text-blue-600">@_processingCount processing</span>
+                    }
+                    @if (_failedCount > 0)
+                    {
+                        <span class="text-red-600">@_failedCount failed</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class UploadFile
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public long Size { get; set; }
+        public string Type { get; set; } = "";
+        public string Status { get; set; } = "";
+        public int Progress { get; set; }
+    }
+
+    private readonly List<UploadFile> _files =
+    [
+        new() { Id = "f1", Name = "product-catalog-2026.xlsx", Size = 2450000, Type = "spreadsheet", Status = "complete", Progress = 100 },
+        new() { Id = "f2", Name = "customer-data-export.csv", Size = 1820000, Type = "spreadsheet", Status = "complete", Progress = 100 },
+        new() { Id = "f3", Name = "quarterly-report-q1.pdf", Size = 5670000, Type = "document", Status = "processing", Progress = 67 },
+        new() { Id = "f4", Name = "marketing-assets.zip", Size = 12400000, Type = "archive", Status = "processing", Progress = 34 },
+        new() { Id = "f5", Name = "user-feedback-survey.xlsx", Size = 890000, Type = "spreadsheet", Status = "complete", Progress = 100 },
+        new() { Id = "f6", Name = "inventory-update.csv", Size = 3200000, Type = "spreadsheet", Status = "failed", Progress = 0 },
+        new() { Id = "f7", Name = "team-photos.zip", Size = 8900000, Type = "archive", Status = "complete", Progress = 100 },
+        new() { Id = "f8", Name = "legal-contract-v2.pdf", Size = 1560000, Type = "document", Status = "failed", Progress = 0 },
+        new() { Id = "f9", Name = "training-materials.pdf", Size = 4320000, Type = "document", Status = "complete", Progress = 100 },
+        new() { Id = "f10", Name = "analytics-dashboard.xlsx", Size = 2100000, Type = "spreadsheet", Status = "complete", Progress = 100 },
+    ];
+
+    private int _completeCount => _files.Count(f => f.Status == "complete");
+    private int _failedCount => _files.Count(f => f.Status == "failed");
+    private int _processingCount => _files.Count(f => f.Status == "processing");
+
+    private void HandleRetry(string id)
+    {
+        var file = _files.Find(f => f.Id == id);
+        if (file != null) { file.Status = "processing"; file.Progress = 15; }
+    }
+
+    private void HandleRemove(string id) => _files.RemoveAll(f => f.Id == id);
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):F1} MB",
+    };
+
+    private static string GetTypeColor(string type) => type switch
+    {
+        "document" => "bg-blue-500/10 text-blue-600",
+        "spreadsheet" => "bg-emerald-500/10 text-emerald-600",
+        "archive" => "bg-purple-500/10 text-purple-600",
+        _ => "bg-muted text-muted-foreground",
+    };
+
+    private static string GetTypeLabel(string type) => type switch
+    {
+        "document" => "PDF",
+        "spreadsheet" => "XLSX",
+        "archive" => "ZIP",
+        _ => type.ToUpper(),
+    };
+}

@@ -1,0 +1,154 @@
+@* ============================================================
+   Block: dashboard-bandwidth-usage
+   Title: Dashboard Bandwidth Usage
+   Description: Animated React bandwidth consumption dashboard block for Next.js with per-service bandwidth bars, daily and monthly caps, overage alerts, and usage trend indicators using shadcn/ui, Tailwind CSS, and framer-motion
+   Long Description: Bandwidth monitoring with IP tracking
+   Dependencies: BadgeCn
+   Source: original/blocks/dashboard/dashboard-bandwidth-usage.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Bandwidth Usage</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_services.Length services · March 2026
+                </p>
+            </div>
+            @if (_alertCount > 0)
+                        {
+                <div class="flex items-center gap-1.5">
+                    <LucideTriangleAlertCn Size="12" Class="size-3.5 text-amber-500" />
+                    <span class="text-amber-600 text-xs dark:text-amber-400">
+                        @_alertCount @(_alertCount == 1 ? "alert" : "alerts")
+                    </span>
+                </div>
+            }
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div>
+                <span class="text-muted-foreground text-xs">Total Used</span>
+                <div class="flex items-baseline gap-1">
+                    <span class="font-semibold text-2xl tabular-nums">
+                        @((_totalUsed / 1000.0).ToString("F1"))
+                    </span>
+                    <span class="text-muted-foreground text-xs">
+                        / @((_totalCap / 1000.0).ToString("F1")) TB
+                    </span>
+                </div>
+            </div>
+            <span class="text-muted-foreground text-xs">·</span>
+            <div>
+                <span class="text-muted-foreground text-xs">Remaining</span>
+                <div class="flex items-baseline gap-1">
+                    <span class="font-semibold text-sm tabular-nums">
+                        @(((_totalCap - _totalUsed) / 1000.0).ToString("F1")) TB
+                    </span>
+                </div>
+            </div>
+            <span class="text-muted-foreground text-xs">·</span>
+            <span class="text-muted-foreground text-xs">Day 17 of 31</span>
+        </div>
+
+        @* Service rows *@
+        <div>
+            @for (var i = 0; i < _services.Length; i++)
+                        {
+                var service = _services[i];
+                var index = i;
+                var monthlyPct = Math.Min((double)service.CurrentGB / service.MonthlyCapGB * 100, 100);
+                var monthlyLevel = GetUsageLevel(service.CurrentGB, service.MonthlyCapGB);
+                var dailyLevel = GetUsageLevel(service.DailyUsageGB, service.DailyCapGB);
+                var hasAlert = monthlyLevel != "normal" || dailyLevel != "normal";
+
+                <div class="@(Cn.Merge("px-4 py-3", index < _services.Length - 1 ? "border-b" : ""))">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", hasAlert ? (monthlyLevel == "critical" || dailyLevel == "critical" ? "bg-red-500" : "bg-amber-500") : "bg-emerald-500"))"></span>
+                            <span class="font-medium text-sm">@service.Name</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            @if (dailyLevel != "normal")
+                                        {
+                                <BadgeCn Variant="BadgeVariant.Secondary"
+                                         Class="@(Cn.Merge("text-[10px] font-normal", dailyLevel == "critical" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"))">
+                                    Daily @(dailyLevel == "critical" ? "over" : "high")
+                                </BadgeCn>
+                            }
+                            <span class="flex items-center gap-0.5 text-xs text-muted-foreground">
+                                @if (service.Trend == "up")
+                                            {
+                                    <LucideArrowUpCn Size="12" Class="size-3" />
+                                }
+                                else if (service.Trend == "down")
+                                {
+                                    <LucideArrowDownCn Size="12" Class="size-3" />
+                                }
+                                else
+                                {
+                                    <LucideGaugeCn Size="12" Class="size-3" />
+                                }
+                                <span class="tabular-nums">@service.TrendPercent</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-center gap-2">
+                        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div class="@(Cn.Merge("h-full rounded-full", GetBarColor(monthlyLevel)))"
+                                 style="@($"width: {monthlyPct:F0}%")">
+                            </div>
+                        </div>
+                        <span class="shrink-0 text-muted-foreground text-xs tabular-nums">
+                            @service.CurrentGB / @service.MonthlyCapGB GB
+                        </span>
+                    </div>
+                    <div class="mt-1 flex items-center justify-between">
+                        <span class="text-muted-foreground text-xs tabular-nums">
+                            Today: @service.DailyUsageGB / @service.DailyCapGB GB
+                        </span>
+                        <span class="text-muted-foreground text-xs tabular-nums">
+                            @(monthlyPct.ToString("F0"))%
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record BandwidthService(string Id, string Name, int CurrentGB, int MonthlyCapGB, int DailyUsageGB, int DailyCapGB, string Trend, string TrendPercent);
+
+    private static string GetUsageLevel(int current, int cap)
+    {
+        var pct = (double)current / cap * 100;
+        if (pct >= 95) return "critical";
+        if (pct >= 80) return "warning";
+        return "normal";
+    }
+
+    private static string GetBarColor(string level) => level switch
+    {
+        "critical" => "bg-red-500",
+        "warning" => "bg-amber-500",
+        _ => "bg-emerald-500"
+    };
+
+    private int _totalUsed => _services.Sum(s => s.CurrentGB);
+    private int _totalCap => _services.Sum(s => s.MonthlyCapGB);
+    private int _alertCount => _services.Count(s => GetUsageLevel(s.CurrentGB, s.MonthlyCapGB) != "normal" || GetUsageLevel(s.DailyUsageGB, s.DailyCapGB) != "normal");
+
+    private readonly BandwidthService[] _services = new[]
+    {
+        new BandwidthService("s1", "API Gateway", 842, 1000, 48, 50, "up", "+12%"),
+        new BandwidthService("s2", "Static Assets CDN", 2340, 5000, 125, 200, "up", "+5%"),
+        new BandwidthService("s3", "Video Streaming", 1890, 2000, 142, 100, "up", "+28%"),
+        new BandwidthService("s4", "Database Replication", 156, 500, 8, 25, "down", "-3%"),
+        new BandwidthService("s5", "Object Storage", 678, 1500, 35, 75, "flat", "+1%"),
+        new BandwidthService("s6", "WebSocket Connections", 234, 300, 18, 15, "up", "+19%")
+    };
+}

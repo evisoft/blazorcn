@@ -1,0 +1,217 @@
+@* ===========================================================
+   Block: ai-chat-split-panel
+   Title: Ai Chat Split Panel
+   Description: AI split-panel chat with conversation and live preview artifact area with tabbed code and console views
+   Dependencies: BadgeCn, ButtonCn, LucideArrowUpCn, LucideCheckCn, LucideCopyCn, LucideMaximizeCn, LucideRefreshCcwCn
+   Source: original/blocks/ai/ai-chat-split-panel.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    <div class="grid h-[700px] grid-cols-1 overflow-hidden rounded-lg border bg-card lg:grid-cols-2">
+        @* Chat panel *@
+        <div class="flex flex-col border-r">
+            <div class="flex items-center gap-2 border-b px-4 py-3">
+                <span class="text-sm font-medium">Code Assistant</span>
+                <span class="text-xs text-muted-foreground">&middot;</span>
+                <span class="text-xs text-muted-foreground">Generates live previews</span>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <div class="flex flex-col">
+                    @for (var i = 0; i < _messages.Length; i++)
+                    {
+                        var msg = _messages[i];
+                        var isLast = i == _messages.Length - 1;
+                        <div class="@(!isLast ? "border-b" : "")">
+                            <div class="px-4 py-3">
+                                <span class="mb-1 block text-xs font-medium text-muted-foreground">
+                                    @(msg.Role == "user" ? "You" : "AI")
+                                </span>
+                                <p class="text-sm leading-relaxed">@msg.Content</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="border-t px-4 py-3">
+                <div class="relative">
+                    <textarea class="min-h-0 max-h-28 w-full resize-none border-0 bg-transparent pr-10 text-sm shadow-none focus:outline-none focus-visible:ring-0"
+                              rows="1"
+                              placeholder="Describe what to build..."
+                              @bind="_input"></textarea>
+                    <ButtonCn Class="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                              Size="ButtonSize.Icon"
+                              Variant="ButtonVariant.Ghost"
+                              Disabled="@(string.IsNullOrWhiteSpace(_input))">
+                        <LucideArrowUpCn Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+
+        @* Preview panel *@
+        <div class="hidden flex-col lg:flex">
+            <div class="flex items-center justify-between border-b px-4 py-3">
+                <div class="flex items-center gap-1">
+                    @foreach (var tab in _tabs)
+                    {
+                        var tabName = tab;
+                        <button type="button"
+                                class="@Cn.Merge("h-7 rounded-md px-3 text-xs transition-colors", _activeTab == tabName ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")"
+                                @onclick="@(() => _activeTab = tabName)">
+                            @(char.ToUpper(tabName[0]) + tabName[1..])
+                        </button>
+                    }
+                </div>
+                <div class="flex items-center gap-1">
+                    <ButtonCn Class="size-7" Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon">
+                        <LucideRefreshCcwCn Size="16" Class="size-3.5" />
+                    </ButtonCn>
+                    <ButtonCn Class="size-7" Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon">
+                        <LucideMaximizeCn Size="16" Class="size-3.5" />
+                    </ButtonCn>
+                </div>
+            </div>
+
+            @if (_activeTab == "preview")
+            {
+                <div class="flex flex-1 items-start justify-center p-6">
+                    <div class="flex items-start gap-3">
+                        @foreach (var tier in _pricingTiers)
+                        {
+                            <div class="@Cn.Merge("flex w-36 flex-col rounded-lg border p-4", tier.Popular ? "border-foreground/20 bg-muted/50" : "")">
+                                @if (tier.Popular)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="mb-2 w-fit text-[10px]">
+                                        Popular
+                                    </BadgeCn>
+                                }
+                                <span class="text-xs font-medium">@tier.Plan</span>
+                                <span class="mt-1 text-2xl font-semibold tabular-nums">
+                                    $@tier.Price<span class="text-xs font-normal text-muted-foreground">/mo</span>
+                                </span>
+                                <div class="mt-3 space-y-1.5">
+                                    @foreach (var f in new[] { "Feature A", "Feature B", "Feature C" })
+                                    {
+                                        <div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                            <span class="size-1 rounded-full bg-foreground/30"></span>
+                                            @f
+                                        </div>
+                                    }
+                                </div>
+                                <ButtonCn Class="mt-4 h-7 text-[10px]"
+                                          Size="ButtonSize.Sm"
+                                          Variant="@(tier.Popular ? ButtonVariant.Default : ButtonVariant.Outline)">
+                                    Get Started
+                                </ButtonCn>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_activeTab == "code")
+            {
+                <div class="relative flex-1 overflow-y-auto">
+                    <ButtonCn Class="absolute right-2 top-2 z-10 h-6 gap-1 px-2 text-xs"
+                              Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Sm"
+                              @onclick="HandleCopy">
+                        @if (_copied)
+                        {
+                            <LucideCheckCn Size="16" Class="size-3" />
+                            <text>Copied</text>
+                        }
+                        else
+                        {
+                            <LucideCopyCn Size="16" Class="size-3" />
+                            <text>Copy</text>
+                        }
+                    </ButtonCn>
+                    <div class="rounded-md bg-zinc-950 p-3">
+                        <pre class="font-mono text-sm leading-relaxed"><code class="text-zinc-300">@PreviewCode</code></pre>
+                    </div>
+                </div>
+            }
+
+            @if (_activeTab == "console")
+            {
+                <div class="flex-1 overflow-y-auto bg-zinc-950">
+                    <div class="flex flex-col gap-1 p-3 font-mono text-xs">
+                        @foreach (var line in _consoleOutput)
+                        {
+                            <div class="flex gap-3">
+                                <span class="shrink-0 text-zinc-600">@line.Time</span>
+                                <span class="@(line.Type == "success" ? "text-emerald-400" : "text-zinc-400")">
+                                    @line.Text
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Role, string Content);
+    private record PricingTier(string Plan, string Price, bool Popular);
+    private record ConsoleLine(string Time, string Type, string Text);
+
+    private static readonly ChatMessage[] _messages =
+    {
+        new("1", "user", "Create a responsive pricing card component with a popular plan badge and a CTA button."),
+        new("2", "assistant", "Here's a pricing card component with a highlighted popular plan. I've rendered a preview with three pricing tiers on the right. The middle card uses the popular prop for the highlighted treatment.")
+    };
+
+    private static readonly PricingTier[] _pricingTiers =
+    {
+        new("Starter", "9", false),
+        new("Pro", "29", true),
+        new("Team", "79", false)
+    };
+
+    private static readonly ConsoleLine[] _consoleOutput =
+    {
+        new("12:34:01", "info", "Compiling component..."),
+        new("12:34:02", "success", "Build successful (142ms)"),
+        new("12:34:02", "info", "Rendering preview with 3 pricing tiers"),
+        new("12:34:03", "success", "Preview ready")
+    };
+
+    private const string PreviewCode = @"function PricingCard({ plan, price, features, popular }) {
+  return (
+    <div className={cn(
+      ""rounded-2xl border p-6"",
+      popular && ""border-primary shadow-lg""
+    )}>
+      {popular && (
+        <Badge className=""mb-4"">Most Popular</Badge>
+      )}
+      <h3 className=""text-lg font-semibold"">{plan}</h3>
+      <p className=""mt-2 text-3xl font-bold"">
+        ${price}<span className=""text-sm text-muted-foreground"">/mo</span>
+      </p>
+      <Button className=""mt-8 w-full"" variant={popular ? ""default"" : ""outline""}>
+        Get Started
+      </Button>
+    </div>
+  )
+}";
+
+    private static readonly string[] _tabs = { "preview", "code", "console" };
+
+    private string _input = "";
+    private string _activeTab = "preview";
+    private bool _copied;
+
+    private async Task HandleCopy()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

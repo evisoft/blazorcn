@@ -1,0 +1,252 @@
+@* ============================================================
+   Block: account-webhooks
+   Title: Account Webhooks
+   Description: Webhook endpoint management with URL configuration, event subscriptions, secret keys, delivery logs, retry mechanisms, and test webhook functionality
+   Dependencies: AlertDialogCn, BadgeCn, ButtonCn, SwitchCn
+   Source: original/blocks/account/account-webhooks.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideWebhookCn Class="h-5 w-5 text-muted-foreground" Size="20" />
+                    <div>
+                        <h2 class="text-sm font-medium">Webhooks</h2>
+                        <p class="text-xs text-muted-foreground">Configure endpoints to receive real-time event notifications</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs">@_webhooks.Count endpoint@(_webhooks.Count != 1 ? "s" : "")</BadgeCn>
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                        <LucidePlusCn Class="h-3.5 w-3.5" Size="14" />
+                        Add Endpoint
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+
+        @if (_webhooks.Count == 0)
+        {
+            <div class="px-4 py-6 text-center">
+                <LucideWebhookCn Class="mx-auto mb-2 h-6 w-6 text-muted-foreground" Size="24" />
+                <p class="text-xs text-muted-foreground">No webhook endpoints configured</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var webhook in _webhooks)
+            {
+                <div class="border-b">
+                    <div class="px-4 py-3">
+                        <div class="flex items-start justify-between">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="truncate font-mono text-sm font-medium">@webhook.Url</span>
+                                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", GetHealthDot(webhook.SuccessRate))"></span>
+                                    <span class="text-xs text-muted-foreground">@GetHealthLabel(webhook.SuccessRate)</span>
+                                </div>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    Created @webhook.CreatedAt
+                                    @if (webhook.LastDelivery != null)
+                                    {
+                                        <text> -- Last delivery @webhook.LastDelivery</text>
+                                    }
+                                    -- @(webhook.SuccessRate.ToString("F1"))% success
+                                </p>
+                                <div class="mt-1.5 flex flex-wrap gap-1">
+                                    @foreach (var evt in webhook.Events)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">@evt</BadgeCn>
+                                    }
+                                </div>
+                            </div>
+                            <SwitchCn Checked="@webhook.Enabled" CheckedChanged="@((bool _) => webhook.Enabled = !webhook.Enabled)" />
+                        </div>
+
+                        <div class="mt-3 flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Signing Secret</p>
+                                <p class="truncate font-mono text-xs">@webhook.Secret</p>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <ButtonCn Class="h-6 gap-1 px-2 text-xs" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                          OnClick="@(() => HandleCopySecret(webhook.Id))">
+                                    @if (_copiedSecretId == webhook.Id)
+                                    {
+                                        <LucideCheckCn Class="h-3 w-3" Size="12" />
+                                        <text>Copied</text>
+                                    }
+                                    else
+                                    {
+                                        <LucideCopyCn Class="h-3 w-3" Size="12" />
+                                        <text>Copy</text>
+                                    }
+                                </ButtonCn>
+                                <ButtonCn Class="h-6 gap-1 px-2 text-xs" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                          Disabled="@(_testingWebhookId == webhook.Id)"
+                                          OnClick="@(() => HandleTestWebhook(webhook.Id))">
+                                    @if (_testingWebhookId == webhook.Id)
+                                    {
+                                        <LucideLoader2Cn Class="h-3 w-3 animate-spin" Size="12" />
+                                        <text>Testing</text>
+                                    }
+                                    else
+                                    {
+                                        <LucidePlayCircleCn Class="h-3 w-3" Size="12" />
+                                        <text>Test</text>
+                                    }
+                                </ButtonCn>
+                                <ButtonCn Class="h-6 w-6 text-destructive hover:text-destructive" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                                          OnClick="@(() => { _selectedWebhookId = webhook.Id; _deleteDialogOpen = true; })">
+                                    <LucideTrash2Cn Class="h-3 w-3" Size="12" />
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+
+        <div class="border-b">
+            <div class="px-4 py-2">
+                <span class="text-xs font-medium text-muted-foreground">RECENT DELIVERIES</span>
+            </div>
+            @foreach (var log in _deliveryLogs)
+            {
+                <div class="flex items-center gap-3 border-t px-4 py-2.5 transition-colors hover:bg-muted/50">
+                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", GetStatusDot(log.Status))"></span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono text-sm font-medium">@log.Event</span>
+                            @if (log.RetryCount > 0)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">@log.RetryCount retries</BadgeCn>
+                            }
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                            @if (log.StatusCode != null)
+                            {
+                                <span class="@Cn.Merge("font-mono", log.Status == "success" ? "text-emerald-600" : "text-red-600")">@log.StatusCode</span>
+                            }
+                            @if (log.ResponseTime != null)
+                            {
+                                <span>@(log.ResponseTime)ms</span>
+                            }
+                            <span>@log.Timestamp</span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <AlertDialogCn @bind-Open="_deleteDialogOpen">
+        <AlertDialogContentCn>
+            <AlertDialogHeaderCn>
+                <AlertDialogTitleCn>Delete Webhook?</AlertDialogTitleCn>
+                <AlertDialogDescriptionCn>This will permanently delete the webhook endpoint. You will stop receiving event notifications at this URL. This action cannot be undone.</AlertDialogDescriptionCn>
+            </AlertDialogHeaderCn>
+            <AlertDialogFooterCn>
+                <AlertDialogCancelCn>Cancel</AlertDialogCancelCn>
+                <AlertDialogActionCn Class="bg-destructive text-destructive-foreground hover:bg-destructive/90" OnClick="HandleDeleteWebhook">Delete Webhook</AlertDialogActionCn>
+            </AlertDialogFooterCn>
+        </AlertDialogContentCn>
+    </AlertDialogCn>
+</section>
+
+@code {
+    private class WebhookEndpoint
+    {
+        public string Id { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string[] Events { get; set; } = [];
+        public string Secret { get; set; } = "";
+        public bool Enabled { get; set; }
+        public string CreatedAt { get; set; } = "";
+        public string? LastDelivery { get; set; }
+        public double SuccessRate { get; set; }
+    }
+
+    private record DeliveryLog(string Id, string WebhookId, string Event, string Status, int? StatusCode, string Timestamp, int RetryCount, int? ResponseTime);
+
+    private bool _deleteDialogOpen;
+    private string? _selectedWebhookId;
+    private string? _copiedSecretId;
+    private string? _testingWebhookId;
+
+    private readonly List<WebhookEndpoint> _webhooks =
+    [
+        new()
+        {
+            Id = "1",
+            Url = "https://api.example.com/webhooks",
+            Events = ["user.created", "payment.succeeded"],
+            Secret = "whsec_4f3d2e1c9b8a7f6e5d4c3b2a1",
+            Enabled = true,
+            CreatedAt = "Dec 15, 2023",
+            LastDelivery = "2 hours ago",
+            SuccessRate = 98.5,
+        },
+    ];
+
+    private static readonly DeliveryLog[] _deliveryLogs =
+    [
+        new("1", "1", "payment.succeeded", "success", 200, "2 hours ago", 0, 145),
+        new("2", "1", "user.created", "success", 200, "5 hours ago", 0, 98),
+        new("3", "1", "payment.succeeded", "failed", 500, "1 day ago", 3, 2341),
+    ];
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "success" => "bg-emerald-500",
+        "failed" => "bg-red-500",
+        "pending" => "bg-amber-500",
+        _ => "bg-muted-foreground",
+    };
+
+    private static string GetHealthLabel(double successRate) => successRate switch
+    {
+        >= 95 => "Healthy",
+        >= 80 => "Degraded",
+        _ => "Failing",
+    };
+
+    private static string GetHealthDot(double successRate) => successRate switch
+    {
+        >= 95 => "bg-emerald-500",
+        >= 80 => "bg-amber-500",
+        _ => "bg-red-500",
+    };
+
+    private void HandleCopySecret(string webhookId)
+    {
+        _copiedSecretId = webhookId;
+        _ = Task.Delay(2000).ContinueWith(_ =>
+        {
+            _copiedSecretId = null;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private void HandleTestWebhook(string webhookId)
+    {
+        _testingWebhookId = webhookId;
+        _ = Task.Delay(1500).ContinueWith(_ =>
+        {
+            _testingWebhookId = null;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private void HandleDeleteWebhook()
+    {
+        if (_selectedWebhookId != null)
+        {
+            _webhooks.RemoveAll(w => w.Id == _selectedWebhookId);
+            _deleteDialogOpen = false;
+            _selectedWebhookId = null;
+        }
+    }
+}

@@ -1,0 +1,306 @@
+@* ===========================================================
+   Block: ai-code-editor
+   Title: Ai Code Editor
+   Description: AI code editor with file tree, syntax-highlighted code display, and AI suggestion cards
+   Dependencies: BadgeCn, ButtonCn, LucideCheckCn, LucideChevronRightCn, LucideCopyCn, LucideFileCn, LucideFileTextCn, LucideFolderCn, LucideFolderOpenCn
+   Source: original/blocks/ai/ai-code-editor.tsx
+   =========================================================== *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Top bar *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <span class="text-sm font-medium">@_activeFile</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-mono text-xs">
+                TSX
+            </BadgeCn>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="text-xs text-muted-foreground">@_suggestions.Length suggestions</span>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_suggestions.Count(s => s.Type == "bug")
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @_suggestions.Count(s => s.Type == "optimization")
+                </span>
+            </div>
+        </div>
+
+        @* File Tree *@
+        <div class="border-b">
+            <button type="button"
+                    class="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted/50"
+                    @onclick="@(() => _expandedTree = !_expandedTree)">
+                <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", _expandedTree ? "rotate-90" : "")" />
+                <span class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Explorer</span>
+            </button>
+            @if (_expandedTree)
+            {
+                <div class="space-y-0.5 px-2 pb-2">
+                    @RenderFileTree(_fileTree, 0)
+                </div>
+            }
+        </div>
+
+        @* Code display *@
+        <div class="border-b">
+            <div class="overflow-x-auto">
+                <pre class="bg-zinc-950 p-4 font-mono text-[13px] leading-6"><code>@foreach (var line in _codeLines)
+{<div class="flex"><span class="mr-6 inline-block w-5 select-none text-right text-zinc-600">@line.Number</span><span class="text-zinc-300">@line.Text</span></div>}</code></pre>
+            </div>
+        </div>
+
+        @* AI Suggestions *@
+        <div>
+            <div class="px-4 py-2">
+                <span class="text-xs font-medium text-muted-foreground">Suggestions</span>
+            </div>
+            @for (var i = 0; i < _suggestions.Length; i++)
+            {
+                var suggestion = _suggestions[i];
+                var isExpanded = _expanded == suggestion.Id;
+                var isLast = i == _suggestions.Length - 1;
+                var sugId = suggestion.Id;
+                <div class="@(!isLast ? "border-b" : "")">
+                    <button type="button"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => _expanded = isExpanded ? null : sugId)">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", GetTypeDot(suggestion.Type))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@suggestion.Title</span>
+                            @if (suggestion.Line.HasValue)
+                            {
+                                <p class="mt-0.5 font-mono text-xs text-muted-foreground">Line @suggestion.Line</p>
+                            }
+                        </div>
+                        <LucideChevronRightCn Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-xs font-medium text-muted-foreground">Suggestion</span>
+                                    <ButtonCn Class="h-6 gap-1 px-2 text-xs"
+                                              Variant="ButtonVariant.Ghost"
+                                              Size="ButtonSize.Sm"
+                                              @onclick="@(() => HandleCopy(sugId))">
+                                        @if (_copied == sugId)
+                                        {
+                                            <LucideCheckCn Size="16" Class="size-3" />
+                                            <text>Copied</text>
+                                        }
+                                        else
+                                        {
+                                            <LucideCopyCn Size="16" Class="size-3" />
+                                            <text>Copy</text>
+                                        }
+                                    </ButtonCn>
+                                </div>
+                                <p class="text-sm leading-relaxed">@suggestion.Description</p>
+                            </div>
+                            <div class="mt-2 flex gap-2">
+                                <ButtonCn Class="h-7 text-xs" Variant="ButtonVariant.Outline" Size="ButtonSize.Sm">Apply</ButtonCn>
+                                <ButtonCn Class="h-7 text-xs text-muted-foreground" Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm">Dismiss</ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record FileNode(string Name, string Type, string? Language = null, FileNode[]? Children = null);
+    private record AiSuggestion(string Id, string Title, string Description, string Type, int? Line = null);
+    private record CodeLine(int Number, string Text);
+
+    private static readonly FileNode[] _fileTree =
+    {
+        new("src", "folder", Children: new FileNode[]
+        {
+            new("components", "folder", Children: new FileNode[]
+            {
+                new("Button.tsx", "file", "tsx"),
+                new("Card.tsx", "file", "tsx"),
+                new("Header.tsx", "file", "tsx")
+            }),
+            new("hooks", "folder", Children: new FileNode[]
+            {
+                new("useAuth.ts", "file", "ts"),
+                new("useFetch.ts", "file", "ts")
+            }),
+            new("App.tsx", "file", "tsx"),
+            new("index.ts", "file", "ts")
+        }),
+        new("package.json", "file", "json"),
+        new("tsconfig.json", "file", "json")
+    };
+
+    private static readonly AiSuggestion[] _suggestions =
+    {
+        new("1", "Extract reusable hook",
+            "The fetch logic on lines 12-28 can be extracted into a custom useApi hook to reduce duplication across components.",
+            "optimization", 12),
+        new("2", "Add error boundary",
+            "This component lacks error handling. Wrap the async operation in a try-catch and add a fallback UI for failed states.",
+            "bug", 15),
+        new("3", "Use memo for list",
+            "The items list is recalculated every render. Wrap the filter operation in useMemo to prevent unnecessary recomputations.",
+            "optimization", 31)
+    };
+
+    private static readonly CodeLine[] _codeLines =
+    {
+        new(1, "import { useState, useEffect } from \"react\""),
+        new(2, "import { Button } from \"~/components/ui/button\""),
+        new(3, ""),
+        new(4, "interface AppProps {"),
+        new(5, "  title: string"),
+        new(6, "  description?: string"),
+        new(7, "}"),
+        new(8, ""),
+        new(9, "export default function App({ title, description }: AppProps) {"),
+        new(10, "  const [items, setItems] = useState([])"),
+        new(11, "  const [loading, setLoading] = useState(true)"),
+        new(12, ""),
+        new(13, "  useEffect(() => {"),
+        new(14, "    fetch(\"/api/items\")"),
+        new(15, "      .then(res => res.json())"),
+        new(16, "      .then(data => {"),
+        new(17, "        setItems(data)"),
+        new(18, "        setLoading(false)"),
+        new(19, "      })"),
+        new(20, "  }, [])"),
+        new(21, ""),
+        new(22, "  // Filter visible items"),
+        new(23, "  const visible = items.filter(i => i.active)"),
+        new(24, ""),
+        new(25, "  return ("),
+        new(26, "    <div>"),
+        new(27, "      <h1>{title}</h1>"),
+        new(28, "      {visible.map(item => ("),
+        new(29, "        <Card key={item.id} />"),
+        new(30, "      ))}"),
+        new(31, "    </div>"),
+        new(32, "  )"),
+        new(33, "}")
+    };
+
+    private string _activeFile = "App.tsx";
+    private string? _expanded = "2";
+    private bool _expandedTree = true;
+    private string? _copied;
+    private readonly HashSet<string> _expandedFolders = new() { "src" };
+
+    private static string GetTypeDot(string type) => type switch
+    {
+        "optimization" => "bg-blue-500",
+        "bug" => "bg-red-500",
+        "style" => "bg-amber-500",
+        _ => "bg-gray-500"
+    };
+
+    private RenderFragment RenderFileTree(FileNode[] nodes, int depth) => builder =>
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == "folder")
+            {
+                var folderExpanded = _expandedFolders.Contains(node.Name);
+                var folderName = node.Name;
+                builder.OpenElement(0, "div");
+
+                builder.OpenElement(1, "button");
+                builder.AddAttribute(2, "type", "button");
+                builder.AddAttribute(3, "class", "flex w-full items-center gap-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50");
+                builder.AddAttribute(4, "style", $"padding-left: {depth * 12 + 8}px");
+                builder.AddAttribute(5, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => ToggleFolder(folderName)));
+
+                builder.OpenComponent<LucideChevronRightCn>(6);
+                builder.AddComponentParameter(7, "Size", "16");
+                builder.AddComponentParameter(8, "Class", Cn.Merge("size-3 shrink-0 transition-transform duration-200", folderExpanded ? "rotate-90" : ""));
+                builder.CloseComponent();
+
+                if (folderExpanded)
+                {
+                    builder.OpenComponent<LucideFolderOpenCn>(9);
+                    builder.AddComponentParameter(10, "Size", "16");
+                    builder.AddComponentParameter(11, "Class", "size-3.5 shrink-0 text-muted-foreground");
+                    builder.CloseComponent();
+                }
+                else
+                {
+                    builder.OpenComponent<LucideFolderCn>(9);
+                    builder.AddComponentParameter(10, "Size", "16");
+                    builder.AddComponentParameter(11, "Class", "size-3.5 shrink-0 text-muted-foreground");
+                    builder.CloseComponent();
+                }
+
+                builder.OpenElement(12, "span");
+                builder.AddAttribute(13, "class", "truncate");
+                builder.AddContent(14, node.Name);
+                builder.CloseElement();
+
+                builder.CloseElement(); // button
+
+                if (folderExpanded && node.Children != null)
+                {
+                    builder.AddContent(15, RenderFileTree(node.Children, depth + 1));
+                }
+
+                builder.CloseElement(); // div
+            }
+            else
+            {
+                var fileName = node.Name;
+                var isActive = _activeFile == fileName;
+                builder.OpenElement(0, "button");
+                builder.AddAttribute(1, "type", "button");
+                builder.AddAttribute(2, "class", Cn.Merge("flex w-full items-center gap-1.5 py-1 text-left text-xs transition-colors", isActive ? "bg-muted/50 text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"));
+                builder.AddAttribute(3, "style", $"padding-left: {depth * 12 + 20}px");
+                builder.AddAttribute(4, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => _activeFile = fileName));
+
+                if (node.Language is "tsx" or "ts")
+                {
+                    builder.OpenComponent<LucideFileTextCn>(5);
+                    builder.AddComponentParameter(6, "Size", "16");
+                    builder.AddComponentParameter(7, "Class", "size-3.5 shrink-0 text-muted-foreground");
+                    builder.CloseComponent();
+                }
+                else
+                {
+                    builder.OpenComponent<LucideFileCn>(5);
+                    builder.AddComponentParameter(6, "Size", "16");
+                    builder.AddComponentParameter(7, "Class", "size-3.5 shrink-0 text-muted-foreground");
+                    builder.CloseComponent();
+                }
+
+                builder.OpenElement(8, "span");
+                builder.AddAttribute(9, "class", "truncate");
+                builder.AddContent(10, node.Name);
+                builder.CloseElement();
+
+                builder.CloseElement(); // button
+            }
+        }
+    };
+
+    private void ToggleFolder(string name)
+    {
+        if (!_expandedFolders.Remove(name))
+            _expandedFolders.Add(name);
+    }
+
+    private async Task HandleCopy(string id)
+    {
+        _copied = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = null;
+    }
+}

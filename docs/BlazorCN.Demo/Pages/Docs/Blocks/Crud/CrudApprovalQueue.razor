@@ -1,0 +1,190 @@
+@* ============================================================
+   Block: crud-approval-queue
+   Title: Crud Approval Queue
+   Description: Review and approve pending items with bulk actions and priority filtering
+   Long Description: Approval workflows are essential for content moderation, access control, and quality assurance.
+   Dependencies: BadgeCn, ButtonCn, CheckboxCn
+   Source: original/blocks/crud/crud-approval-queue.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-6 py-5">
+            <h2 class="text-sm font-medium">Approval Queue</h2>
+            <p class="mt-1 text-xs text-muted-foreground">Review and approve pending requests</p>
+        </div>
+
+        <div class="flex border-b">
+            @foreach (var tab in new[] { ("pending", "Pending", _pendingCount), ("approved", "Approved", _approvedCount), ("rejected", "Rejected", _rejectedCount) })
+            {
+                <button type="button"
+                        class="@Cn.Merge("flex-1 border-b-2 px-4 py-3 text-xs font-medium transition-colors", _activeTab == tab.Item1 ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")"
+                        @onclick="@(() => _activeTab = tab.Item1)">
+                    @tab.Item2
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-2 h-5 text-xs">
+                        @tab.Item3
+                    </BadgeCn>
+                </button>
+            }
+        </div>
+
+        @if (_activeTab == "pending" && _selected.Count > 0)
+        {
+            <div class="border-b bg-muted/50 px-6 py-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-muted-foreground">@_selected.Count selected</span>
+                    <div class="flex items-center gap-2">
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                  Class="h-7 gap-1 text-xs" @onclick="BulkApprove">
+                            <LucideCheckCn Size="12" Class="size-3.5" />
+                            Approve All
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                  Class="h-7 gap-1 text-xs text-red-600 hover:text-red-600" @onclick="BulkReject">
+                            <LucideXCn Size="12" Class="size-3.5" />
+                            Reject All
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div>
+            @{ var filtered = _items.Where(i => i.Status == _activeTab).ToList(); }
+            @if (filtered.Count == 0)
+            {
+                <div class="px-6 py-12 text-center">
+                    <p class="text-sm text-muted-foreground">No @_activeTab items</p>
+                </div>
+            }
+            else
+            {
+                @for (var idx = 0; idx < filtered.Count; idx++)
+                {
+                    var item = filtered[idx];
+                    <div class="@(idx != filtered.Count - 1 ? "border-b" : "")">
+                        <div role="button" tabindex="0"
+                             class="flex w-full cursor-pointer items-start gap-3 px-6 py-4 text-left transition-colors hover:bg-muted/50"
+                             @onclick="@(() => ToggleExpand(item.Id))">
+                            @if (_activeTab == "pending")
+                            {
+                                <div @onclick:stopPropagation="true">
+                                    <CheckboxCn Checked="@_selected.Contains(item.Id)" Class="mt-0.5"
+                                                CheckedChanged="@(_ => ToggleSelect(item.Id))" />
+                                </div>
+                            }
+                            <span class="@Cn.Merge("mt-1 size-1.5 shrink-0 rounded-full", GetPriorityColor(item.Priority))"></span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@item.Title</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 text-xs">
+                                        @item.Type
+                                    </BadgeCn>
+                                </div>
+                                <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <LucideUserCn Size="12" Class="size-3" />
+                                    <span>@item.Requester</span>
+                                    <span>&#x2022;</span>
+                                    <span>@item.Submitted</span>
+                                </div>
+                                @if (_expanded.Contains(item.Id))
+                                {
+                                    <p class="mt-2 text-xs text-muted-foreground">@item.Description</p>
+                                }
+                            </div>
+                            <LucideChevronRightCn Size="16"
+                                                  Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", _expanded.Contains(item.Id) ? "rotate-90" : "")" />
+                        </div>
+                        @if (_expanded.Contains(item.Id) && _activeTab == "pending")
+                        {
+                            <div class="border-t bg-muted/30 px-6 py-3">
+                                <div class="flex items-center gap-2">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                              Class="h-7 gap-1 text-xs" @onclick="@(() => Approve(item.Id))">
+                                        <LucideCheckCn Size="12" Class="size-3.5" />
+                                        Approve
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                              Class="h-7 gap-1 text-xs text-red-600 hover:text-red-600"
+                                              @onclick="@(() => Reject(item.Id))">
+                                        <LucideXCn Size="12" Class="size-3.5" />
+                                        Reject
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class ApprovalItem
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Requester { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Submitted { get; set; } = "";
+        public string Priority { get; set; } = "";
+        public string Status { get; set; } = "pending";
+        public string Description { get; set; } = "";
+    }
+
+    private string _activeTab = "pending";
+    private readonly HashSet<string> _selected = [];
+    private readonly HashSet<string> _expanded = [];
+
+    private readonly List<ApprovalItem> _items =
+    [
+        new() { Id = "1", Title = "New blog post submission", Requester = "Sarah Chen", Type = "Content", Submitted = "10 min ago", Priority = "high", Status = "pending", Description = "Q1 Product Launch Announcement" },
+        new() { Id = "2", Title = "Admin access request", Requester = "Mike Johnson", Type = "Access", Submitted = "25 min ago", Priority = "high", Status = "pending", Description = "Needs admin role for user management" },
+        new() { Id = "3", Title = "Feature flag activation", Requester = "Emily Rodriguez", Type = "Feature", Submitted = "1 hour ago", Priority = "medium", Status = "pending", Description = "Enable dark mode for beta users" },
+        new() { Id = "4", Title = "Marketing budget increase", Requester = "Tom Anderson", Type = "Budget", Submitted = "2 hours ago", Priority = "low", Status = "pending", Description = "Additional $5K for Q2 campaigns" },
+        new() { Id = "5", Title = "API documentation update", Requester = "Lisa Park", Type = "Content", Submitted = "Yesterday", Priority = "low", Status = "approved", Description = "Updated endpoint descriptions" },
+        new() { Id = "6", Title = "Database migration approval", Requester = "Chris Lee", Type = "Feature", Submitted = "2 days ago", Priority = "high", Status = "rejected", Description = "Schema changes for new tables" },
+    ];
+
+    private int _pendingCount => _items.Count(i => i.Status == "pending");
+    private int _approvedCount => _items.Count(i => i.Status == "approved");
+    private int _rejectedCount => _items.Count(i => i.Status == "rejected");
+
+    private void ToggleSelect(string id) { if (!_selected.Remove(id)) _selected.Add(id); }
+    private void ToggleExpand(string id) { if (!_expanded.Remove(id)) _expanded.Add(id); }
+
+    private void Approve(string id)
+    {
+        var item = _items.Find(i => i.Id == id);
+        if (item != null) item.Status = "approved";
+        _selected.Remove(id);
+    }
+
+    private void Reject(string id)
+    {
+        var item = _items.Find(i => i.Id == id);
+        if (item != null) item.Status = "rejected";
+        _selected.Remove(id);
+    }
+
+    private void BulkApprove()
+    {
+        foreach (var item in _items.Where(i => _selected.Contains(i.Id))) item.Status = "approved";
+        _selected.Clear();
+    }
+
+    private void BulkReject()
+    {
+        foreach (var item in _items.Where(i => _selected.Contains(i.Id))) item.Status = "rejected";
+        _selected.Clear();
+    }
+
+    private static string GetPriorityColor(string priority) => priority switch
+    {
+        "high" => "bg-red-500",
+        "medium" => "bg-amber-500",
+        "low" => "bg-blue-500",
+        _ => "bg-muted-foreground",
+    };
+}
