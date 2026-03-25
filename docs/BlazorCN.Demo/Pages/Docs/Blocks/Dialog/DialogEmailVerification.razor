@@ -1,0 +1,184 @@
+@* ========================================
+   Block: dialog-email-verification
+   Title: Dialog Email Verification
+   Description: Email verification dialog with OTP code input, resend functionality, countdown timer, and verification status
+   Dependencies: AlertCn, AlertDescriptionCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputOtpCn, InputOtpSlotCn, LucideArrowLeftCn, LucideCheckCn, LucideCircleAlertCn, LucideLoader2Cn, LucideMailCn, LucideRefreshCwCn
+   Source: original/blocks/dialog/dialog-email-verification.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideMailCn Class="mr-2 h-4 w-4" Size="16" />
+                Verify Email
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn class="sm:max-w-md">
+        @if (_isVerified)
+        {
+            <div class="flex flex-col items-center justify-center py-8 text-center">
+                <div class="flex h-12 w-12 items-center justify-center rounded-full border-2 border-primary">
+                    <LucideCheckCn Class="h-6 w-6 text-primary" Size="24" />
+                </div>
+                <h3 class="mt-4 text-lg font-semibold">Email Verified</h3>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Your email address has been successfully verified.
+                </p>
+                <p class="mt-2 text-xs text-muted-foreground">@_email</p>
+                <ButtonCn Class="mt-6" @onclick="HandleClose">
+                    Continue
+                </ButtonCn>
+            </div>
+        }
+        else
+        {
+            <DialogHeaderCn class="text-center">
+                <div class="flex justify-center mb-2">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-full border">
+                        <LucideMailCn Class="h-6 w-6" Size="24" />
+                    </div>
+                </div>
+                <DialogTitleCn>Check your email</DialogTitleCn>
+                <DialogDescriptionCn>We sent a verification code to</DialogDescriptionCn>
+                <p class="text-sm font-medium">@_email</p>
+            </DialogHeaderCn>
+
+            <div class="space-y-6 py-4">
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <AlertCn Variant="AlertVariant.Destructive">
+                        <LucideCircleAlertCn Class="h-4 w-4" Size="16" />
+                        <AlertDescriptionCn>@_error</AlertDescriptionCn>
+                    </AlertCn>
+                }
+
+                <div class="flex flex-col items-center space-y-4">
+                    <InputOtpCn MaxLength="6" @bind-Value="_otp" Disabled="_isVerifying">
+                        <InputOtpSlotCn Index="0" />
+                        <InputOtpSlotCn Index="1" />
+                        <InputOtpSlotCn Index="2" />
+                        <InputOtpSlotCn Index="3" />
+                        <InputOtpSlotCn Index="4" />
+                        <InputOtpSlotCn Index="5" />
+                    </InputOtpCn>
+
+                    <p class="text-xs text-muted-foreground">Enter the 6-digit code from your email</p>
+                </div>
+
+                <ButtonCn Class="w-full" Disabled="@(_otp.Length != 6 || _isVerifying)" @onclick="HandleVerify">
+                    @if (_isVerifying)
+                    {
+                        <LucideLoader2Cn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                        <span>Verifying...</span>
+                    }
+                    else
+                    {
+                        <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                        <span>Verify Email</span>
+                    }
+                </ButtonCn>
+
+                <div class="text-center space-y-2">
+                    <p class="text-sm text-muted-foreground">Didn't receive the code?</p>
+                    @if (_resendCooldown > 0)
+                    {
+                        <p class="text-sm text-muted-foreground">
+                            Resend available in <span class="font-medium">@(_resendCooldown)s</span>
+                        </p>
+                    }
+                    else
+                    {
+                        <ButtonCn Class="h-auto p-0" Disabled="_isResending" Size="ButtonSize.Sm" Variant="ButtonVariant.Link" @onclick="HandleResend">
+                            @if (_isResending)
+                            {
+                                <LucideLoader2Cn Class="mr-1 h-3 w-3 animate-spin" Size="12" />
+                                <span>Sending...</span>
+                            }
+                            else
+                            {
+                                <LucideRefreshCwCn Class="mr-1 h-3 w-3" Size="12" />
+                                <span>Resend code</span>
+                            }
+                        </ButtonCn>
+                    }
+                </div>
+
+                <div class="rounded-lg border p-3 text-center">
+                    <p class="text-xs text-muted-foreground">
+                        Check your spam folder if you don't see the email.
+                        <br />
+                        The code expires in 10 minutes.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t">
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" @onclick="HandleClose">
+                    <LucideArrowLeftCn Class="mr-1 h-4 w-4" Size="16" />
+                    Go back
+                </ButtonCn>
+                <ButtonCn Class="text-xs" Size="ButtonSize.Sm" Variant="ButtonVariant.Link">
+                    Use different email
+                </ButtonCn>
+            </div>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _otp = "";
+    private bool _isVerifying;
+    private bool _isResending;
+    private bool _isVerified;
+    private string? _error;
+    private int _resendCooldown;
+    private string _email = "user@example.com";
+
+    private async Task HandleVerify()
+    {
+        if (_otp.Length != 6) return;
+
+        _isVerifying = true;
+        _error = null;
+        StateHasChanged();
+
+        await Task.Delay(1500);
+
+        if (_otp == "123456")
+        {
+            _isVerified = true;
+        }
+        else
+        {
+            _error = "Invalid verification code. Please try again.";
+            _otp = "";
+        }
+
+        _isVerifying = false;
+    }
+
+    private async Task HandleResend()
+    {
+        _isResending = true;
+        _error = null;
+        StateHasChanged();
+
+        await Task.Delay(1000);
+
+        _isResending = false;
+        _resendCooldown = 60;
+        _otp = "";
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _otp = "";
+        _error = null;
+        _isVerified = false;
+        _resendCooldown = 0;
+    }
+}

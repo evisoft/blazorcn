@@ -1,0 +1,204 @@
+@* ========================================
+   Block: dialog-embed-video
+   Title: Dialog Embed Video
+   Description: Embed video dialog with URL input, platform detection, preview player, and embed code generation
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCheckCn, LucideCircleAlertCn, LucideCopyCn, LucideLinkCn, LucideVideoCn, SwitchCn
+   Source: original/blocks/dialog/dialog-embed-video.tsx
+   ======================================== *@
+
+@using System.Text.RegularExpressions
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideVideoCn Class="mr-2 h-4 w-4" Size="16" />
+                Embed Video
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn class="sm:max-w-lg">
+        <DialogHeaderCn>
+            <DialogTitleCn class="flex items-center gap-2">
+                <LucideVideoCn Class="h-5 w-5" Size="20" />
+                Embed Video
+            </DialogTitleCn>
+            <DialogDescriptionCn>Paste a video URL from YouTube or Vimeo to embed.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            <div class="space-y-2">
+                <LabelCn For="video-url">Video URL</LabelCn>
+                <div class="relative">
+                    <LucideLinkCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                    <InputCn Class="pl-9"
+                             id="video-url"
+                             Placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..."
+                             @bind-Value="_url" />
+                </div>
+                @if (!string.IsNullOrEmpty(_url) && VideoInfo == null)
+                {
+                    <p class="text-xs text-destructive flex items-center gap-1">
+                        <LucideCircleAlertCn Class="h-3 w-3" Size="12" />
+                        Could not detect video from URL
+                    </p>
+                }
+                @if (VideoInfo != null)
+                {
+                    <div class="flex items-center gap-2">
+                        <BadgeCn Class="@(VideoInfo.Platform == "youtube" ? "text-red-500" : "text-blue-500")" Variant="BadgeVariant.Secondary">
+                            @(VideoInfo.Platform == "youtube" ? "YouTube" : "Vimeo")
+                        </BadgeCn>
+                        <span class="text-xs text-muted-foreground">Video ID: @VideoInfo.VideoId</span>
+                    </div>
+                }
+            </div>
+
+            @if (VideoInfo != null)
+            {
+                <div class="aspect-video rounded-lg border overflow-hidden">
+                    <iframe allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen
+                            class="w-full h-full"
+                            src="@VideoInfo.EmbedUrl"
+                            title="Embedded video player">
+                    </iframe>
+                </div>
+
+                <div class="flex flex-wrap gap-x-6 gap-y-3">
+                    <label for="video-autoplay" class="flex items-center gap-2 text-sm">
+                        <SwitchCn id="video-autoplay" Checked="_autoplay" CheckedChanged="@((bool v) => _autoplay = v)" />
+                        Autoplay
+                    </label>
+                    <label for="video-loop" class="flex items-center gap-2 text-sm">
+                        <SwitchCn id="video-loop" Checked="_loop" CheckedChanged="@((bool v) => _loop = v)" />
+                        Loop
+                    </label>
+                    <label for="video-muted" class="flex items-center gap-2 text-sm">
+                        <SwitchCn id="video-muted" Checked="_muted" CheckedChanged="@((bool v) => _muted = v)" />
+                        Muted
+                    </label>
+                    <label for="video-controls" class="flex items-center gap-2 text-sm">
+                        <SwitchCn id="video-controls" Checked="_controls" CheckedChanged="@((bool v) => _controls = v)" />
+                        Controls
+                    </label>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Embed Code</span>
+                        <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" @onclick="HandleCopyCode">
+                            @if (_copied)
+                            {
+                                <LucideCheckCn Class="mr-2 h-3 w-3" Size="12" />
+                                <span>Copied</span>
+                            }
+                            else
+                            {
+                                <LucideCopyCn Class="mr-2 h-3 w-3" Size="12" />
+                                <span>Copy</span>
+                            }
+                        </ButtonCn>
+                    </div>
+                    <pre class="rounded-lg border p-3 text-xs font-mono whitespace-pre-wrap break-all overflow-hidden">@EmbedCode</pre>
+                </div>
+            }
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">
+                Cancel
+            </ButtonCn>
+            <ButtonCn Disabled="@(VideoInfo == null)" @onclick="HandleClose">
+                Insert Video
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private record VideoInfoData(string Platform, string VideoId, string EmbedUrl);
+
+    private static readonly Regex YoutubePattern = new(@"(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})");
+    private static readonly Regex VimeoPattern = new(@"vimeo\.com\/(?:video\/)?(\d+)");
+
+    private bool _open;
+    private string _url = "";
+    private bool _autoplay;
+    private bool _loop;
+    private bool _muted;
+    private bool _controls = true;
+    private bool _copied;
+
+    private VideoInfoData? VideoInfo
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_url)) return null;
+
+            var ytMatch = YoutubePattern.Match(_url);
+            if (ytMatch.Success)
+            {
+                var id = ytMatch.Groups[1].Value;
+                return new VideoInfoData("youtube", id, BuildYoutubeUrl(id));
+            }
+
+            var vmMatch = VimeoPattern.Match(_url);
+            if (vmMatch.Success)
+            {
+                var id = vmMatch.Groups[1].Value;
+                return new VideoInfoData("vimeo", id, BuildVimeoUrl(id));
+            }
+
+            return null;
+        }
+    }
+
+    private string BuildYoutubeUrl(string id)
+    {
+        var parms = new List<string>();
+        if (_autoplay) parms.Add("autoplay=1");
+        if (_loop) parms.Add("loop=1");
+        if (_muted) parms.Add("mute=1");
+        if (!_controls) parms.Add("controls=0");
+        var query = parms.Count > 0 ? "?" + string.Join("&", parms) : "";
+        return $"https://www.youtube.com/embed/{id}{query}";
+    }
+
+    private string BuildVimeoUrl(string id)
+    {
+        var parms = new List<string>();
+        if (_autoplay) parms.Add("autoplay=1");
+        if (_loop) parms.Add("loop=1");
+        if (_muted) parms.Add("muted=1");
+        var query = parms.Count > 0 ? "?" + string.Join("&", parms) : "";
+        return $"https://player.vimeo.com/video/{id}{query}";
+    }
+
+    private string EmbedCode => VideoInfo == null ? "" :
+$@"<iframe
+  width=""560""
+  height=""315""
+  src=""{VideoInfo.EmbedUrl}""
+  frameborder=""0""
+  allow=""accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture""
+  allowfullscreen
+></iframe>";
+
+    private void HandleCopyCode()
+    {
+        _copied = true;
+        _ = Task.Delay(2000).ContinueWith(_ => { _copied = false; InvokeAsync(StateHasChanged); });
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _url = "";
+        _autoplay = false;
+        _loop = false;
+        _muted = false;
+        _controls = true;
+        _copied = false;
+    }
+}

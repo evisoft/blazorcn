@@ -1,0 +1,172 @@
+@* ========================================
+   Block: dialog-add-comment
+   Title: Dialog Add Comment
+   Description: Add comment dialog with rich text input, @mentions, file attachments, and emoji support
+   Dependencies: AvatarCn, AvatarFallbackCn, AvatarImageCn, ButtonCn, CommandCn, CommandEmptyCn, CommandGroupCn, CommandItemCn, CommandListCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, PopoverCn, PopoverContentCn, PopoverTriggerCn, TextareaCn, LucideAtSignCn, LucideFileCn, LucideLoader2Cn, LucideMessageSquareCn, LucidePaperclipCn, LucideSendCn, LucideSmileCn, LucideXCn
+   Source: original/blocks/dialog/dialog-add-comment.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideMessageSquareCn Class="mr-2 h-4 w-4" Size="16" />
+                Add Comment
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-lg">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideMessageSquareCn Class="h-5 w-5" Size="20" />
+                Add Comment
+            </DialogTitleCn>
+            <DialogDescriptionCn>
+                Share your thoughts. Use @@mentions to notify team members.
+            </DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @* Comment Input *@
+            <div class="relative">
+                <TextareaCn Class="resize-none pr-10"
+                            Value="@_comment"
+                            ValueChanged="@((string v) => HandleCommentChange(v))"
+                            Placeholder="@("Write a comment... Use @ to mention someone")"
+                            Rows="4" />
+
+                @* Mention Dropdown *@
+                @if (_showMentions && FilteredMembers.Any())
+                {
+                    <div class="absolute left-0 right-0 top-full mt-1 z-10">
+                        <CommandCn Class="rounded-lg border shadow-md">
+                            <CommandListCn>
+                                <CommandEmptyCn>No members found.</CommandEmptyCn>
+                                <CommandGroupCn Heading="Team Members">
+                                    @foreach (var member in FilteredMembers)
+                                    {
+                                        <CommandItemCn Class="cursor-pointer" @onclick="@(() => HandleMentionSelect(member))">
+                                            <AvatarCn Class="h-6 w-6 mr-2">
+                                                <AvatarFallbackCn Class="text-xs">@member.Initials</AvatarFallbackCn>
+                                            </AvatarCn>
+                                            <span>@member.Name</span>
+                                        </CommandItemCn>
+                                    }
+                                </CommandGroupCn>
+                            </CommandListCn>
+                        </CommandCn>
+                    </div>
+                }
+            </div>
+
+            @* Action Bar *@
+            <div class="flex items-center gap-2">
+                <ButtonCn Class="h-8 w-8" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                          @onclick="@(() => { _comment += "@@"; })">
+                    <LucideAtSignCn Class="h-4 w-4" Size="16" />
+                </ButtonCn>
+
+                <PopoverCn>
+                    <PopoverTriggerCn>
+                        <ButtonCn Class="h-8 w-8" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost">
+                            <LucideSmileCn Class="h-4 w-4" Size="16" />
+                        </ButtonCn>
+                    </PopoverTriggerCn>
+                    <PopoverContentCn Align="FloatingAlign.Start" Class="w-auto p-2">
+                        <div class="flex gap-1">
+                            @foreach (var emoji in _emojis)
+                            {
+                                <button type="button"
+                                        class="h-8 w-8 flex items-center justify-center rounded hover:bg-muted text-lg"
+                                        @onclick="@(() => { _comment += emoji; })">
+                                    @emoji
+                                </button>
+                            }
+                        </div>
+                    </PopoverContentCn>
+                </PopoverCn>
+
+                <span class="flex-1"></span>
+
+                <span class="text-xs text-muted-foreground">@_comment.Length/1000</span>
+            </div>
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn Disabled="@_isSubmitting" @onclick="@(() => _open = false)" Variant="ButtonVariant.Outline">
+                Cancel
+            </ButtonCn>
+            <ButtonCn Disabled="@(string.IsNullOrWhiteSpace(_comment) || _isSubmitting)" @onclick="HandleSubmit">
+                @if (_isSubmitting)
+                {
+                    <LucideLoader2Cn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                    <span>Posting...</span>
+                }
+                else
+                {
+                    <LucideSendCn Class="mr-2 h-4 w-4" Size="16" />
+                    <span>Post Comment</span>
+                }
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _comment = "";
+    private bool _showMentions;
+    private string _mentionSearch = "";
+    private bool _isSubmitting;
+
+    private static readonly string[] _emojis = ["👍", "❤️", "🎉", "🚀", "💡", "✅", "👀", "🔥"];
+
+    private record TeamMember(string Id, string Name, string Initials);
+
+    private static readonly TeamMember[] _teamMembers =
+    [
+        new("1", "Alice Johnson", "AJ"),
+        new("2", "Bob Smith", "BS"),
+        new("3", "Carol Williams", "CW"),
+        new("4", "David Brown", "DB"),
+        new("5", "Emma Davis", "ED"),
+    ];
+
+    private IEnumerable<TeamMember> FilteredMembers =>
+        _teamMembers.Where(m => m.Name.Contains(_mentionSearch, StringComparison.OrdinalIgnoreCase));
+
+    private void HandleCommentChange(string value)
+    {
+        _comment = value;
+        var lastAtIndex = value.LastIndexOf('@');
+        if (lastAtIndex != -1)
+        {
+            var textAfterAt = value[(lastAtIndex + 1)..];
+            if (!textAfterAt.Contains(' '))
+            {
+                _mentionSearch = textAfterAt;
+                _showMentions = true;
+                return;
+            }
+        }
+        _showMentions = false;
+    }
+
+    private void HandleMentionSelect(TeamMember member)
+    {
+        var lastAtIndex = _comment.LastIndexOf('@');
+        _comment = $"{_comment[..lastAtIndex]}@{member.Name} ";
+        _showMentions = false;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_comment)) return;
+        _isSubmitting = true;
+        StateHasChanged();
+        await Task.Delay(1000);
+        _isSubmitting = false;
+        _open = false;
+        _comment = "";
+    }
+}

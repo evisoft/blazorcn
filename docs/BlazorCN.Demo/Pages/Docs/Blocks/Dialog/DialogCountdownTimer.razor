@@ -1,0 +1,296 @@
+@* ========================================
+   Block: dialog-countdown-timer
+   Title: Dialog Countdown Timer
+   Description: Countdown timer dialog with custom duration input, visual progress ring, pause/resume controls, and completion alert
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideBellCn, LucideBellOffCn, LucideCheckCn, LucidePauseCn, LucidePlayCn, LucidePlusCn, LucideRotateCcwCn, LucideTimerCn
+   Source: original/blocks/dialog/dialog-countdown-timer.tsx
+   ======================================== *@
+
+@implements IDisposable
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideTimerCn Class="mr-2 h-4 w-4" Size="16" />
+                Countdown Timer
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideTimerCn Class="h-5 w-5" Size="20" />
+                    Countdown Timer
+                </div>
+                <ButtonCn Class="h-8 w-8" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" @onclick="@(() => _soundEnabled = !_soundEnabled)">
+                    @if (_soundEnabled)
+                    {
+                        <LucideBellCn Class="h-4 w-4" Size="16" />
+                    }
+                    else
+                    {
+                        <LucideBellOffCn Class="h-4 w-4" Size="16" />
+                    }
+                </ButtonCn>
+            </DialogTitleCn>
+            <DialogDescriptionCn>Set a countdown for any duration.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @if (_isComplete)
+            {
+                <div class="flex flex-col items-center py-6 text-center">
+                    <div class="rounded-full border-4 border-primary p-4 animate-pulse">
+                        <LucideCheckCn Class="h-8 w-8 text-primary" Size="32" />
+                    </div>
+                    <h3 class="mt-4 text-lg font-semibold">Time's Up!</h3>
+                    <p class="mt-1 text-sm text-muted-foreground">Your countdown has finished.</p>
+                    <div class="flex gap-2 mt-4">
+                        <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleDismissComplete">
+                            <LucideRotateCcwCn Class="mr-2 h-4 w-4" Size="16" />
+                            New Timer
+                        </ButtonCn>
+                        <ButtonCn @onclick="HandleRestart">
+                            <LucidePlayCn Class="mr-2 h-4 w-4" Size="16" />
+                            Restart
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+            else if (_isTimerSet)
+            {
+                @* Timer display *@
+                <div class="flex justify-center">
+                    <div class="relative w-32 h-32">
+                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100" role="img" aria-label="Countdown timer">
+                            <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="6" class="text-muted" />
+                            <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"
+                                    class="@Cn.Merge("transition-all duration-1000", _isLowTime ? "text-destructive" : "text-primary")"
+                                    style="stroke-dasharray: @_circumference.ToString("F2"); stroke-dashoffset: @_strokeDashoffset.ToString("F2");" />
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="@Cn.Merge("text-lg font-mono font-bold tabular-nums", _isLowTime ? "text-destructive animate-pulse" : "")">
+                                @FormatTime(_remainingSeconds)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center gap-2">
+                    @if (_isRunning)
+                    {
+                        <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandlePause">
+                            <LucidePauseCn Class="mr-2 h-4 w-4" Size="16" />
+                            Pause
+                        </ButtonCn>
+                    }
+                    else
+                    {
+                        <ButtonCn @onclick="HandleResume">
+                            <LucidePlayCn Class="mr-2 h-4 w-4" Size="16" />
+                            Resume
+                        </ButtonCn>
+                    }
+                    <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleReset">
+                        <LucideRotateCcwCn Class="mr-2 h-4 w-4" Size="16" />
+                        Reset
+                    </ButtonCn>
+                </div>
+
+                <div class="flex justify-center gap-2">
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" @onclick="@(() => HandleAddTime(60))">
+                        <LucidePlusCn Class="mr-1 h-3 w-3" Size="12" />1 min
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" @onclick="@(() => HandleAddTime(300))">
+                        <LucidePlusCn Class="mr-1 h-3 w-3" Size="12" />5 min
+                    </ButtonCn>
+                </div>
+            }
+            else
+            {
+                @* Input form *@
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="space-y-2">
+                        <LabelCn Class="text-xs text-center block" For="hours">Hours</LabelCn>
+                        <InputCn Class="text-center font-mono text-lg" Id="hours" Type="number" Value="@_hours" ValueChanged="@((string v) => _hours = v)" />
+                    </div>
+                    <div class="space-y-2">
+                        <LabelCn Class="text-xs text-center block" For="minutes">Minutes</LabelCn>
+                        <InputCn Class="text-center font-mono text-lg" Id="minutes" Type="number" Value="@_minutes" ValueChanged="@((string v) => _minutes = v)" />
+                    </div>
+                    <div class="space-y-2">
+                        <LabelCn Class="text-xs text-center block" For="seconds">Seconds</LabelCn>
+                        <InputCn Class="text-center font-mono text-lg" Id="seconds" Type="number" Value="@_seconds" ValueChanged="@((string v) => _seconds = v)" />
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <LabelCn Class="text-xs text-muted-foreground">Quick presets</LabelCn>
+                    <div class="grid grid-cols-3 gap-2">
+                        @foreach (var preset in _presets)
+                        {
+                            var p = preset;
+                            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" @onclick="@(() => HandlePreset(p.Seconds))">
+                                @p.Label
+                            </ButtonCn>
+                        }
+                    </div>
+                </div>
+
+                <ButtonCn Class="w-full" Disabled="@(CalculateTotalSeconds() <= 0)" Size="ButtonSize.Lg" @onclick="HandleStart">
+                    <LucidePlayCn Class="mr-2 h-5 w-5" Size="20" />
+                    Start Countdown
+                </ButtonCn>
+
+                @if (CalculateTotalSeconds() > 0)
+                {
+                    <p class="text-sm text-center text-muted-foreground">
+                        Total: @FormatTime(CalculateTotalSeconds())
+                    </p>
+                }
+            }
+        </div>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _hours = "0";
+    private string _minutes = "5";
+    private string _seconds = "0";
+    private int _totalSeconds;
+    private int _remainingSeconds;
+    private bool _isRunning;
+    private bool _isComplete;
+    private bool _soundEnabled = true;
+    private System.Threading.Timer? _timer;
+
+    private bool _isTimerSet => _remainingSeconds > 0 || _isRunning;
+    private bool _isLowTime => _remainingSeconds <= 10 && _remainingSeconds > 0;
+
+    private const double _circumference = 2 * Math.PI * 45;
+    private double _progress => _totalSeconds == 0 ? 0 : (double)(_totalSeconds - _remainingSeconds) / _totalSeconds * 100;
+    private double _strokeDashoffset => _circumference - (_progress / 100) * _circumference;
+
+    private record Preset(string Label, int Seconds);
+    private static readonly Preset[] _presets =
+    [
+        new("1 min", 60), new("5 min", 300), new("10 min", 600),
+        new("15 min", 900), new("30 min", 1800), new("1 hour", 3600),
+    ];
+
+    private int CalculateTotalSeconds()
+    {
+        var h = int.TryParse(_hours, out var hv) ? hv : 0;
+        var m = int.TryParse(_minutes, out var mv) ? mv : 0;
+        var s = int.TryParse(_seconds, out var sv) ? sv : 0;
+        return h * 3600 + m * 60 + s;
+    }
+
+    private static string FormatTime(int totalSecs)
+    {
+        var h = totalSecs / 3600;
+        var m = (totalSecs % 3600) / 60;
+        var s = totalSecs % 60;
+        return h > 0 ? $"{h:D2}:{m:D2}:{s:D2}" : $"{m:D2}:{s:D2}";
+    }
+
+    private void HandleStart()
+    {
+        var total = CalculateTotalSeconds();
+        if (total <= 0) return;
+        _totalSeconds = total;
+        _remainingSeconds = total;
+        _isRunning = true;
+        _isComplete = false;
+        StartTimer();
+    }
+
+    private void HandlePause()
+    {
+        _isRunning = false;
+        StopTimer();
+    }
+
+    private void HandleResume()
+    {
+        if (_remainingSeconds > 0)
+        {
+            _isRunning = true;
+            StartTimer();
+        }
+    }
+
+    private void HandleReset()
+    {
+        StopTimer();
+        _isRunning = false;
+        _isComplete = false;
+        _remainingSeconds = 0;
+        _totalSeconds = 0;
+    }
+
+    private void HandlePreset(int secs)
+    {
+        _hours = (secs / 3600).ToString();
+        _minutes = ((secs % 3600) / 60).ToString();
+        _seconds = (secs % 60).ToString();
+    }
+
+    private void HandleAddTime(int secs)
+    {
+        _remainingSeconds += secs;
+        _totalSeconds += secs;
+    }
+
+    private void HandleDismissComplete()
+    {
+        _isComplete = false;
+        _remainingSeconds = 0;
+        _totalSeconds = 0;
+    }
+
+    private void HandleRestart()
+    {
+        HandleDismissComplete();
+        HandleStart();
+    }
+
+    private void StartTimer()
+    {
+        _timer?.Dispose();
+        _timer = new System.Threading.Timer(Tick, null, 1000, 1000);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void Tick(object? state)
+    {
+        InvokeAsync(() =>
+        {
+            if (_remainingSeconds <= 1)
+            {
+                _remainingSeconds = 0;
+                _isRunning = false;
+                _isComplete = true;
+                StopTimer();
+            }
+            else
+            {
+                _remainingSeconds--;
+            }
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

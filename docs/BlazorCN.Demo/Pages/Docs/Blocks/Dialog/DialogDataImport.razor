@@ -1,0 +1,291 @@
+@* ========================================
+   Block: dialog-data-import
+   Title: Dialog Data Import
+   Description: Data import wizard dialog with file upload, column mapping, validation preview, and import progress tracking
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LabelCn, LucideArrowRightCn, LucideCheckCn, LucideCircleAlertCn, LucideDownloadCn, LucideFileSpreadsheetCn, LucideUploadCn, LucideXCn, ProgressCn, SelectCn, SelectContentCn, SelectItemCn, SelectTriggerCn, SelectValueCn, SeparatorCn
+   Source: original/blocks/dialog/dialog-data-import.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideUploadCn Class="mr-2 h-4 w-4" Size="16" />
+                Import Data
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-lg">
+        @if (_step == "upload")
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn>Import Data</DialogTitleCn>
+                <DialogDescriptionCn>Upload a CSV or Excel file to import your data.</DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="py-4">
+                <div class="@Cn.Merge("border-2 border-dashed rounded-lg p-8 text-center transition-colors", _hasFile ? "border-green-500 bg-green-50" : "border-muted-foreground/25")">
+                    @if (_hasFile)
+                    {
+                        <div class="space-y-2">
+                            <LucideFileSpreadsheetCn Class="h-10 w-10 mx-auto text-green-600" Size="40" />
+                            <p class="font-medium">sample-data.csv</p>
+                            <p class="text-sm text-muted-foreground">12.4 KB</p>
+                            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" @onclick="@(() => _hasFile = false)">
+                                <LucideXCn Class="mr-2 h-4 w-4" Size="16" />
+                                Remove
+                            </ButtonCn>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="space-y-4">
+                            <LucideUploadCn Class="h-10 w-10 mx-auto text-muted-foreground" Size="40" />
+                            <div>
+                                <p class="font-medium">Drag and drop your file here</p>
+                                <p class="text-sm text-muted-foreground">or click to browse</p>
+                            </div>
+                            <ButtonCn Variant="ButtonVariant.Outline" @onclick="@(() => _hasFile = true)">
+                                Choose File
+                            </ButtonCn>
+                            <p class="text-xs text-muted-foreground">
+                                Supports CSV and Excel files up to 10MB
+                            </p>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">Cancel</ButtonCn>
+                <ButtonCn Disabled="@(!_hasFile)" @onclick="@(() => _step = "mapping")">
+                    Continue
+                    <LucideArrowRightCn Class="ml-2 h-4 w-4" Size="16" />
+                </ButtonCn>
+            </DialogFooterCn>
+        }
+        else if (_step == "mapping")
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn>Map Columns</DialogTitleCn>
+                <DialogDescriptionCn>Match your file columns to the system fields.</DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="py-4 space-y-4">
+                @foreach (var field in _systemFields)
+                {
+                    var f = field;
+                    <div class="flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-2 min-w-[140px]">
+                            <LabelCn Class="text-sm">@f.Label</LabelCn>
+                            @if (f.Required)
+                            {
+                                <BadgeCn Class="text-xs" Variant="BadgeVariant.Secondary">Required</BadgeCn>
+                            }
+                        </div>
+                        <SelectCn Value="@(_mappings.GetValueOrDefault(f.Id, ""))" ValueChanged="@((string v) => _mappings[f.Id] = v)">
+                            <SelectTriggerCn Class="w-[200px]">
+                                <SelectValueCn Placeholder="Select column" />
+                            </SelectTriggerCn>
+                            <SelectContentCn>
+                                <SelectItemCn Value="skip">-- Skip --</SelectItemCn>
+                                @foreach (var col in _sampleColumns)
+                                {
+                                    <SelectItemCn Value="@col">@col</SelectItemCn>
+                                }
+                            </SelectContentCn>
+                        </SelectCn>
+                    </div>
+                }
+            </div>
+
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" @onclick="@(() => _step = "upload")">Back</ButtonCn>
+                <ButtonCn @onclick="@(() => _step = "preview")">
+                    Preview Import
+                    <LucideArrowRightCn Class="ml-2 h-4 w-4" Size="16" />
+                </ButtonCn>
+            </DialogFooterCn>
+        }
+        else if (_step == "preview")
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn>Preview &amp; Validate</DialogTitleCn>
+                <DialogDescriptionCn>Review the data before importing.</DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="py-4 space-y-4">
+                <div class="flex items-center justify-between text-sm">
+                    <div class="flex items-center gap-2">
+                        <LucideCheckCn Class="h-4 w-4 text-green-600" Size="16" />
+                        <span>2 valid records</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <LucideCircleAlertCn Class="h-4 w-4 text-amber-500" Size="16" />
+                        <span>1 record with errors</span>
+                    </div>
+                </div>
+
+                <div class="rounded-lg border overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-muted">
+                                <tr>
+                                    <th class="px-3 py-2 text-left font-medium">Status</th>
+                                    <th class="px-3 py-2 text-left font-medium">Name</th>
+                                    <th class="px-3 py-2 text-left font-medium">Email</th>
+                                    <th class="px-3 py-2 text-left font-medium">Company</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in _sampleData)
+                                {
+                                    <tr class="border-t">
+                                        <td class="px-3 py-2">
+                                            @if (row.Email.Contains('@'))
+                                            {
+                                                <LucideCheckCn Class="h-4 w-4 text-green-600" Size="16" />
+                                            }
+                                            else
+                                            {
+                                                <LucideCircleAlertCn Class="h-4 w-4 text-amber-500" Size="16" />
+                                            }
+                                        </td>
+                                        <td class="px-3 py-2">@row.Name</td>
+                                        <td class="@Cn.Merge("px-3 py-2", !row.Email.Contains('@') ? "text-amber-600" : "")">
+                                            @row.Email
+                                            @if (!row.Email.Contains('@'))
+                                            {
+                                                <span class="block text-xs">Invalid email format</span>
+                                            }
+                                        </td>
+                                        <td class="px-3 py-2">@row.Company</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <p class="text-xs text-muted-foreground">
+                    Records with errors will be skipped.
+                </p>
+            </div>
+
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" @onclick="@(() => _step = "mapping")">Back</ButtonCn>
+                <ButtonCn @onclick="StartImport">
+                    Import 2 Records
+                    <LucideArrowRightCn Class="ml-2 h-4 w-4" Size="16" />
+                </ButtonCn>
+            </DialogFooterCn>
+        }
+        else if (_step == "importing")
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn>Importing...</DialogTitleCn>
+                <DialogDescriptionCn>Please wait while we import your data.</DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="py-8 space-y-4">
+                <ProgressCn Class="h-2" Value="@_progress" />
+                <p class="text-center text-sm text-muted-foreground">
+                    @(_progress < 100 ? $"Processing records... {_progress}%" : "Finalizing import...")
+                </p>
+            </div>
+        }
+        else if (_step == "complete")
+        {
+            <DialogHeaderCn Class="text-center">
+                <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 mb-4">
+                    <LucideCheckCn Class="h-6 w-6 text-green-600" Size="24" />
+                </div>
+                <DialogTitleCn>Import Complete</DialogTitleCn>
+                <DialogDescriptionCn>
+                    <p>Successfully imported 2 records.</p>
+                    <p class="text-amber-600">1 record skipped due to errors.</p>
+                </DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <SeparatorCn />
+
+            <div class="py-4 space-y-3">
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted-foreground">Total processed</span>
+                    <span class="font-medium">3 records</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted-foreground">Successfully imported</span>
+                    <span class="font-medium text-green-600">2 records</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted-foreground">Skipped with errors</span>
+                    <span class="font-medium text-amber-600">1 record</span>
+                </div>
+            </div>
+
+            <DialogFooterCn Class="flex-col sm:flex-row gap-2">
+                <ButtonCn Class="sm:flex-1" Variant="ButtonVariant.Outline">
+                    <LucideDownloadCn Class="mr-2 h-4 w-4" Size="16" />
+                    Download Error Report
+                </ButtonCn>
+                <ButtonCn Class="sm:flex-1" @onclick="HandleClose">Done</ButtonCn>
+            </DialogFooterCn>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _step = "upload";
+    private bool _hasFile;
+    private int _progress;
+
+    private readonly Dictionary<string, string> _mappings = new()
+    {
+        ["name"] = "Name", ["email"] = "Email", ["phone"] = "Phone",
+        ["company"] = "Company Name", ["role"] = "Position",
+    };
+
+    private record SystemField(string Id, string Label, bool Required);
+    private static readonly SystemField[] _systemFields =
+    [
+        new("name", "Full Name", true), new("email", "Email Address", true),
+        new("phone", "Phone Number", false), new("company", "Company", false),
+        new("role", "Job Title", false),
+    ];
+
+    private static readonly string[] _sampleColumns = ["Name", "Email", "Phone", "Company Name", "Position"];
+
+    private record SampleRow(string Name, string Email, string Company);
+    private static readonly SampleRow[] _sampleData =
+    [
+        new("John Smith", "john@example.com", "Acme Inc"),
+        new("Jane Doe", "jane@example.com", "Tech Corp"),
+        new("Bob Wilson", "invalid-email", "StartupXYZ"),
+    ];
+
+    private async Task StartImport()
+    {
+        _step = "importing";
+        _progress = 0;
+        StateHasChanged();
+
+        for (var i = 0; i <= 100; i += 10)
+        {
+            _progress = i;
+            StateHasChanged();
+            await Task.Delay(300);
+        }
+
+        _step = "complete";
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _step = "upload";
+        _hasFile = false;
+        _progress = 0;
+    }
+}

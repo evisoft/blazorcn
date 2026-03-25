@@ -1,0 +1,243 @@
+@* ========================================
+   Block: dialog-add-card
+   Title: Dialog Add Card
+   Description: Add payment card dialog with card number, expiry, CVV inputs, card type detection, and secure form validation
+   Dependencies: ButtonCn, CheckboxCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCalendarCn, LucideCheckCn, LucideCreditCardCn, LucideLoader2Cn, LucideLockCn, LucideShieldCheckCn
+   Source: original/blocks/dialog/dialog-add-card.tsx
+   ======================================== *@
+
+@using System.Text.RegularExpressions
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideCreditCardCn Class="mr-2 h-4 w-4" Size="16" />
+                Add Card
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideCreditCardCn Class="h-5 w-5" Size="20" />
+                Add Payment Card
+            </DialogTitleCn>
+            <DialogDescriptionCn>
+                Enter your card details to add a new payment method.
+            </DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @* Card Preview *@
+            <div class="flex flex-col justify-between h-44 rounded-xl border bg-gradient-to-br from-slate-800 to-slate-900 p-5 text-white overflow-hidden">
+                <div class="flex items-start justify-between">
+                    <div class="h-8 w-10 rounded bg-gradient-to-br from-yellow-300 to-yellow-500"></div>
+                    <div>
+                        @if (CardType == "visa")
+                        {
+                            <span class="text-xl font-bold italic">VISA</span>
+                        }
+                        else if (CardType == "mastercard")
+                        {
+                            <div class="flex">
+                                <div class="h-8 w-8 rounded-full bg-red-500 opacity-80"></div>
+                                <div class="h-8 w-8 -ml-3 rounded-full bg-yellow-500 opacity-80"></div>
+                            </div>
+                        }
+                        else if (CardType == "amex")
+                        {
+                            <span class="text-lg font-bold">AMEX</span>
+                        }
+                        else if (CardType == "discover")
+                        {
+                            <span class="text-lg font-bold">DISCOVER</span>
+                        }
+                        else
+                        {
+                            <LucideCreditCardCn Class="h-8 w-8 opacity-50" Size="32" />
+                        }
+                    </div>
+                </div>
+                <p class="font-mono text-lg tracking-wider">@MaskedNumber</p>
+                <div class="flex items-end justify-between gap-4">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[10px] uppercase text-white/60 mb-0.5">Cardholder</p>
+                        <p class="text-sm font-medium truncate">@(string.IsNullOrWhiteSpace(_cardName) ? "YOUR NAME" : _cardName)</p>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <p class="text-[10px] uppercase text-white/60 mb-0.5">Expires</p>
+                        <p class="text-sm font-medium font-mono">@(string.IsNullOrWhiteSpace(_expiry) ? "MM/YY" : _expiry)</p>
+                    </div>
+                </div>
+            </div>
+
+            @* Card Number *@
+            <div class="space-y-2">
+                <LabelCn For="card-number">Card Number</LabelCn>
+                <div class="relative">
+                    <LucideCreditCardCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                    <InputCn Class="pl-9 font-mono"
+                             Disabled="@_isSubmitting"
+                             Id="card-number"
+                             Value="@_cardNumber"
+                             ValueChanged="@((string v) => HandleCardNumberChange(v))"
+                             Placeholder="1234 5678 9012 3456" />
+                </div>
+            </div>
+
+            @* Cardholder Name *@
+            <div class="space-y-2">
+                <LabelCn For="card-name">Cardholder Name</LabelCn>
+                <InputCn Class="uppercase"
+                         Disabled="@_isSubmitting"
+                         Id="card-name"
+                         Value="@_cardName"
+                         ValueChanged="@((string v) => _cardName = v.ToUpperInvariant())"
+                         Placeholder="John Doe" />
+            </div>
+
+            @* Expiry and CVV *@
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <LabelCn For="expiry">Expiry Date</LabelCn>
+                    <div class="relative">
+                        <LucideCalendarCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                        <InputCn Class="pl-9 font-mono"
+                                 Disabled="@_isSubmitting"
+                                 Id="expiry"
+                                 Value="@_expiry"
+                                 ValueChanged="@((string v) => HandleExpiryChange(v))"
+                                 Placeholder="MM/YY" />
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <LabelCn For="cvv">CVV</LabelCn>
+                    <div class="relative">
+                        <LucideLockCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                        <InputCn Class="pl-9 font-mono"
+                                 Disabled="@_isSubmitting"
+                                 Id="cvv"
+                                 Type="password"
+                                 Value="@_cvv"
+                                 ValueChanged="@((string v) => HandleCvvChange(v))"
+                                 Placeholder="@(CardType == "amex" ? "\u2022\u2022\u2022\u2022" : "\u2022\u2022\u2022")" />
+                    </div>
+                </div>
+            </div>
+
+            @* Save Card *@
+            <div class="flex items-center gap-2 rounded-lg border p-3">
+                <CheckboxCn Disabled="@_isSubmitting"
+                            Id="save-card"
+                            Checked="_saveCard"
+                            CheckedChanged="@(v => _saveCard = v)" />
+                <LabelCn Class="text-sm font-normal cursor-pointer flex-1" For="save-card">
+                    Save this card for future payments
+                </LabelCn>
+            </div>
+
+            @* Security Note *@
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <LucideShieldCheckCn Class="h-4 w-4" Size="16" />
+                <span>Your card details are encrypted and secure</span>
+            </div>
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn Disabled="@_isSubmitting" @onclick="HandleClose" Variant="ButtonVariant.Outline">
+                Cancel
+            </ButtonCn>
+            <ButtonCn Disabled="@(!IsValid || _isSubmitting)" @onclick="HandleSubmit">
+                @if (_isSubmitting)
+                {
+                    <LucideLoader2Cn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                    <span>Adding...</span>
+                }
+                else
+                {
+                    <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                    <span>Add Card</span>
+                }
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _cardNumber = "";
+    private string _cardName = "";
+    private string _expiry = "";
+    private string _cvv = "";
+    private bool _saveCard = true;
+    private bool _isSubmitting;
+
+    private string CardType
+    {
+        get
+        {
+            var cleaned = Regex.Replace(_cardNumber, @"\s", "");
+            if (Regex.IsMatch(cleaned, @"^4")) return "visa";
+            if (Regex.IsMatch(cleaned, @"^5[1-5]") || Regex.IsMatch(cleaned, @"^2[2-7]")) return "mastercard";
+            if (Regex.IsMatch(cleaned, @"^3[47]")) return "amex";
+            if (Regex.IsMatch(cleaned, @"^6(?:011|5)")) return "discover";
+            return "unknown";
+        }
+    }
+
+    private string CleanedNumber => Regex.Replace(_cardNumber, @"\s", "");
+
+    private bool IsValid =>
+        CleanedNumber.Length >= 15 &&
+        _cardName.Trim().Length >= 2 &&
+        _expiry.Length == 5 &&
+        _cvv.Length >= 3;
+
+    private string MaskedNumber =>
+        CleanedNumber.Length > 4
+            ? $"\u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 {CleanedNumber[^4..]}"
+            : (string.IsNullOrEmpty(_cardNumber) ? "\u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022" : _cardNumber);
+
+    private void HandleCardNumberChange(string value)
+    {
+        var cleaned = Regex.Replace(value, @"\D", "");
+        var groups = Regex.Matches(cleaned, @".{1,4}");
+        _cardNumber = string.Join(" ", groups.Select(m => m.Value));
+        if (_cardNumber.Length > 19) _cardNumber = _cardNumber[..19];
+    }
+
+    private void HandleExpiryChange(string value)
+    {
+        var cleaned = Regex.Replace(value, @"\D", "");
+        if (cleaned.Length > 4) cleaned = cleaned[..4];
+        _expiry = cleaned.Length >= 2 ? $"{cleaned[..2]}/{cleaned[2..]}" : cleaned;
+    }
+
+    private void HandleCvvChange(string value)
+    {
+        var cleaned = Regex.Replace(value, @"\D", "");
+        var maxLength = CardType == "amex" ? 4 : 3;
+        _cvv = cleaned.Length > maxLength ? cleaned[..maxLength] : cleaned;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (!IsValid) return;
+        _isSubmitting = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _isSubmitting = false;
+        _open = false;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _cardNumber = "";
+        _cardName = "";
+        _expiry = "";
+        _cvv = "";
+        _saveCard = true;
+    }
+}

@@ -1,0 +1,152 @@
+@* ========================================
+   Block: dialog-split-bill
+   Title: Dialog Split Bill
+   Description: Split bill dialog with item assignment and per-person totals for restaurant apps
+   Dependencies: AvatarCn, AvatarFallbackCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LucideCheckCn, LucideReceiptCn
+   Source: original/blocks/dialog/dialog-split-bill.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideReceiptCn Class="mr-2 h-4 w-4" Size="16" />
+                Split Bill
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn style="max-width: 384px;">
+        @if (_done)
+        {
+            <div class="flex flex-col items-center justify-center py-6 text-center">
+                <LucideCheckCn Class="h-8 w-8 text-primary" Size="32" />
+                <h3 class="mt-4 text-lg font-medium">Bill Split</h3>
+                <p class="mt-1 text-sm text-muted-foreground">Everyone knows what they owe.</p>
+            </div>
+            <div class="space-y-2">
+                @foreach (var person in _people)
+                {
+                    <div class="flex items-center justify-between p-2 rounded-md border">
+                        <div class="flex items-center gap-2">
+                            <AvatarCn Class="h-6 w-6">
+                                <AvatarFallbackCn Class="text-xs">@person.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <span class="text-sm">@person.Name</span>
+                        </div>
+                        <span class="font-mono font-medium">
+                            $@(GetPersonTotal(person.Id).ToString("F2"))
+                        </span>
+                    </div>
+                }
+            </div>
+            <DialogFooterCn>
+                <ButtonCn Class="w-full" @onclick="HandleClose">
+                    Done
+                </ButtonCn>
+            </DialogFooterCn>
+        }
+        else
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn>Split Bill</DialogTitleCn>
+                <DialogDescriptionCn>Assign items to each person.</DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="py-4 space-y-2">
+                @foreach (var item in _items)
+                {
+                    <div class="flex items-center justify-between p-2 rounded-md border">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium truncate">@item.Name</p>
+                            <p class="text-xs text-muted-foreground">
+                                $@(item.Price.ToString("F2"))
+                                @if (item.AssignedTo.Count > 1)
+                                {
+                                    <span> &middot; $@((item.Price / item.AssignedTo.Count).ToString("F2")) ea</span>
+                                }
+                            </p>
+                        </div>
+                        <div class="flex gap-1 ml-2">
+                            @foreach (var person in _people)
+                            {
+                                <button
+                                    type="button"
+                                    class="@Cn.Merge("h-7 w-7 rounded-full text-[10px] font-medium transition-colors", item.AssignedTo.Contains(person.Id) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")"
+                                    @onclick="@(() => ToggleAssignment(item.Id, person.Id))">
+                                    @person.Initials
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <p class="text-xs text-muted-foreground pt-2">Includes 8% tax + 18% tip</p>
+            </div>
+
+            <DialogFooterCn>
+                <ButtonCn @onclick="HandleClose" Variant="ButtonVariant.Outline">
+                    Cancel
+                </ButtonCn>
+                <ButtonCn @onclick="@(() => _done = true)">Done</ButtonCn>
+            </DialogFooterCn>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private bool _done;
+
+    private record PersonData(string Id, string Name, string Initials);
+    private class ItemData(string Id, string Name, decimal Price, List<string> AssignedTo)
+    {
+        public string Id { get; } = Id;
+        public string Name { get; } = Name;
+        public decimal Price { get; } = Price;
+        public List<string> AssignedTo { get; set; } = AssignedTo;
+    }
+
+    private static readonly PersonData[] _people =
+    [
+        new("1", "You", "YO"),
+        new("2", "Alex", "AL"),
+        new("3", "Sam", "SA")
+    ];
+
+    private List<ItemData> _items = CreateInitialItems();
+
+    private static List<ItemData> CreateInitialItems() =>
+    [
+        new("a", "Margherita Pizza", 18.0m, ["1", "2"]),
+        new("b", "Caesar Salad", 12.0m, ["3"]),
+        new("c", "Pasta Carbonara", 22.0m, ["1"]),
+        new("d", "Tiramisu", 10.0m, ["2", "3"])
+    ];
+
+    private void ToggleAssignment(string itemId, string personId)
+    {
+        var item = _items.First(i => i.Id == itemId);
+        if (item.AssignedTo.Contains(personId))
+            item.AssignedTo.Remove(personId);
+        else
+            item.AssignedTo.Add(personId);
+    }
+
+    private decimal GetPersonTotal(string personId)
+    {
+        decimal total = 0;
+        foreach (var item in _items)
+        {
+            if (item.AssignedTo.Contains(personId) && item.AssignedTo.Count > 0)
+                total += item.Price / item.AssignedTo.Count;
+        }
+        return total * 1.26m; // 8% tax + 18% tip
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _items = CreateInitialItems();
+        _done = false;
+    }
+}

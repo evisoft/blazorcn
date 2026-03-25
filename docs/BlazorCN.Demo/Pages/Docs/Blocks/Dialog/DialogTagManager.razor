@@ -1,0 +1,259 @@
+@* ========================================
+   Block: dialog-tag-manager
+   Title: Dialog Tag Manager
+   Description: Tag manager dialog with tag list, create new tags, edit existing, delete with confirmation, and color selection
+   Dependencies: AlertDialogActionCn, AlertDialogCancelCn, AlertDialogCn, AlertDialogContentCn, AlertDialogDescriptionCn, AlertDialogFooterCn, AlertDialogHeaderCn, AlertDialogTitleCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LucideCheckCn, LucidePencilCn, LucidePlusCn, LucideSearchCn, LucideTagsCn, LucideTrash2Cn, LucideXCn, ScrollAreaCn
+   Source: original/blocks/dialog/dialog-tag-manager.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideTagsCn Class="mr-2 h-4 w-4" Size="16" />
+                Manage Tags
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn>Manage Tags</DialogTitleCn>
+            <DialogDescriptionCn>Create, edit, and organize your tags.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @* Search *@
+            <div class="relative">
+                <LucideSearchCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                <InputCn
+                    Class="pl-9"
+                    Placeholder="Search tags..."
+                    Value="@_searchQuery"
+                    ValueChanged="@(v => _searchQuery = v)" />
+            </div>
+
+            @* Create New Tag *@
+            @if (_isCreating)
+            {
+                <div class="space-y-3 rounded-lg border p-3">
+                    <div class="flex gap-2">
+                        <InputCn
+                            Placeholder="Tag name"
+                            Value="@_newTagName"
+                            ValueChanged="@(v => _newTagName = v)" />
+                        <ButtonCn @onclick="@(() => _isCreating = false)" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost">
+                            <LucideXCn Class="h-4 w-4" Size="16" />
+                        </ButtonCn>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex gap-1.5">
+                            @foreach (var color in _tagColors)
+                            {
+                                <button
+                                    type="button"
+                                    class="@Cn.Merge("h-5 w-5 rounded-full transition-transform", color.Value, _newTagColor == color.Value ? "ring-2 ring-offset-2 ring-primary" : "")"
+                                    @onclick="@(() => _newTagColor = color.Value)"
+                                    title="@color.Name" />
+                            }
+                        </div>
+                        <ButtonCn Disabled="@string.IsNullOrWhiteSpace(_newTagName)" @onclick="HandleCreateTag" Size="ButtonSize.Sm">
+                            Create
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <ButtonCn
+                    Class="w-full"
+                    @onclick="@(() => _isCreating = true)"
+                    Size="ButtonSize.Sm"
+                    Variant="ButtonVariant.Outline">
+                    <LucidePlusCn Class="mr-2 h-4 w-4" Size="16" />
+                    New Tag
+                </ButtonCn>
+            }
+
+            @* Tags List *@
+            <ScrollAreaCn Class="h-[240px]">
+                @if (!FilteredTags.Any())
+                {
+                    <div class="flex flex-col items-center justify-center py-8 text-center">
+                        <LucideTagsCn Class="h-8 w-8 text-muted-foreground mb-2" Size="32" />
+                        <p class="text-sm text-muted-foreground">
+                            @(!string.IsNullOrEmpty(_searchQuery) ? "No tags found" : "No tags yet")
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="space-y-1">
+                        @foreach (var tag in FilteredTags)
+                        {
+                            <div class="flex items-center gap-2 rounded-lg p-2 hover:bg-muted/50 group">
+                                @if (_editingId == tag.Id)
+                                {
+                                    <div class="flex-1 flex items-center gap-2">
+                                        <div class="@Cn.Merge("h-3 w-3 rounded-full shrink-0", tag.Color)"></div>
+                                        <InputCn
+                                            Class="h-7 text-sm"
+                                            Value="@_editingName"
+                                            ValueChanged="@(v => _editingName = v)" />
+                                        <ButtonCn
+                                            Class="h-7 w-7"
+                                            @onclick="HandleSaveEdit"
+                                            Size="ButtonSize.Icon"
+                                            Variant="ButtonVariant.Ghost">
+                                            <LucideCheckCn Class="h-3 w-3" Size="12" />
+                                        </ButtonCn>
+                                        <ButtonCn
+                                            Class="h-7 w-7"
+                                            @onclick="HandleCancelEdit"
+                                            Size="ButtonSize.Icon"
+                                            Variant="ButtonVariant.Ghost">
+                                            <LucideXCn Class="h-3 w-3" Size="12" />
+                                        </ButtonCn>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="@Cn.Merge("h-3 w-3 rounded-full shrink-0", tag.Color)"></div>
+                                    <span class="flex-1 text-sm">@tag.Name</span>
+                                    <span class="text-xs text-muted-foreground">@tag.Count</span>
+                                    <ButtonCn
+                                        Class="h-7 w-7 opacity-0 group-hover:opacity-100"
+                                        @onclick="@(() => HandleStartEdit(tag))"
+                                        Size="ButtonSize.Icon"
+                                        Variant="ButtonVariant.Ghost">
+                                        <LucidePencilCn Class="h-3 w-3" Size="12" />
+                                    </ButtonCn>
+                                    <ButtonCn
+                                        Class="h-7 w-7 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                                        @onclick="@(() => _deleteTag = tag)"
+                                        Size="ButtonSize.Icon"
+                                        Variant="ButtonVariant.Ghost">
+                                        <LucideTrash2Cn Class="h-3 w-3" Size="12" />
+                                    </ButtonCn>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </ScrollAreaCn>
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn @onclick="@(() => _open = false)">Done</ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@* Delete Confirmation *@
+<AlertDialogCn @bind-Open="_deleteDialogOpen">
+    <AlertDialogOverlayCn />
+    <AlertDialogContentCn Class="sm:max-w-sm">
+        <AlertDialogHeaderCn>
+            <AlertDialogTitleCn>Delete "@(_deleteTag?.Name)"?</AlertDialogTitleCn>
+            <AlertDialogDescriptionCn>
+                This will remove the tag from @(_deleteTag?.Count ?? 0) items. This cannot be undone.
+            </AlertDialogDescriptionCn>
+        </AlertDialogHeaderCn>
+        <AlertDialogFooterCn>
+            <AlertDialogCancelCn @onclick="@(() => _deleteTag = null)">Cancel</AlertDialogCancelCn>
+            <AlertDialogActionCn Class="bg-destructive text-white hover:bg-destructive/90" @onclick="HandleDeleteConfirm">
+                Delete
+            </AlertDialogActionCn>
+        </AlertDialogFooterCn>
+    </AlertDialogContentCn>
+</AlertDialogCn>
+
+@code {
+    private bool _open;
+    private string _searchQuery = "";
+    private bool _isCreating;
+    private string _newTagName = "";
+    private string _newTagColor;
+    private string? _editingId;
+    private string _editingName = "";
+    private TagData? _deleteTag;
+
+    private bool _deleteDialogOpen
+    {
+        get => _deleteTag is not null;
+        set { if (!value) _deleteTag = null; }
+    }
+
+    private record TagColorData(string Name, string Value);
+    private record TagData(string Id, string Name, string Color, int Count);
+
+    private static readonly TagColorData[] _tagColors =
+    [
+        new("Red", "bg-red-500"),
+        new("Orange", "bg-orange-500"),
+        new("Yellow", "bg-yellow-500"),
+        new("Green", "bg-green-500"),
+        new("Blue", "bg-blue-500"),
+        new("Purple", "bg-purple-500"),
+        new("Pink", "bg-pink-500"),
+        new("Gray", "bg-gray-500")
+    ];
+
+    private static readonly TagData[] _initialTags =
+    [
+        new("1", "Important", "bg-red-500", 12),
+        new("2", "Work", "bg-blue-500", 28),
+        new("3", "Personal", "bg-green-500", 15),
+        new("4", "Ideas", "bg-yellow-500", 8),
+        new("5", "Research", "bg-purple-500", 23),
+        new("6", "Archive", "bg-gray-500", 45)
+    ];
+
+    private List<TagData> _tags = new(_initialTags);
+
+    private IEnumerable<TagData> FilteredTags => string.IsNullOrEmpty(_searchQuery)
+        ? _tags
+        : _tags.Where(t => t.Name.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnInitialized()
+    {
+        _newTagColor = _tagColors[0].Value;
+    }
+
+    private void HandleCreateTag()
+    {
+        if (string.IsNullOrWhiteSpace(_newTagName)) return;
+        _tags.Insert(0, new TagData(DateTime.Now.Ticks.ToString(), _newTagName.Trim(), _newTagColor, 0));
+        _newTagName = "";
+        _newTagColor = _tagColors[0].Value;
+        _isCreating = false;
+    }
+
+    private void HandleStartEdit(TagData tag)
+    {
+        _editingId = tag.Id;
+        _editingName = tag.Name;
+    }
+
+    private void HandleSaveEdit()
+    {
+        if (string.IsNullOrWhiteSpace(_editingName) || _editingId is null) return;
+        var index = _tags.FindIndex(t => t.Id == _editingId);
+        if (index >= 0)
+            _tags[index] = _tags[index] with { Name = _editingName.Trim() };
+        _editingId = null;
+        _editingName = "";
+    }
+
+    private void HandleCancelEdit()
+    {
+        _editingId = null;
+        _editingName = "";
+    }
+
+    private void HandleDeleteConfirm()
+    {
+        if (_deleteTag is null) return;
+        _tags.RemoveAll(t => t.Id == _deleteTag.Id);
+        _deleteTag = null;
+    }
+}

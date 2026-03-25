@@ -1,0 +1,160 @@
+@* ========================================
+   Block: dialog-session-timeout
+   Title: Dialog Session Timeout
+   Description: Session timeout warning dialog with countdown timer, extend session option, and auto-logout functionality
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LucideClockCn, LucideLogOutCn, LucideRefreshCwCn, ProgressCn
+   Source: original/blocks/dialog/dialog-session-timeout.tsx
+   ======================================== *@
+
+@implements IDisposable
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideClockCn Class="mr-2 h-4 w-4" Size="16" />
+                Show Timeout Warning
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        @if (_isExpired)
+        {
+            <div class="flex flex-col items-center justify-center py-8 text-center">
+                <LucideLogOutCn Class="h-8 w-8 text-muted-foreground" Size="32" />
+                <h3 class="mt-4 text-lg font-semibold">Session Expired</h3>
+                <p class="mt-2 text-sm text-muted-foreground">Please log in again to continue.</p>
+                <ButtonCn Class="mt-6" @onclick="HandleClose">
+                    Go to Login
+                </ButtonCn>
+            </div>
+        }
+        else
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn>Session Timeout</DialogTitleCn>
+                <DialogDescriptionCn>
+                    Your session is about to expire due to inactivity.
+                </DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="space-y-4 py-4">
+                <div class="flex flex-col items-center py-4">
+                    <LucideClockCn Class="h-8 w-8 text-muted-foreground mb-3" Size="32" />
+                    <p class="@Cn.Merge("text-4xl font-bold font-mono tabular-nums", _secondsLeft <= 30 ? "text-destructive" : "")">
+                        @FormatTime(_secondsLeft)
+                    </p>
+                    <p class="text-sm text-muted-foreground mt-1">until automatic logout</p>
+                </div>
+
+                <ProgressCn
+                    Class="@Cn.Merge("h-1.5", _secondsLeft <= 30 ? "[&>div]:bg-destructive" : "")"
+                    Value="@ProgressValue" />
+            </div>
+
+            <DialogFooterCn>
+                <ButtonCn @onclick="HandleLogout" Variant="ButtonVariant.Outline">
+                    <LucideLogOutCn Class="mr-2 h-4 w-4" Size="16" />
+                    Log Out
+                </ButtonCn>
+                <ButtonCn Disabled="@_isExtending" @onclick="HandleExtendSession">
+                    @if (_isExtending)
+                    {
+                        <LucideRefreshCwCn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                        <span>Extending...</span>
+                    }
+                    else
+                    {
+                        <span>Stay Logged In</span>
+                    }
+                </ButtonCn>
+            </DialogFooterCn>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private const int TotalSeconds = 120;
+
+    private bool _open;
+    private int _secondsLeft = TotalSeconds;
+    private bool _isExpired;
+    private bool _isExtending;
+    private System.Threading.Timer? _timer;
+
+    private int ProgressValue => (int)((double)_secondsLeft / TotalSeconds * 100);
+
+    private static string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_open && !_isExpired)
+            StartTimer();
+        else
+            StopTimer();
+    }
+
+    private void StartTimer()
+    {
+        StopTimer();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_secondsLeft <= 1)
+                {
+                    _isExpired = true;
+                    _secondsLeft = 0;
+                    StopTimer();
+                }
+                else
+                {
+                    _secondsLeft--;
+                }
+                StateHasChanged();
+            });
+        }, null, 1000, 1000);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private async Task HandleExtendSession()
+    {
+        _isExtending = true;
+        StateHasChanged();
+        await Task.Delay(1000);
+        _secondsLeft = TotalSeconds;
+        _isExtending = false;
+        _open = false;
+        StopTimer();
+    }
+
+    private void HandleLogout()
+    {
+        _isExpired = true;
+        StopTimer();
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _secondsLeft = TotalSeconds;
+        _isExpired = false;
+        _isExtending = false;
+        StopTimer();
+    }
+
+    public void Dispose()
+    {
+        StopTimer();
+    }
+}

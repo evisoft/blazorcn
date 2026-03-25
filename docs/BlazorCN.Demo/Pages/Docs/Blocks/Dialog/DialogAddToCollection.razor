@@ -1,0 +1,209 @@
+@* ========================================
+   Block: dialog-add-to-collection
+   Title: Dialog Add To Collection
+   Description: Add to collection dialog with collection list, create new option, search filter, and multi-select support
+   Dependencies: BadgeCn, ButtonCn, CheckboxCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, ScrollAreaCn, SeparatorCn, LucideCheckCn, LucideFolderCn, LucideFolderPlusCn, LucideLoader2Cn, LucidePlusCn, LucideSearchCn, LucideXCn
+   Source: original/blocks/dialog/dialog-add-to-collection.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideFolderPlusCn Class="mr-2 h-4 w-4" Size="16" />
+                Add to Collection
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideFolderPlusCn Class="h-5 w-5" Size="20" />
+                Add to Collection
+            </DialogTitleCn>
+            <DialogDescriptionCn>Select collections to add this item to.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            <div class="relative">
+                <LucideSearchCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                <InputCn Class="pl-9"
+                         Value="@_searchQuery"
+                         ValueChanged="@((string v) => _searchQuery = v)"
+                         Placeholder="Search collections..." />
+            </div>
+
+            @if (_isCreating)
+            {
+                <div class="flex gap-2">
+                    <InputCn Value="@_newCollectionName"
+                             ValueChanged="@((string v) => _newCollectionName = v)"
+                             Placeholder="Collection name" />
+                    <ButtonCn Disabled="@(string.IsNullOrWhiteSpace(_newCollectionName))"
+                              @onclick="HandleCreateCollection"
+                              Size="ButtonSize.Icon">
+                        <LucideCheckCn Class="h-4 w-4" Size="16" />
+                    </ButtonCn>
+                    <ButtonCn @onclick="@(() => _isCreating = false)" Size="ButtonSize.Icon" Variant="ButtonVariant.Outline">
+                        <LucideXCn Class="h-4 w-4" Size="16" />
+                    </ButtonCn>
+                </div>
+            }
+            else
+            {
+                <ButtonCn Class="w-full justify-start"
+                          @onclick="@(() => _isCreating = true)"
+                          Variant="ButtonVariant.Outline">
+                    <LucidePlusCn Class="mr-2 h-4 w-4" Size="16" />
+                    Create New Collection
+                </ButtonCn>
+            }
+
+            <SeparatorCn />
+
+            <ScrollAreaCn Class="h-[240px]">
+                @if (!FilteredCollections.Any())
+                {
+                    <div class="flex flex-col items-center justify-center py-8 text-center">
+                        <LucideFolderCn Class="h-8 w-8 text-muted-foreground mb-2" Size="32" />
+                        <p class="text-sm text-muted-foreground">
+                            @(string.IsNullOrEmpty(_searchQuery) ? "No collections yet" : "No collections found")
+                        </p>
+                        @if (string.IsNullOrEmpty(_searchQuery))
+                        {
+                            <ButtonCn @onclick="@(() => _isCreating = true)" Size="ButtonSize.Sm" Variant="ButtonVariant.Link">
+                                Create your first collection
+                            </ButtonCn>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="space-y-1">
+                        @foreach (var collection in FilteredCollections)
+                        {
+                            var isSelected = _selectedIds.Contains(collection.Id);
+                            var wasAlreadyIn = _alreadyInCollections.Contains(collection.Id);
+                            <label for="@($"collection-{collection.Id}")"
+                                   class="@Cn.Merge("w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left cursor-pointer", isSelected ? "bg-primary/5" : "hover:bg-muted")">
+                                <CheckboxCn Id="@($"collection-{collection.Id}")"
+                                            Checked="@isSelected"
+                                            CheckedChanged="@(v => HandleToggleCollection(collection.Id))" />
+                                <div class="@Cn.Merge("w-3 h-3 rounded-full", collection.Color)"></div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium truncate">@collection.Name</p>
+                                    <p class="text-xs text-muted-foreground">@collection.ItemCount items</p>
+                                </div>
+                                @if (wasAlreadyIn && isSelected)
+                                {
+                                    <BadgeCn Class="text-xs" Variant="BadgeVariant.Secondary">Added</BadgeCn>
+                                }
+                            </label>
+                        }
+                    </div>
+                }
+            </ScrollAreaCn>
+
+            @if (_selectedIds.Count > 0)
+            {
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted-foreground">
+                        @_selectedIds.Count collection@(_selectedIds.Count != 1 ? "s" : "") selected
+                    </span>
+                    @if (HasChanges)
+                    {
+                        <BadgeCn Variant="BadgeVariant.Secondary">
+                            @if (NewSelections.Count > 0) { @($"+{NewSelections.Count}") }
+                            @if (NewSelections.Count > 0 && RemovedSelections.Count > 0) { @(" / ") }
+                            @if (RemovedSelections.Count > 0) { @($"-{RemovedSelections.Count}") }
+                        </BadgeCn>
+                    }
+                </div>
+            }
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn @onclick="HandleClose" Variant="ButtonVariant.Outline">Cancel</ButtonCn>
+            <ButtonCn Disabled="@(!HasChanges || _isSaving)" @onclick="HandleSave">
+                @if (_isSaving)
+                {
+                    <LucideLoader2Cn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                    <span>Save Changes</span>
+                }
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _searchQuery = "";
+    private HashSet<string> _selectedIds = new(["1", "3"]);
+    private bool _isCreating;
+    private string _newCollectionName = "";
+    private bool _isSaving;
+
+    private static readonly HashSet<string> _alreadyInCollections = new(["1", "3"]);
+
+    private record CollectionItem(string Id, string Name, int ItemCount, string Color);
+
+    private List<CollectionItem> _collections =
+    [
+        new("1", "Favorites", 24, "bg-red-500"),
+        new("2", "Read Later", 12, "bg-blue-500"),
+        new("3", "Work Resources", 45, "bg-green-500"),
+        new("4", "Inspiration", 89, "bg-purple-500"),
+        new("5", "Tutorials", 33, "bg-yellow-500"),
+        new("6", "Design Assets", 67, "bg-pink-500"),
+    ];
+
+    private IEnumerable<CollectionItem> FilteredCollections =>
+        string.IsNullOrEmpty(_searchQuery)
+            ? _collections
+            : _collections.Where(c => c.Name.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase));
+
+    private List<string> NewSelections => _selectedIds.Where(id => !_alreadyInCollections.Contains(id)).ToList();
+    private List<string> RemovedSelections => _alreadyInCollections.Where(id => !_selectedIds.Contains(id)).ToList();
+    private bool HasChanges => NewSelections.Count > 0 || RemovedSelections.Count > 0;
+
+    private void HandleToggleCollection(string collectionId)
+    {
+        if (_selectedIds.Contains(collectionId))
+            _selectedIds.Remove(collectionId);
+        else
+            _selectedIds.Add(collectionId);
+    }
+
+    private void HandleCreateCollection()
+    {
+        if (string.IsNullOrWhiteSpace(_newCollectionName)) return;
+        var colors = new[] { "bg-red-500", "bg-blue-500", "bg-green-500", "bg-purple-500", "bg-yellow-500", "bg-pink-500", "bg-orange-500", "bg-teal-500" };
+        var newId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        _collections.Insert(0, new CollectionItem(newId, _newCollectionName.Trim(), 0, colors[Random.Shared.Next(colors.Length)]));
+        _selectedIds.Add(newId);
+        _newCollectionName = "";
+        _isCreating = false;
+    }
+
+    private async Task HandleSave()
+    {
+        _isSaving = true;
+        StateHasChanged();
+        await Task.Delay(1000);
+        _isSaving = false;
+        _open = false;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _searchQuery = "";
+        _isCreating = false;
+        _newCollectionName = "";
+    }
+}

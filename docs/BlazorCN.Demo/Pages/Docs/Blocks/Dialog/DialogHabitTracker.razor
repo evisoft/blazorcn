@@ -1,0 +1,241 @@
+@* ========================================
+   Block: dialog-habit-tracker
+   Title: Dialog Habit Tracker
+   Description: Habit tracker dialog with daily check-off, streak counter, weekly calendar view, and completion statistics
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LucideCalendarCn, LucideCheckCn, LucideChevronLeftCn, LucideChevronRightCn, LucideFlameCn, LucideTargetCn, LucideTrophyCn
+   Source: original/blocks/dialog/dialog-habit-tracker.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideTargetCn Class="mr-2 h-4 w-4" Size="16" />
+                Track Habits
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn class="flex items-center gap-2">
+                <LucideTargetCn Class="h-5 w-5" Size="20" />
+                Habit Tracker
+            </DialogTitleCn>
+            <DialogDescriptionCn>Track your daily habits and build streaks.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            <div class="space-y-1">
+                @foreach (var habit in _habits)
+                {
+                    <button type="button"
+                            class="@Cn.Merge("w-full flex items-center gap-2 p-2 rounded-lg text-left text-sm transition-colors", _selectedHabit.Id == habit.Id ? "bg-primary text-primary-foreground" : "hover:bg-muted")"
+                            @onclick="@(() => _selectedHabit = habit)">
+                        <span>@habit.Icon</span>
+                        <span class="flex-1 truncate">@habit.Name</span>
+                        @if (_selectedHabit.Id == habit.Id)
+                        {
+                            <LucideCheckCn Class="h-4 w-4 shrink-0" Size="16" />
+                        }
+                    </button>
+                }
+            </div>
+
+            <div class="flex items-center justify-between rounded-lg border p-3 text-sm">
+                <div class="flex items-center gap-1">
+                    <LucideFlameCn Class="h-4 w-4 text-primary" Size="16" />
+                    <span class="font-medium">@_selectedHabit.CurrentStreak</span>
+                    <span class="text-muted-foreground">streak</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <LucideTrophyCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                    <span class="font-medium">@_selectedHabit.BestStreak</span>
+                    <span class="text-muted-foreground">best</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="font-medium">@CompletionRate%</span>
+                    <span class="text-muted-foreground">rate</span>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <ButtonCn Class="h-8 w-8" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" @onclick="@(() => _weekOffset--)">
+                        <LucideChevronLeftCn Class="h-4 w-4" Size="16" />
+                    </ButtonCn>
+                    <div class="flex items-center gap-2">
+                        <LucideCalendarCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                        <span class="text-sm font-medium">
+                            @WeekLabel
+                        </span>
+                    </div>
+                    <ButtonCn Class="h-8 w-8" Disabled="@(_weekOffset >= 0)" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" @onclick="@(() => _weekOffset++)">
+                        <LucideChevronRightCn Class="h-4 w-4" Size="16" />
+                    </ButtonCn>
+                </div>
+
+                <div class="grid grid-cols-7 gap-1">
+                    @foreach (var day in _dayNames)
+                    {
+                        <div class="text-center text-xs text-muted-foreground py-1">@day</div>
+                    }
+                    @foreach (var date in WeekDates)
+                    {
+                        var completed = IsDateCompleted(date);
+                        var isToday = date.Date == DateTime.Today;
+                        var isFuture = date.Date > DateTime.Today;
+
+                        <button type="button"
+                                class="@Cn.Merge("aspect-square rounded-lg flex flex-col items-center justify-center text-sm transition-colors", completed ? "bg-primary text-primary-foreground" : "", !completed && !isFuture ? "hover:bg-muted" : "", isToday && !completed ? "ring-2 ring-primary ring-offset-2" : "", isFuture ? "opacity-30 cursor-not-allowed" : "")"
+                                disabled="@isFuture"
+                                @onclick="@(() => ToggleDate(date))">
+                            <span class="text-xs">@date.Day</span>
+                            @if (completed)
+                            {
+                                <LucideCheckCn Class="h-3 w-3 mt-0.5" Size="12" />
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (!IsDateCompleted(DateTime.Today))
+            {
+                <ButtonCn Class="w-full" @onclick="@(() => ToggleDate(DateTime.Today))">
+                    <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                    Complete Today
+                </ButtonCn>
+            }
+        </div>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private class Habit
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public List<string> CompletedDates { get; set; } = new();
+        public int CurrentStreak { get; set; }
+        public int BestStreak { get; set; }
+    }
+
+    private static readonly string[] _dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    private static string GetDateString(DateTime date) => date.ToString("yyyy-MM-dd");
+
+    private static List<Habit> CreateInitialHabits()
+    {
+        var now = DateTime.Today;
+        return new List<Habit>
+        {
+            new()
+            {
+                Id = "1", Name = "Morning Exercise", Icon = "\U0001F3C3",
+                CompletedDates = new List<string>
+                {
+                    GetDateString(now.AddDays(-6)), GetDateString(now.AddDays(-5)),
+                    GetDateString(now.AddDays(-4)), GetDateString(now.AddDays(-3)),
+                    GetDateString(now.AddDays(-1)), GetDateString(now)
+                },
+                CurrentStreak = 2, BestStreak = 12
+            },
+            new()
+            {
+                Id = "2", Name = "Read 30 minutes", Icon = "\U0001F4DA",
+                CompletedDates = new List<string>
+                {
+                    GetDateString(now.AddDays(-4)), GetDateString(now.AddDays(-3)),
+                    GetDateString(now.AddDays(-2)), GetDateString(now.AddDays(-1)),
+                    GetDateString(now)
+                },
+                CurrentStreak = 5, BestStreak = 21
+            },
+            new()
+            {
+                Id = "3", Name = "Drink 8 glasses of water", Icon = "\U0001F4A7",
+                CompletedDates = new List<string>
+                {
+                    GetDateString(now.AddDays(-2)), GetDateString(now.AddDays(-1))
+                },
+                CurrentStreak = 2, BestStreak = 30
+            },
+        };
+    }
+
+    private bool _open;
+    private List<Habit> _habits = CreateInitialHabits();
+    private Habit _selectedHabit;
+    private int _weekOffset;
+
+    public DialogHabitTracker()
+    {
+        _selectedHabit = _habits[0];
+    }
+
+    private string WeekLabel => _weekOffset switch
+    {
+        0 => "This Week",
+        -1 => "Last Week",
+        _ => $"{Math.Abs(_weekOffset)} weeks {(_weekOffset < 0 ? "ago" : "ahead")}"
+    };
+
+    private DateTime[] WeekDates
+    {
+        get
+        {
+            var today = DateTime.Today;
+            var startOfWeek = today.AddDays(-(int)today.DayOfWeek + _weekOffset * 7);
+            return Enumerable.Range(0, 7).Select(i => startOfWeek.AddDays(i)).ToArray();
+        }
+    }
+
+    private int CompletionRate
+    {
+        get
+        {
+            var last30 = Enumerable.Range(0, 30).Select(i => GetDateString(DateTime.Today.AddDays(-i)));
+            var completed = last30.Count(d => _selectedHabit.CompletedDates.Contains(d));
+            return (int)Math.Round((double)completed / 30 * 100);
+        }
+    }
+
+    private bool IsDateCompleted(DateTime date) =>
+        _selectedHabit.CompletedDates.Contains(GetDateString(date));
+
+    private void ToggleDate(DateTime date)
+    {
+        if (date.Date > DateTime.Today) return;
+
+        var dateStr = GetDateString(date);
+        if (_selectedHabit.CompletedDates.Contains(dateStr))
+            _selectedHabit.CompletedDates.Remove(dateStr);
+        else
+            _selectedHabit.CompletedDates.Add(dateStr);
+
+        // Recalculate streak
+        var streak = 0;
+        var checkDate = DateTime.Today;
+        while (true)
+        {
+            var checkStr = GetDateString(checkDate);
+            if (_selectedHabit.CompletedDates.Contains(checkStr))
+            {
+                streak++;
+                checkDate = checkDate.AddDays(-1);
+            }
+            else if (checkDate == DateTime.Today)
+            {
+                checkDate = checkDate.AddDays(-1);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        _selectedHabit.CurrentStreak = streak;
+        _selectedHabit.BestStreak = Math.Max(_selectedHabit.BestStreak, streak);
+    }
+}

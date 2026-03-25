@@ -1,0 +1,142 @@
+@* ========================================
+   Block: dialog-device-management
+   Title: Dialog Device Management
+   Description: Device management dialog with active sessions list, device details, location info, last active timestamps, and remote logout functionality
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LucideLaptopCn, LucideLogOutCn, LucideMonitorCn, LucideShieldCn, LucideSmartphoneCn, LucideTabletCn, LucideTriangleAlertCn
+   Source: original/blocks/dialog/dialog-device-management.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideShieldCn Class="mr-2 h-4 w-4" Size="16" />
+                Manage Devices
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideShieldCn Class="h-5 w-5" Size="20" />
+                Active Sessions
+            </DialogTitleCn>
+            <DialogDescriptionCn>Manage devices that are signed in to your account.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        @if (_suspiciousCount > 0)
+        {
+            <p class="text-sm text-destructive flex items-center gap-2">
+                <LucideTriangleAlertCn Class="h-4 w-4" Size="16" />
+                @_suspiciousCount suspicious session@(_suspiciousCount > 1 ? "s" : "") detected
+            </p>
+        }
+
+        <div class="space-y-2 py-2">
+            @foreach (var device in _activeDevices)
+            {
+                var d = device;
+                var isRevoking = _revokedId == d.Id;
+                <div class="@Cn.Merge("flex items-center gap-3 p-3 rounded-lg transition-all", d.IsCurrent ? "bg-muted" : "", isRevoking ? "opacity-50" : "")">
+                    @d.IconFragment
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium truncate">@d.Name</span>
+                            @if (d.IsCurrent)
+                            {
+                                <BadgeCn Class="text-xs" Variant="BadgeVariant.Secondary">Current</BadgeCn>
+                            }
+                            @if (d.IsSuspicious)
+                            {
+                                <BadgeCn Class="text-xs" Variant="BadgeVariant.Destructive">Suspicious</BadgeCn>
+                            }
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                            @d.Browser &middot; @d.Location &middot; @d.LastActive
+                        </p>
+                    </div>
+                    @if (!d.IsCurrent)
+                    {
+                        <ButtonCn Class="text-muted-foreground hover:text-destructive shrink-0" Disabled="@isRevoking" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" @onclick="@(() => HandleRevokeDevice(d.Id))">
+                            <LucideLogOutCn Class="h-4 w-4" Size="16" />
+                        </ButtonCn>
+                    }
+                </div>
+            }
+        </div>
+
+        <DialogFooterCn>
+            @if (_showConfirmAll)
+            {
+                <ButtonCn Variant="ButtonVariant.Outline" @onclick="@(() => _showConfirmAll = false)">Cancel</ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Destructive" @onclick="HandleRevokeAll">
+                    Sign out @_otherDevicesCount devices
+                </ButtonCn>
+            }
+            else
+            {
+                @if (_otherDevicesCount > 0)
+                {
+                    <ButtonCn Class="text-destructive hover:text-destructive" Variant="ButtonVariant.Outline" @onclick="@(() => _showConfirmAll = true)">
+                        Sign out all others
+                    </ButtonCn>
+                }
+                <ButtonCn @onclick="HandleClose">Done</ButtonCn>
+            }
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string? _revokedId;
+    private bool _showConfirmAll;
+
+    private int _otherDevicesCount => _activeDevices.Count(d => !d.IsCurrent);
+    private int _suspiciousCount => _activeDevices.Count(d => d.IsSuspicious);
+
+    private class DeviceInfo
+    {
+        public string Id { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string Browser { get; init; } = "";
+        public string Location { get; init; } = "";
+        public string LastActive { get; init; } = "";
+        public bool IsCurrent { get; init; }
+        public bool IsSuspicious { get; init; }
+        public RenderFragment? IconFragment { get; init; }
+    }
+
+    private readonly List<DeviceInfo> _activeDevices;
+
+    public DialogDeviceManagement()
+    {
+        _activeDevices =
+        [
+            new() { Id = "1", Name = "MacBook Pro", Browser = "Chrome on macOS", Location = "San Francisco, CA", LastActive = "Active now", IsCurrent = true, IconFragment = @<LucideLaptopCn Class="h-5 w-5 text-muted-foreground shrink-0" Size="20" /> },
+            new() { Id = "2", Name = "iPhone 15", Browser = "Safari on iOS", Location = "San Francisco, CA", LastActive = "2 hours ago", IsCurrent = false, IconFragment = @<LucideSmartphoneCn Class="h-5 w-5 text-muted-foreground shrink-0" Size="20" /> },
+            new() { Id = "3", Name = "Windows PC", Browser = "Edge on Windows", Location = "New York, NY", LastActive = "Yesterday", IsCurrent = false, IsSuspicious = true, IconFragment = @<LucideMonitorCn Class="h-5 w-5 text-muted-foreground shrink-0" Size="20" /> },
+            new() { Id = "4", Name = "iPad Air", Browser = "Safari on iPadOS", Location = "San Francisco, CA", LastActive = "3 days ago", IsCurrent = false, IconFragment = @<LucideTabletCn Class="h-5 w-5 text-muted-foreground shrink-0" Size="20" /> },
+        ];
+    }
+
+    private async Task HandleRevokeDevice(string deviceId)
+    {
+        _revokedId = deviceId;
+        StateHasChanged();
+        await Task.Delay(500);
+        _activeDevices.RemoveAll(d => d.Id == deviceId);
+        _revokedId = null;
+    }
+
+    private void HandleRevokeAll()
+    {
+        _activeDevices.RemoveAll(d => !d.IsCurrent);
+        _showConfirmAll = false;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+    }
+}

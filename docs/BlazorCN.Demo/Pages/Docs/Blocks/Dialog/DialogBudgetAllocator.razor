@@ -1,0 +1,173 @@
+@* ========================================
+   Block: dialog-budget-allocator
+   Title: Dialog Budget Allocator
+   Description: Budget allocator dialog with category sliders, visual breakdown chart, remaining balance tracker, and preset templates
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, SelectCn, SelectContentCn, SelectItemCn, SelectTriggerCn, SelectValueCn, SliderCn, LucideCarCn, LucideCheckCn, LucideGamepad2Cn, LucideHeartCn, LucideHouseCn, LucidePiggyBankCn, LucideRotateCcwCn, LucideShoppingBagCn, LucideTriangleAlertCn, LucideUtensilsCn, LucideWalletCn
+   Source: original/blocks/dialog/dialog-budget-allocator.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideWalletCn Class="mr-2 h-4 w-4" Size="16" />
+                Allocate Budget
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-lg">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideWalletCn Class="h-5 w-5" Size="20" />
+                Budget Allocator
+            </DialogTitleCn>
+            <DialogDescriptionCn>
+                Distribute your $@_totalBudget.ToString("N0") monthly budget across categories.
+            </DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-6 py-4">
+            @* Template selector *@
+            <div class="flex items-center gap-2">
+                <SelectCn Value="@_selectedTemplate" ValueChanged="@HandleTemplateChange">
+                    <SelectTriggerCn Class="flex-1"><SelectValueCn Placeholder="Choose a template" /></SelectTriggerCn>
+                    <SelectContentCn>
+                        @foreach (var t in _templates)
+                        {
+                            <SelectItemCn Value="@t.Id">@t.Name — @t.Description</SelectItemCn>
+                        }
+                    </SelectContentCn>
+                </SelectCn>
+                <ButtonCn @onclick="HandleReset" Size="ButtonSize.Icon" Variant="ButtonVariant.Outline">
+                    <LucideRotateCcwCn Class="h-4 w-4" Size="16" />
+                </ButtonCn>
+            </div>
+
+            @* Visual breakdown bar *@
+            <div class="space-y-2">
+                <div class="h-3 w-full rounded-full overflow-hidden flex border">
+                    @foreach (var cat in _categories)
+                    {
+                        <div class="@Cn.Merge("h-full transition-all duration-300", cat.Color)"
+                             style="width: @($"{(cat.Percentage / (double)Math.Max(TotalAllocated, 100)) * 100}%");"></div>
+                    }
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted-foreground">
+                        @(IsOverBudget ? $"{Math.Abs(Remaining)}% over budget" : Remaining > 0 ? $"{Remaining}% remaining" : "Perfectly balanced")
+                    </span>
+                    <span class="@Cn.Merge("font-medium tabular-nums", IsOverBudget ? "text-destructive" : "")">@TotalAllocated%</span>
+                </div>
+            </div>
+
+            @* Category sliders *@
+            <div class="space-y-4">
+                @foreach (var category in _categories)
+                {
+                    var catId = category.Id;
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2 text-muted-foreground">
+                                @CategoryIcon(category.Id)
+                                <span class="text-sm text-foreground">@category.Name</span>
+                            </div>
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="text-muted-foreground tabular-nums w-16 text-right">@FormatCurrency(category.Percentage)</span>
+                                <span class="font-medium tabular-nums w-10 text-right">@(category.Percentage)%</span>
+                            </div>
+                        </div>
+                        <SliderCn Max="50" Min="0" Value="@((double)category.Percentage)"
+                                  ValueChanged="@(v => HandleSliderChange(catId, (int)v))" />
+                    </div>
+                }
+            </div>
+
+            @if (IsOverBudget)
+            {
+                <p class="text-sm text-destructive flex items-center gap-2">
+                    <LucideTriangleAlertCn Class="h-4 w-4" Size="16" />
+                    Reduce allocations to stay within budget.
+                </p>
+            }
+        </div>
+
+        <DialogFooterCn Class="gap-2 sm:gap-0">
+            <ButtonCn @onclick="@(() => _open = false)" Variant="ButtonVariant.Outline">Cancel</ButtonCn>
+            <ButtonCn Disabled="@IsOverBudget" @onclick="@(() => _open = false)">
+                <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                Save Budget
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _selectedTemplate = "";
+    private int _totalBudget = 5000;
+
+    private record Category(string Id, string Name, string Color, int Percentage);
+    private record Template(string Id, string Name, string Description, Dictionary<string, int> Allocations);
+
+    private List<Category> _categories = new(InitialCategories);
+
+    private static readonly Category[] InitialCategories =
+    [
+        new("housing", "Housing", "bg-foreground", 30),
+        new("food", "Food", "bg-foreground/80", 15),
+        new("transport", "Transport", "bg-foreground/60", 10),
+        new("shopping", "Shopping", "bg-foreground/50", 10),
+        new("entertainment", "Entertainment", "bg-foreground/40", 10),
+        new("savings", "Savings", "bg-foreground/30", 20),
+        new("health", "Health", "bg-foreground/20", 5),
+    ];
+
+    private static readonly Template[] _templates =
+    [
+        new("balanced", "Balanced", "50/30/20 rule", new() { ["housing"]=30, ["food"]=15, ["transport"]=10, ["shopping"]=10, ["entertainment"]=10, ["savings"]=20, ["health"]=5 }),
+        new("saver", "Saver", "Focus on savings", new() { ["housing"]=25, ["food"]=15, ["transport"]=10, ["shopping"]=5, ["entertainment"]=5, ["savings"]=35, ["health"]=5 }),
+        new("lifestyle", "Lifestyle", "More flexibility", new() { ["housing"]=30, ["food"]=20, ["transport"]=10, ["shopping"]=15, ["entertainment"]=15, ["savings"]=5, ["health"]=5 }),
+    ];
+
+    private int TotalAllocated => _categories.Sum(c => c.Percentage);
+    private int Remaining => 100 - TotalAllocated;
+    private bool IsOverBudget => Remaining < 0;
+
+    private RenderFragment CategoryIcon(string id) => id switch
+    {
+        "housing" => b => { b.OpenComponent<LucideHouseCn>(0); b.AddAttribute(1, "Class", "h-4 w-4"); b.AddAttribute(2, "Size", 16); b.CloseComponent(); },
+        "food" => b => { b.OpenComponent<LucideUtensilsCn>(0); b.AddAttribute(1, "Class", "h-4 w-4"); b.AddAttribute(2, "Size", 16); b.CloseComponent(); },
+        "transport" => b => { b.OpenComponent<LucideCarCn>(0); b.AddAttribute(1, "Class", "h-4 w-4"); b.AddAttribute(2, "Size", 16); b.CloseComponent(); },
+        "shopping" => b => { b.OpenComponent<LucideShoppingBagCn>(0); b.AddAttribute(1, "Class", "h-4 w-4"); b.AddAttribute(2, "Size", 16); b.CloseComponent(); },
+        "entertainment" => b => { b.OpenComponent<LucideGamepad2Cn>(0); b.AddAttribute(1, "Class", "h-4 w-4"); b.AddAttribute(2, "Size", 16); b.CloseComponent(); },
+        "savings" => b => { b.OpenComponent<LucidePiggyBankCn>(0); b.AddAttribute(1, "Class", "h-4 w-4"); b.AddAttribute(2, "Size", 16); b.CloseComponent(); },
+        "health" => b => { b.OpenComponent<LucideHeartCn>(0); b.AddAttribute(1, "Class", "h-4 w-4"); b.AddAttribute(2, "Size", 16); b.CloseComponent(); },
+        _ => b => { },
+    };
+
+    private void HandleSliderChange(string categoryId, int value)
+    {
+        _categories = _categories.Select(c => c.Id == categoryId ? c with { Percentage = value } : c).ToList();
+        _selectedTemplate = "";
+    }
+
+    private void HandleTemplateChange(string templateId)
+    {
+        var template = _templates.FirstOrDefault(t => t.Id == templateId);
+        if (template is null) return;
+        _categories = _categories.Select(c => c with { Percentage = template.Allocations.GetValueOrDefault(c.Id, 0) }).ToList();
+        _selectedTemplate = templateId;
+    }
+
+    private void HandleReset()
+    {
+        _categories = new(InitialCategories);
+        _selectedTemplate = "";
+    }
+
+    private string FormatCurrency(int percentage)
+    {
+        var amount = _totalBudget * percentage / 100.0;
+        return amount.ToString("C0");
+    }
+}

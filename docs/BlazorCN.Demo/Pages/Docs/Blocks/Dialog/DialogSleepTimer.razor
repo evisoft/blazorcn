@@ -1,0 +1,273 @@
+@* ========================================
+   Block: dialog-sleep-timer
+   Title: Dialog Sleep Timer
+   Description: Sleep timer dialog with duration presets, countdown display, fade-out option, and cancel functionality for media apps
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LabelCn, LucideCheckCn, LucideClockCn, LucideMoonCn, LucidePlayCn, LucidePlusCn, LucideSparklesCn, LucideVolume2Cn, LucideVolumeXCn, LucideXCn, ProgressCn, SwitchCn
+   Source: original/blocks/dialog/dialog-sleep-timer.tsx
+   ======================================== *@
+
+@implements IDisposable
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideMoonCn Class="mr-2 h-4 w-4" Size="16" />
+                Sleep Timer
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideMoonCn Class="h-5 w-5" Size="20" />
+                Sleep Timer
+            </DialogTitleCn>
+            <DialogDescriptionCn>Set a timer to stop playback automatically.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @if (_timerState == TimerState.Completed)
+            {
+                <div class="flex flex-col items-center py-8 text-center">
+                    <div class="rounded-full bg-primary/10 p-4 mb-4">
+                        <LucideCheckCn Class="h-8 w-8 text-primary" Size="32" />
+                    </div>
+                    <h3 class="text-lg font-semibold">Goodnight!</h3>
+                    <p class="text-sm text-muted-foreground mt-1">Playback has been stopped.</p>
+                    <ButtonCn Class="mt-4" @onclick="HandleCancel">
+                        <LucideMoonCn Class="mr-2 h-4 w-4" Size="16" />
+                        Set New Timer
+                    </ButtonCn>
+                </div>
+            }
+            else if (IsActive)
+            {
+                <div class="flex flex-col items-center py-4">
+                    <div class="relative">
+                        <div class="text-5xl font-mono font-bold tabular-nums">
+                            @FormatTime(_remainingSeconds)
+                        </div>
+                        @if (_timerState == TimerState.Fading)
+                        {
+                            <BadgeCn Class="absolute -top-2 -right-2 animate-pulse">Fading</BadgeCn>
+                        }
+                    </div>
+                    <p class="text-sm text-muted-foreground mt-2">Ends at @GetEndTime()</p>
+                </div>
+
+                <ProgressCn Class="h-2" Value="@ProgressValue" />
+
+                @if (_fadeOutEnabled)
+                {
+                    <div class="flex items-center justify-between rounded-lg border p-3">
+                        <div class="flex items-center gap-2">
+                            @if (_timerState == TimerState.Fading)
+                            {
+                                <LucideVolumeXCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                            }
+                            else
+                            {
+                                <LucideVolume2Cn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                            }
+                            <span class="text-sm">Volume</span>
+                        </div>
+                        <BadgeCn Class="font-mono" Variant="BadgeVariant.Secondary">
+                            @(_currentVolume)%
+                        </BadgeCn>
+                    </div>
+                }
+
+                <div class="space-y-2">
+                    <LabelCn Class="text-xs text-muted-foreground">Add more time</LabelCn>
+                    <div class="flex gap-2">
+                        @foreach (var minutes in _extendOptions)
+                        {
+                            <ButtonCn
+                                Class="flex-1"
+                                @onclick="@(() => HandleExtend(minutes))"
+                                Size="ButtonSize.Sm"
+                                Variant="ButtonVariant.Outline">
+                                <LucidePlusCn Class="mr-1 h-3 w-3" Size="12" />
+                                @(minutes)m
+                            </ButtonCn>
+                        }
+                    </div>
+                </div>
+
+                <ButtonCn Class="w-full" @onclick="HandleCancel" Variant="ButtonVariant.Destructive">
+                    <LucideXCn Class="mr-2 h-4 w-4" Size="16" />
+                    Cancel Timer
+                </ButtonCn>
+            }
+            else
+            {
+                <div class="grid grid-cols-3 gap-2">
+                    @foreach (var preset in _presets)
+                    {
+                        <ButtonCn
+                            @onclick="@(() => _selectedMinutes = preset.Minutes)"
+                            Size="ButtonSize.Sm"
+                            Variant="@(_selectedMinutes == preset.Minutes ? ButtonVariant.Default : ButtonVariant.Outline)">
+                            @preset.Label
+                        </ButtonCn>
+                    }
+                </div>
+
+                <div class="rounded-lg border p-4 text-center">
+                    <div class="flex items-center justify-center gap-2 text-muted-foreground mb-1">
+                        <LucideClockCn Class="h-4 w-4" Size="16" />
+                        <span class="text-sm">Timer will end at</span>
+                    </div>
+                    <p class="text-2xl font-semibold">
+                        @(DateTime.Now.AddMinutes(_selectedMinutes).ToString("hh:mm tt"))
+                    </p>
+                </div>
+
+                <div class="flex items-center justify-between rounded-lg border p-3">
+                    <div class="space-y-0.5">
+                        <LabelCn Class="text-sm font-normal" For="fade-out">
+                            Fade out audio
+                        </LabelCn>
+                        <p class="text-xs text-muted-foreground">
+                            Gradually lower volume before stopping
+                        </p>
+                    </div>
+                    <SwitchCn Id="fade-out" @bind-Checked="_fadeOutEnabled" />
+                </div>
+
+                <div class="flex items-center gap-2 rounded-lg border p-3 text-sm text-muted-foreground">
+                    <LucideSparklesCn Class="h-4 w-4 shrink-0" Size="16" />
+                    <span>Playback will stop automatically when the timer ends.</span>
+                </div>
+            }
+        </div>
+
+        @if (_timerState == TimerState.Idle)
+        {
+            <DialogFooterCn Class="gap-2 sm:gap-0">
+                <ButtonCn @onclick="@(() => _open = false)" Variant="ButtonVariant.Outline">
+                    Cancel
+                </ButtonCn>
+                <ButtonCn @onclick="HandleStart">
+                    <LucidePlayCn Class="mr-2 h-4 w-4" Size="16" />
+                    Start Timer
+                </ButtonCn>
+            </DialogFooterCn>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private enum TimerState { Idle, Running, Fading, Completed }
+
+    private bool _open;
+    private int _selectedMinutes = 30;
+    private int _remainingSeconds;
+    private TimerState _timerState = TimerState.Idle;
+    private bool _fadeOutEnabled = true;
+    private int _fadeOutDuration = 30;
+    private int _currentVolume = 100;
+    private int _totalSeconds;
+    private System.Threading.Timer? _timer;
+
+    private static readonly int[] _extendOptions = [5, 15, 30];
+
+    private record PresetData(string Label, int Minutes);
+    private static readonly PresetData[] _presets =
+    [
+        new("15 min", 15),
+        new("30 min", 30),
+        new("45 min", 45),
+        new("1 hour", 60),
+        new("1.5 hours", 90),
+        new("2 hours", 120)
+    ];
+
+    private bool IsActive => _timerState == TimerState.Running || _timerState == TimerState.Fading;
+    private int ProgressValue => _totalSeconds > 0 ? (int)(((double)(_totalSeconds - _remainingSeconds) / _totalSeconds) * 100) : 0;
+
+    private static string FormatTime(int seconds)
+    {
+        var hrs = seconds / 3600;
+        var mins = (seconds % 3600) / 60;
+        var secs = seconds % 60;
+        return hrs > 0
+            ? $"{hrs}:{mins:D2}:{secs:D2}"
+            : $"{mins}:{secs:D2}";
+    }
+
+    private string GetEndTime() =>
+        DateTime.Now.AddSeconds(_remainingSeconds).ToString("hh:mm tt");
+
+    private void HandleStart()
+    {
+        _totalSeconds = _selectedMinutes * 60;
+        _remainingSeconds = _totalSeconds;
+        _currentVolume = 100;
+        _timerState = TimerState.Running;
+        StartTimer();
+    }
+
+    private void HandleCancel()
+    {
+        StopTimer();
+        _timerState = TimerState.Idle;
+        _remainingSeconds = 0;
+        _currentVolume = 100;
+    }
+
+    private void HandleExtend(int minutes)
+    {
+        _remainingSeconds += minutes * 60;
+        _totalSeconds += minutes * 60;
+        if (_timerState == TimerState.Fading)
+        {
+            _timerState = TimerState.Running;
+            _currentVolume = 100;
+        }
+    }
+
+    private void StartTimer()
+    {
+        StopTimer();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_remainingSeconds <= 1)
+                {
+                    _timerState = TimerState.Completed;
+                    _currentVolume = 0;
+                    _remainingSeconds = 0;
+                    StopTimer();
+                }
+                else
+                {
+                    _remainingSeconds--;
+
+                    if (_fadeOutEnabled && _remainingSeconds <= _fadeOutDuration && _timerState != TimerState.Fading)
+                        _timerState = TimerState.Fading;
+
+                    if (_timerState == TimerState.Fading)
+                    {
+                        var fadeProgress = (double)(_fadeOutDuration - _remainingSeconds + 1) / _fadeOutDuration;
+                        _currentVolume = (int)Math.Round(100 * (1 - fadeProgress));
+                    }
+                }
+                StateHasChanged();
+            });
+        }, null, 1000, 1000);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    public void Dispose()
+    {
+        StopTimer();
+    }
+}

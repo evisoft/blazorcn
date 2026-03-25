@@ -1,0 +1,181 @@
+@* ========================================
+   Block: dialog-media-upload
+   Title: Dialog Media Upload
+   Description: Media upload dialog with drag-drop zone, file type filtering, image preview grid, upload progress, and bulk management
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LucideAlertCircleCn, LucideCheckCn, LucideFileCn, LucideImageCn, LucideTrash2Cn, LucideUploadCn, LucideXCn, ProgressCn, ScrollAreaCn
+   Source: original/blocks/dialog/dialog-media-upload.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideUploadCn Class="mr-2 h-4 w-4" Size="16" />
+                Upload Media
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-lg">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideImageCn Class="h-5 w-5" Size="20" />
+                Upload Media
+            </DialogTitleCn>
+            <DialogDescriptionCn>Drag and drop images or click to browse. Max 10MB per file.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @* Drop Zone *@
+            <div class="@Cn.Merge("border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer", "border-muted-foreground/25 hover:border-muted-foreground/50")"
+                 role="button" tabindex="0" @onclick="AddDemoFiles">
+                <LucideUploadCn Class="h-8 w-8 mx-auto mb-2 text-muted-foreground" Size="32" />
+                <p class="text-sm font-medium">Drag files here or click to browse</p>
+                <p class="text-xs text-muted-foreground mt-1">JPEG, PNG, WebP, GIF up to 10MB</p>
+            </div>
+
+            @if (_files.Count > 0)
+            {
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium">@_files.Count file@(_files.Count != 1 ? "s" : "")</span>
+                        @{ var completeCount = _files.Count(f => f.Status == "complete"); }
+                        @if (completeCount > 0)
+                        {
+                            <BadgeCn Class="text-xs" Variant="BadgeVariant.Secondary">@completeCount uploaded</BadgeCn>
+                        }
+                        @{ var errorCount = _files.Count(f => f.Status == "error"); }
+                        @if (errorCount > 0)
+                        {
+                            <BadgeCn Class="text-xs" Variant="BadgeVariant.Destructive">@errorCount failed</BadgeCn>
+                        }
+                    </div>
+                    <ButtonCn Class="text-xs text-destructive hover:text-destructive" Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" @onclick="ClearAll">
+                        <LucideTrash2Cn Class="h-3 w-3 mr-1" Size="12" />
+                        Clear all
+                    </ButtonCn>
+                </div>
+
+                <ScrollAreaCn Class="h-[200px] -mx-6 px-6">
+                    <div class="space-y-2">
+                        @foreach (var file in _files)
+                        {
+                            <div class="@Cn.Merge("flex items-center gap-3 p-2 rounded-lg border", file.Status == "error" ? "border-destructive/50 bg-destructive/5" : "", file.Status == "complete" ? "border-primary/50 bg-primary/5" : "")">
+                                <div class="h-12 w-12 rounded-md bg-muted flex items-center justify-center shrink-0">
+                                    <LucideFileCn Class="h-6 w-6 text-muted-foreground" Size="24" />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium truncate">@file.Name</p>
+                                    <p class="text-xs text-muted-foreground">@FormatFileSize(file.Size)</p>
+                                    @if (file.Status == "uploading")
+                                    {
+                                        <ProgressCn Class="h-1 mt-1" Value="@file.Progress" />
+                                    }
+                                    @if (file.Status == "error")
+                                    {
+                                        <p class="text-xs text-destructive mt-0.5">@file.Error</p>
+                                    }
+                                </div>
+                                <div class="shrink-0">
+                                    @if (file.Status == "complete")
+                                    {
+                                        <LucideCheckCn Class="h-5 w-5 text-primary" Size="20" />
+                                    }
+                                    else if (file.Status == "error")
+                                    {
+                                        <LucideAlertCircleCn Class="h-5 w-5 text-destructive" Size="20" />
+                                    }
+                                    else if (file.Status == "uploading")
+                                    {
+                                        <span class="text-xs text-muted-foreground">@file.Progress%</span>
+                                    }
+                                    else
+                                    {
+                                        <ButtonCn Class="h-8 w-8" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" @onclick="@(() => RemoveFile(file.Id))">
+                                            <LucideXCn Class="h-4 w-4" Size="16" />
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </ScrollAreaCn>
+            }
+        </div>
+
+        <DialogFooterCn Class="gap-2 sm:gap-0">
+            <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">
+                @(completeCount == _files.Count && _files.Count > 0 ? "Done" : "Cancel")
+            </ButtonCn>
+            @{ var pendingCount = _files.Count(f => f.Status == "pending"); }
+            @if (pendingCount > 0)
+            {
+                <ButtonCn Disabled="@_isUploading" @onclick="SimulateUpload">
+                    @(_isUploading ? "Uploading..." : $"Upload {pendingCount} file{(pendingCount != 1 ? "s" : "")}")
+                </ButtonCn>
+            }
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private class UploadFile
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public long Size { get; set; }
+        public string Status { get; set; } = "pending";
+        public int Progress { get; set; }
+        public string? Error { get; set; }
+    }
+
+    private bool _open;
+    private List<UploadFile> _files = new();
+    private bool _isUploading;
+    private int completeCount => _files.Count(f => f.Status == "complete");
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private void AddDemoFiles()
+    {
+        _files.Add(new UploadFile { Id = Guid.NewGuid().ToString(), Name = "photo-001.jpg", Size = 2_450_000 });
+        _files.Add(new UploadFile { Id = Guid.NewGuid().ToString(), Name = "screenshot.png", Size = 1_200_000 });
+        _files.Add(new UploadFile { Id = Guid.NewGuid().ToString(), Name = "banner.webp", Size = 890_000 });
+    }
+
+    private void RemoveFile(string fileId) => _files.RemoveAll(f => f.Id == fileId);
+
+    private void ClearAll() => _files.Clear();
+
+    private async Task SimulateUpload()
+    {
+        _isUploading = true;
+        var pending = _files.Where(f => f.Status == "pending").ToList();
+
+        foreach (var file in pending)
+        {
+            file.Status = "uploading";
+            for (var p = 0; p <= 100; p += 10)
+            {
+                await Task.Delay(100);
+                file.Progress = p;
+                StateHasChanged();
+            }
+            file.Status = "complete";
+            StateHasChanged();
+        }
+
+        _isUploading = false;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _files.Clear();
+        _isUploading = false;
+    }
+}

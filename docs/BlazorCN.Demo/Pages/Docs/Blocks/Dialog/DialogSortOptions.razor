@@ -1,0 +1,236 @@
+@* ========================================
+   Block: dialog-sort-options
+   Title: Dialog Sort Options
+   Description: Sort options dialog with field selection, order direction, and multi-level sorting
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LabelCn, LucideArrowDownCn, LucideArrowUpCn, LucideArrowUpDownCn, LucideCheckCn, LucideLoader2Cn, LucidePlusCn, LucideRotateCcwCn, LucideXCn, SelectCn, SelectContentCn, SelectItemCn, SelectTriggerCn, SelectValueCn, SeparatorCn
+   Source: original/blocks/dialog/dialog-sort-options.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideArrowUpDownCn Class="mr-2 h-4 w-4" Size="16" />
+                Sort Options
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideArrowUpDownCn Class="h-5 w-5" Size="20" />
+                Sort Options
+            </DialogTitleCn>
+            <DialogDescriptionCn>Configure how items are sorted.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @* Sort Criteria List *@
+            <div class="space-y-2">
+                @for (var i = 0; i < _sortCriteria.Count; i++)
+                {
+                    var index = i;
+                    var criteria = _sortCriteria[index];
+                    var otherUsedFields = _sortCriteria.Where((_, idx) => idx != index).Select(c => c.Field).ToList();
+                    var selectableFields = _availableFields.Where(f => !otherUsedFields.Contains(f.Id)).ToArray();
+
+                    <div class="flex items-center gap-2 rounded-lg border p-3">
+                        @* Priority Indicator *@
+                        <div class="flex flex-col items-center gap-1">
+                            <ButtonCn
+                                Class="h-5 w-5"
+                                Disabled="@(index == 0)"
+                                @onclick="@(() => HandleMoveUp(index))"
+                                Size="ButtonSize.Icon"
+                                Variant="ButtonVariant.Ghost">
+                                <LucideArrowUpCn Class="h-3 w-3" Size="12" />
+                            </ButtonCn>
+                            <BadgeCn Class="text-xs px-1.5" Variant="BadgeVariant.Outline">
+                                @(index + 1)
+                            </BadgeCn>
+                            <ButtonCn
+                                Class="h-5 w-5"
+                                Disabled="@(index == _sortCriteria.Count - 1)"
+                                @onclick="@(() => HandleMoveDown(index))"
+                                Size="ButtonSize.Icon"
+                                Variant="ButtonVariant.Ghost">
+                                <LucideArrowDownCn Class="h-3 w-3" Size="12" />
+                            </ButtonCn>
+                        </div>
+
+                        @* Field Select *@
+                        <div class="flex-1">
+                            <SelectCn Value="@criteria.Field" ValueChanged="@(v => HandleFieldChange(index, v))">
+                                <SelectTriggerCn Class="h-9">
+                                    <SelectValueCn />
+                                </SelectTriggerCn>
+                                <SelectContentCn>
+                                    @foreach (var f in selectableFields)
+                                    {
+                                        <SelectItemCn Value="@f.Id">@f.Label</SelectItemCn>
+                                    }
+                                </SelectContentCn>
+                            </SelectCn>
+                        </div>
+
+                        @* Direction Toggle *@
+                        <ButtonCn
+                            Class="gap-1.5 shrink-0"
+                            @onclick="@(() => HandleDirectionChange(index))"
+                            Size="ButtonSize.Sm"
+                            Variant="ButtonVariant.Outline">
+                            @if (criteria.Direction == "asc")
+                            {
+                                <LucideArrowUpCn Class="h-3.5 w-3.5" Size="14" />
+                                <span class="text-xs">A&#8594;Z</span>
+                            }
+                            else
+                            {
+                                <LucideArrowDownCn Class="h-3.5 w-3.5" Size="14" />
+                                <span class="text-xs">Z&#8594;A</span>
+                            }
+                        </ButtonCn>
+
+                        @* Remove Button *@
+                        <ButtonCn
+                            Class="h-8 w-8 shrink-0"
+                            Disabled="@(_sortCriteria.Count == 1)"
+                            @onclick="@(() => HandleRemoveSort(index))"
+                            Size="ButtonSize.Icon"
+                            Variant="ButtonVariant.Ghost">
+                            <LucideXCn Class="h-4 w-4" Size="16" />
+                        </ButtonCn>
+                    </div>
+                }
+            </div>
+
+            @* Add Sort Level *@
+            @if (AvailableForAdd.Any() && _sortCriteria.Count < 4)
+            {
+                <ButtonCn Class="w-full" @onclick="HandleAddSort" Size="ButtonSize.Sm" Variant="ButtonVariant.Outline">
+                    <LucidePlusCn Class="mr-2 h-4 w-4" Size="16" />
+                    Add Sort Level
+                </ButtonCn>
+            }
+
+            <SeparatorCn />
+
+            @* Summary *@
+            <div class="space-y-2">
+                <LabelCn Class="text-sm font-medium">Sort Order</LabelCn>
+                <div class="rounded-lg border p-3">
+                    <p class="text-sm text-muted-foreground">
+                        @for (var i = 0; i < _sortCriteria.Count; i++)
+                        {
+                            var c = _sortCriteria[i];
+                            @if (i > 0) { <text>, then by </text> }
+                            <span class="font-medium text-foreground">@GetFieldLabel(c.Field)</span>
+                            <text> (@(c.Direction == "asc" ? "ascending" : "descending"))</text>
+                        }
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <DialogFooterCn Class="flex-col sm:flex-row gap-2">
+            <ButtonCn
+                Class="mr-auto"
+                Disabled="@_isApplying"
+                @onclick="HandleReset"
+                Size="ButtonSize.Sm"
+                Variant="ButtonVariant.Ghost">
+                <LucideRotateCcwCn Class="mr-2 h-4 w-4" Size="16" />
+                Reset
+            </ButtonCn>
+            <ButtonCn Disabled="@_isApplying" @onclick="@(() => _open = false)" Variant="ButtonVariant.Outline">
+                Cancel
+            </ButtonCn>
+            <ButtonCn Disabled="@(_sortCriteria.Count == 0 || _isApplying)" @onclick="HandleApply">
+                @if (_isApplying)
+                {
+                    <LucideLoader2Cn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                    <span>Applying...</span>
+                }
+                else
+                {
+                    <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                    <span>Apply Sort</span>
+                }
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private bool _isApplying;
+
+    private record SortField(string Id, string Label, string Type);
+    private record SortCriteria(string Field, string Direction);
+
+    private static readonly SortField[] _availableFields =
+    [
+        new("name", "Name", "string"),
+        new("date_created", "Date Created", "date"),
+        new("date_modified", "Date Modified", "date"),
+        new("size", "Size", "number"),
+        new("type", "Type", "string"),
+        new("status", "Status", "string"),
+        new("priority", "Priority", "number"),
+        new("assignee", "Assignee", "string")
+    ];
+
+    private static readonly SortCriteria[] _defaultSort = [new("date_modified", "desc")];
+
+    private List<SortCriteria> _sortCriteria = new(_defaultSort);
+
+    private IEnumerable<SortField> AvailableForAdd
+    {
+        get
+        {
+            var usedFields = _sortCriteria.Select(c => c.Field).ToHashSet();
+            return _availableFields.Where(f => !usedFields.Contains(f.Id));
+        }
+    }
+
+    private string GetFieldLabel(string fieldId) =>
+        _availableFields.FirstOrDefault(f => f.Id == fieldId)?.Label ?? fieldId;
+
+    private void HandleAddSort()
+    {
+        var first = AvailableForAdd.FirstOrDefault();
+        if (first is not null)
+            _sortCriteria.Add(new SortCriteria(first.Id, "asc"));
+    }
+
+    private void HandleRemoveSort(int index) => _sortCriteria.RemoveAt(index);
+
+    private void HandleFieldChange(int index, string field) =>
+        _sortCriteria[index] = _sortCriteria[index] with { Field = field };
+
+    private void HandleDirectionChange(int index) =>
+        _sortCriteria[index] = _sortCriteria[index] with { Direction = _sortCriteria[index].Direction == "asc" ? "desc" : "asc" };
+
+    private void HandleMoveUp(int index)
+    {
+        if (index > 0)
+            (_sortCriteria[index - 1], _sortCriteria[index]) = (_sortCriteria[index], _sortCriteria[index - 1]);
+    }
+
+    private void HandleMoveDown(int index)
+    {
+        if (index < _sortCriteria.Count - 1)
+            (_sortCriteria[index], _sortCriteria[index + 1]) = (_sortCriteria[index + 1], _sortCriteria[index]);
+    }
+
+    private void HandleReset() => _sortCriteria = new List<SortCriteria>(_defaultSort);
+
+    private async Task HandleApply()
+    {
+        _isApplying = true;
+        StateHasChanged();
+        await Task.Delay(800);
+        _isApplying = false;
+        _open = false;
+    }
+}

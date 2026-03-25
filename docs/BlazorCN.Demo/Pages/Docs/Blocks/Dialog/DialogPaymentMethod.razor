@@ -1,0 +1,208 @@
+@* ========================================
+   Block: dialog-payment-method
+   Title: Dialog Payment Method
+   Description: Payment method dialog with credit card form, card number formatting, expiry validation, and card type detection
+   Dependencies: ButtonCn, CheckboxCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCheckCn, LucideCreditCardCn, LucideLockCn
+   Source: original/blocks/dialog/dialog-payment-method.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideCreditCardCn Class="mr-2 h-4 w-4" Size="16" />
+                Add Payment Method
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        @if (_saved)
+        {
+            <DialogHeaderCn Class="text-center">
+                <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
+                    <LucideCheckCn Class="h-6 w-6 text-primary" Size="24" />
+                </div>
+                <DialogTitleCn>Card Added</DialogTitleCn>
+                <DialogDescriptionCn>
+                    Your payment method ending in @_cardNumber[^4..] has been saved@(_saveCard ? " and will be available for future purchases" : "").
+                </DialogDescriptionCn>
+            </DialogHeaderCn>
+            <DialogFooterCn>
+                <ButtonCn Class="w-full" @onclick="HandleClose">Done</ButtonCn>
+            </DialogFooterCn>
+        }
+        else
+        {
+            <DialogHeaderCn>
+                <DialogTitleCn Class="flex items-center gap-2">
+                    <LucideCreditCardCn Class="h-5 w-5" Size="20" />
+                    Add Payment Method
+                </DialogTitleCn>
+                <DialogDescriptionCn>Enter your card details securely.</DialogDescriptionCn>
+            </DialogHeaderCn>
+
+            <div class="grid gap-4 py-4">
+                <div class="grid gap-2">
+                    <LabelCn For="cardNumber">Card Number</LabelCn>
+                    <div class="relative">
+                        <InputCn Class="pr-16"
+                                 Id="cardNumber"
+                                 Placeholder="1234 5678 9012 3456"
+                                 Value="@_cardNumber"
+                                 ValueChanged="HandleCardNumberChange" />
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2">
+                            <div class="@Cn.Merge("h-6 w-8 rounded border flex items-center justify-center text-xs font-bold", _cardType == "unknown" ? "border-border bg-muted text-muted-foreground" : "border-border bg-muted/50 text-foreground")">
+                                @if (_cardType == "unknown")
+                                {
+                                    <LucideCreditCardCn Class="h-4 w-4" Size="16" />
+                                }
+                                else
+                                {
+                                    @CardLabel
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid gap-2">
+                    <LabelCn For="cardName">Name on Card</LabelCn>
+                    <InputCn Id="cardName" Placeholder="John Smith" Value="@_cardName" ValueChanged="@(v => _cardName = v)" />
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="grid gap-2">
+                        <LabelCn For="expiry">Expiry Date</LabelCn>
+                        <InputCn Id="expiry" Placeholder="MM/YY" Value="@_expiry" ValueChanged="HandleExpiryChange" />
+                    </div>
+                    <div class="grid gap-2">
+                        <LabelCn For="cvv">
+                            CVV
+                            <span class="ml-1 text-xs text-muted-foreground">(@(_cardType == "amex" ? "4 digits" : "3 digits"))</span>
+                        </LabelCn>
+                        <InputCn Id="cvv" Type="password" Placeholder="@(_cardType == "amex" ? "@@@@@@@@" : "@@@@@@@")" Value="@_cvv" ValueChanged="HandleCvvChange" />
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2 pt-2">
+                    <CheckboxCn Checked="_saveCard" CheckedChanged="@(v => _saveCard = v)" Id="saveCard" />
+                    <LabelCn Class="text-sm font-normal cursor-pointer" For="saveCard">
+                        Save this card for future purchases
+                    </LabelCn>
+                </div>
+
+                <div class="flex items-center gap-2 text-xs text-muted-foreground pt-2">
+                    <LucideLockCn Class="h-3 w-3" Size="12" />
+                    <span>Your payment info is encrypted and secure</span>
+                </div>
+            </div>
+
+            <DialogFooterCn Class="gap-2 sm:gap-0">
+                <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">Cancel</ButtonCn>
+                <ButtonCn Disabled="@(!IsValid)" @onclick="@(() => _saved = true)">Add Card</ButtonCn>
+            </DialogFooterCn>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private bool _saved;
+    private bool _saveCard;
+    private string _cardNumber = "";
+    private string _cardName = "";
+    private string _expiry = "";
+    private string _cvv = "";
+    private string _cardType = "unknown";
+
+    private string CardLabel => _cardType switch
+    {
+        "visa" => "VISA",
+        "mastercard" => "MC",
+        "amex" => "AMEX",
+        "discover" => "DISC",
+        _ => ""
+    };
+
+    private bool IsValid =>
+        _cardNumber.Replace(" ", "").Length >= (_cardType == "amex" ? 15 : 16) &&
+        _cardName.Trim().Length > 0 &&
+        IsValidExpiry() &&
+        _cvv.Length >= (_cardType == "amex" ? 4 : 3);
+
+    private static string DetectCardType(string number)
+    {
+        var cleaned = number.Replace(" ", "");
+        if (cleaned.StartsWith("4")) return "visa";
+        if (cleaned.Length >= 2 && int.TryParse(cleaned[..2], out var prefix2))
+        {
+            if (prefix2 >= 51 && prefix2 <= 55) return "mastercard";
+            if (prefix2 >= 22 && prefix2 <= 27) return "mastercard";
+            if (prefix2 == 34 || prefix2 == 37) return "amex";
+        }
+        if (cleaned.StartsWith("6011") || cleaned.StartsWith("65")) return "discover";
+        return "unknown";
+    }
+
+    private void HandleCardNumberChange(string value)
+    {
+        var cleaned = new string(value.Where(char.IsDigit).ToArray());
+        var type = DetectCardType(cleaned);
+        var maxDigits = type == "amex" ? 15 : 16;
+        if (cleaned.Length > maxDigits) cleaned = cleaned[..maxDigits];
+
+        if (type == "amex" && cleaned.Length > 0)
+        {
+            var parts = new List<string>();
+            if (cleaned.Length > 0) parts.Add(cleaned[..Math.Min(4, cleaned.Length)]);
+            if (cleaned.Length > 4) parts.Add(cleaned[4..Math.Min(10, cleaned.Length)]);
+            if (cleaned.Length > 10) parts.Add(cleaned[10..]);
+            _cardNumber = string.Join(" ", parts);
+        }
+        else
+        {
+            var parts = Enumerable.Range(0, (cleaned.Length + 3) / 4)
+                .Select(i => cleaned.Substring(i * 4, Math.Min(4, cleaned.Length - i * 4)));
+            _cardNumber = string.Join(" ", parts);
+        }
+        _cardType = type;
+    }
+
+    private void HandleExpiryChange(string value)
+    {
+        var cleaned = new string(value.Where(char.IsDigit).ToArray());
+        if (cleaned.Length > 4) cleaned = cleaned[..4];
+        _expiry = cleaned.Length >= 2 ? $"{cleaned[..2]}/{cleaned[2..]}" : cleaned;
+    }
+
+    private void HandleCvvChange(string value)
+    {
+        var cleaned = new string(value.Where(char.IsDigit).ToArray());
+        var maxLen = _cardType == "amex" ? 4 : 3;
+        _cvv = cleaned.Length > maxLen ? cleaned[..maxLen] : cleaned;
+    }
+
+    private bool IsValidExpiry()
+    {
+        if (_expiry.Length != 5) return false;
+        var parts = _expiry.Split('/');
+        if (parts.Length != 2) return false;
+        if (!int.TryParse(parts[0], out var month) || !int.TryParse(parts[1], out var year)) return false;
+        year += 2000;
+        if (month < 1 || month > 12) return false;
+        var now = DateTime.Now;
+        return year > now.Year || (year == now.Year && month >= now.Month);
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _saved = false;
+        _cardNumber = "";
+        _cardName = "";
+        _expiry = "";
+        _cvv = "";
+        _saveCard = false;
+        _cardType = "unknown";
+    }
+}

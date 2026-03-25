@@ -1,0 +1,228 @@
+@* ========================================
+   Block: dialog-address-autocomplete
+   Title: Dialog Address Autocomplete
+   Description: Address input dialog with autocomplete suggestions, manual entry fallback, and address validation
+   Dependencies: ButtonCn, CommandCn, CommandEmptyCn, CommandGroupCn, CommandItemCn, CommandListCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCheckCn, LucideHouseCn, LucideLoader2Cn, LucideMapPinCn, LucideSearchCn, LucideSquarePenCn
+   Source: original/blocks/dialog/dialog-address-autocomplete.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideMapPinCn Class="mr-2 h-4 w-4" Size="16" />
+                Add Address
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideMapPinCn Class="h-5 w-5" Size="20" />
+                @(_showManualEntry ? "Enter Address" : "Add Address")
+            </DialogTitleCn>
+            <DialogDescriptionCn>
+                @(_showManualEntry ? "Fill in the address details manually." : "Start typing to search for your address.")
+            </DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            @if (!_showManualEntry && _selectedAddress is null)
+            {
+                @* Search Input *@
+                <div class="relative">
+                    <LucideSearchCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                    <InputCn Class="pl-9"
+                             Value="@_searchQuery"
+                             ValueChanged="@((string v) => HandleSearch(v))"
+                             Placeholder="Search for an address..." />
+                    @if (_isSearching)
+                    {
+                        <LucideLoader2Cn Class="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" Size="16" />
+                    }
+                </div>
+
+                @* Suggestions *@
+                @if (_suggestions.Count > 0 || _searchQuery.Length >= 3)
+                {
+                    <CommandCn Class="rounded-lg border">
+                        <CommandListCn>
+                            <CommandEmptyCn>@(_isSearching ? "Searching..." : "No addresses found.")</CommandEmptyCn>
+                            <CommandGroupCn>
+                                @foreach (var suggestion in _suggestions)
+                                {
+                                    <CommandItemCn Class="cursor-pointer" @onclick="@(() => HandleSelectSuggestion(suggestion))">
+                                        <LucideMapPinCn Class="mr-2 h-4 w-4 text-muted-foreground" Size="16" />
+                                        <div>
+                                            <p class="text-sm font-medium">@suggestion.MainText</p>
+                                            <p class="text-xs text-muted-foreground">@suggestion.SecondaryText</p>
+                                        </div>
+                                    </CommandItemCn>
+                                }
+                            </CommandGroupCn>
+                        </CommandListCn>
+                    </CommandCn>
+                }
+
+                @* Manual Entry Link *@
+                <div class="text-center">
+                    <ButtonCn @onclick="@(() => _showManualEntry = true)" Size="ButtonSize.Sm" Variant="ButtonVariant.Link">
+                        Enter address manually
+                    </ButtonCn>
+                </div>
+            }
+
+            @* Manual Entry Form *@
+            @if (_showManualEntry && _selectedAddress is null)
+            {
+                <div class="space-y-4">
+                    <div class="space-y-2">
+                        <LabelCn For="street">Street Address</LabelCn>
+                        <InputCn Id="street" Value="@_manualStreet" ValueChanged="@((string v) => _manualStreet = v)" Placeholder="123 Main Street" />
+                    </div>
+                    <div class="space-y-2">
+                        <LabelCn For="apt">Apt, Suite, Unit (optional)</LabelCn>
+                        <InputCn Id="apt" Value="@_manualApt" ValueChanged="@((string v) => _manualApt = v)" Placeholder="Apt 4B" />
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <LabelCn For="city">City</LabelCn>
+                            <InputCn Id="city" Value="@_manualCity" ValueChanged="@((string v) => _manualCity = v)" Placeholder="San Francisco" />
+                        </div>
+                        <div class="space-y-2">
+                            <LabelCn For="state">State</LabelCn>
+                            <InputCn Id="state" Value="@_manualState" ValueChanged="@((string v) => _manualState = v)" Placeholder="CA" />
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <LabelCn For="zip">ZIP Code</LabelCn>
+                        <InputCn Id="zip" Value="@_manualZip" ValueChanged="@((string v) => _manualZip = v)" Placeholder="94102" />
+                    </div>
+                    <div class="flex gap-2">
+                        <ButtonCn Class="flex-1" @onclick="@(() => _showManualEntry = false)" Variant="ButtonVariant.Outline">
+                            Back to search
+                        </ButtonCn>
+                        <ButtonCn Class="flex-1"
+                                  Disabled="@(string.IsNullOrWhiteSpace(_manualStreet) || string.IsNullOrWhiteSpace(_manualCity))"
+                                  @onclick="HandleManualSubmit">
+                            Use this address
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+
+            @* Selected Address Display *@
+            @if (_selectedAddress is not null)
+            {
+                <div class="rounded-lg border p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border">
+                            <LucideHouseCn Class="h-5 w-5" Size="20" />
+                        </div>
+                        <div class="flex-1 min-w-0 space-y-0.5">
+                            @{ var lines = FormatAddress(_selectedAddress); }
+                            @for (var i = 0; i < lines.Length; i++)
+                            {
+                                <p class="@Cn.Merge("text-sm", i == 0 ? "font-medium" : "text-muted-foreground")">@lines[i]</p>
+                            }
+                        </div>
+                        <ButtonCn Class="shrink-0" @onclick="@(() => _selectedAddress = null)" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost">
+                            <LucideSquarePenCn Class="h-4 w-4" Size="16" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn Disabled="@_isSubmitting" @onclick="HandleClose" Variant="ButtonVariant.Outline">Cancel</ButtonCn>
+            <ButtonCn Disabled="@(_selectedAddress is null || _isSubmitting)" @onclick="HandleSave">
+                @if (_isSubmitting)
+                {
+                    <LucideLoader2Cn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                    <span>Save Address</span>
+                }
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _searchQuery = "";
+    private bool _isSearching;
+    private List<AddressSuggestion> _suggestions = [];
+    private bool _showManualEntry;
+    private AddressComponents? _selectedAddress;
+    private bool _isSubmitting;
+    private string _manualStreet = "", _manualApt = "", _manualCity = "", _manualState = "", _manualZip = "";
+
+    private record AddressSuggestion(string Id, string MainText, string SecondaryText);
+    private record AddressComponents(string Street, string Apt, string City, string State, string Zip, string Country);
+
+    private static readonly AddressSuggestion[] _mockSuggestions =
+    [
+        new("1", "123 Main Street", "San Francisco, CA 94102, USA"),
+        new("2", "456 Market Street", "San Francisco, CA 94103, USA"),
+        new("3", "789 Mission Street", "San Francisco, CA 94105, USA"),
+    ];
+
+    private async void HandleSearch(string query)
+    {
+        _searchQuery = query;
+        if (query.Length < 3) { _suggestions.Clear(); return; }
+        _isSearching = true;
+        StateHasChanged();
+        await Task.Delay(500);
+        _suggestions = _mockSuggestions.Where(s => s.MainText.Contains(query, StringComparison.OrdinalIgnoreCase) || s.SecondaryText.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        _isSearching = false;
+        StateHasChanged();
+    }
+
+    private void HandleSelectSuggestion(AddressSuggestion suggestion)
+    {
+        _selectedAddress = new(suggestion.MainText, "", "San Francisco", "CA", "94102", "United States");
+        _searchQuery = "";
+        _suggestions.Clear();
+    }
+
+    private void HandleManualSubmit()
+    {
+        _selectedAddress = new(_manualStreet, _manualApt, _manualCity, _manualState, _manualZip, "United States");
+        _showManualEntry = false;
+    }
+
+    private async Task HandleSave()
+    {
+        if (_selectedAddress is null) return;
+        _isSubmitting = true;
+        StateHasChanged();
+        await Task.Delay(1000);
+        _isSubmitting = false;
+        _open = false;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _searchQuery = "";
+        _suggestions.Clear();
+        _selectedAddress = null;
+        _showManualEntry = false;
+        _manualStreet = _manualApt = _manualCity = _manualState = _manualZip = "";
+    }
+
+    private static string[] FormatAddress(AddressComponents addr)
+    {
+        var lines = new List<string>();
+        lines.Add(string.IsNullOrEmpty(addr.Apt) ? addr.Street : $"{addr.Street}, {addr.Apt}");
+        lines.Add($"{addr.City}, {addr.State} {addr.Zip}");
+        if (!string.IsNullOrEmpty(addr.Country)) lines.Add(addr.Country);
+        return lines.ToArray();
+    }
+}

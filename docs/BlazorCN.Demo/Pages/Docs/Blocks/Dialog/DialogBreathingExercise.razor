@@ -1,0 +1,255 @@
+@* ========================================
+   Block: dialog-breathing-exercise
+   Title: Dialog Breathing Exercise
+   Description: Breathing exercise dialog with guided animations, multiple patterns, visual circle expansion, and session completion tracking
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, ProgressCn, SelectCn, SelectContentCn, SelectItemCn, SelectTriggerCn, SelectValueCn, LucideCheckCn, LucidePauseCn, LucidePlayCn, LucideRotateCcwCn, LucideWindCn
+   Source: original/blocks/dialog/dialog-breathing-exercise.tsx
+   ======================================== *@
+
+@implements IDisposable
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideWindCn Class="mr-2 h-4 w-4" Size="16" />
+                Breathing Exercise
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideWindCn Class="h-5 w-5" Size="20" />
+                Breathing Exercise
+            </DialogTitleCn>
+            <DialogDescriptionCn>Follow the circle and calm your mind.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-6 py-4">
+            @if (_isComplete)
+            {
+                <div class="flex flex-col items-center py-8 text-center">
+                    <LucideCheckCn Class="h-10 w-10 text-primary mb-4" Size="40" />
+                    <h3 class="text-lg font-semibold">Session Complete</h3>
+                    <p class="text-sm text-muted-foreground mt-1">
+                        @Pattern.Cycles cycles of @Pattern.Name.ToLowerInvariant()
+                    </p>
+                    <div class="flex gap-2 mt-6">
+                        <ButtonCn @onclick="HandleReset" Variant="ButtonVariant.Outline">Done</ButtonCn>
+                        <ButtonCn @onclick="HandleStart">
+                            <LucidePlayCn Class="mr-2 h-4 w-4" Size="16" />
+                            Repeat
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+            else
+            {
+                @* Pattern selector *@
+                @if (!_isRunning && _phase == "idle")
+                {
+                    <div class="space-y-4">
+                        <SelectCn Value="@_selectedPatternId" ValueChanged="@HandlePatternChange">
+                            <SelectTriggerCn><SelectValueCn /></SelectTriggerCn>
+                            <SelectContentCn>
+                                @foreach (var p in _patterns)
+                                {
+                                    <SelectItemCn Value="@p.Id">@p.Name — @p.Description</SelectItemCn>
+                                }
+                            </SelectContentCn>
+                        </SelectCn>
+                        <p class="text-sm text-muted-foreground text-center">
+                            @(Pattern.Inhale)s in@(Pattern.Hold > 0 ? $" · {Pattern.Hold}s hold" : "") · @(Pattern.Exhale)s out@(Pattern.HoldAfterExhale > 0 ? $" · {Pattern.HoldAfterExhale}s hold" : "") · @(Pattern.Cycles) cycles
+                        </p>
+                    </div>
+                }
+
+                @* Breathing circle *@
+                <div class="flex justify-center items-center h-48">
+                    <div class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-foreground/20 transition-all", _isRunning ? "duration-1000 ease-in-out" : "")"
+                         style="width: @($"{120 + 60 * GetCircleScale()}px"); height: @($"{120 + 60 * GetCircleScale()}px");">
+                        <div class="text-center">
+                            <p class="text-base font-medium text-muted-foreground">@PhaseInstruction</p>
+                            @if (_phase != "idle")
+                            {
+                                <p class="text-4xl font-semibold tabular-nums">@_phaseTime</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @* Progress *@
+                @if (_isRunning || _phase != "idle")
+                {
+                    <div class="space-y-2">
+                        <ProgressCn Class="h-1.5" Value="@GetOverallProgress()" />
+                        <p class="text-sm text-muted-foreground text-center">
+                            Cycle @(_currentCycle + 1) of @Pattern.Cycles
+                        </p>
+                    </div>
+                }
+
+                @* Controls *@
+                <div class="flex justify-center gap-2">
+                    @if (_phase == "idle")
+                    {
+                        <ButtonCn @onclick="HandleStart" Size="ButtonSize.Lg">
+                            <LucidePlayCn Class="mr-2 h-4 w-4" Size="16" />
+                            Begin
+                        </ButtonCn>
+                    }
+                    else if (_isRunning)
+                    {
+                        <ButtonCn @onclick="HandlePause" Variant="ButtonVariant.Outline">
+                            <LucidePauseCn Class="mr-2 h-4 w-4" Size="16" />
+                            Pause
+                        </ButtonCn>
+                        <ButtonCn @onclick="HandleReset" Variant="ButtonVariant.Outline">
+                            <LucideRotateCcwCn Class="mr-2 h-4 w-4" Size="16" />
+                            Stop
+                        </ButtonCn>
+                    }
+                    else
+                    {
+                        <ButtonCn @onclick="HandleResume">
+                            <LucidePlayCn Class="mr-2 h-4 w-4" Size="16" />
+                            Resume
+                        </ButtonCn>
+                        <ButtonCn @onclick="HandleReset" Variant="ButtonVariant.Outline">
+                            <LucideRotateCcwCn Class="mr-2 h-4 w-4" Size="16" />
+                            Stop
+                        </ButtonCn>
+                    }
+                </div>
+            }
+
+            @if (_sessionsCompleted > 0)
+            {
+                <p class="text-xs text-center text-muted-foreground">
+                    @_sessionsCompleted session@(_sessionsCompleted != 1 ? "s" : "") completed
+                </p>
+            }
+        </div>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _selectedPatternId = "relaxing";
+    private bool _isRunning;
+    private string _phase = "idle";
+    private int _phaseTime;
+    private int _currentCycle;
+    private bool _isComplete;
+    private int _sessionsCompleted;
+    private System.Threading.Timer? _timer;
+
+    private record BreathingPattern(string Id, string Name, string Description, int Inhale, int Hold, int Exhale, int HoldAfterExhale, int Cycles);
+
+    private static readonly BreathingPattern[] _patterns =
+    [
+        new("relaxing", "Relaxing Breath", "4-7-8 technique for calm", 4, 7, 8, 0, 4),
+        new("box", "Box Breathing", "Equal parts for focus", 4, 4, 4, 4, 4),
+        new("energizing", "Energizing Breath", "Quick inhale, slow exhale", 2, 0, 4, 0, 6),
+        new("calming", "Deep Calm", "Long exhales for relaxation", 4, 2, 6, 0, 5),
+    ];
+
+    private static readonly Dictionary<string, string> _phaseInstructions = new()
+    {
+        ["inhale"] = "Breathe In", ["hold"] = "Hold", ["exhale"] = "Breathe Out",
+        ["holdAfterExhale"] = "Hold", ["idle"] = "Get Ready",
+    };
+
+    private BreathingPattern Pattern => _patterns.FirstOrDefault(p => p.Id == _selectedPatternId) ?? _patterns[0];
+    private string PhaseInstruction => _phaseInstructions.GetValueOrDefault(_phase, "Get Ready");
+
+    private int GetPhaseDuration() => _phase switch
+    {
+        "inhale" => Pattern.Inhale, "hold" => Pattern.Hold,
+        "exhale" => Pattern.Exhale, "holdAfterExhale" => Pattern.HoldAfterExhale, _ => 0,
+    };
+
+    private double GetPhaseProgress()
+    {
+        var duration = GetPhaseDuration();
+        return duration == 0 ? 100 : ((duration - _phaseTime) / (double)duration) * 100;
+    }
+
+    private double GetCircleScale() => _phase switch
+    {
+        "idle" => 0.6, "inhale" => 0.6 + (0.4 * GetPhaseProgress() / 100),
+        "hold" => 1.0, "exhale" => 1.0 - (0.4 * GetPhaseProgress() / 100),
+        "holdAfterExhale" => 0.6, _ => 0.6,
+    };
+
+    private double GetOverallProgress()
+    {
+        var totalCycleTime = Pattern.Inhale + Pattern.Hold + Pattern.Exhale + Pattern.HoldAfterExhale;
+        var total = totalCycleTime * Pattern.Cycles;
+        var completed = _currentCycle * totalCycleTime;
+        var phaseOffset = _phase switch
+        {
+            "hold" => Pattern.Inhale, "exhale" => Pattern.Inhale + Pattern.Hold,
+            "holdAfterExhale" => Pattern.Inhale + Pattern.Hold + Pattern.Exhale, _ => 0,
+        };
+        var elapsed = GetPhaseDuration() - _phaseTime;
+        return ((completed + phaseOffset + elapsed) / (double)total) * 100;
+    }
+
+    private string GetNextPhase() => _phase switch
+    {
+        "inhale" => Pattern.Hold > 0 ? "hold" : "exhale",
+        "hold" => "exhale",
+        "exhale" => Pattern.HoldAfterExhale > 0 ? "holdAfterExhale" : "inhale",
+        "holdAfterExhale" => "inhale", _ => "inhale",
+    };
+
+    private void Tick(object? _)
+    {
+        _phaseTime--;
+        if (_phaseTime <= 0)
+        {
+            if ((_phase == "exhale" && Pattern.HoldAfterExhale == 0) || _phase == "holdAfterExhale")
+            {
+                _currentCycle++;
+                if (_currentCycle >= Pattern.Cycles)
+                {
+                    _isRunning = false;
+                    _isComplete = true;
+                    _sessionsCompleted++;
+                    _timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                    InvokeAsync(StateHasChanged);
+                    return;
+                }
+            }
+            var next = GetNextPhase();
+            _phase = next;
+            _phaseTime = next switch { "inhale" => Pattern.Inhale, "hold" => Pattern.Hold, "exhale" => Pattern.Exhale, "holdAfterExhale" => Pattern.HoldAfterExhale, _ => 0 };
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleStart()
+    {
+        _phase = "inhale";
+        _phaseTime = Pattern.Inhale;
+        _currentCycle = 0;
+        _isComplete = false;
+        _isRunning = true;
+        _timer = new System.Threading.Timer(Tick, null, 1000, 1000);
+    }
+
+    private void HandlePause() { _isRunning = false; _timer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite); }
+    private void HandleResume() { _isRunning = true; _timer?.Change(1000, 1000); }
+
+    private void HandleReset()
+    {
+        _timer?.Dispose(); _timer = null;
+        _isRunning = false; _phase = "idle"; _phaseTime = 0; _currentCycle = 0; _isComplete = false;
+    }
+
+    private void HandlePatternChange(string id) { _selectedPatternId = id; HandleReset(); }
+
+    public void Dispose() { _timer?.Dispose(); }
+}

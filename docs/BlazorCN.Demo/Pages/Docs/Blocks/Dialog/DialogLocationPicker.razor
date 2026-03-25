@@ -1,0 +1,253 @@
+@* ========================================
+   Block: dialog-location-picker
+   Title: Dialog Location Picker
+   Description: Location picker dialog with address search, interactive map placeholder, coordinates display, and recent locations
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCheckCn, LucideClockCn, LucideCopyCn, LucideCrosshairCn, LucideMapPinCn, LucideNavigationCn, LucideSearchCn, LucideStarCn, ScrollAreaCn, SeparatorCn
+   Source: original/blocks/dialog/dialog-location-picker.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideMapPinCn Class="mr-2 h-4 w-4" Size="16" />
+                Select Location
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-lg">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideMapPinCn Class="h-5 w-5" Size="20" />
+                Select Location
+            </DialogTitleCn>
+            <DialogDescriptionCn>Search for an address or select from saved locations.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            <div class="relative">
+                <LucideSearchCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                <InputCn Class="pl-9" Placeholder="Search address or place..."
+                         Value="@_search" ValueChanged="HandleSearchChange" @onfocus="HandleSearchFocus" />
+                @if (_showSuggestions && GetFilteredSuggestions().Any())
+                {
+                    <div class="absolute top-full left-0 right-0 z-10 mt-1 rounded-md border bg-popover shadow-md">
+                        @foreach (var location in GetFilteredSuggestions())
+                        {
+                            <button type="button" class="w-full flex items-start gap-3 p-3 hover:bg-muted text-left"
+                                    @onclick="@(() => HandleSelectLocation(location))">
+                                <LucideMapPinCn Class="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" Size="16" />
+                                <div>
+                                    <p class="text-sm font-medium">@location.Name</p>
+                                    <p class="text-xs text-muted-foreground">@location.Address</p>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <ButtonCn Class="w-full" Disabled="@_isLocating" Variant="ButtonVariant.Outline" @onclick="HandleUseCurrentLocation">
+                <LucideCrosshairCn Class="@Cn.Merge("mr-2 h-4 w-4", _isLocating ? "animate-pulse" : "")" Size="16" />
+                @(_isLocating ? "Detecting location..." : "Use current location")
+            </ButtonCn>
+
+            <div class="relative h-32 rounded-lg border-2 border-dashed bg-muted/30 overflow-hidden">
+                <div class="absolute inset-0 flex items-center justify-center">
+                    @if (_selectedLocation is not null)
+                    {
+                        <div class="text-center">
+                            <LucideMapPinCn Class="h-8 w-8 text-primary mx-auto mb-1" Size="32" />
+                            <p class="text-xs font-medium">@_selectedLocation.Name</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center">
+                            <LucideNavigationCn Class="h-8 w-8 text-muted-foreground mx-auto mb-1" Size="32" />
+                            <p class="text-xs text-muted-foreground">Map preview</p>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 right-2">
+                    <BadgeCn Class="text-xs" Variant="BadgeVariant.Secondary">Interactive map</BadgeCn>
+                </div>
+            </div>
+
+            @if (_selectedLocation is not null)
+            {
+                <div class="rounded-lg border p-3">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-sm">@_selectedLocation.Name</p>
+                            <p class="text-xs text-muted-foreground truncate">@_selectedLocation.Address</p>
+                        </div>
+                        <ButtonCn Class="h-8 w-8 shrink-0" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" @onclick="HandleCopyCoordinates">
+                            @if (_copied)
+                            {
+                                <LucideCheckCn Class="h-4 w-4 text-primary" Size="16" />
+                            }
+                            else
+                            {
+                                <LucideCopyCn Class="h-4 w-4" Size="16" />
+                            }
+                        </ButtonCn>
+                    </div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <BadgeCn Class="text-xs font-mono" Variant="BadgeVariant.Outline">
+                            @_selectedLocation.Lat.ToString("F4", System.Globalization.CultureInfo.InvariantCulture), @_selectedLocation.Lng.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)
+                        </BadgeCn>
+                    </div>
+                </div>
+            }
+
+            <SeparatorCn />
+
+            <div class="space-y-3">
+                @if (_savedLocations.Length > 0)
+                {
+                    <div class="space-y-2">
+                        <LabelCn Class="text-xs text-muted-foreground flex items-center gap-1">
+                            <LucideStarCn Class="h-3 w-3" Size="12" />
+                            Saved Places
+                        </LabelCn>
+                        <div class="grid grid-cols-2 gap-2">
+                            @foreach (var location in _savedLocations)
+                            {
+                                <button type="button"
+                                        class="@Cn.Merge("flex items-center gap-2 p-2 rounded-lg border text-left transition-colors hover:bg-muted", _selectedLocation?.Id == location.Id ? "border-primary bg-primary/5" : "")"
+                                        @onclick="@(() => HandleSelectLocation(location))">
+                                    <LucideMapPinCn Class="h-4 w-4 text-muted-foreground shrink-0" Size="16" />
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-medium truncate">@location.Name</p>
+                                        <p class="text-xs text-muted-foreground truncate">@location.Address.Split(',')[0]</p>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (_recentLocations.Length > 0)
+                {
+                    <div class="space-y-2">
+                        <LabelCn Class="text-xs text-muted-foreground flex items-center gap-1">
+                            <LucideClockCn Class="h-3 w-3" Size="12" />
+                            Recent
+                        </LabelCn>
+                        <ScrollAreaCn Class="h-[80px]">
+                            <div class="space-y-1">
+                                @foreach (var location in _recentLocations)
+                                {
+                                    <button type="button"
+                                            class="@Cn.Merge("w-full flex items-center gap-2 p-2 rounded-lg text-left transition-colors hover:bg-muted", _selectedLocation?.Id == location.Id ? "bg-primary/5" : "")"
+                                            @onclick="@(() => HandleSelectLocation(location))">
+                                        <LucideClockCn Class="h-3 w-3 text-muted-foreground shrink-0" Size="12" />
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-sm truncate">@location.Name</p>
+                                        </div>
+                                    </button>
+                                }
+                            </div>
+                        </ScrollAreaCn>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <DialogFooterCn Class="gap-2 sm:gap-0">
+            <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">Cancel</ButtonCn>
+            <ButtonCn Disabled="@(_selectedLocation is null)" @onclick="HandleConfirm">
+                <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                Confirm Location
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private record Location(string Id, string Name, string Address, double Lat, double Lng);
+
+    private static readonly Location[] _mockSuggestions =
+    [
+        new("1", "Empire State Building", "350 5th Ave, New York, NY 10118", 40.7484, -73.9857),
+        new("2", "Central Park", "New York, NY 10022", 40.7829, -73.9654),
+        new("3", "Times Square", "Manhattan, NY 10036", 40.758, -73.9855),
+    ];
+
+    private static readonly Location[] _savedLocations =
+    [
+        new("home", "Home", "123 Main Street, Brooklyn, NY 11201", 40.6892, -73.9857),
+        new("work", "Work", "456 Park Ave, New York, NY 10022", 40.7614, -73.9776),
+    ];
+
+    private static readonly Location[] _recentLocations =
+    [
+        new("r1", "Coffee Shop", "789 Broadway, New York, NY 10003", 40.7308, -73.9973),
+        new("r2", "Gym", "321 Fitness Blvd, New York, NY 10001", 40.7501, -73.9972),
+    ];
+
+    private bool _open;
+    private string _search = "";
+    private Location? _selectedLocation;
+    private bool _showSuggestions;
+    private bool _isLocating;
+    private bool _copied;
+
+    private IEnumerable<Location> GetFilteredSuggestions() =>
+        _search.Length > 2
+            ? _mockSuggestions.Where(l =>
+                l.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                l.Address.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            : Enumerable.Empty<Location>();
+
+    private void HandleSearchFocus()
+    {
+        if (_search.Length > 2) _showSuggestions = true;
+    }
+
+    private void HandleSearchChange(string value)
+    {
+        _search = value;
+        _showSuggestions = value.Length > 2;
+    }
+
+    private void HandleSelectLocation(Location location)
+    {
+        _selectedLocation = location;
+        _search = location.Address;
+        _showSuggestions = false;
+    }
+
+    private async Task HandleUseCurrentLocation()
+    {
+        _isLocating = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _selectedLocation = new Location("current", "Current Location", "Your current location", 40.7128, -74.006);
+        _search = "Current Location";
+        _isLocating = false;
+    }
+
+    private async Task HandleCopyCoordinates()
+    {
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copied = false;
+    }
+
+    private void HandleConfirm()
+    {
+        if (_selectedLocation is not null) _open = false;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _search = "";
+        _selectedLocation = null;
+        _showSuggestions = false;
+        _copied = false;
+    }
+}

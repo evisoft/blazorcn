@@ -1,0 +1,252 @@
+@* ========================================
+   Block: dialog-search-replace
+   Title: Dialog Search Replace
+   Description: Search and replace dialog with find input, replace input, match options, occurrence count, and replace all functionality
+   Dependencies: BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCaseSensitiveCn, LucideCheckCn, LucideChevronDownCn, LucideChevronUpCn, LucideRegexCn, LucideReplaceCn, LucideSearchCn, LucideWholeWordCn, SeparatorCn, ToggleCn
+   Source: original/blocks/dialog/dialog-search-replace.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideSearchCn Class="mr-2 h-4 w-4" Size="16" />
+                Find and Replace
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideReplaceCn Class="h-5 w-5" Size="20" />
+                Find and Replace
+            </DialogTitleCn>
+            <DialogDescriptionCn>Search for text and replace it across the document.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @* Search Input *@
+            <div class="space-y-2">
+                <LabelCn For="search">Find</LabelCn>
+                <div class="relative">
+                    <LucideSearchCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                    <InputCn
+                        Class="pl-9 pr-20"
+                        Id="search"
+                        Placeholder="Search text..."
+                        Value="@_searchTerm"
+                        ValueChanged="@(v => { _searchTerm = v; CountMatches(); })" />
+                    @if (!string.IsNullOrEmpty(_searchTerm))
+                    {
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            <BadgeCn Class="text-xs" Variant="BadgeVariant.Secondary">
+                                @(_totalMatches > 0 ? $"{_currentMatch}/{_totalMatches}" : "0 results")
+                            </BadgeCn>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Replace Input *@
+            <div class="space-y-2">
+                <LabelCn For="replace">Replace with</LabelCn>
+                <div class="relative">
+                    <LucideReplaceCn Class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" Size="16" />
+                    <InputCn
+                        Class="pl-9"
+                        Id="replace"
+                        Placeholder="Replace text..."
+                        Value="@_replaceTerm"
+                        ValueChanged="@(v => _replaceTerm = v)" />
+                </div>
+            </div>
+
+            @* Search Options *@
+            <div class="flex items-center gap-2">
+                <ToggleCn
+                    aria-label="Match case"
+                    Size="ToggleSize.Sm"
+                    Pressed="_caseSensitive"
+                    PressedChanged="@(v => { _caseSensitive = v; CountMatches(); })">
+                    <LucideCaseSensitiveCn Class="h-4 w-4" Size="16" />
+                </ToggleCn>
+                <ToggleCn
+                    aria-label="Whole word"
+                    Size="ToggleSize.Sm"
+                    Pressed="_wholeWord"
+                    PressedChanged="@(v => { _wholeWord = v; CountMatches(); })">
+                    <LucideWholeWordCn Class="h-4 w-4" Size="16" />
+                </ToggleCn>
+                <ToggleCn
+                    aria-label="Use regex"
+                    Size="ToggleSize.Sm"
+                    Pressed="_useRegex"
+                    PressedChanged="@(v => { _useRegex = v; CountMatches(); })">
+                    <LucideRegexCn Class="h-4 w-4" Size="16" />
+                </ToggleCn>
+                <span class="text-xs text-muted-foreground ml-2">
+                    @if (_caseSensitive) { <text>Case sensitive</text> }
+                    @if (_caseSensitive && _wholeWord) { <text> &bull; </text> }
+                    @if (_wholeWord) { <text>Whole word</text> }
+                    @if ((_caseSensitive || _wholeWord) && _useRegex) { <text> &bull; </text> }
+                    @if (_useRegex) { <text>Regex</text> }
+                </span>
+            </div>
+
+            <SeparatorCn />
+
+            @* Navigation *@
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <ButtonCn
+                        Disabled="@(_totalMatches == 0)"
+                        @onclick="HandlePrevious"
+                        Size="ButtonSize.Icon"
+                        Variant="ButtonVariant.Outline">
+                        <LucideChevronUpCn Class="h-4 w-4" Size="16" />
+                    </ButtonCn>
+                    <ButtonCn
+                        Disabled="@(_totalMatches == 0)"
+                        @onclick="HandleNext"
+                        Size="ButtonSize.Icon"
+                        Variant="ButtonVariant.Outline">
+                        <LucideChevronDownCn Class="h-4 w-4" Size="16" />
+                    </ButtonCn>
+                    <span class="text-sm text-muted-foreground">Navigate matches</span>
+                </div>
+            </div>
+
+            @* Action Feedback *@
+            @if (_lastAction is not null)
+            {
+                <div class="flex items-center gap-2 rounded-lg border border-primary/50 p-3">
+                    <LucideCheckCn Class="h-4 w-4 text-primary" Size="16" />
+                    <span class="text-sm">@_lastAction</span>
+                </div>
+            }
+        </div>
+
+        <DialogFooterCn Class="flex-col sm:flex-row gap-2">
+            <ButtonCn Class="sm:mr-auto" @onclick="HandleClose" Variant="ButtonVariant.Outline">
+                Close
+            </ButtonCn>
+            <ButtonCn
+                Disabled="@(_totalMatches == 0 || string.IsNullOrEmpty(_replaceTerm))"
+                @onclick="HandleReplaceOne"
+                Variant="ButtonVariant.Outline">
+                Replace
+            </ButtonCn>
+            <ButtonCn Disabled="@(_totalMatches == 0 || string.IsNullOrEmpty(_replaceTerm))" @onclick="HandleReplaceAll">
+                Replace All (@_totalMatches)
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _searchTerm = "";
+    private string _replaceTerm = "";
+    private bool _caseSensitive;
+    private bool _wholeWord;
+    private bool _useRegex;
+    private int _currentMatch;
+    private int _totalMatches;
+    private string? _lastAction;
+
+    private const string SampleContent = """
+        The quick brown fox jumps over the lazy dog.
+        The Quick Brown Fox is a common pangram.
+        This fox is quick and the fox is brown.
+        Another line with fox mentioned twice: fox fox.
+        """;
+
+    private void CountMatches()
+    {
+        if (string.IsNullOrEmpty(_searchTerm))
+        {
+            _totalMatches = 0;
+            _currentMatch = 0;
+            return;
+        }
+
+        try
+        {
+            var pattern = _searchTerm;
+            if (!_useRegex)
+                pattern = System.Text.RegularExpressions.Regex.Escape(pattern);
+            if (_wholeWord)
+                pattern = $@"\b{pattern}\b";
+
+            var options = _caseSensitive
+                ? System.Text.RegularExpressions.RegexOptions.None
+                : System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+
+            var matches = System.Text.RegularExpressions.Regex.Matches(SampleContent, pattern, options);
+            var count = matches.Count;
+            _totalMatches = count;
+
+            if (count > 0 && _currentMatch == 0)
+                _currentMatch = 1;
+            else if (count == 0)
+                _currentMatch = 0;
+            else if (_currentMatch > count)
+                _currentMatch = count;
+        }
+        catch
+        {
+            _totalMatches = 0;
+            _currentMatch = 0;
+        }
+    }
+
+    private void HandleNext()
+    {
+        if (_totalMatches > 0)
+            _currentMatch = _currentMatch >= _totalMatches ? 1 : _currentMatch + 1;
+    }
+
+    private void HandlePrevious()
+    {
+        if (_totalMatches > 0)
+            _currentMatch = _currentMatch <= 1 ? _totalMatches : _currentMatch - 1;
+    }
+
+    private async Task HandleReplaceOne()
+    {
+        if (_totalMatches > 0)
+        {
+            _lastAction = "Replaced 1 occurrence";
+            _totalMatches = Math.Max(0, _totalMatches - 1);
+            if (_currentMatch > _totalMatches)
+                _currentMatch = Math.Max(1, _totalMatches);
+            StateHasChanged();
+            await Task.Delay(2000);
+            _lastAction = null;
+        }
+    }
+
+    private async Task HandleReplaceAll()
+    {
+        if (_totalMatches > 0)
+        {
+            var count = _totalMatches;
+            _lastAction = $"Replaced {count} occurrences";
+            _totalMatches = 0;
+            _currentMatch = 0;
+            StateHasChanged();
+            await Task.Delay(2000);
+            _lastAction = null;
+        }
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _searchTerm = "";
+        _replaceTerm = "";
+        _currentMatch = 0;
+        _totalMatches = 0;
+        _lastAction = null;
+    }
+}

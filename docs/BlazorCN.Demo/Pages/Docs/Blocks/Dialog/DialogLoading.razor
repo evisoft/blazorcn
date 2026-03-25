@@ -1,0 +1,230 @@
+@* ========================================
+   Block: dialog-loading
+   Title: Dialog Loading
+   Description: Loading dialog with spinner animation, progress indicator, status messages, and cancel option for long-running operations
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LucideAlertCircleCn, LucideCheckCircle2Cn, LucideDownloadCn, LucideLoader2Cn, LucideXCn, ProgressCn
+   Source: original/blocks/dialog/dialog-loading.tsx
+   ======================================== *@
+
+@implements IDisposable
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideDownloadCn Class="mr-2 h-4 w-4" Size="16" />
+                Start Operation
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                @if (_status == "loading")
+                {
+                    <LucideLoader2Cn Class="h-5 w-5 animate-spin" Size="20" />
+                    @:Processing
+                }
+                else if (_status == "success")
+                {
+                    <LucideCheckCircle2Cn Class="h-5 w-5 text-primary" Size="20" />
+                    @:Complete
+                }
+                else if (_status == "error")
+                {
+                    <LucideAlertCircleCn Class="h-5 w-5 text-destructive" Size="20" />
+                    @:Error
+                }
+                else if (_status == "cancelled")
+                {
+                    <LucideXCn Class="h-5 w-5 text-muted-foreground" Size="20" />
+                    @:Cancelled
+                }
+            </DialogTitleCn>
+            <DialogDescriptionCn>
+                @(_status switch {
+                    "loading" => "Please wait while we process your request.",
+                    "success" => "Your operation completed successfully.",
+                    "error" => "Something went wrong during the operation.",
+                    "cancelled" => "The operation was cancelled.",
+                    _ => ""
+                })
+            </DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            @if (_status == "loading")
+            {
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-muted-foreground">@CurrentMessage</span>
+                        <span class="font-medium">@(Math.Round(_progress))%</span>
+                    </div>
+                    <ProgressCn Class="h-2" Value="@_progress" />
+                </div>
+
+                <div class="flex justify-center gap-1">
+                    @for (var i = 0; i < _loadingSteps.Length - 1; i++)
+                    {
+                        var index = i;
+                        <div class="@Cn.Merge("h-1.5 w-6 rounded-full transition-colors", index <= _currentStep ? "bg-primary" : "bg-muted")"></div>
+                    }
+                </div>
+
+                <div class="flex items-center justify-center">
+                    <span class="text-xs text-muted-foreground">Elapsed: @FormatTime(_elapsedTime)</span>
+                </div>
+
+                <div class="flex justify-center">
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" @onclick="@(() => _status = "cancelled")">
+                        Cancel
+                    </ButtonCn>
+                </div>
+            }
+
+            @if (_status == "success")
+            {
+                <div class="flex flex-col items-center justify-center py-4 text-center">
+                    <div class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-primary">
+                        <LucideCheckCircle2Cn Class="h-8 w-8 text-primary" Size="32" />
+                    </div>
+                    <p class="mt-4 text-sm text-muted-foreground">Completed in @FormatTime(_elapsedTime)</p>
+                    <ButtonCn Class="mt-4" @onclick="HandleClose">Done</ButtonCn>
+                </div>
+            }
+
+            @if (_status == "error")
+            {
+                <div class="flex flex-col items-center justify-center py-4 text-center">
+                    <div class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-destructive">
+                        <LucideAlertCircleCn Class="h-8 w-8 text-destructive" Size="32" />
+                    </div>
+                    <p class="mt-4 text-sm font-medium">Operation Failed</p>
+                    <p class="mt-1 text-sm text-muted-foreground">An unexpected error occurred. Please try again.</p>
+                    <div class="mt-4 flex gap-2">
+                        <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">Close</ButtonCn>
+                        <ButtonCn @onclick="@(() => StartLoading())">Retry</ButtonCn>
+                    </div>
+                </div>
+            }
+
+            @if (_status == "cancelled")
+            {
+                <div class="flex flex-col items-center justify-center py-4 text-center">
+                    <div class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-muted">
+                        <LucideXCn Class="h-8 w-8 text-muted-foreground" Size="32" />
+                    </div>
+                    <p class="mt-4 text-sm text-muted-foreground">Operation was cancelled after @FormatTime(_elapsedTime)</p>
+                    <div class="mt-4 flex gap-2">
+                        <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">Close</ButtonCn>
+                        <ButtonCn @onclick="@(() => StartLoading())">Start Again</ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private record LoadingStep(string Message, double Progress);
+
+    private static readonly LoadingStep[] _loadingSteps =
+    [
+        new("Initializing...", 0),
+        new("Connecting to server...", 15),
+        new("Fetching data...", 30),
+        new("Processing records...", 50),
+        new("Validating results...", 70),
+        new("Finalizing...", 90),
+        new("Complete!", 100),
+    ];
+
+    private bool _open;
+    private string _status = "loading";
+    private int _currentStep;
+    private double _progress;
+    private int _elapsedTime;
+    private System.Threading.Timer? _progressTimer;
+    private System.Threading.Timer? _timeTimer;
+
+    private string CurrentMessage => _loadingSteps.ElementAtOrDefault(_currentStep)?.Message ?? "Processing...";
+
+    private bool _previousOpen;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_open && !_previousOpen)
+        {
+            StartLoading();
+        }
+        else if (!_open && _previousOpen)
+        {
+            StopTimers();
+        }
+        _previousOpen = _open;
+    }
+
+    private void StartLoading()
+    {
+        _currentStep = 0;
+        _progress = 0;
+        _elapsedTime = 0;
+        _status = "loading";
+        StopTimers();
+
+        _progressTimer = new System.Threading.Timer(_ => InvokeAsync(() =>
+        {
+            if (_status != "loading") { StopTimers(); return; }
+            if (_currentStep >= _loadingSteps.Length - 1)
+            {
+                _status = "success";
+                StopTimers();
+                StateHasChanged();
+                return;
+            }
+            _currentStep++;
+            var target = _loadingSteps[_currentStep].Progress;
+            _progress = target;
+            StateHasChanged();
+        }), null, 1200, 1200);
+
+        _timeTimer = new System.Threading.Timer(_ => InvokeAsync(() =>
+        {
+            if (_status != "loading") return;
+            _elapsedTime++;
+            StateHasChanged();
+        }), null, 1000, 1000);
+
+        StateHasChanged();
+    }
+
+    private void StopTimers()
+    {
+        _progressTimer?.Dispose();
+        _progressTimer = null;
+        _timeTimer?.Dispose();
+        _timeTimer = null;
+    }
+
+    private static string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return mins > 0 ? $"{mins}m {secs}s" : $"{secs}s";
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        StopTimers();
+        _status = "loading";
+        _currentStep = 0;
+        _progress = 0;
+        _elapsedTime = 0;
+    }
+
+    public void Dispose()
+    {
+        StopTimers();
+    }
+}

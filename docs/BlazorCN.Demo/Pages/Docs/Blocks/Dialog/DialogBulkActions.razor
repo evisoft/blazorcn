@@ -1,0 +1,158 @@
+@* ========================================
+   Block: dialog-bulk-actions
+   Title: Dialog Bulk Actions
+   Description: Bulk actions dialog with item count, action selection, progress indicator, and batch operation confirmation
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LabelCn, ProgressCn, RadioGroupCn, RadioGroupItemCn, LucideArchiveCn, LucideCheckCn, LucideDownloadCn, LucideFolderInputCn, LucideLayersCn, LucideTagCn, LucideTrash2Cn, LucideTriangleAlertCn, LucideXCn
+   Source: original/blocks/dialog/dialog-bulk-actions.tsx
+   ======================================== *@
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideLayersCn Class="mr-2 h-4 w-4" Size="16" />
+                Bulk Actions
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn Class="flex items-center gap-2">
+                <LucideLayersCn Class="h-5 w-5" Size="20" />
+                Bulk Actions
+            </DialogTitleCn>
+            <DialogDescriptionCn>Apply an action to @_selectedItems selected items.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        @if (_status == "idle")
+        {
+            <div class="space-y-4 py-4">
+                <div class="space-y-3">
+                    <LabelCn>Choose action</LabelCn>
+                    <RadioGroupCn Class="grid grid-cols-2 gap-2" Value="@_selectedAction" ValueChanged="@(v => _selectedAction = v)">
+                        @foreach (var action in _bulkActions)
+                        {
+                            var isSelected = _selectedAction == action.Id;
+                            <label for="@action.Id"
+                                   class="@Cn.Merge("flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors", isSelected ? (action.Destructive ? "border-destructive bg-destructive/5" : "border-primary bg-primary/5") : "hover:bg-muted")">
+                                <RadioGroupItemCn Id="@action.Id" Value="@action.Id" />
+                                <div>
+                                    <p class="text-sm font-medium">@action.Label</p>
+                                    <p class="text-xs text-muted-foreground">@action.Description</p>
+                                </div>
+                            </label>
+                        }
+                    </RadioGroupCn>
+                </div>
+
+                @if (CurrentAction?.Destructive == true)
+                {
+                    <p class="text-sm text-destructive flex items-center gap-2">
+                        <LucideTriangleAlertCn Class="h-4 w-4" Size="16" />
+                        This will permanently delete @_selectedItems items.
+                    </p>
+                }
+            </div>
+
+            <DialogFooterCn>
+                <ButtonCn @onclick="HandleClose" Variant="ButtonVariant.Outline">Cancel</ButtonCn>
+                <ButtonCn @onclick="HandleExecute"
+                          Variant="@(CurrentAction?.Destructive == true ? ButtonVariant.Destructive : ButtonVariant.Default)">
+                    @CurrentAction?.Label @_selectedItems Items
+                </ButtonCn>
+            </DialogFooterCn>
+        }
+
+        @if (_status == "processing")
+        {
+            <div class="py-8 space-y-6">
+                <div class="space-y-3">
+                    <ProgressCn Class="h-1.5" Value="@_progress" />
+                    <p class="text-sm text-muted-foreground text-center">
+                        Processing @_processedCount of @_selectedItems items...
+                    </p>
+                </div>
+            </div>
+        }
+
+        @if (_status == "completed")
+        {
+            <div class="py-8 space-y-6">
+                <div class="flex flex-col items-center text-center">
+                    <LucideCheckCn Class="h-10 w-10 text-primary" Size="40" />
+                    <h3 class="mt-4 text-lg font-semibold">Complete</h3>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        @_selectedItems items @(CurrentAction?.Label.ToLowerInvariant())d successfully.
+                    </p>
+                </div>
+                <DialogFooterCn Class="sm:justify-center">
+                    <ButtonCn @onclick="HandleClose">Done</ButtonCn>
+                </DialogFooterCn>
+            </div>
+        }
+
+        @if (_status == "error")
+        {
+            <div class="py-8 space-y-6">
+                <div class="flex flex-col items-center text-center">
+                    <LucideXCn Class="h-10 w-10 text-destructive" Size="40" />
+                    <h3 class="mt-4 text-lg font-semibold">Failed</h3>
+                    <p class="mt-1 text-sm text-muted-foreground">Some items could not be processed.</p>
+                </div>
+                <DialogFooterCn Class="sm:justify-center gap-2">
+                    <ButtonCn @onclick="HandleClose" Variant="ButtonVariant.Outline">Close</ButtonCn>
+                    <ButtonCn @onclick="HandleExecute">Retry</ButtonCn>
+                </DialogFooterCn>
+            </div>
+        }
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private string _selectedAction = "archive";
+    private string _status = "idle";
+    private double _progress;
+    private int _processedCount;
+    private int _selectedItems = 24;
+
+    private record BulkAction(string Id, string Label, string Description, bool Destructive = false);
+
+    private static readonly BulkAction[] _bulkActions =
+    [
+        new("archive", "Archive", "Move to archive"),
+        new("export", "Export", "Download as file"),
+        new("move", "Move", "Move to folder"),
+        new("tag", "Tag", "Apply tags"),
+        new("duplicate", "Duplicate", "Create copies"),
+        new("delete", "Delete", "Remove permanently", true),
+    ];
+
+    private BulkAction? CurrentAction => _bulkActions.FirstOrDefault(a => a.Id == _selectedAction);
+
+    private async Task HandleExecute()
+    {
+        _status = "processing";
+        _progress = 0;
+        _processedCount = 0;
+        StateHasChanged();
+
+        for (var i = 1; i <= _selectedItems; i++)
+        {
+            await Task.Delay(80);
+            _progress = (double)i / _selectedItems * 100;
+            _processedCount = i;
+            StateHasChanged();
+        }
+
+        _status = "completed";
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _status = "idle";
+        _progress = 0;
+        _processedCount = 0;
+    }
+}

@@ -1,0 +1,109 @@
+@* ========================================
+   Block: dialog-rate-limit
+   Title: Dialog Rate Limit
+   Description: Rate limit warning dialog with countdown timer, request quota display, upgrade prompt, and retry functionality
+   Dependencies: ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, LucideClockCn, LucideLoaderCn, LucideTriangleAlertCn, ProgressCn
+   Source: original/blocks/dialog/dialog-rate-limit.tsx
+   ======================================== *@
+
+@implements IDisposable
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideTriangleAlertCn Class="mr-2 h-4 w-4" Size="16" />
+                Rate Limit
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn Class="sm:max-w-sm">
+        <DialogHeaderCn>
+            <DialogTitleCn>Rate Limit Exceeded</DialogTitleCn>
+            <DialogDescriptionCn>You've reached the request limit. Please wait.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            <div class="flex flex-col items-center justify-center py-4">
+                <LucideClockCn Class="h-8 w-8 text-muted-foreground" Size="32" />
+                <p class="mt-3 text-3xl font-bold font-mono tabular-nums">
+                    @(IsReady ? "Ready!" : FormatTime(_seconds))
+                </p>
+                <p class="text-sm text-muted-foreground mt-1">
+                    @(IsReady ? "You can retry now" : "until reset")
+                </p>
+            </div>
+
+            <div class="space-y-2">
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted-foreground">Requests used</span>
+                    <span class="font-medium">100 / 100</span>
+                </div>
+                <ProgressCn Class="h-1.5" Value="100" />
+            </div>
+        </div>
+
+        <DialogFooterCn>
+            <ButtonCn Variant="ButtonVariant.Outline" @onclick="@(() => _open = false)">Cancel</ButtonCn>
+            <ButtonCn Disabled="@(!IsReady || _isRetrying)" @onclick="HandleRetry">
+                @if (_isRetrying)
+                {
+                    <LucideLoaderCn Class="mr-2 h-4 w-4 animate-spin" Size="16" />
+                    <span>Retrying...</span>
+                }
+                else
+                {
+                    <span>Retry</span>
+                }
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private bool _open;
+    private int _seconds = 67;
+    private bool _isRetrying;
+    private System.Threading.Timer? _timer;
+
+    private bool IsReady => _seconds == 0;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _timer = new System.Threading.Timer(_ =>
+            {
+                InvokeAsync(() =>
+                {
+                    if (_open && _seconds > 0)
+                    {
+                        _seconds = Math.Max(0, _seconds - 1);
+                        StateHasChanged();
+                    }
+                });
+            }, null, 1000, 1000);
+        }
+    }
+
+    private static string FormatTime(int s)
+    {
+        var mins = s / 60;
+        var secs = s % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    private async Task HandleRetry()
+    {
+        _isRetrying = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _isRetrying = false;
+        _open = false;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

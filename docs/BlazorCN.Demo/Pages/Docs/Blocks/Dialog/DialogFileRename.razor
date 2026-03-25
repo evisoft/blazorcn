@@ -1,0 +1,172 @@
+@* ========================================
+   Block: dialog-file-rename
+   Title: Dialog File Rename
+   Description: File rename dialog with name validation, extension handling, conflict detection, and batch rename preview
+   Dependencies: AlertCn, AlertDescriptionCn, BadgeCn, ButtonCn, DialogCn, DialogContentCn, DialogDescriptionCn, DialogFooterCn, DialogHeaderCn, DialogTitleCn, DialogTriggerCn, InputCn, LabelCn, LucideCheckCn, LucideFileCn, LucideFileTextCn, LucideFileWarningCn, LucideInfoCn, LucideTriangleAlertCn, LucideXCn, SwitchCn
+   Source: original/blocks/dialog/dialog-file-rename.tsx
+   ======================================== *@
+
+@using System.Text.RegularExpressions
+
+<DialogCn @bind-Open="_open">
+    <div class="flex min-h-[350px] items-center justify-center">
+        <DialogTriggerCn>
+            <ButtonCn Variant="ButtonVariant.Outline">
+                <LucideFileTextCn Class="mr-2 h-4 w-4" Size="16" />
+                Rename File
+            </ButtonCn>
+        </DialogTriggerCn>
+    </div>
+    <DialogContentCn class="sm:max-w-md">
+        <DialogHeaderCn>
+            <DialogTitleCn class="flex items-center gap-2">
+                <LucideFileTextCn Class="h-5 w-5" Size="20" />
+                Rename File
+            </DialogTitleCn>
+            <DialogDescriptionCn>Enter a new name for this file.</DialogDescriptionCn>
+        </DialogHeaderCn>
+
+        <div class="space-y-4 py-4">
+            <div class="flex items-center gap-3 rounded-lg border p-3">
+                <LucideFileCn Class="h-10 w-10 text-muted-foreground shrink-0" Size="40" />
+                <div class="min-w-0 flex-1">
+                    <p class="font-medium truncate">document.pdf</p>
+                    <p class="text-sm text-muted-foreground">Original filename</p>
+                </div>
+                <BadgeCn Class="uppercase shrink-0" Variant="BadgeVariant.Secondary">pdf</BadgeCn>
+            </div>
+
+            <div class="space-y-2">
+                <LabelCn For="filename">New filename</LabelCn>
+                <div class="flex gap-2">
+                    <InputCn Class="@Cn.Merge("flex-1", ValidationError != null ? "border-destructive focus-visible:ring-destructive" : "")"
+                             id="filename"
+                             Placeholder="Enter filename"
+                             @bind-Value="_newName" />
+                    <div class="flex items-center rounded-md border bg-muted px-3 text-sm text-muted-foreground">
+                        .@(_preserveExtension ? "pdf" : _customExtension)
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <div class="space-y-0.5">
+                    <LabelCn Class="text-sm font-normal" For="preserve-ext">
+                        Preserve extension
+                    </LabelCn>
+                    <p class="text-xs text-muted-foreground">Keep the original file extension</p>
+                </div>
+                <SwitchCn Checked="_preserveExtension" CheckedChanged="@((bool v) => _preserveExtension = v)" id="preserve-ext" />
+            </div>
+
+            @if (!_preserveExtension)
+            {
+                <div class="space-y-2">
+                    <LabelCn For="extension">New extension</LabelCn>
+                    <InputCn Class="max-w-[120px]" id="extension" Placeholder="pdf" @bind-Value="_customExtension" />
+                </div>
+            }
+
+            @if (ValidationMessage != null)
+            {
+                <AlertCn Variant="@(ValidationError != null ? AlertVariant.Destructive : AlertVariant.Default)">
+                    @if (ValidationError != null)
+                    {
+                        <LucideXCn Class="h-4 w-4" Size="16" />
+                    }
+                    else
+                    {
+                        <LucideTriangleAlertCn Class="h-4 w-4" Size="16" />
+                    }
+                    <AlertDescriptionCn>@ValidationMessage</AlertDescriptionCn>
+                </AlertCn>
+            }
+
+            @if (HasChanges && ValidationError == null)
+            {
+                <div class="rounded-lg border p-3 space-y-2">
+                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                        <LucideInfoCn Class="h-3 w-3" Size="12" />
+                        <span>Preview</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-muted-foreground line-through">document.pdf</span>
+                        <span class="text-muted-foreground">&rarr;</span>
+                        <span class="font-medium">@FullFileName</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <DialogFooterCn class="gap-2 sm:gap-0">
+            <ButtonCn Variant="ButtonVariant.Outline" @onclick="HandleClose">
+                Cancel
+            </ButtonCn>
+            <ButtonCn Disabled="@(ValidationError != null || !HasChanges)" @onclick="HandleRename">
+                <LucideCheckCn Class="mr-2 h-4 w-4" Size="16" />
+                Rename
+            </ButtonCn>
+        </DialogFooterCn>
+    </DialogContentCn>
+</DialogCn>
+
+@code {
+    private static readonly string[] _existingFiles = ["document.pdf", "report.pdf", "image.png", "photo.jpg", "data.xlsx", "notes.txt", "backup.zip"];
+    private static readonly Regex _invalidChars = new(@"[\\/:*?""<>|]");
+    private static readonly string[] _reservedNames = ["con", "prn", "aux", "nul", "com1", "lpt1"];
+
+    private bool _open;
+    private string _newName = "document";
+    private bool _preserveExtension = true;
+    private string _customExtension = "pdf";
+
+    private string CurrentExtension => _preserveExtension ? "pdf" : _customExtension;
+    private string FullFileName => $"{_newName}.{CurrentExtension}";
+
+    private bool HasChanges => _newName != "document" || CurrentExtension != "pdf";
+
+    private string? ValidationError
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_newName)) return "Filename cannot be empty";
+            if (_invalidChars.IsMatch(_newName)) return "Filename contains invalid characters: \\ / : * ? \" < > |";
+            if (_reservedNames.Contains(_newName.ToLowerInvariant())) return "This is a reserved system name";
+            if (_newName.StartsWith('.') || _newName.StartsWith(' ')) return "Filename cannot start with a dot or space";
+            if (_newName.EndsWith(' ') || _newName.EndsWith('.')) return "Filename cannot end with a space or dot";
+
+            var fullName = FullFileName;
+            if (fullName != "document.pdf" && _existingFiles.Contains(fullName.ToLowerInvariant()))
+                return $"A file named \"{fullName}\" already exists";
+
+            if (_newName == "document" && CurrentExtension == "pdf") return "The new name is the same as the original";
+
+            return null;
+        }
+    }
+
+    private string? ValidationMessage
+    {
+        get
+        {
+            if (ValidationError != null) return ValidationError;
+            if (!_preserveExtension && _customExtension != "pdf")
+                return "Changing the extension may make the file unusable";
+            return null;
+        }
+    }
+
+    private void HandleRename()
+    {
+        if (ValidationError != null) return;
+        _open = false;
+    }
+
+    private void HandleClose()
+    {
+        _open = false;
+        _newName = "document";
+        _preserveExtension = true;
+        _customExtension = "pdf";
+    }
+}
