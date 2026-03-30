@@ -246,6 +246,16 @@ function computePosition(reference, floating, options) {
         // If both overflow, keep original side
     }
 
+    // CSS transforms (and other properties) create a new containing block for
+    // fixed-positioned descendants. When that happens, position:fixed coordinates
+    // are relative to the ancestor, not the viewport. Adjust accordingly.
+    const cb = getContainingBlock(floating);
+    if (cb) {
+        const cbRect = cb.getBoundingClientRect();
+        pos.top -= cbRect.top;
+        pos.left -= cbRect.left;
+    }
+
     // Apply position using fixed positioning (relative to viewport)
     floating.style.position = 'fixed';
     floating.style.top = `${pos.top}px`;
@@ -295,6 +305,30 @@ function getOppositeSide(side) {
         case 'right': return 'left';
         default: return 'bottom';
     }
+}
+
+/**
+ * Finds the nearest ancestor that creates a containing block for fixed-positioned
+ * elements (CSS transforms, perspective, filter, etc. all trigger this).
+ * Returns null when the containing block is the viewport (normal case).
+ */
+function getContainingBlock(element) {
+    let parent = element.parentElement;
+    while (parent && parent !== document.body && parent !== document.documentElement) {
+        const s = getComputedStyle(parent);
+        if (s.transform !== 'none'
+            || (s.translate && s.translate !== 'none')
+            || (s.rotate && s.rotate !== 'none')
+            || (s.scale && s.scale !== 'none')
+            || s.perspective !== 'none'
+            || s.willChange === 'transform' || s.willChange === 'perspective'
+            || (s.filter && s.filter !== 'none')
+            || (s.backdropFilter && s.backdropFilter !== 'none')) {
+            return parent;
+        }
+        parent = parent.parentElement;
+    }
+    return null;
 }
 
 // --- Keyboard Navigation ---
