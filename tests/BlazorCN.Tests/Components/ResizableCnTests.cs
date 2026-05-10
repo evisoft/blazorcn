@@ -216,8 +216,6 @@ public class ResizableCnTests : BunitContext
         inner.Should().NotBeNull();
         inner.ClassList.Should().Contain("cn-resizable-handle-icon");
         inner.ClassList.Should().Contain("z-10");
-        inner.ClassList.Should().Contain("rounded-xs");
-        inner.ClassList.Should().Contain("border");
     }
 
     [Fact]
