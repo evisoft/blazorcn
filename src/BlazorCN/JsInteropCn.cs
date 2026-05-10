@@ -1,7 +1,26 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 
 namespace BlazorCN;
+
+/// <summary>JS interop payload for createFloating. Plain class with parameterless ctor +
+/// init-only properties so System.Text.Json can serialize it under AOT/trimming —
+/// positional records and anonymous types both lose constructor parameter names.</summary>
+internal sealed class FloatingJsOptions
+{
+    [JsonPropertyName("side")] public string Side { get; init; } = "bottom";
+    [JsonPropertyName("sideOffset")] public int SideOffset { get; init; }
+    [JsonPropertyName("align")] public string Align { get; init; } = "center";
+    [JsonPropertyName("alignOffset")] public int AlignOffset { get; init; }
+}
+
+/// <summary>JS interop payload for setupKeyboardNavigation. See <see cref="FloatingJsOptions"/> for rationale.</summary>
+internal sealed class KeyboardNavJsOptions
+{
+    [JsonPropertyName("selector")] public string Selector { get; init; } = "[data-menu-item]";
+    [JsonPropertyName("orientation")] public string Orientation { get; init; } = "vertical";
+}
 
 /// <summary>
 /// Typed wrapper for BlazorCN JavaScript interop calls.
@@ -84,12 +103,12 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         FloatingOptions options)
     {
         var module = await GetModuleAsync();
-        var jsOptions = new
+        var jsOptions = new FloatingJsOptions
         {
-            side = options.Side.ToString().ToLowerInvariant(),
-            sideOffset = options.SideOffset,
-            align = options.Align.ToString().ToLowerInvariant(),
-            alignOffset = options.AlignOffset
+            Side = options.Side.ToString().ToLowerInvariant(),
+            SideOffset = options.SideOffset,
+            Align = options.Align.ToString().ToLowerInvariant(),
+            AlignOffset = options.AlignOffset,
         };
         return await module.InvokeAsync<string>(
             "createFloating", reference, floating, id, jsOptions);
@@ -124,10 +143,10 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         string orientation = "vertical") where T : class
     {
         var module = await GetModuleAsync();
-        var jsOptions = new
+        var jsOptions = new KeyboardNavJsOptions
         {
-            selector = itemSelector,
-            orientation
+            Selector = itemSelector,
+            Orientation = orientation,
         };
         await module.InvokeVoidAsync(
             "setupKeyboardNavigation", container, id, dotnetRef, escapeMethodName, jsOptions);
