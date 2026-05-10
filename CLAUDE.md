@@ -265,3 +265,41 @@ dotnet pack src/BlazorCN/BlazorCN.csproj
 
 - `original/` — shadcn-ui source (React). The source of truth for visual design, component API, CSS variables, and Tailwind classes.
 - `oldblazor/` — MudBlazor source. Reference for Blazor component library best practices, .csproj setup, JS interop patterns, and NuGet packaging.
+
+## Gotchas
+
+### NEVER pass anonymous types or positional records to `IJSObjectReference.InvokeAsync`
+
+**Symptom:** Floating-content components (Select, Popover, DropdownMenu, ContextMenu, Menubar, HoverCard, Combobox, Tooltip) open at the off-screen sentinel coords (`top:-9999px; left:-9999px`) and stay there. The `try/catch` in `OnAfterRenderAsync` silently swallows the error, so there's no visible failure unless you instrument it.
+
+**Cause:** Blazor WASM AOT/trimmed builds **strip constructor parameter names**. `System.Text.Json` then refuses to serialize the JS-interop payload with:
+
+```
+NotSupportedException: ConstructorContainsNullParameterNames
+```
+
+This affects BOTH:
+- Anonymous types: `new { side, sideOffset, ... }`
+- Positional records: `record FooOptions(string Side, int SideOffset, ...)`
+
+**Fix:** Use plain classes with parameterless constructor + `[JsonPropertyName]`-attributed init properties. No constructor parameters means nothing to lose names from.
+
+```csharp
+// WRONG — anonymous type, breaks under AOT/trim
+var opts = new { side = "bottom", sideOffset = 4 };
+await module.InvokeAsync<string>("createFloating", reference, floating, id, opts);
+
+// WRONG — positional record, ALSO breaks
+internal sealed record FloatingJsOptions(string Side, int SideOffset);
+
+// RIGHT — plain class with init properties
+internal sealed class FloatingJsOptions
+{
+    [JsonPropertyName("side")] public string Side { get; init; } = "bottom";
+    [JsonPropertyName("sideOffset")] public int SideOffset { get; init; }
+}
+```
+
+The current `JsInteropCn.FloatingJsOptions` and `KeyboardNavJsOptions` are correct. **Don't "modernize" them back to records or anonymous types.**
+
+**Diagnostic technique:** Surface the exception. The default `catch` blocks in `*ContentCn.razor.cs` swallow silently. Add `Console.WriteLine($"[component] EXCEPTION: {ex.GetType().Name}: {ex.Message}")` inside the catch, deploy, repro in the browser, read the message — the `ConstructorContainsNullParameterNames` text is the giveaway. Remove the logging once fixed.
