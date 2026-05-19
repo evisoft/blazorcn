@@ -101,7 +101,9 @@ public class SelectCnTests : BunitContext
         var el = cut.Find("[data-slot='select-trigger']");
         el.ClassList.Should().Contain("cn-select-trigger");
         el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("w-fit");
+        // w-full (was w-fit) so the trigger fills its container and doesn't resize
+        // as the selected text length changes.
+        el.ClassList.Should().Contain("w-full");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-between");
         el.ClassList.Should().Contain("outline-hidden");
@@ -219,19 +221,27 @@ public class SelectCnTests : BunitContext
             }));
 
         cut.Find("[data-slot='select-item']").Click();
-        cut.Find("[data-slot='select-value']").TextContent.Trim().Should().Be("apple");
+        // Trigger displays the item's ChildContent text ("Apple"), not the raw Value ("apple").
+        // This is the whole point of having separate Value + ChildContent — the user sees
+        // "Friday" while the form-bound value is "5".
+        cut.Find("[data-slot='select-value']").TextContent.Trim().Should().Be("Apple");
     }
 
     // --- SelectContentCn ---
 
     [Fact]
-    public void SelectContent_Not_Rendered_When_Closed()
+    public void SelectContent_Hidden_When_Closed()
     {
+        // SelectContentCn now renders even when closed (so child SelectItemCn instances
+        // can register their display text), but applies the `hidden` HTML attribute to
+        // remove it from layout and the accessibility tree.
         SetupJsInterop();
         var cut = Render<SelectCn>(p => p
             .AddChildContent<SelectContentCn>(c => c
                 .AddChildContent("Body")));
-        cut.FindAll("[data-slot='select-content']").Should().BeEmpty();
+        var content = cut.Find("[data-slot='select-content']");
+        content.HasAttribute("hidden").Should().BeTrue();
+        content.GetAttribute("data-state").Should().Be("closed");
     }
 
     [Fact]
