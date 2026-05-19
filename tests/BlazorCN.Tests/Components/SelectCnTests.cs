@@ -48,10 +48,13 @@ public class SelectCnTests : BunitContext
     [Fact]
     public void Select_Has_Default_Classes()
     {
+        // Root is `block w-full` (not `inline-block`) so the Select fills its container
+        // and doesn't shrink to the selected text — the parent layout controls width.
         var cut = Render<SelectCn>(p => p.AddChildContent("Content"));
         var el = cut.Find("[data-slot='select']");
         el.ClassList.Should().Contain("relative");
-        el.ClassList.Should().Contain("inline-block");
+        el.ClassList.Should().Contain("block");
+        el.ClassList.Should().Contain("w-full");
     }
 
     [Fact]
