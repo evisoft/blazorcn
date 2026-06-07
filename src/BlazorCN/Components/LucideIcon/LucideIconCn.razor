@@ -1,0 +1,86 @@
+@namespace BlazorCN
+@inherits LucideIconBaseCn
+@using System.Diagnostics.CodeAnalysis
+
+@* Generic Lucide icon dispatcher: renders the individual Lucide{PascalName}Cn
+   component matching the kebab-case Name (e.g. Name="circle-check-big" →
+   LucideCircleCheckBigCn). Convenience wrapper so consumers can pick an icon by
+   string at runtime instead of importing each component by type.
+
+   AOT/trimming note: resolution is by reflection (Type.GetType), so a trimmer
+   rooting only from <LucideIconCn Name="x"/> usages may strip the concrete icon
+   types. For trim-safe / Native-AOT apps, reference the specific LucideXCn
+   component directly instead of this dispatcher. *@
+
+@if (_resolved is not null)
+{
+    <DynamicComponent Type="_resolved" Parameters="BuildParameters()" />
+}
+
+@code {
+    /// <summary>The kebab-case Lucide icon name, e.g. "circle-check-big", "trash-2", "linkedin".</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Type?> _cache = new();
+
+    // Lucide v1→v2 renames: accept legacy names so older markup keeps rendering.
+    private static readonly Dictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["alert-circle"] = "circle-alert",
+        ["alert-triangle"] = "triangle-alert",
+        ["alert-octagon"] = "octagon-alert",
+        ["x-circle"] = "circle-x",
+        ["check-circle"] = "circle-check",
+        ["check-circle-2"] = "circle-check-big",
+        ["x-square"] = "square-x",
+        ["check-square"] = "square-check",
+        ["plus-circle"] = "circle-plus",
+        ["minus-circle"] = "circle-minus",
+        ["pause-circle"] = "circle-pause",
+        ["play-circle"] = "circle-play",
+        ["stop-circle"] = "circle-stop",
+        ["home"] = "house",
+        ["more-horizontal"] = "ellipsis",
+        ["more-vertical"] = "ellipsis-vertical",
+        ["edit"] = "pen",
+        ["edit-2"] = "pen",
+        ["edit-3"] = "pen-line",
+    };
+
+    private Type? _resolved;
+
+    protected override void OnParametersSet()
+        => _resolved = string.IsNullOrWhiteSpace(Name) ? null : _cache.GetOrAdd(Name, Resolve);
+
+    [UnconditionalSuppressMessage("Trimming", "IL2057",
+        Justification = "Icon types live in this assembly; documented AOT/trim limitation of the by-name dispatcher.")]
+    private static Type? Resolve(string name)
+    {
+        var key = _aliases.TryGetValue(name, out var mapped) ? mapped : name;
+        var pascal = string.Concat(key
+            .Split('-', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+        return typeof(LucideIconBaseCn).Assembly.GetType($"BlazorCN.Lucide{pascal}Cn");
+    }
+
+    private Dictionary<string, object> BuildParameters()
+    {
+        var p = new Dictionary<string, object>
+        {
+            [nameof(Size)] = Size,
+            [nameof(Fill)] = Fill,
+            [nameof(Stroke)] = Stroke,
+            [nameof(StrokeWidth)] = StrokeWidth,
+        };
+        if (!string.IsNullOrEmpty(Class)) p[nameof(Class)] = Class;
+        if (!string.IsNullOrEmpty(Style)) p[nameof(Style)] = Style;
+        if (AdditionalAttributes is not null)
+        {
+            foreach (var kv in AdditionalAttributes)
+            {
+                if (kv.Value is not null) p[kv.Key] = kv.Value;
+            }
+        }
+        return p;
+    }
+}

@@ -263,6 +263,12 @@ function computePosition(reference, floating, options) {
     floating.style.margin = '0';
     floating.setAttribute('data-side', actualSide);
 
+    // Expose the reference (trigger) width so width-matching popovers (e.g. Select)
+    // can size themselves to the trigger via `min-w-[var(--cn-trigger-width)]`.
+    // Mirrors Radix's `--radix-select-trigger-width`. Recomputed on every reposition
+    // (scroll/resize) so it stays in sync. Harmless for floats that don't read it.
+    floating.style.setProperty('--cn-trigger-width', `${refRect.width}px`);
+
     return actualSide;
 }
 

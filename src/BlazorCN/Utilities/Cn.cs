@@ -98,6 +98,10 @@ public static partial class Cn
             return "justify";
         if (ItemsRegex().IsMatch(baseClass))
             return "items";
+        if (FlexDirectionRegex().IsMatch(baseClass))
+            return "flex-direction";
+        if (FlexWrapRegex().IsMatch(baseClass))
+            return "flex-wrap";
         if (FlexRegex().IsMatch(baseClass))
             return "flex";
         if (GridColsRegex().IsMatch(baseClass))
@@ -169,7 +173,13 @@ public static partial class Cn
     [GeneratedRegex(@"^items-.+$")]
     private static partial Regex ItemsRegex();
 
-    [GeneratedRegex(@"^flex-.+$")]
+    [GeneratedRegex(@"^flex-(row|row-reverse|col|col-reverse)$")]
+    private static partial Regex FlexDirectionRegex();
+
+    [GeneratedRegex(@"^flex-(wrap|wrap-reverse|nowrap)$")]
+    private static partial Regex FlexWrapRegex();
+
+    [GeneratedRegex(@"^flex-(1|auto|initial|none|\d+)$")]
     private static partial Regex FlexRegex();
 
     [GeneratedRegex(@"^grid-cols-.+$")]

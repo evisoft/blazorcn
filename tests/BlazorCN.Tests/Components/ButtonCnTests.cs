@@ -74,7 +74,7 @@ public class ButtonCnTests : BunitContext
     {
         var clicked = false;
         var cut = Render<ButtonCn>(p => p
-            .Add(c => c.OnClick, EventCallback.Factory.Create(this, () => clicked = true))
+            .Add(c => c.OnClick, () => clicked = true)
             .AddChildContent("Click"));
         cut.Find("button").Click();
         clicked.Should().BeTrue();

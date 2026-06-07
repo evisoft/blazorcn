@@ -290,7 +290,7 @@ public class DropdownMenuCnTests : BunitContext
         var cut = Render<DropdownMenuCn>(p => p
             .Add(c => c.Open, true)
             .AddChildContent<DropdownMenuItemCn>(i => i
-                .Add(x => x.OnClick, EventCallback.Factory.Create(this, () => clicked = true))
+                .Add(x => x.OnClick, () => clicked = true)
                 .AddChildContent("Item")));
         cut.Find("[data-slot='dropdown-menu-item']").Click();
         clicked.Should().BeTrue();
@@ -304,7 +304,7 @@ public class DropdownMenuCnTests : BunitContext
             .Add(c => c.Open, true)
             .AddChildContent<DropdownMenuItemCn>(i => i
                 .Add(x => x.Disabled, true)
-                .Add(x => x.OnClick, EventCallback.Factory.Create(this, () => clicked = true))
+                .Add(x => x.OnClick, () => clicked = true)
                 .AddChildContent("Item")));
         cut.Find("[data-slot='dropdown-menu-item']").Click();
         clicked.Should().BeFalse();

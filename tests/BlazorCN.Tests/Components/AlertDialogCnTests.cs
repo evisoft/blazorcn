@@ -375,7 +375,7 @@ public class AlertDialogCnTests : BunitContext
             .Add(c => c.Open, true)
             .Add(c => c.OpenChanged, EventCallback.Factory.Create<bool>(this, v => isOpen = v))
             .AddChildContent<AlertDialogActionCn>(a => a
-                .Add(x => x.OnClick, EventCallback.Factory.Create(this, () => actionClicked = true))
+                .Add(x => x.OnClick, () => actionClicked = true)
                 .AddChildContent("Confirm")));
         cut.Find("[data-slot='alert-dialog-action']").Click();
         actionClicked.Should().BeTrue();

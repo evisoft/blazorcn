@@ -331,7 +331,7 @@ public class MenubarCnTests : BunitContext
     {
         var clicked = false;
         var cut = Render<MenubarItemCn>(p => p
-            .Add(c => c.OnClick, EventCallback.Factory.Create(this, () => clicked = true))
+            .Add(c => c.OnClick, () => clicked = true)
             .AddChildContent("Item"));
         cut.Find("[data-slot='menubar-item']").Click();
         clicked.Should().BeTrue();

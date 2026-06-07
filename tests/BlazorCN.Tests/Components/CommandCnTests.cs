@@ -65,7 +65,7 @@ public class CommandCnTests : BunitContext
         var cut = Render<CommandCn>(p => p
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Search...")));
-        cut.Find("[data-slot='command-input'] input").Should().NotBeNull();
+        cut.Find("input[data-slot='command-input']").Should().NotBeNull();
     }
 
     [Fact]
@@ -74,13 +74,8 @@ public class CommandCnTests : BunitContext
         var cut = Render<CommandCn>(p => p
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Search...")));
-        var el = cut.Find("[data-slot='command-input'] input");
+        var el = cut.Find("input[data-slot='command-input']");
         el.ClassList.Should().Contain("cn-command-input");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("h-10");
-        el.ClassList.Should().Contain("rounded-md");
-        el.ClassList.Should().Contain("bg-transparent");
-        el.ClassList.Should().Contain("py-3");
         el.ClassList.Should().Contain("outline-hidden");
     }
 
@@ -90,11 +85,10 @@ public class CommandCnTests : BunitContext
         var cut = Render<CommandCn>(p => p
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Search...")));
-        var wrapper = cut.Find("[data-slot='command-input']");
-        wrapper.ClassList.Should().Contain("flex");
-        wrapper.ClassList.Should().Contain("items-center");
-        wrapper.ClassList.Should().Contain("border-b");
-        wrapper.ClassList.Should().Contain("px-3");
+        var wrapper = cut.Find("[data-slot='command-input-wrapper']");
+        wrapper.ClassList.Should().Contain("cn-command-input-wrapper");
+        var group = cut.Find(".cn-command-input-group");
+        group.ClassList.Should().Contain("cn-command-input-group");
     }
 
     [Fact]
@@ -103,7 +97,7 @@ public class CommandCnTests : BunitContext
         var cut = Render<CommandCn>(p => p
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Search...")));
-        cut.FindAll("[data-slot='command-input'] svg").Should().NotBeEmpty();
+        cut.FindAll("[data-slot='command-input-wrapper'] svg").Should().NotBeEmpty();
     }
 
     [Fact]
@@ -112,7 +106,7 @@ public class CommandCnTests : BunitContext
         var cut = Render<CommandCn>(p => p
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Type a command...")));
-        cut.Find("[data-slot='command-input'] input").GetAttribute("placeholder").Should().Be("Type a command...");
+        cut.Find("input[data-slot='command-input']").GetAttribute("placeholder").Should().Be("Type a command...");
     }
 
     [Fact]
@@ -123,7 +117,7 @@ public class CommandCnTests : BunitContext
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Search...")
                 .Add(c => c.ValueChanged, EventCallback.Factory.Create<string>(this, v => inputValue = v))));
-        cut.Find("[data-slot='command-input'] input").Input("test");
+        cut.Find("input[data-slot='command-input']").Input("test");
         inputValue.Should().Be("test");
     }
 
@@ -134,7 +128,7 @@ public class CommandCnTests : BunitContext
             .AddChildContent<CommandInputCn>(i => i
                 .Add(c => c.Placeholder, "Search...")
                 .Add(c => c.Class, "custom-input")));
-        cut.Find("[data-slot='command-input'] input").ClassList.Should().Contain("custom-input");
+        cut.Find("input[data-slot='command-input']").ClassList.Should().Contain("custom-input");
     }
 
     // --- CommandListCn ---

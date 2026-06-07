@@ -245,8 +245,8 @@ public class ToastCnTests : BunitContext
         service.Show("Default toast");
 
         var toast = cut.Find("[data-slot='toast']");
-        toast.ClassList.Should().Contain("bg-background");
-        toast.ClassList.Should().Contain("text-foreground");
+        toast.ClassList.Should().Contain("cn-toast");
+        toast.GetAttribute("data-variant").Should().Be("default");
     }
 
     [Fact]
@@ -259,8 +259,8 @@ public class ToastCnTests : BunitContext
 
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("success");
-        toast.ClassList.Should().Contain("bg-green-50");
-        toast.ClassList.Should().Contain("text-green-900");
+        toast.ClassList.Should().Contain("cn-toast");
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
     }
 
     [Fact]
@@ -273,8 +273,8 @@ public class ToastCnTests : BunitContext
 
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("error");
-        toast.ClassList.Should().Contain("bg-destructive");
-        toast.ClassList.Should().Contain("text-destructive-foreground");
+        toast.ClassList.Should().Contain("cn-toast");
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
     }
 
     [Fact]
@@ -287,8 +287,8 @@ public class ToastCnTests : BunitContext
 
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("warning");
-        toast.ClassList.Should().Contain("bg-yellow-50");
-        toast.ClassList.Should().Contain("text-yellow-900");
+        toast.ClassList.Should().Contain("cn-toast");
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
     }
 
     [Fact]
@@ -301,8 +301,8 @@ public class ToastCnTests : BunitContext
 
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("info");
-        toast.ClassList.Should().Contain("bg-blue-50");
-        toast.ClassList.Should().Contain("text-blue-900");
+        toast.ClassList.Should().Contain("cn-toast");
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
     }
 
     [Fact]

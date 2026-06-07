@@ -214,8 +214,8 @@ public class ResizableCnTests : BunitContext
                 .Add(c => c.WithHandle, true)));
         var inner = cut.Find("[data-slot='resizable-handle'] > div");
         inner.Should().NotBeNull();
-        inner.ClassList.Should().Contain("cn-resizable-handle-icon");
         inner.ClassList.Should().Contain("z-10");
+        inner.ClassList.Should().Contain("bg-border");
     }
 
     [Fact]
@@ -224,7 +224,8 @@ public class ResizableCnTests : BunitContext
         var cut = Render<ResizablePanelGroupCn>(p => p
             .AddChildContent<ResizableHandleCn>(h => h
                 .Add(c => c.WithHandle, true)));
-        cut.Find("[data-slot='resizable-handle'] svg").Should().NotBeNull();
+        // Grip is now a plain bar (matches shadcn radix-example), not a dotted SVG.
+        cut.FindAll("[data-slot='resizable-handle'] svg").Should().BeEmpty();
     }
 
     [Fact]
