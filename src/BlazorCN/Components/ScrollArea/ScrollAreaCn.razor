@@ -1,11 +1,13 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IAsyncDisposable
 
-<div class="@Cn.Merge("relative overflow-hidden", Class)"
+<div @ref="_rootRef"
+     class="@Cn.Merge("relative overflow-hidden", Class)"
      style="@Style"
      data-slot="scroll-area"
      @attributes="AdditionalAttributes">
-    <div class="@ViewportClasses">
+    <div class="@ViewportClasses" data-slot="scroll-area-viewport">
         @ChildContent
     </div>
     @if (Orientation is ScrollOrientation.Vertical or ScrollOrientation.Both)
@@ -21,14 +23,48 @@
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public ScrollOrientation Orientation { get; set; } = ScrollOrientation.Vertical;
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _rootRef;
+    private readonly string _id = $"scroll-area-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
 
     private const string ViewportFocusClasses = "transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1";
 
     private string ViewportClasses => Orientation switch
     {
-        ScrollOrientation.Vertical => $"h-full w-full rounded-[inherit] overflow-y-auto overflow-x-hidden {ViewportFocusClasses}",
-        ScrollOrientation.Horizontal => $"h-full w-full rounded-[inherit] overflow-x-auto overflow-y-hidden {ViewportFocusClasses}",
-        ScrollOrientation.Both => $"h-full w-full rounded-[inherit] overflow-auto {ViewportFocusClasses}",
-        _ => $"h-full w-full rounded-[inherit] overflow-y-auto overflow-x-hidden {ViewportFocusClasses}"
+        ScrollOrientation.Vertical => $"cn-scroll-area-viewport h-full w-full rounded-[inherit] overflow-y-auto overflow-x-hidden {ViewportFocusClasses}",
+        ScrollOrientation.Horizontal => $"cn-scroll-area-viewport h-full w-full rounded-[inherit] overflow-x-auto overflow-y-hidden {ViewportFocusClasses}",
+        ScrollOrientation.Both => $"cn-scroll-area-viewport h-full w-full rounded-[inherit] overflow-auto {ViewportFocusClasses}",
+        _ => $"cn-scroll-area-viewport h-full w-full rounded-[inherit] overflow-y-auto overflow-x-hidden {ViewportFocusClasses}"
     };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInitialized)
+        {
+            _jsInitialized = true;
+            try
+            {
+                await JsInterop.InitScrollAreaAsync(_rootRef, _id);
+            }
+            catch
+            {
+                // JS unavailable (e.g. prerender / unit tests) — degrade silently.
+                _jsInitialized = false;
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try
+            {
+                await JsInterop.DestroyScrollAreaAsync(_id);
+            }
+            catch { /* Component may be disposed after circuit */ }
+        }
+    }
 }

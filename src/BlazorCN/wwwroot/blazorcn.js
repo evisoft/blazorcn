@@ -269,7 +269,46 @@ function computePosition(reference, floating, options) {
     // (scroll/resize) so it stays in sync. Harmless for floats that don't read it.
     floating.style.setProperty('--cn-trigger-width', `${refRect.width}px`);
 
+    // Position the arrow (tooltip) on the resolved side, centered on the reference.
+    positionArrow(floating, refRect, actualSide);
+
     return actualSide;
+}
+
+/**
+ * Positions a floating element's arrow (if present) so it points at the reference,
+ * centered along the shared edge and clamped to stay within the floating box.
+ * The arrow is a square rotated 45deg, straddling the edge so its inner half is
+ * hidden behind the same-colored content and its outer corner forms the pointer.
+ * No-ops when the floating element has no arrow (only tooltips render one).
+ * @param {HTMLElement} floating
+ * @param {DOMRect} refRect - reference's viewport rect
+ * @param {string} side - resolved side (top|bottom|left|right)
+ */
+function positionArrow(floating, refRect, side) {
+    const arrow = floating.querySelector('[data-slot="tooltip-arrow"]');
+    if (!arrow) return;
+
+    const fRect = floating.getBoundingClientRect();
+    const size = arrow.offsetWidth || 10;
+    const half = size / 2;
+    const pad = 6; // keep the arrow off the rounded corners
+
+    if (side === 'top' || side === 'bottom') {
+        const refCenterX = refRect.left + refRect.width / 2;
+        let x = refCenterX - fRect.left - half;
+        x = Math.max(pad, Math.min(x, fRect.width - size - pad));
+        arrow.style.left = `${x}px`;
+        arrow.style.top = side === 'top' ? '100%' : '0px';
+        arrow.style.transform = 'translateY(-50%) rotate(45deg)';
+    } else {
+        const refCenterY = refRect.top + refRect.height / 2;
+        let y = refCenterY - fRect.top - half;
+        y = Math.max(pad, Math.min(y, fRect.height - size - pad));
+        arrow.style.top = `${y}px`;
+        arrow.style.left = side === 'left' ? '100%' : '0px';
+        arrow.style.transform = 'translateX(-50%) rotate(45deg)';
+    }
 }
 
 function calcAlignHorizontal(refRect, floatRect, align, alignOffset) {
@@ -461,6 +500,125 @@ function findPrevEnabled(items, currentIndex) {
         if (!isItemDisabled(items[idx])) return idx;
     }
     return -1;
+}
+
+// --- Scroll Area ---
+
+/** @type {Map<string, { controller: AbortController, ro: ResizeObserver }>} */
+const scrollAreaMap = new Map();
+
+/**
+ * Wires a custom scrollbar to a scroll-area: sizes/positions the thumb to reflect
+ * scroll progress, hides the bar when content doesn't overflow, and lets the user
+ * drag the thumb. The native scrollbar is hidden via CSS (.cn-scroll-area-viewport).
+ * @param {HTMLElement} root - the [data-slot="scroll-area"] element
+ * @param {string} id - unique ID for cleanup
+ */
+export function initScrollArea(root, id) {
+    if (!root) return;
+    destroyScrollArea(id);
+
+    const viewport = root.querySelector('[data-slot="scroll-area-viewport"]');
+    if (!viewport) return;
+    const bars = [...root.querySelectorAll('[data-slot="scroll-area-scrollbar"]')];
+    if (bars.length === 0) return;
+
+    const controller = new AbortController();
+
+    const update = () => {
+        for (const bar of bars) {
+            const vertical = bar.getAttribute('data-orientation') !== 'horizontal';
+            const thumb = bar.querySelector('[data-slot="scroll-area-thumb"]');
+            if (!thumb) continue;
+
+            const contentSize = vertical ? viewport.scrollHeight : viewport.scrollWidth;
+            const viewSize = vertical ? viewport.clientHeight : viewport.clientWidth;
+            const overflow = contentSize - viewSize;
+
+            // Hide the bar entirely when there's nothing to scroll.
+            if (overflow <= 1) {
+                bar.style.display = 'none';
+                continue;
+            }
+            bar.style.display = '';
+
+            const trackSize = vertical ? bar.clientHeight : bar.clientWidth;
+            const thumbSize = Math.max((viewSize / contentSize) * trackSize, 20);
+            const scrollPos = vertical ? viewport.scrollTop : viewport.scrollLeft;
+            const maxThumbOffset = trackSize - thumbSize;
+            const offset = overflow > 0 ? (scrollPos / overflow) * maxThumbOffset : 0;
+
+            thumb.style.position = 'absolute';
+            if (vertical) {
+                thumb.style.insetInline = '0';
+                thumb.style.top = `${offset}px`;
+                thumb.style.height = `${thumbSize}px`;
+            } else {
+                thumb.style.insetBlock = '0';
+                thumb.style.left = `${offset}px`;
+                thumb.style.width = `${thumbSize}px`;
+            }
+        }
+    };
+
+    // Drag-to-scroll on each thumb.
+    for (const bar of bars) {
+        const vertical = bar.getAttribute('data-orientation') !== 'horizontal';
+        const thumb = bar.querySelector('[data-slot="scroll-area-thumb"]');
+        if (!thumb) continue;
+
+        thumb.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            thumb.setPointerCapture(e.pointerId);
+
+            const startPos = vertical ? e.clientY : e.clientX;
+            const startScroll = vertical ? viewport.scrollTop : viewport.scrollLeft;
+            const trackSize = vertical ? bar.clientHeight : bar.clientWidth;
+            const contentSize = vertical ? viewport.scrollHeight : viewport.scrollWidth;
+            const viewSize = vertical ? viewport.clientHeight : viewport.clientWidth;
+            const thumbSize = Math.max((viewSize / contentSize) * trackSize, 20);
+            const maxThumbOffset = trackSize - thumbSize;
+            const overflow = contentSize - viewSize;
+
+            const onMove = (ev) => {
+                const delta = (vertical ? ev.clientY : ev.clientX) - startPos;
+                const scrollDelta = maxThumbOffset > 0 ? (delta / maxThumbOffset) * overflow : 0;
+                if (vertical) viewport.scrollTop = startScroll + scrollDelta;
+                else viewport.scrollLeft = startScroll + scrollDelta;
+            };
+            const onUp = (ev) => {
+                thumb.releasePointerCapture(ev.pointerId);
+                thumb.removeEventListener('pointermove', onMove);
+                thumb.removeEventListener('pointerup', onUp);
+            };
+            thumb.addEventListener('pointermove', onMove);
+            thumb.addEventListener('pointerup', onUp);
+        }, { signal: controller.signal });
+    }
+
+    viewport.addEventListener('scroll', update, { signal: controller.signal, passive: true });
+
+    // Recompute when the viewport or its content resizes.
+    const ro = new ResizeObserver(update);
+    ro.observe(viewport);
+    if (viewport.firstElementChild) ro.observe(viewport.firstElementChild);
+
+    update();
+    scrollAreaMap.set(id, { controller, ro });
+}
+
+/**
+ * Tears down a scroll-area's listeners and observers.
+ * @param {string} id
+ */
+export function destroyScrollArea(id) {
+    const entry = scrollAreaMap.get(id);
+    if (entry) {
+        entry.controller.abort();
+        entry.ro.disconnect();
+        scrollAreaMap.delete(id);
+    }
 }
 
 // --- Utilities ---

@@ -161,6 +161,25 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         await module.InvokeVoidAsync("cleanupKeyboardNavigation", id);
     }
 
+    /// <summary>
+    /// Wires a custom scrollbar to a scroll-area root: sizes and positions the thumb
+    /// to reflect scroll progress, hides the bar when content fits, and enables drag.
+    /// </summary>
+    public async ValueTask InitScrollAreaAsync(ElementReference root, string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("initScrollArea", root, id);
+    }
+
+    /// <summary>
+    /// Tears down a scroll-area's listeners and observers for the given ID.
+    /// </summary>
+    public async ValueTask DestroyScrollAreaAsync(string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("destroyScrollArea", id);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

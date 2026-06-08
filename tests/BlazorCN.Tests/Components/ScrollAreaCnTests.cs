@@ -1,11 +1,20 @@
 using Bunit;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
 
 public class ScrollAreaCnTests : BunitContext
 {
+    public ScrollAreaCnTests()
+    {
+        // ScrollAreaCn injects JsInteropCn and calls initScrollArea in OnAfterRenderAsync.
+        // Loose mode lets those interop calls no-op, and registering the service satisfies [Inject].
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     // --- ScrollAreaCn ---
 
     [Fact]
