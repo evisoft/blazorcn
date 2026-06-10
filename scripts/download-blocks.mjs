@@ -47,9 +47,16 @@ async function handle(item) {
   try { data = await fetchJson(item.name); }
   catch (e) { failures.push({ name: item.name, error: String(e.message || e) }); done++; return; }
 
+  const baseDir = path.resolve(ROOT, 'original');
   for (const f of data.files || []) {
     if (!f.path) continue;
-    const target = path.join(ROOT, 'original', f.path);
+    // Guard against path traversal (zip-slip): f.path comes from a remote
+    // registry — never let a "../" escape the original/ directory.
+    const target = path.resolve(baseDir, f.path);
+    if (target !== baseDir && !target.startsWith(baseDir + path.sep)) {
+      failures.push({ name: item.name, error: `unsafe path skipped: ${f.path}` });
+      continue;
+    }
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, f.content ?? '');
     written++;
