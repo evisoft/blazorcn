@@ -1,0 +1,295 @@
+@* ============================================================
+   Block: account-third-party-apps
+   Title: AccountThirdPartyApps
+   Description: A third-party app permissions manager for React and Next.js with expandable permission details, stale app warnings, revoke actions, and access level badges built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-third-party-apps.tsx
+   ============================================================ *@
+
+@{
+    var activeApps = _appData.Where(a => !_revokedIds.Contains(a.Id)).ToList();
+    var staleCount = activeApps.Count(a => a.LastAccessedDaysAgo >= StaleThresholdDays);
+    var adminApps = activeApps.Where(a => a.Permissions.Any(p => p.Level == "admin")).ToList();
+    var uniqueScopes = activeApps.SelectMany(a => a.Permissions).Select(p => p.Scope).Distinct().Count();
+}
+
+<TooltipProviderCn>
+    <section class="mx-auto w-full max-w-2xl p-4">
+        <div class="overflow-hidden rounded-lg border bg-card">
+            @* Header *@
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-sm font-medium">Authorized Applications</h2>
+                        <p class="text-xs text-muted-foreground">
+                            @activeApps.Count apps have access to your account
+                        </p>
+                    </div>
+                    @if (staleCount > 0)
+                    {
+                        <TooltipCn>
+                            <TooltipTriggerCn>
+                                <span class="flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-600">
+                                    <LucideIconCn Name="alert-triangle" Size="12" Class="h-3 w-3" />
+                                    @staleCount stale
+                                </span>
+                            </TooltipTriggerCn>
+                            <TooltipContentCn>
+                                <p class="text-xs">
+                                    @staleCount app@(staleCount > 1 ? "s" : "") not accessed in 90+ days
+                                </p>
+                            </TooltipContentCn>
+                        </TooltipCn>
+                    }
+                </div>
+                @if (adminApps.Count > 0)
+                {
+                    <p class="mt-1.5 text-[10px] text-muted-foreground">
+                        @adminApps.Count app@(adminApps.Count > 1 ? "s" : "") with admin access:
+                        @string.Join(", ", adminApps.Select(a => a.Name))
+                    </p>
+                }
+            </div>
+
+            @* App grid *@
+            @if (activeApps.Count == 0)
+            {
+                <div class="px-4 py-10 text-center">
+                    <LucideIconCn Name="shield-alert" Size="32" Class="mx-auto h-8 w-8 text-muted-foreground/30" />
+                    <p class="mt-2 text-sm text-muted-foreground">No authorized applications</p>
+                    <p class="text-xs text-muted-foreground">
+                        Apps you authorize via OAuth will appear here
+                    </p>
+                </div>
+            }
+            else
+            {
+                <div class="divide-y">
+                    @foreach (var app in activeApps)
+                    {
+                        var isStale = app.LastAccessedDaysAgo >= StaleThresholdDays;
+                        var isExpanded = _expandedId == app.Id;
+                        var isRevoking = _revokingId == app.Id;
+                        var level = HighestLevel(app.Permissions);
+
+                        <div class="@(Cn.Merge("px-4 py-3 transition-colors", isStale ? "bg-amber-500/[0.03]" : ""))">
+                            <div class="flex items-start gap-3">
+                                @* Icon *@
+                                <div class="@(Cn.Merge("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold text-white", app.Color))">
+                                    @app.Initial
+                                </div>
+
+                                @* Info *@
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium">@app.Name</span>
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="@(Cn.Merge("h-4 px-1.5 text-[10px]", _levelConfig[level].ClassName))">
+                                            @_levelConfig[level].Label
+                                        </BadgeCn>
+                                        @if (isStale)
+                                        {
+                                            <TooltipCn>
+                                                <TooltipTriggerCn>
+                                                    <span class="flex items-center gap-0.5 text-[10px] text-amber-600">
+                                                        <LucideIconCn Name="alert-triangle" Size="10" Class="h-2.5 w-2.5" />
+                                                        Stale
+                                                    </span>
+                                                </TooltipTriggerCn>
+                                                <TooltipContentCn>
+                                                    <p class="text-xs">
+                                                        Not accessed in @app.LastAccessedDaysAgo days &mdash;
+                                                        consider revoking
+                                                    </p>
+                                                </TooltipContentCn>
+                                            </TooltipCn>
+                                        }
+                                    </div>
+                                    <p class="text-xs text-muted-foreground">
+                                        by @app.Publisher &middot; @app.Permissions.Length permission@(app.Permissions.Length > 1 ? "s" : "")
+                                    </p>
+                                    <div class="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground">
+                                        <span>Authorized @app.AuthorizedDate</span>
+                                        <span>Last accessed @app.LastAccessedDate</span>
+                                    </div>
+                                </div>
+
+                                @* Actions *@
+                                <div class="flex shrink-0 items-center gap-1.5">
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 w-7 p-0" @onclick="() => HandleToggleExpand(app.Id)">
+                                        <LucideIconCn Name="chevron-down" Size="14" Class="@(Cn.Merge("h-3.5 w-3.5 text-muted-foreground transition-transform", isExpanded ? "rotate-180" : ""))" />
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs text-destructive hover:text-destructive" Disabled="@isRevoking" @onclick="() => HandleRevoke(app.Id)">
+                                        @if (isRevoking)
+                                        {
+                                            <LucideIconCn Name="loader-2" Size="12" Class="h-3 w-3 animate-spin" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="x" Size="12" Class="h-3 w-3" />
+                                        }
+                                        Revoke
+                                    </ButtonCn>
+                                </div>
+                            </div>
+
+                            @* Expanded permissions *@
+                            @if (isExpanded)
+                            {
+                                <div class="overflow-hidden">
+                                    <div class="ml-12 mt-3 rounded-md bg-muted/50 p-3">
+                                        <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Permissions
+                                        </span>
+                                        <div class="mt-2 space-y-2">
+                                            @foreach (var perm in app.Permissions)
+                                            {
+                                                <div class="flex items-start justify-between gap-3">
+                                                    <div class="min-w-0">
+                                                        <p class="font-mono text-xs text-foreground">
+                                                            @perm.Scope
+                                                        </p>
+                                                        <p class="text-[10px] text-muted-foreground">
+                                                            @perm.Description
+                                                        </p>
+                                                    </div>
+                                                    <BadgeCn Variant="BadgeVariant.Outline" Class="@(Cn.Merge("shrink-0 text-[10px]", _levelConfig[perm.Level].ClassName))">
+                                                        @_levelConfig[perm.Level].Label
+                                                    </BadgeCn>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Footer summary *@
+            @if (activeApps.Count > 0)
+            {
+                <div class="border-t px-4 py-2.5">
+                    <div class="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <div class="flex items-center gap-3">
+                            <span class="flex items-center gap-1">
+                                <LucideIconCn Name="check" Size="10" Class="h-2.5 w-2.5 text-emerald-500" />
+                                @activeApps.Count(a => a.LastAccessedDaysAgo < StaleThresholdDays) active
+                            </span>
+                            @if (staleCount > 0)
+                            {
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="alert-triangle" Size="10" Class="h-2.5 w-2.5 text-amber-500" />
+                                    @staleCount stale (90+ days)
+                                </span>
+                            }
+                        </div>
+                        <span>
+                            @uniqueScopes unique scopes granted
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+</TooltipProviderCn>
+
+@code {
+    private const int StaleThresholdDays = 90;
+
+    private record Permission(string Scope, string Description, string Level);
+
+    private record ThirdPartyApp(
+        string Id,
+        string Name,
+        string Publisher,
+        string Initial,
+        string Color,
+        Permission[] Permissions,
+        string AuthorizedDate,
+        string LastAccessedDate,
+        int LastAccessedDaysAgo);
+
+    private static readonly Dictionary<string, (string Label, string ClassName)> _levelConfig = new()
+    {
+        ["read"]  = ("Read",  "text-blue-600 border-blue-200 bg-blue-500/5"),
+        ["write"] = ("Write", "text-amber-600 border-amber-200 bg-amber-500/5"),
+        ["admin"] = ("Admin", "text-red-600 border-red-200 bg-red-500/5"),
+    };
+
+    private static readonly ThirdPartyApp[] _appData =
+    [
+        new("app-slack", "Slack Workspace Sync", "Slack Technologies", "S", "bg-purple-500",
+            [
+                new("profile:read",        "View your display name, email, and avatar",           "read"),
+                new("channels:read",       "List channels you belong to",                          "read"),
+                new("notifications:write", "Send notifications to your Slack channels",            "write"),
+                new("webhooks:manage",     "Create and delete incoming webhooks on your behalf",   "admin"),
+            ],
+            "Jan 12, 2026", "Apr 4, 2026", 1),
+
+        new("app-figma", "Figma Design Tokens", "Figma, Inc.", "F", "bg-orange-500",
+            [
+                new("tokens:read",     "Read design tokens and style variables",       "read"),
+                new("components:read", "Access component library metadata",            "read"),
+                new("tokens:write",    "Push updated token values back to Figma",      "write"),
+            ],
+            "Feb 28, 2026", "Mar 30, 2026", 6),
+
+        new("app-zapier", "Zapier Automation", "Zapier, Inc.", "Z", "bg-amber-500",
+            [
+                new("profile:read",       "View your account profile information",                 "read"),
+                new("data:read",          "Read records from your workspace tables",               "read"),
+                new("data:write",         "Create and update records in workspace tables",         "write"),
+                new("webhooks:read",      "Subscribe to event webhooks",                           "read"),
+                new("automations:admin",  "Full control over automation rules and triggers",       "admin"),
+            ],
+            "Sep 3, 2025", "Dec 18, 2025", 109),
+
+        new("app-linear", "Linear Issue Tracker", "Linear Inc.", "L", "bg-blue-500",
+            [
+                new("issues:read",  "View issues, labels, and project boards",    "read"),
+                new("issues:write", "Create and update issues on your behalf",    "write"),
+            ],
+            "Mar 15, 2026", "Apr 3, 2026", 2),
+
+        new("app-vercel", "Vercel Deploy Hook", "Vercel Inc.", "V", "bg-foreground",
+            [
+                new("deployments:read",  "View deployment status and logs",                          "read"),
+                new("deployments:write", "Trigger new deployments via webhook",                      "write"),
+                new("env:admin",         "Read and write environment variables across projects",     "admin"),
+            ],
+            "Nov 22, 2025", "Nov 30, 2025", 127),
+
+        new("app-notion", "Notion Docs Sync", "Notion Labs", "N", "bg-neutral-700",
+            [
+                new("pages:read", "Read page content and database entries", "read"),
+            ],
+            "Mar 28, 2026", "Apr 1, 2026", 4),
+    ];
+
+    private string? _expandedId;
+    private string? _revokingId;
+    private readonly HashSet<string> _revokedIds = new();
+
+    private static string HighestLevel(Permission[] permissions)
+    {
+        if (permissions.Any(p => p.Level == "admin")) return "admin";
+        if (permissions.Any(p => p.Level == "write")) return "write";
+        return "read";
+    }
+
+    private async Task HandleRevoke(string id)
+    {
+        _revokingId = id;
+        StateHasChanged();
+        await Task.Delay(800);
+        _revokedIds.Add(id);
+        _revokingId = null;
+        if (_expandedId == id) _expandedId = null;
+    }
+
+    private void HandleToggleExpand(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+}

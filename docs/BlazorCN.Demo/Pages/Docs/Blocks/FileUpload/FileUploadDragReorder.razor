@@ -1,0 +1,197 @@
+@* ============================================================
+   Block: file-upload-drag-reorder
+   Title: FileUploadDragReorder
+   Description: Uploaded file list with drag-to-reorder block for React and Next.js with grip handles, numbered order, move up/down buttons, and save order using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-drag-reorder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">File order</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">
+                Drag to reorder or use arrow buttons
+            </p>
+        </div>
+
+        @* Count *@
+        <div class="border-b px-4 py-2">
+            <span class="text-muted-foreground text-xs">@_files.Count files</span>
+        </div>
+
+        @* File list *@
+        <div>
+            @for (int i = 0; i < _files.Count; i++)
+            {
+                var idx = i;
+                var file = _files[i];
+                var isLast = idx == _files.Count - 1;
+                var isDragging = _dragIndex == idx;
+                var isDragOver = _dragOverIndex == idx && _dragIndex != idx;
+                <div
+                    draggable="true"
+                    @ondragstart="@(() => HandleDragStart(idx))"
+                    @ondragenter="@(() => HandleDragEnter(idx))"
+                    @ondragleave="HandleDragLeave"
+                    @ondragover:preventDefault="true"
+                    @ondrop="@(() => HandleDrop(idx))"
+                    @ondragend="HandleDragEnd"
+                    class="@Cn.Merge("flex items-center gap-2 px-4 py-2.5 transition-colors", isLast ? "" : "border-b", isDragging ? "opacity-40" : "", isDragOver ? "bg-muted/50" : "")"
+                >
+                    @* Grip handle *@
+                    <div class="cursor-grab text-muted-foreground/40 active:cursor-grabbing">
+                        <LucideIconCn Name="grip-vertical" Size="16" Class="size-4" />
+                    </div>
+
+                    @* Number *@
+                    <span class="w-5 shrink-0 text-center font-mono text-muted-foreground text-xs tabular-nums">
+                        @(idx + 1)
+                    </span>
+
+                    @* File info *@
+                    <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                    <div class="min-w-0 flex-1">
+                        <span class="block truncate font-medium text-sm">@file.Name</span>
+                        <span class="text-muted-foreground text-xs">@file.Size</span>
+                    </div>
+
+                    @* Move buttons *@
+                    <div class="flex shrink-0 items-center gap-0.5">
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs"
+                            Class="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                            Disabled="@(idx == 0)"
+                            OnClick="@(() => MoveUp(idx))"
+                            aria-label="@($"Move {file.Name} up")">
+                            <LucideIconCn Name="chevron-up" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs"
+                            Class="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                            Disabled="@(idx == _files.Count - 1)"
+                            OnClick="@(() => MoveDown(idx))"
+                            aria-label="@($"Move {file.Name} down")">
+                            <LucideIconCn Name="chevron-down" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Current order + Save *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <div class="min-w-0 flex-1">
+                <span class="text-muted-foreground text-xs">
+                    Order: @string.Join(" → ", System.Linq.Enumerable.Range(1, _files.Count))
+                </span>
+            </div>
+            <ButtonCn Size="ButtonSize.Sm"
+                Variant="@(_saved ? ButtonVariant.Outline : ButtonVariant.Default)"
+                Class="h-7 shrink-0 gap-1.5 text-xs"
+                OnClick="HandleSave">
+                @if (_saved)
+                {
+                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                    <span>Saved</span>
+                }
+                else
+                {
+                    <LucideIconCn Name="save" Size="12" Class="size-3" />
+                    <span>Save order</span>
+                }
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class OrderedFile
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Size { get; set; } = "";
+        public string Type { get; set; } = "";
+    }
+
+    private List<OrderedFile> _files =
+    [
+        new OrderedFile { Id = "f1", Name = "cover-photo.jpg",               Size = "2.1 MB", Type = "image/jpeg"        },
+        new OrderedFile { Id = "f2", Name = "chapter-01-introduction.pdf",   Size = "840 KB", Type = "application/pdf"   },
+        new OrderedFile { Id = "f3", Name = "chapter-02-methodology.pdf",    Size = "1.2 MB", Type = "application/pdf"   },
+        new OrderedFile { Id = "f4", Name = "chapter-03-results.pdf",        Size = "3.4 MB", Type = "application/pdf"   },
+        new OrderedFile { Id = "f5", Name = "data-appendix.xlsx",            Size = "560 KB", Type = "application/xlsx"  },
+        new OrderedFile { Id = "f6", Name = "references.pdf",                Size = "420 KB", Type = "application/pdf"   },
+        new OrderedFile { Id = "f7", Name = "back-cover.jpg",                Size = "1.8 MB", Type = "image/jpeg"        },
+    ];
+
+    private bool _saved = false;
+    private int? _dragIndex = null;
+    private int? _dragOverIndex = null;
+    private int _dragCounter = 0;
+
+    private void MoveUp(int index)
+    {
+        if (index == 0) return;
+        var temp = _files[index - 1];
+        _files[index - 1] = _files[index];
+        _files[index] = temp;
+        _saved = false;
+    }
+
+    private void MoveDown(int index)
+    {
+        if (index == _files.Count - 1) return;
+        var temp = _files[index + 1];
+        _files[index + 1] = _files[index];
+        _files[index] = temp;
+        _saved = false;
+    }
+
+    private void HandleDragStart(int index)
+    {
+        _dragIndex = index;
+    }
+
+    private void HandleDragEnter(int index)
+    {
+        _dragCounter++;
+        _dragOverIndex = index;
+    }
+
+    private void HandleDragLeave(DragEventArgs e)
+    {
+        _dragCounter--;
+        if (_dragCounter == 0)
+        {
+            _dragOverIndex = null;
+        }
+    }
+
+    private void HandleDrop(int targetIndex)
+    {
+        _dragCounter = 0;
+        if (_dragIndex == null || _dragIndex == targetIndex)
+        {
+            _dragIndex = null;
+            _dragOverIndex = null;
+            return;
+        }
+        var dragged = _files[_dragIndex.Value];
+        _files.RemoveAt(_dragIndex.Value);
+        _files.Insert(targetIndex, dragged);
+        _dragIndex = null;
+        _dragOverIndex = null;
+        _saved = false;
+    }
+
+    private void HandleDragEnd(DragEventArgs e)
+    {
+        _dragIndex = null;
+        _dragOverIndex = null;
+        _dragCounter = 0;
+    }
+
+    private void HandleSave()
+    {
+        _saved = true;
+    }
+}

@@ -1,0 +1,194 @@
+@* ============================================================
+   Block: todo-list-matrix
+   Title: TodoListMatrix
+   Description: An effort vs impact matrix todo list block for React and Next.js with four quadrants, task placement, and drag-to-move workflow built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-matrix.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Effort vs Impact Matrix</span>
+            <div class="flex items-center gap-3">
+                @foreach (var q in _quadrants)
+                {
+                    var qid = q.Id;
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", q.Dot)" />
+                        @GetTasksForQuadrant(qid).Count
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Axis labels *@
+        <div class="flex items-center justify-between border-b px-4 py-2">
+            <span class="text-muted-foreground text-xs">High Impact</span>
+            <div class="flex items-center gap-4">
+                <span class="text-muted-foreground text-xs">Low Effort</span>
+                <span class="text-muted-foreground text-xs">High Effort</span>
+            </div>
+        </div>
+
+        @* Matrix grid *@
+        <div class="grid grid-cols-1 md:grid-cols-2">
+            @for (int qi = 0; qi < _quadrants.Length; qi++)
+            {
+                var quadrant = _quadrants[qi];
+                var quadrantTasks = GetTasksForQuadrant(quadrant.Id);
+                var isRight = qi % 2 == 1;
+                var isBottom = qi >= 2;
+                var qLocal = quadrant;
+                <div class="@Cn.Merge(!isRight ? "md:border-r" : "", !isBottom ? "border-b" : "")">
+                    @* Quadrant header *@
+                    <div class="flex items-center gap-2 border-b px-3 py-2.5">
+                        <span class="@Cn.Merge("size-2 rounded-full", quadrant.Dot)" />
+                        <span class="font-medium text-xs">@quadrant.Title</span>
+                        <span class="text-muted-foreground text-[10px]">@quadrant.Description</span>
+                        <span class="ml-auto flex size-5 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground tabular-nums">
+                            @quadrantTasks.Count
+                        </span>
+                    </div>
+
+                    @* Tasks *@
+                    <div class="flex flex-col gap-1.5 p-3" style="min-height:8rem">
+                        @foreach (var task in quadrantTasks)
+                        {
+                            var taskId = task.Id;
+                            var taskEffort = task.Effort;
+                            var taskImpact = task.Impact;
+                            <div class="group flex items-center gap-2 rounded-md border bg-background px-2.5 py-1.5">
+                                <span class="min-w-0 flex-1 text-sm">@task.Text</span>
+                                <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <ButtonCn Variant="ButtonVariant.Ghost"
+                                              Size="ButtonSize.IconXs"
+                                              @onclick="@(() => MoveEffort(taskId))"
+                                              aria-label="@(taskEffort == "low" ? "Move right" : "Move left")">
+                                        @if (taskEffort == "low")
+                                        {
+                                            <LucideIconCn Name="arrow-right" Size="12" Class="size-3 text-muted-foreground" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="arrow-left" Size="12" Class="size-3 text-muted-foreground" />
+                                        }
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost"
+                                              Size="ButtonSize.IconXs"
+                                              @onclick="@(() => MoveImpact(taskId))"
+                                              aria-label="@(taskImpact == "high" ? "Move down" : "Move up")">
+                                        @if (taskImpact == "high")
+                                        {
+                                            <LucideIconCn Name="arrow-down" Size="12" Class="size-3 text-muted-foreground" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="arrow-up" Size="12" Class="size-3 text-muted-foreground" />
+                                        }
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        }
+                        @if (quadrantTasks.Count == 0)
+                        {
+                            <div class="flex flex-1 items-center justify-center">
+                                <span class="text-muted-foreground/50 text-xs">No tasks</span>
+                            </div>
+                        }
+                    </div>
+
+                    @* Add input *@
+                    <div class="flex items-center gap-1.5 border-t px-3 py-2">
+                        <InputCn Value="@_inputs[qLocal.Id]"
+                                 ValueChanged="@((string v) => { _inputs[qLocal.Id] = v; })"
+                                 @onkeydown="@((KeyboardEventArgs e) => HandleKeyDown(e, qLocal))"
+                                 Placeholder="Add task..."
+                                 Class="h-7 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0" />
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.IconXs"
+                                  @onclick="@(() => AddTask(qLocal))"
+                                  Disabled="@(string.IsNullOrWhiteSpace(_inputs[qLocal.Id]))"
+                                  aria-label="@($"Add task to {qLocal.Title}")">
+                            <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record QuadrantInfo(string Id, string Title, string Effort, string Impact, string Description, string Dot);
+    private record TaskItem(string Id, string Text, string Effort, string Impact);
+
+    private static readonly QuadrantInfo[] _quadrants =
+    [
+        new("quick-wins", "Quick Wins", "low",  "high", "Low effort, high impact",  "bg-emerald-500"),
+        new("big-bets",   "Big Bets",   "high", "high", "High effort, high impact", "bg-blue-500"),
+        new("fill-ins",   "Fill-ins",   "low",  "low",  "Low effort, low impact",   "bg-amber-500"),
+        new("avoid",      "Avoid",      "high", "low",  "High effort, low impact",  "bg-red-500"),
+    ];
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Add search to docs",       "low",  "high"),
+        new("2", "Fix mobile nav bug",        "low",  "high"),
+        new("3", "Rewrite auth system",       "high", "high"),
+        new("4", "Build analytics dashboard", "high", "high"),
+        new("5", "Update favicon",            "low",  "low"),
+        new("6", "Rename CSS variables",      "low",  "low"),
+        new("7", "Migrate to new ORM",        "high", "low"),
+        new("8", "Custom email templates",    "high", "low"),
+    ];
+
+    private Dictionary<string, string> _inputs = new()
+    {
+        ["quick-wins"] = "",
+        ["big-bets"]   = "",
+        ["fill-ins"]   = "",
+        ["avoid"]      = "",
+    };
+
+    private int _nextId = 9;
+
+    private List<TaskItem> GetTasksForQuadrant(string id) =>
+        _tasks.Where(t => GetQuadrantId(t.Effort, t.Impact) == id).ToList();
+
+    private static string GetQuadrantId(string effort, string impact)
+    {
+        if (effort == "low"  && impact == "high") return "quick-wins";
+        if (effort == "high" && impact == "high") return "big-bets";
+        if (effort == "low"  && impact == "low")  return "fill-ins";
+        return "avoid";
+    }
+
+    private void MoveEffort(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Effort = _tasks[idx].Effort == "low" ? "high" : "low" };
+    }
+
+    private void MoveImpact(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Impact = _tasks[idx].Impact == "low" ? "high" : "low" };
+    }
+
+    private void AddTask(QuadrantInfo quadrant)
+    {
+        var text = _inputs[quadrant.Id].Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        _tasks.Add(new TaskItem(_nextId.ToString(), text, quadrant.Effort, quadrant.Impact));
+        _nextId++;
+        _inputs[quadrant.Id] = "";
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e, QuadrantInfo quadrant)
+    {
+        if (e.Key == "Enter") AddTask(quadrant);
+    }
+}

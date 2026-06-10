@@ -1,0 +1,275 @@
+@* ============================================================
+   Block: music-ringtone-creator
+   Title: MusicRingtoneCreator
+   Description: A ringtone creator block for React and Next.js with track selection, start and end time sliders, waveform preview, fade toggles, output format picker, and create ringtone action built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-ringtone-creator.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="scissors" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Ringtone Creator</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                Max 30s
+            </BadgeCn>
+        </div>
+
+        @* Track selector *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">Selected Track</span>
+            <button type="button"
+                    @onclick="@(() => _showTrackList = !_showTrackList)"
+                    class="mt-1.5 flex w-full items-center gap-3 rounded-md bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted">
+                <LucideIconCn Name="music" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                <div class="min-w-0 flex-1">
+                    <span class="font-medium text-sm">@_selectedTrack.Title</span>
+                    <p class="text-muted-foreground text-xs">@_selectedTrack.Artist &middot; @FormatTime(_selectedTrack.DurationSec)</p>
+                </div>
+                <LucideIconCn Name="search" Size="14" Class="size-3.5 text-muted-foreground" />
+            </button>
+
+            @if (_showTrackList)
+            {
+                <div class="mt-2">
+                    <InputCn @bind-Value="_search" Placeholder="Search tracks..." Class="mb-2 h-8 text-xs" />
+                    <div class="space-y-0.5">
+                        @foreach (var track in FilteredTracks)
+                        {
+                            var t = track;
+                            <button type="button"
+                                    @onclick="@(() => SelectTrack(t))"
+                                    class="@Cn.Merge("flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted/50", t.Id == _selectedTrack.Id ? "bg-muted/50" : "")">
+                                <span class="font-medium text-sm">@t.Title</span>
+                                <span class="text-muted-foreground text-xs">@t.Artist</span>
+                                <span class="ml-auto font-mono text-muted-foreground text-xs">@FormatTime(t.DurationSec)</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Waveform preview *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="volume-2" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-xs">Waveform Preview</span>
+                </div>
+                <span class="font-mono text-muted-foreground text-xs tabular-nums">@FormatTime(_startTime) &ndash; @FormatTime(_endTime)</span>
+            </div>
+            <div class="flex h-16 items-end gap-px rounded-md bg-muted/30 px-2 py-2">
+                @{
+                    var maxDur = _selectedTrack.DurationSec;
+                    var startPct = maxDur > 0 ? (double)_startTime / maxDur : 0.0;
+                    var endPct   = maxDur > 0 ? (double)_endTime   / maxDur : 0.0;
+                }
+                @for (int i = 0; i < _waveformBars.Length; i++)
+                {
+                    var idx = i;
+                    var barPos = (double)idx / _waveformBars.Length;
+                    var isSelected = barPos >= startPct && barPos <= endPct;
+                    var h = _waveformBars[idx];
+                    <div class="@Cn.Merge("flex-1 rounded-sm", isSelected ? "bg-foreground" : "bg-muted-foreground/20")"
+                         style="@($"height:{h}%")"></div>
+                }
+            </div>
+        </div>
+
+        @* Time controls *@
+        <div class="grid grid-cols-2 border-b">
+            <div class="border-r px-4 py-3">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="font-medium text-muted-foreground text-xs">Start Time</span>
+                    <span class="font-mono text-xs tabular-nums">@FormatTime(_startTime)</span>
+                </div>
+                <SliderCn Value="@((double)_startTime)"
+                          ValueChanged="@((double v) => { if ((int)v < _endTime) _startTime = (int)v; })"
+                          Min="0"
+                          Max="@_selectedTrack.DurationSec"
+                          Step="1"
+                          Class="w-full" />
+            </div>
+            <div class="px-4 py-3">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="font-medium text-muted-foreground text-xs">End Time</span>
+                    <span class="font-mono text-xs tabular-nums">@FormatTime(_endTime)</span>
+                </div>
+                <SliderCn Value="@((double)_endTime)"
+                          ValueChanged="@((double v) => { if ((int)v > _startTime) _endTime = (int)v; })"
+                          Min="0"
+                          Max="@_selectedTrack.DurationSec"
+                          Step="1"
+                          Class="w-full" />
+            </div>
+        </div>
+
+        @* Fade toggles + Duration *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-4">
+                <span class="flex items-center gap-2">
+                    <SwitchCn Checked="@_fadeIn" CheckedChanged="@((bool v) => _fadeIn = v)" Id="fade-in" />
+                    <span class="text-xs">Fade in</span>
+                </span>
+                <span class="flex items-center gap-2">
+                    <SwitchCn Checked="@_fadeOut" CheckedChanged="@((bool v) => _fadeOut = v)" Id="fade-out" />
+                    <span class="text-xs">Fade out</span>
+                </span>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">Duration: @(_endTime - _startTime)s</span>
+        </div>
+
+        @* Output format *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">Output Format</span>
+            <div class="flex items-center gap-1 rounded-md bg-muted/50 p-0.5">
+                @foreach (var option in _formatOptions)
+                {
+                    var opt = option;
+                    <ButtonCn Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Sm"
+                              Class="@Cn.Merge("h-7 text-xs", _format == opt.Value ? "bg-background shadow-sm" : "text-muted-foreground")"
+                              OnClick="@(() => _format = opt.Value)">
+                        @opt.Label
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Create action *@
+        <div class="flex items-center justify-between px-4 py-3">
+            <p class="text-muted-foreground text-xs">
+                @(_endTime - _startTime)s ringtone &middot; @_format.ToUpperInvariant() &middot;
+                @(_fadeIn ? "Fade in" : "No fade in") &middot; @(_fadeOut ? "Fade out" : "No fade out")
+            </p>
+            <ButtonCn Size="ButtonSize.Sm"
+                      Class="h-7 gap-1.5 text-xs"
+                      OnClick="HandleCreate"
+                      Disabled="@(_creating || (_endTime - _startTime) < 1)">
+                @if (_created)
+                {
+                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                    <span>Created</span>
+                }
+                else if (_creating)
+                {
+                    <span>Creating...</span>
+                }
+                else
+                {
+                    <LucideIconCn Name="download" Size="12" Class="size-3" />
+                    <span>Create Ringtone</span>
+                }
+            </ButtonCn>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Track(string Id, string Title, string Artist, int DurationSec);
+    private record FormatOption(string Value, string Label, string Description);
+
+    private static readonly Track[] _tracks =
+    [
+        new("t1", "Midnight Signal", "Neon Waves",  222),
+        new("t2", "Glass Highway",   "Glass Tide",  258),
+        new("t3", "Slow Burn",       "Velvet Haze", 235),
+        new("t4", "Neon Pulse",      "Neon Waves",  228),
+        new("t5", "Crystal Clear",   "Moonlit",     209),
+    ];
+
+    private static readonly int[] _waveformBars =
+    [
+        12, 28, 45, 38, 62, 78, 55, 42, 68, 85, 72, 48, 35, 58, 92, 75, 60, 45, 82, 68,
+        55, 40, 72, 88, 65, 50, 38, 60, 78, 52, 42, 70, 85, 58, 48, 65, 80, 55, 40, 72,
+    ];
+
+    private static readonly FormatOption[] _formatOptions =
+    [
+        new("mp3", "MP3", "Universal"),
+        new("m4r", "M4R", "iPhone"),
+        new("wav", "WAV", "Lossless"),
+    ];
+
+    private Track  _selectedTrack = _tracks[0];
+    private string _search        = "";
+    private bool   _showTrackList = false;
+    private int    _startTime     = 30;
+    private int    _endTime       = 60;
+    private bool   _fadeIn        = true;
+    private bool   _fadeOut       = true;
+    private string _format        = "mp3";
+    private bool   _creating      = false;
+    private bool   _created       = false;
+
+    private System.Timers.Timer? _creatingTimer;
+    private System.Timers.Timer? _createdTimer;
+
+    private IEnumerable<Track> FilteredTracks =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _tracks
+            : _tracks.Where(t =>
+                t.Title.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                t.Artist.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private static string FormatTime(int sec)
+    {
+        var m = sec / 60;
+        var s = sec % 60;
+        return $"{m}:{s:D2}";
+    }
+
+    private void SelectTrack(Track track)
+    {
+        _selectedTrack  = track;
+        _showTrackList  = false;
+        _search         = "";
+        _startTime      = 0;
+        _endTime        = Math.Min(30, track.DurationSec);
+    }
+
+    private void HandleCreate()
+    {
+        _creating = true;
+        _created  = false;
+
+        _creatingTimer = new System.Timers.Timer(1500);
+        _creatingTimer.AutoReset = false;
+        _creatingTimer.Elapsed += async (_, _) =>
+        {
+            _creating = false;
+            _created  = true;
+            _creatingTimer?.Dispose();
+            _creatingTimer = null;
+            await InvokeAsync(StateHasChanged);
+
+            _createdTimer = new System.Timers.Timer(3000);
+            _createdTimer.AutoReset = false;
+            _createdTimer.Elapsed += async (_, _) =>
+            {
+                _created = false;
+                _createdTimer?.Dispose();
+                _createdTimer = null;
+                await InvokeAsync(StateHasChanged);
+            };
+            _createdTimer.Start();
+        };
+        _creatingTimer.Start();
+    }
+
+    public void Dispose()
+    {
+        _creatingTimer?.Stop();
+        _creatingTimer?.Dispose();
+        _createdTimer?.Stop();
+        _createdTimer?.Dispose();
+    }
+}

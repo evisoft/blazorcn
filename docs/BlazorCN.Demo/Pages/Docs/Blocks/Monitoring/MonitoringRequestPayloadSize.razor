@@ -1,0 +1,106 @@
+@* ============================================================
+   Block: monitoring-request-payload-size
+   Title: MonitoringRequestPayloadSize
+   Description: A high-granularity API monitoring dashboard tracking the distribution and trends of incoming request body sizes and outgoing response sizes.
+   Source: original/blocks/monitoring/monitoring-request-payload-size.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <div class="flex items-center justify-between border-b px-6 py-4 bg-violet-500/[0.02]">
+            <div class="flex items-center gap-3">
+                <div class="flex size-10 items-center justify-center rounded-xl bg-violet-500/10 border border-violet-500/20">
+                    <LucideIconCn Name="file-code-2" Size="20" Class="size-5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold tracking-tight">API Payload Metrics</h3>
+                    <p class="mt-0.5 text-muted-foreground text-[11px] font-semibold opacity-75">
+                        Ingress/Egress Data Distribution
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-black uppercase tracking-widest bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-400 dark:border-violet-500/20">
+                    Gzip Enabled
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x border-b">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                <div class="p-6 group hover:bg-muted/5 transition-colors">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-black text-muted-foreground uppercase tracking-widest">@s.Label</span>
+                        <LucideIconCn Name="@s.IconName" Size="14" Class="size-3.5 text-muted-foreground/40 group-hover:text-violet-500/50 transition-colors" />
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-3xl font-black tabular-nums tracking-tighter">@s.Value</span>
+                        <span class="text-muted-foreground text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+
+                    <div class="h-10 w-full mt-6">
+                        @{
+                            var trend = s.Trend;
+                            var tCount = trend.Length;
+                            var chartW = 200;
+                            var chartH = 40;
+                            var minV = trend.Min() - 1.0;
+                            var maxV = trend.Max() + 1.0;
+                            var vRange = maxV - minV == 0 ? 1.0 : maxV - minV;
+                            double TpX(int i2) => tCount <= 1 ? 0 : (double)chartW / (tCount - 1) * i2;
+                            double TpY(double v2) => chartH - (v2 - minV) / vRange * chartH;
+                            var pts = string.Join(" ", Enumerable.Range(0, tCount).Select(i2 => $"{TpX(i2):F1},{TpY(trend[i2]):F1}"));
+                            var fillPts = $"0,{chartH} " + pts + $" {chartW},{chartH}";
+                            var strokeColor = s.Status == "warning" ? "#f59e0b" : "#8b5cf6";
+                        }
+                        <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="@($"trendGrad-{s.Label}")" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stop-color="@strokeColor" stop-opacity="0.1" />
+                                    <stop offset="95%" stop-color="@strokeColor" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="@fillPts" fill="@($"url(#trendGrad-{s.Label})")" />
+                            <polyline points="@pts" fill="none" stroke="@strokeColor" stroke-width="2.5" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="px-6 py-4 bg-muted/20 flex items-center justify-between">
+            <div class="flex items-center gap-6">
+                <div class="flex flex-col">
+                    <span class="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Throughput</span>
+                    <span class="text-xs font-black">1.4 GB / hr</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Compression</span>
+                    <span class="text-xs font-black text-emerald-600">68.4% Ratio</span>
+                </div>
+            </div>
+            <button type="button" class="text-[10px] font-black uppercase tracking-widest text-violet-600 dark:text-violet-400 hover:underline">
+                Payload Audit →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, string Value, string Unit, string IconName, string Status, double[] Trend);
+
+    private static readonly double[] _payloadBase =
+    [
+        124, 132, 128, 145, 184, 212, 198, 176, 154, 168, 182, 174,
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Avg. Req Size", "174", "KB", "arrow-down", "healthy", _payloadBase),
+        new("Avg. Res Size", "842", "KB", "arrow-up", "warning", _payloadBase.Select(d => d * 5).ToArray()),
+        new("P99 Size", "4.2", "MB", "scale", "healthy", _payloadBase.Select(d => d / 40.0 + 3).ToArray()),
+    ];
+}

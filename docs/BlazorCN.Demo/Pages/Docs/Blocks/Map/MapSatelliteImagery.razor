@@ -1,0 +1,257 @@
+@* ============================================================
+   Block: map-satellite-imagery
+   Title: MapSatelliteImagery
+   Description: Interactive satellite imagery viewer map block for Next.js with location markers, imagery date selector, zoom level indicator, and comparison overlay controls using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-satellite-imagery.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="satellite" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Satellite Imagery</span>
+                <span class="text-muted-foreground text-xs">@_locations.Length locations</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                @foreach (var mode in _overlayModes)
+                {
+                    var m = mode;
+                    <button
+                        type="button"
+                        @onclick="@(() => _overlayMode = m)"
+                        class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _overlayMode == m ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >@mode</button>
+                }
+            </div>
+        </div>
+
+        @* Date Selector *@
+        <div class="flex items-center gap-2 border-b px-4 py-2.5">
+            <LucideIconCn Name="calendar" Size="14" Class="size-3.5 text-muted-foreground" />
+            <span class="font-medium text-muted-foreground text-xs">Capture date</span>
+            <div class="ml-2 flex items-center gap-1.5">
+                @foreach (var d in _captureDates)
+                {
+                    var date = d;
+                    var iconName = d.Quality == "clear" ? "sun" : "cloud";
+                    var iconClass = d.Quality == "clear" ? "size-3 text-amber-500" : d.Quality == "partial" ? "size-3 text-muted-foreground" : "size-3 text-muted-foreground/50";
+                    <button
+                        type="button"
+                        @onclick="@(() => _selectedDate = date.Id)"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors", _selectedDate == date.Id ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        <LucideIconCn Name="@iconName" Size="12" Class="@iconClass" />
+                        @date.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + Sidebar *@
+        <div class="flex">
+            @* Map placeholder *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                    @* Location markers positioned within the NYC viewport *@
+                    @foreach (var loc in _locations)
+                    {
+                        var location = loc;
+                        var dotColor = GetCategoryColor(loc.Category);
+                        var pos = GetMarkerPosition(loc.Longitude, loc.Latitude);
+                        <button
+                            type="button"
+                            class="@($"absolute flex size-5 items-center justify-center rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 {dotColor}")"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%")"
+                            @onclick="@(() => _selectedLocation = _selectedLocation == location.Id ? null : location.Id)"
+                            title="@loc.Name"
+                        >
+                            <LucideIconCn Name="map-pin" Size="10" Class="size-2.5 text-white" />
+                        </button>
+                        @if (_selectedLocation == loc.Id)
+                        {
+                            <div
+                                class="absolute z-20 w-60 rounded-md border bg-background p-3 shadow-md -translate-x-1/2"
+                                style="@($"left:{pos.X}%;top:{Math.Max(pos.Y - 2, 5)}%;margin-top:-8rem")"
+                            >
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="font-medium text-sm">@loc.Name</p>
+                                        <p class="text-muted-foreground text-xs">@loc.Category</p>
+                                    </div>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@loc.Resolution</BadgeCn>
+                                </div>
+                                <p class="mb-2 text-muted-foreground text-xs leading-relaxed">@loc.Description</p>
+                                <div class="flex items-center gap-3 border-t pt-2 text-muted-foreground text-xs">
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="cloud" Size="12" Class="size-3" />
+                                        @loc.CloudCover% cloud
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="eye" Size="12" Class="size-3" />
+                                        @loc.Sensor
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                @* Overlay badge *@
+                <div class="absolute top-3 left-3 flex items-center gap-1.5 rounded-md border bg-background/90 px-2.5 py-1.5 shadow-sm">
+                    <LucideIconCn Name="layers" Size="12" Class="size-3 text-muted-foreground" />
+                    <span class="font-medium text-xs">@_overlayMode</span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">@ActiveDate?.Date</span>
+                </div>
+            </div>
+
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-l">
+                <div class="border-b px-3 py-2">
+                    <span class="font-medium text-muted-foreground text-xs">Monitoring locations</span>
+                </div>
+                <div class="max-h-[460px] overflow-y-auto">
+                    @foreach (var (loc, index) in _locations.Select((l, i) => (l, i)))
+                    {
+                        var location = loc;
+                        var isExpanded = _expandedLocation == loc.Id;
+                        var isLast = index == _locations.Length - 1;
+                        var dotColor = GetCategoryColor(loc.Category);
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                @onclick="@(() => _expandedLocation = isExpanded ? null : location.Id)"
+                                class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+                            >
+                                <span class="@($"size-1.5 shrink-0 rounded-full {dotColor}")"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="font-medium text-xs">@loc.Name</span>
+                                    <p class="truncate text-muted-foreground text-[10px]">@loc.Sensor · @loc.Resolution</p>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="px-3 pb-3 pl-7">
+                                    <p class="mb-2 text-muted-foreground text-xs leading-relaxed">@loc.Description</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <span class="flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5 text-xs">
+                                            <LucideIconCn Name="cloud" Size="12" Class="size-3 text-muted-foreground" />
+                                            @loc.CloudCover%
+                                        </span>
+                                        <span class="rounded-md bg-muted/50 px-2 py-0.5 font-mono text-xs">@loc.Resolution</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                @foreach (var cat in _categories)
+                {
+                    var category = cat;
+                    var count = Array.FindAll(_locations, l => l.Category == category).Length;
+                    var dotColor = GetCategoryColor(category);
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@($"size-1.5 rounded-full {dotColor}")"></span>
+                        @cat (@count)
+                    </span>
+                }
+            </div>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <LucideIconCn Name="zoom-in" Size="12" Class="size-3" />
+                Zoom @_zoom&#x78;
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ImageryLocation(
+        string Id,
+        string Name,
+        string Description,
+        double Longitude,
+        double Latitude,
+        string Resolution,
+        int CloudCover,
+        string Sensor,
+        string Category
+    );
+
+    private record CaptureDate(string Id, string Date, string Label, string Quality);
+
+    private static readonly CaptureDate[] _captureDates =
+    [
+        new("d1", "2026-03-28", "Mar 28", "clear"),
+        new("d2", "2026-03-21", "Mar 21", "partial"),
+        new("d3", "2026-03-14", "Mar 14", "clear"),
+        new("d4", "2026-03-07", "Mar 7",  "cloudy"),
+        new("d5", "2026-02-28", "Feb 28", "clear"),
+    ];
+
+    private static readonly ImageryLocation[] _locations =
+    [
+        new("loc1", "Central Business District",
+            "High-density commercial zone with ongoing construction activity detected in northwest quadrant",
+            -73.9857, 40.7484, "0.5m", 3, "WorldView-3", "urban"),
+        new("loc2", "East River Waterfront",
+            "Monitoring sediment flow patterns and dock infrastructure changes since last capture",
+            -73.9712, 40.7075, "1.0m", 8, "Sentinel-2", "water"),
+        new("loc3", "Central Park Canopy",
+            "Vegetation health assessment showing NDVI changes across seasonal transition",
+            -73.9654, 40.7829, "0.5m", 5, "WorldView-3", "forest"),
+        new("loc4", "Hudson Yards Development",
+            "Tracking structural progress on Phase 2 construction. New foundation visible in latest capture",
+            -74.0005, 40.7537, "0.3m", 2, "Pleiades Neo", "urban"),
+        new("loc5", "Governors Island Agriculture",
+            "Urban farming plots monitored for crop rotation and soil moisture indicators",
+            -74.0167, 40.6892, "1.0m", 12, "Sentinel-2", "agriculture"),
+        new("loc6", "Prospect Park Reservoir",
+            "Water level and algae bloom monitoring across reservoir surface area",
+            -73.9685, 40.6602, "0.5m", 6, "WorldView-3", "water"),
+    ];
+
+    private static readonly string[] _overlayModes = ["Natural Color", "NDVI", "Thermal", "False Color"];
+
+    private static readonly string[] _categories = ["urban", "agriculture", "water", "forest"];
+
+    private string _selectedDate = "d1";
+    private string? _selectedLocation = null;
+    private string _overlayMode = "Natural Color";
+    private string? _expandedLocation = "loc1";
+    private int _zoom = 11;
+
+    private CaptureDate? ActiveDate => Array.Find(_captureDates, d => d.Id == _selectedDate);
+
+    private static string GetCategoryColor(string category) => category switch
+    {
+        "urban"       => "bg-blue-500",
+        "agriculture" => "bg-emerald-500",
+        "water"       => "bg-cyan-500",
+        "forest"      => "bg-green-600",
+        _             => "bg-muted-foreground",
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-74.04, -73.94], lat [40.65, 40.80]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.04, lonMax = -73.94;
+        const double latMin = 40.65,  latMax = 40.80;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+}

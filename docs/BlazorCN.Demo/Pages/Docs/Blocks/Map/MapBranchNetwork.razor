@@ -1,0 +1,289 @@
+@* ============================================================
+   Block: map-branch-network
+   Title: MapBranchNetwork
+   Description: Interactive bank branch and ATM network map with branch markers, ATM locations, service type badges, wait time indicators, and branch detail panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-branch-network.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="landmark" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Branch network</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length branches</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _serviceFilter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _serviceFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                @foreach (var svc in _allServices)
+                {
+                    var s = svc;
+                    <button
+                        type="button"
+                        @onclick="@(() => _serviceFilter = (_serviceFilter == s ? null : s))"
+                        class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _serviceFilter == s ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        @s
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Branches</span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var br in _filtered)
+                    {
+                        var branch = br;
+                        bool isSelected = _selectedBranch == branch.Id;
+                        <button
+                            type="button"
+                            @onclick="@(() => HandleBranchClick(branch))"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "")">
+                            <span class="@Cn.Merge("size-2 shrink-0 rounded-full", BranchTypeColor(branch.Type))"></span>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@branch.Name</span>
+                                <div class="mt-0.5 flex items-center gap-1.5">
+                                    <span class="text-[10px] text-muted-foreground">
+                                        @BranchTypeLabel(branch.Type)
+                                    </span>
+                                    <span class="text-[10px] text-muted-foreground">·</span>
+                                    <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                        <LucideIconCn Name="clock" Size="10" Class="size-2.5" />
+                                        @branch.Hours
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5">
+                                <span class="text-[10px] tabular-nums text-muted-foreground">
+                                    @branch.WaitTime
+                                </span>
+                                <span class="@Cn.Merge("size-1.5 rounded-full", WaitDotColor(branch.WaitLevel))"></span>
+                            </div>
+                        </button>
+                    }
+                </div>
+
+                @* ATM summary *@
+                <div class="border-t px-3 py-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-muted-foreground">ATMs</span>
+                        <span class="text-[10px] text-muted-foreground">
+                            @_onlineAtms/@_atms.Length online
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            @* Map placeholder — Map/MapMarker/MapPopup are React-only; rendered as a styled placeholder *@
+            <div class="relative h-[500px] flex-1 bg-muted/30 flex items-center justify-center">
+                <div class="flex flex-col items-center gap-4 text-muted-foreground">
+                    <LucideIconCn Name="map" Size="48" Class="size-12 opacity-30" />
+                    <div class="text-center">
+                        <p class="text-sm font-medium">Interactive Branch Map</p>
+                        <p class="text-xs opacity-70">Chicago · @_filtered.Length branches · @_atms.Length ATMs</p>
+                    </div>
+                    @* Branch markers legend *@
+                    <div class="flex flex-wrap items-center justify-center gap-3 mt-1">
+                        @foreach (var br in _filtered)
+                        {
+                            var branch = br;
+                            <div class="flex flex-col items-center gap-1">
+                                <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md", BranchTypeColor(branch.Type))">
+                                    <LucideIconCn Name="building" Size="14" Class="size-3.5 text-white" />
+                                </div>
+                                <span class="text-[9px]">@branch.Name.Split(' ')[0]</span>
+                            </div>
+                        }
+                    </div>
+                    @* ATM markers legend *@
+                    <div class="flex flex-wrap items-center justify-center gap-2">
+                        @foreach (var atm in _atms)
+                        {
+                            var atmItem = atm;
+                            <div class="flex flex-col items-center gap-1">
+                                <div class="@Cn.Merge("flex size-5 items-center justify-center rounded-full border border-white shadow-sm", atmItem.Status == "online" ? "bg-emerald-500" : "bg-gray-400")">
+                                    <LucideIconCn Name="wallet" Size="10" Class="size-2.5 text-white" />
+                                </div>
+                                <span class="text-[9px]">@atmItem.Name.Split(' ')[0]</span>
+                            </div>
+                        }
+                    </div>
+
+                    @* Branch popup preview *@
+                    @if (_popupBranch != null)
+                    {
+                        var pb = _popupBranch;
+                        <div class="mt-2 rounded-lg border bg-card p-3 shadow-md w-56">
+                            <div class="mb-2 flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm font-medium">@pb.Name</p>
+                                    <p class="mt-0.5 text-xs text-muted-foreground">@pb.Address</p>
+                                </div>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal">
+                                    @BranchTypeLabel(pb.Type)
+                                </BadgeCn>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Hours</span>
+                                    <span class="font-medium">@pb.Hours</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Wait time</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", WaitDotColor(pb.WaitLevel))"></span>
+                                        <span class="font-medium">@pb.WaitTime</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">In queue</span>
+                                    <span class="tabular-nums font-medium">@pb.QueueLength people</span>
+                                </div>
+                            </div>
+                            <div class="mt-2 border-t pt-2">
+                                <p class="mb-1 text-xs font-medium text-muted-foreground">Services</p>
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach (var svc in pb.Services)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">@svc</BadgeCn>
+                                    }
+                                </div>
+                            </div>
+                            <button type="button" @onclick="@(() => _popupBranch = null)" class="mt-2 text-[10px] text-muted-foreground hover:text-foreground">Close</button>
+                        </div>
+                    }
+
+                    @* ATM popup preview *@
+                    @if (_popupAtm != null)
+                    {
+                        var pa = _popupAtm;
+                        <div class="mt-2 rounded-lg border bg-card p-3 shadow-md w-44">
+                            <div class="mb-2 flex items-center justify-between">
+                                <p class="text-sm font-medium">@pa.Name</p>
+                                <span class="@Cn.Merge("size-1.5 rounded-full", pa.Status == "online" ? "bg-emerald-500" : "bg-gray-400")"></span>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Type</span>
+                                    <span class="font-medium">@pa.Type</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Status</span>
+                                    <span class="@Cn.Merge("capitalize font-medium", pa.Status == "online" ? "text-emerald-600" : "text-muted-foreground")">@pa.Status</span>
+                                </div>
+                            </div>
+                            <button type="button" @onclick="@(() => _popupAtm = null)" class="mt-2 text-[10px] text-muted-foreground hover:text-foreground">Close</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                Full service (@_branches.Count(b => b.Type == "full-service"))
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                Express (@_branches.Count(b => b.Type == "express"))
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-violet-500"></span>
+                Private (@_branches.Count(b => b.Type == "private"))
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                @_atms.Length ATMs (@_onlineAtms online)
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _selectedBranch = null;
+    private Branch? _popupBranch = null;
+    private Atm? _popupAtm = null;
+    private string? _serviceFilter = null;
+
+    private record Branch(string Id, string Name, string Type, string Address, string Hours, string WaitTime, string WaitLevel, int QueueLength, string[] Services, double Longitude, double Latitude);
+    private record Atm(string Id, string Name, string Type, string Status, double Longitude, double Latitude);
+
+    private static readonly Branch[] _branches =
+    [
+        new("b1", "Main Street Branch",    "full-service", "100 Main St, Chicago",           "9:00 AM - 5:00 PM", "5 min",            "short",    3,  ["Mortgage", "Investments", "Business", "Safe Deposit"], -87.6298, 41.8781),
+        new("b2", "Loop Financial Center", "private",      "233 S Wacker Dr, Chicago",        "8:00 AM - 6:00 PM", "By appointment",   "short",    0,  ["Private Banking", "Wealth Management", "Investments"],  -87.6359, 41.8789),
+        new("b3", "Michigan Avenue Branch","full-service", "520 N Michigan Ave, Chicago",     "9:00 AM - 5:00 PM", "15 min",           "moderate", 8,  ["Mortgage", "Business", "Safe Deposit"],                 -87.6244, 41.8912),
+        new("b4", "Lincoln Park Express",  "express",      "2401 N Clark St, Chicago",        "10:00 AM - 4:00 PM","3 min",            "short",    1,  ["Deposits", "Withdrawals", "Account Opening"],           -87.6427, 41.9265),
+        new("b5", "Wicker Park Branch",    "full-service", "1601 N Milwaukee Ave, Chicago",   "9:00 AM - 5:00 PM", "25 min",           "long",     14, ["Mortgage", "Investments", "Business"],                  -87.6694, 41.9087),
+        new("b6", "Hyde Park Branch",      "full-service", "1525 E 53rd St, Chicago",         "9:00 AM - 4:00 PM", "10 min",           "moderate", 5,  ["Mortgage", "Safe Deposit"],                             -87.5879, 41.7994),
+    ];
+
+    private static readonly Atm[] _atms =
+    [
+        new("a1", "State St ATM",       "Deposit-capable", "online",  -87.6278, 41.8819),
+        new("a2", "Ogilvie Station ATM","Walk-up",         "online",  -87.6402, 41.8827),
+        new("a3", "Lakeview ATM",       "Drive-through",   "online",  -87.6536, 41.9416),
+        new("a4", "Pilsen ATM",         "Walk-up",         "offline", -87.6563, 41.8565),
+        new("a5", "River North ATM",    "Deposit-capable", "online",  -87.6341, 41.8917),
+        new("a6", "South Loop ATM",     "Walk-up",         "online",  -87.6267, 41.8672),
+        new("a7", "Old Town ATM",       "Walk-up",         "online",  -87.6385, 41.9109),
+        new("a8", "Chinatown ATM",      "Deposit-capable", "online",  -87.6319, 41.8518),
+    ];
+
+    private static readonly string[] _allServices = ["Mortgage", "Investments", "Business", "Safe Deposit"];
+
+    private Branch[] _filtered => _serviceFilter == null
+        ? _branches
+        : _branches.Where(b => b.Services.Contains(_serviceFilter)).ToArray();
+
+    private int _onlineAtms => _atms.Count(a => a.Status == "online");
+
+    private void HandleBranchClick(Branch branch)
+    {
+        _popupBranch = _popupBranch?.Id == branch.Id ? null : branch;
+        _popupAtm = null;
+        _selectedBranch = branch.Id;
+    }
+
+    private void HandleAtmClick(Atm atm)
+    {
+        _popupAtm = _popupAtm?.Id == atm.Id ? null : atm;
+        _popupBranch = null;
+    }
+
+    private static string BranchTypeColor(string branchType) => branchType switch
+    {
+        "full-service" => "bg-blue-500",
+        "express"      => "bg-emerald-500",
+        "private"      => "bg-violet-500",
+        _              => "bg-gray-400",
+    };
+
+    private static string BranchTypeLabel(string branchType) => branchType switch
+    {
+        "full-service" => "Full Service",
+        "express"      => "Express",
+        "private"      => "Private",
+        _              => branchType,
+    };
+
+    private static string WaitDotColor(string waitLevel) => waitLevel switch
+    {
+        "short"    => "bg-emerald-500",
+        "moderate" => "bg-amber-500",
+        "long"     => "bg-red-500",
+        _          => "bg-gray-400",
+    };
+}

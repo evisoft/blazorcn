@@ -1,0 +1,441 @@
+@* ============================================================
+   Block: account-access-tokens
+   Title: AccountAccessTokens
+   Description: A personal access token management block for React and Next.js with token cards, masked key display, scope badges, usage stats, inline creation form, and copy-to-clipboard feedback built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-access-tokens.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideKeyCn Size="16" Class="text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Personal Access Tokens</h2>
+                        <p class="text-xs text-muted-foreground">
+                            @ActiveCount active · @_tokens.Count total
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs"
+                          @onclick="() => _showCreateForm = !_showCreateForm">
+                    @if (_showCreateForm)
+                    {
+                        <span>Cancel</span>
+                    }
+                    else
+                    {
+                        <LucidePlusCn Size="12" />
+                        <span>New Token</span>
+                    }
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Create Form *@
+        @if (_showCreateForm)
+        {
+            <div class="overflow-hidden">
+                <div class="border-b px-4 py-3 space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1">
+                            <span class="text-xs text-muted-foreground">Token name</span>
+                            <InputCn @bind-Value="_newName" Placeholder="e.g., CI/CD Pipeline" Class="text-sm" />
+                        </div>
+                        <div class="space-y-1">
+                            <span class="text-xs text-muted-foreground">Expiration</span>
+                            <SelectCn @bind-Value="_newExpiry">
+                                <SelectTriggerCn Class="text-sm">
+                                    <SelectValueCn />
+                                </SelectTriggerCn>
+                                <SelectContentCn>
+                                    <SelectItemCn Value="30">30 days</SelectItemCn>
+                                    <SelectItemCn Value="60">60 days</SelectItemCn>
+                                    <SelectItemCn Value="90">90 days</SelectItemCn>
+                                    <SelectItemCn Value="365">1 year</SelectItemCn>
+                                    <SelectItemCn Value="never">No expiration</SelectItemCn>
+                                </SelectContentCn>
+                            </SelectCn>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-xs text-muted-foreground">Scopes</span>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            @foreach (var scope in _allScopeDefinitions)
+                            {
+                                var scopeId = scope.Id;
+                                <span class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-muted/50"
+                                      @onclick="() => ToggleNewScope(scopeId)"
+                                      role="button"
+                                      tabindex="0">
+                                    <CheckboxCn Checked="@_newScopes.Contains(scopeId)" />
+                                    @scope.Label
+                                </span>
+                            }
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs"
+                                  Disabled="@(string.IsNullOrWhiteSpace(_newName) || _isCreating)"
+                                  @onclick="HandleCreate">
+                            @if (_isCreating)
+                            {
+                                <LucideLoader2Cn Size="12" Class="animate-spin" />
+                                <span>Generating...</span>
+                            }
+                            else
+                            {
+                                <span>Generate Token</span>
+                            }
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Token List *@
+        <div class="divide-y">
+            @foreach (var token in _tokens.ToList())
+            {
+                var isExpanded = _expandedId == token.Id;
+                var isKeyVisible = _visibleKeyId == token.Id;
+                var isCopied = _copiedId == token.Id;
+                var isRevoking = _revokingId == token.Id;
+                var config = _scopeLevelConfig[token.ScopeLevel];
+                var grantedScopes = token.Scopes.Where(s => s.Granted).ToList();
+                var tokenId = token.Id;
+
+                <div>
+                    @* Token Row *@
+                    <button type="button"
+                            @onclick="() => ToggleExpanded(tokenId)"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", token.Status == "active" ? "bg-emerald-500" : "bg-red-500")" />
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@token.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary"
+                                         Class="@Cn.Merge("h-4 px-1.5 text-[10px] font-normal", config.Bg, config.Text)">
+                                    @config.Label
+                                </BadgeCn>
+                                @if (token.Status == "expired")
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 px-1.5 text-[10px] font-normal text-red-500">
+                                        Expired
+                                    </BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                                <code class="font-mono">@token.Prefix</code>
+                                <span>·</span>
+                                <span>Last used @token.LastUsed</span>
+                                <span>·</span>
+                                <span>@token.TotalRequests requests</span>
+                            </div>
+                        </div>
+                        <LucideChevronDownCn Size="16" Class="@Cn.Merge("text-muted-foreground transition-transform duration-200", isExpanded ? "rotate-180" : "")" />
+                    </button>
+
+                    @* Expanded Detail *@
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="bg-muted/20 px-4 pb-3">
+
+                                @* Key Display *@
+                                <div class="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
+                                    <code class="flex-1 truncate font-mono text-xs text-muted-foreground">
+                                        @(isKeyVisible ? token.FullKey : token.Prefix)
+                                    </code>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-6 w-6 shrink-0 p-0"
+                                              @onclick="() => HandleToggleKey(tokenId)">
+                                        @if (isKeyVisible)
+                                        {
+                                            <LucideEyeOffCn Size="14" Class="text-muted-foreground" />
+                                        }
+                                        else
+                                        {
+                                            <LucideEyeCn Size="14" Class="text-muted-foreground" />
+                                        }
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-6 w-6 shrink-0 p-0"
+                                              @onclick="() => HandleCopy(tokenId)">
+                                        @if (isCopied)
+                                        {
+                                            <LucideCheckCn Size="14" Class="text-emerald-500" />
+                                        }
+                                        else
+                                        {
+                                            <LucideCopyCn Size="14" Class="text-muted-foreground" />
+                                        }
+                                    </ButtonCn>
+                                </div>
+
+                                @* Scopes + Stats Row *@
+                                <div class="mt-3 grid grid-cols-2 gap-3">
+
+                                    @* Scopes *@
+                                    <div>
+                                        <span class="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                            Scopes (@grantedScopes.Count)
+                                        </span>
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach (var scope in grantedScopes)
+                                            {
+                                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 px-1.5 text-[10px] font-normal">
+                                                    @scope.Id
+                                                </BadgeCn>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @* Details *@
+                                    <div>
+                                        <span class="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                            Details
+                                        </span>
+                                        <div class="space-y-1 text-xs text-muted-foreground">
+                                            <div class="flex justify-between">
+                                                <span>Created</span>
+                                                <span class="font-mono text-foreground">@token.CreatedAt</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>Expires</span>
+                                                <span class="font-mono text-foreground">@token.ExpiresAt</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>Requests</span>
+                                                <span class="font-mono tabular-nums text-foreground">@token.TotalRequests</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @* Revoke *@
+                                <div class="mt-3">
+                                    @if (isRevoking)
+                                    {
+                                        <div class="flex items-center justify-between rounded-md bg-red-500/10 px-3 py-2">
+                                            <span class="text-xs text-red-600 dark:text-red-400">
+                                                Revoke this token? Apps using it will lose access.
+                                            </span>
+                                            <div class="flex gap-1.5">
+                                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                          Class="h-6 px-2 text-xs"
+                                                          @onclick="CancelRevoke">
+                                                    Cancel
+                                                </ButtonCn>
+                                                <ButtonCn Variant="ButtonVariant.Destructive" Size="ButtonSize.Sm"
+                                                          Class="h-6 px-2 text-xs"
+                                                          @onclick="() => ConfirmRevoke(tokenId)">
+                                                    Confirm
+                                                </ButtonCn>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="h-7 gap-1.5 text-xs text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400"
+                                                  @onclick="() => HandleRevoke(tokenId)">
+                                            <LucideTrash2Cn Size="12" />
+                                            Revoke Token
+                                        </ButtonCn>
+                                    }
+                                </div>
+
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Empty State *@
+        @if (_tokens.Count == 0)
+        {
+            <div class="px-4 py-8 text-center">
+                <LucideKeyCn Size="24" Class="mx-auto text-muted-foreground/40" />
+                <p class="mt-2 text-sm text-muted-foreground">No access tokens</p>
+                <p class="text-xs text-muted-foreground">
+                    Create a token to authenticate with the API
+                </p>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private record ScopeDef(string Id, string Label);
+    private record TokenScopeInfo(string Id, string Label, bool Granted);
+    private record ScopeLevelConfig(string Label, string Dot, string Bg, string Text);
+    private record TokenInfo(
+        string Id, string Name, string Prefix, string FullKey,
+        List<TokenScopeInfo> Scopes, string ScopeLevel,
+        string CreatedAt, string LastUsed, string ExpiresAt,
+        string TotalRequests, string Status);
+
+    private static readonly ScopeDef[] _allScopeDefinitions =
+    [
+        new("read:repos",        "Read repositories"),
+        new("write:repos",       "Write repositories"),
+        new("read:profile",      "Read profile"),
+        new("write:deployments", "Write deployments"),
+        new("read:metrics",      "Read metrics"),
+        new("read:logs",         "Read logs"),
+    ];
+
+    private static readonly Dictionary<string, ScopeLevelConfig> _scopeLevelConfig = new()
+    {
+        ["read"]  = new("Read Only",    "bg-blue-500",    "bg-blue-500/10",    "text-blue-600 dark:text-blue-400"),
+        ["write"] = new("Read & Write", "bg-amber-500",   "bg-amber-500/10",   "text-amber-600 dark:text-amber-400"),
+        ["full"]  = new("Full Access",  "bg-emerald-500", "bg-emerald-500/10", "text-emerald-600 dark:text-emerald-400"),
+    };
+
+    private List<TokenInfo> _tokens =
+    [
+        new("tok_1", "CI/CD Pipeline", "sk_live_abc1...def4", "sk_live_abc1d3f8k2m9p4q7r1t6v0x3y5def4",
+            [
+                new("read:repos",        "Read repositories",   true),
+                new("write:repos",       "Write repositories",  true),
+                new("read:profile",      "Read profile",        true),
+                new("write:deployments", "Write deployments",   true),
+                new("read:metrics",      "Read metrics",        true),
+                new("read:logs",         "Read logs",           true),
+            ],
+            "full", "Jan 15, 2026", "2 hours ago", "Jul 15, 2026", "12,847", "active"),
+
+        new("tok_2", "Local Development", "sk_dev_xyz7...uvw9", "sk_dev_xyz7a2b5c8d1e4f7g0h3i6j9uvw9",
+            [
+                new("read:repos",        "Read repositories",   true),
+                new("write:repos",       "Write repositories",  false),
+                new("read:profile",      "Read profile",        true),
+                new("write:deployments", "Write deployments",   false),
+                new("read:metrics",      "Read metrics",        false),
+                new("read:logs",         "Read logs",           false),
+            ],
+            "read", "Feb 20, 2026", "5 days ago", "Never", "3,291", "active"),
+
+        new("tok_3", "Monitoring Service", "sk_live_mon3...qrs8", "sk_live_mon3k5n7p9r1s3u5w7y9a1c3qrs8",
+            [
+                new("read:repos",        "Read repositories",   false),
+                new("write:repos",       "Write repositories",  false),
+                new("read:profile",      "Read profile",        false),
+                new("write:deployments", "Write deployments",   false),
+                new("read:metrics",      "Read metrics",        true),
+                new("read:logs",         "Read logs",           true),
+            ],
+            "read", "Mar 5, 2026", "10 min ago", "Sep 5, 2026", "89,412", "active"),
+
+        new("tok_4", "Staging Environment", "sk_stg_e2f4...h8j0", "sk_stg_e2f4g6i8k0l2n4p6r8t0v2x4h8j0",
+            [
+                new("read:repos",        "Read repositories",   true),
+                new("write:repos",       "Write repositories",  true),
+                new("read:profile",      "Read profile",        false),
+                new("write:deployments", "Write deployments",   true),
+                new("read:metrics",      "Read metrics",        false),
+                new("read:logs",         "Read logs",           false),
+            ],
+            "write", "Mar 18, 2026", "1 week ago", "Jun 18, 2026", "1,203", "expired"),
+    ];
+
+    private string? _expandedId;
+    private string? _visibleKeyId;
+    private string? _copiedId;
+    private string? _revokingId;
+    private bool _showCreateForm;
+    private string _newName = "";
+    private string _newExpiry = "90";
+    private List<string> _newScopes = [];
+    private bool _isCreating;
+
+    private int ActiveCount => _tokens.Count(t => t.Status == "active");
+
+    private void ToggleExpanded(string tokenId)
+    {
+        _expandedId = _expandedId == tokenId ? null : tokenId;
+        _revokingId = null;
+    }
+
+    private async Task HandleCopy(string tokenId)
+    {
+        _copiedId = tokenId;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedId = null;
+    }
+
+    private void HandleToggleKey(string tokenId)
+    {
+        _visibleKeyId = _visibleKeyId == tokenId ? null : tokenId;
+    }
+
+    private void HandleRevoke(string tokenId)
+    {
+        _revokingId = tokenId;
+    }
+
+    private void ConfirmRevoke(string tokenId)
+    {
+        _tokens.RemoveAll(t => t.Id == tokenId);
+        _revokingId = null;
+        if (_expandedId == tokenId) _expandedId = null;
+    }
+
+    private void CancelRevoke()
+    {
+        _revokingId = null;
+    }
+
+    private void ToggleNewScope(string scopeId)
+    {
+        if (_newScopes.Contains(scopeId))
+            _newScopes.Remove(scopeId);
+        else
+            _newScopes.Add(scopeId);
+    }
+
+    private async Task HandleCreate()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        _isCreating = true;
+        StateHasChanged();
+        await Task.Delay(800);
+
+        var grantedScopes = _allScopeDefinitions
+            .Select(s => new TokenScopeInfo(s.Id, s.Label, _newScopes.Contains(s.Id)))
+            .ToList();
+        var hasWrite = _newScopes.Any(s => s.StartsWith("write:"));
+        var hasAll = _newScopes.Count == _allScopeDefinitions.Length;
+        var level = hasAll ? "full" : hasWrite ? "write" : "read";
+        var trimmedName = _newName.Trim();
+        var prefix = trimmedName.Length >= 4 ? trimmedName[..4].ToLower() : trimmedName.ToLower();
+
+        var newToken = new TokenInfo(
+            $"tok_{_tokens.Count + 1}",
+            trimmedName,
+            $"sk_new_{prefix}...gen",
+            $"sk_new_{trimmedName.Replace(" ", "").ToLower()}_generated",
+            grantedScopes,
+            level,
+            "Apr 5, 2026",
+            "Never",
+            _newExpiry == "never" ? "Never" : $"{_newExpiry} days from now",
+            "0",
+            "active"
+        );
+
+        _tokens.Insert(0, newToken);
+        _showCreateForm = false;
+        _newName = "";
+        _newExpiry = "90";
+        _newScopes = [];
+        _isCreating = false;
+    }
+}

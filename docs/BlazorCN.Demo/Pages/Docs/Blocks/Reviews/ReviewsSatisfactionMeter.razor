@@ -1,0 +1,211 @@
+@* ============================================================
+   Block: reviews-satisfaction-meter
+   Title: ReviewsSatisfactionMeter
+   Description: An animated CSAT satisfaction gauge visualization for React and Next.js with SVG arc meter, satisfaction level breakdown, trend indicator, period comparison, and response segmentation built with shadcn/ui Badge component, motion/react animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-satisfaction-meter.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Customer Satisfaction</span>
+                <div class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="users" Size="12" Class="size-3" />
+                    <span class="tabular-nums">@_period.TotalResponses.ToString("N0")</span>
+                    <span>responses</span>
+                </div>
+            </div>
+            @* Period selector *@
+            <div class="flex items-center gap-0.5 rounded-md bg-muted/50 p-0.5">
+                @foreach (var p in _periods)
+                {
+                    var pid = p.Id;
+                    <button
+                        type="button"
+                        @onclick="@(() => _activePeriod = pid)"
+                        class="@Cn.Merge("rounded px-2.5 py-1 text-xs transition-colors", _activePeriod == pid ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                        @p.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Gauge *@
+        <div class="flex flex-col items-center border-b px-4 pb-4 pt-6">
+            @* SVG Arc Gauge *@
+            <svg viewBox="0 0 200 140" class="w-full max-w-[220px]" aria-hidden="true">
+                @* Background arc *@
+                <path
+                    d="@ArcPath(-210, 30)"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="10"
+                    stroke-linecap="round"
+                    class="text-muted/50" />
+                @* Filled arc - clipped by dasharray/dashoffset *@
+                <path
+                    d="@ArcPath(-210, 30)"
+                    fill="none"
+                    stroke="@GetGaugeColor(_period.SatisfactionPercent)"
+                    stroke-width="10"
+                    stroke-linecap="round"
+                    stroke-dasharray="@_bgArcLength.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)"
+                    stroke-dashoffset="@GetDashOffset(_period.SatisfactionPercent).ToString("F4", System.Globalization.CultureInfo.InvariantCulture)" />
+                @* Tick marks *@
+                @foreach (var tick in _ticks)
+                {
+                    var tickAngle = -210.0 + (240.0 * tick) / 100.0;
+                    var rad = tickAngle * Math.PI / 180.0;
+                    var innerR = 80.0 - 16.0;
+                    @((MarkupString)$"<line x1=\"{(100 + innerR * Math.Cos(rad)).ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}\" y1=\"{(100 + innerR * Math.Sin(rad)).ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}\" x2=\"{(100 + (80.0 - 8.0) * Math.Cos(rad)).ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}\" y2=\"{(100 + (80.0 - 8.0) * Math.Sin(rad)).ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" class=\"text-muted-foreground/30\" />")
+                }
+            </svg>
+
+            <div class="-mt-4 flex flex-col items-center">
+                <div class="flex items-baseline gap-1">
+                    <span class="text-3xl font-semibold tabular-nums">@_period.SatisfactionPercent%</span>
+                </div>
+                <span class="text-xs text-muted-foreground">@GetGaugeLabel(_period.SatisfactionPercent)</span>
+
+                @* Trend delta *@
+                <div class="mt-2 flex items-center gap-1">
+                    @{
+                        var delta = _period.SatisfactionPercent - _period.PreviousPercent;
+                    }
+                    @if (delta > 0)
+                    {
+                        <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3 text-emerald-500" />
+                        <span class="text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">+@(delta)pp</span>
+                    }
+                    else if (delta < 0)
+                    {
+                        <LucideIconCn Name="arrow-down-right" Size="12" Class="size-3 text-red-500" />
+                        <span class="text-xs font-medium tabular-nums text-red-600 dark:text-red-400">@(delta)pp</span>
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="minus" Size="12" Class="size-3 text-muted-foreground" />
+                        <span class="text-xs font-medium text-muted-foreground">0pp</span>
+                    }
+                    <span class="text-[10px] text-muted-foreground">vs previous period</span>
+                </div>
+            </div>
+        </div>
+
+        @* Satisfaction level breakdown *@
+        <div class="p-4">
+            <div class="mb-3 flex items-center justify-between">
+                <span class="text-xs font-medium text-muted-foreground">Response Distribution</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                    @_period.Levels.Length levels
+                </BadgeCn>
+            </div>
+
+            <div class="space-y-3">
+                @{
+                    var maxCount = _period.Levels.Max(l => l.Count);
+                }
+                @foreach (var level in _period.Levels)
+                {
+                    var barWidth = (int)Math.Round((double)level.Count / maxCount * 100);
+                    var pct = (int)Math.Round((double)level.Count / _period.TotalResponses * 100);
+                    <div>
+                        <div class="mb-1 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", level.BgColor)"></span>
+                                <span class="text-xs">@level.Label</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="@Cn.Merge("text-xs font-medium tabular-nums", level.Color)">@(pct)%</span>
+                                <span class="w-10 text-right text-[10px] tabular-nums text-muted-foreground">@level.Count</span>
+                            </div>
+                        </div>
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
+                            <div class="@Cn.Merge("h-full rounded-full", level.BgColor)" style="@($"width:{barWidth}%")"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SatisfactionLevel(string Label, int Count, string Color, string BgColor);
+
+    private record Period(string Id, string Label, SatisfactionLevel[] Levels, int TotalResponses, int SatisfactionPercent, int PreviousPercent);
+
+    private static readonly Period[] _periods =
+    [
+        new("7d", "7 days",
+        [
+            new("Very Satisfied", 89, "text-emerald-600 dark:text-emerald-400", "bg-emerald-500"),
+            new("Satisfied", 52, "text-blue-600 dark:text-blue-400", "bg-blue-500"),
+            new("Neutral", 18, "text-amber-600 dark:text-amber-400", "bg-amber-500"),
+            new("Dissatisfied", 7, "text-red-600 dark:text-red-400", "bg-red-500"),
+        ], 166, 85, 81),
+        new("30d", "30 days",
+        [
+            new("Very Satisfied", 312, "text-emerald-600 dark:text-emerald-400", "bg-emerald-500"),
+            new("Satisfied", 189, "text-blue-600 dark:text-blue-400", "bg-blue-500"),
+            new("Neutral", 67, "text-amber-600 dark:text-amber-400", "bg-amber-500"),
+            new("Dissatisfied", 24, "text-red-600 dark:text-red-400", "bg-red-500"),
+        ], 592, 85, 82),
+        new("90d", "90 days",
+        [
+            new("Very Satisfied", 891, "text-emerald-600 dark:text-emerald-400", "bg-emerald-500"),
+            new("Satisfied", 534, "text-blue-600 dark:text-blue-400", "bg-blue-500"),
+            new("Neutral", 213, "text-amber-600 dark:text-amber-400", "bg-amber-500"),
+            new("Dissatisfied", 89, "text-red-600 dark:text-red-400", "bg-red-500"),
+        ], 1727, 83, 79),
+    ];
+
+    private static readonly int[] _ticks = [0, 25, 50, 75, 100];
+
+    // radius=80, startAngle=-210, endAngle=30, totalAngle=240
+    private const double _radius = 80.0;
+    private const double _cx = 100.0;
+    private const double _cy = 100.0;
+    private static readonly double _bgArcLength = (240.0 / 360.0) * 2.0 * Math.PI * _radius;
+
+    private string _activePeriod = "30d";
+    private Period _period => Array.Find(_periods, p => p.Id == _activePeriod) ?? _periods[1];
+
+    private static string ArcPath(double startDeg, double endDeg)
+    {
+        var startRad = startDeg * Math.PI / 180.0;
+        var endRad = endDeg * Math.PI / 180.0;
+        var x1 = _cx + _radius * Math.Cos(startRad);
+        var y1 = _cy + _radius * Math.Sin(startRad);
+        var x2 = _cx + _radius * Math.Cos(endRad);
+        var y2 = _cy + _radius * Math.Sin(endRad);
+        var largeArc = (endDeg - startDeg) > 180 ? 1 : 0;
+        return $"M {x1.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)} {y1.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)} A {_radius.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)} {_radius.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)} 0 {largeArc} 1 {x2.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)} {y2.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    private static double GetDashOffset(int percent)
+    {
+        var filled = (240.0 * percent / 100.0 / 360.0) * 2.0 * Math.PI * _radius;
+        return _bgArcLength - filled;
+    }
+
+    private static string GetGaugeColor(int percent)
+    {
+        if (percent >= 80) return "#10b981";
+        if (percent >= 60) return "#3b82f6";
+        if (percent >= 40) return "#f59e0b";
+        return "#ef4444";
+    }
+
+    private static string GetGaugeLabel(int percent)
+    {
+        if (percent >= 90) return "Excellent";
+        if (percent >= 80) return "Great";
+        if (percent >= 70) return "Good";
+        if (percent >= 60) return "Fair";
+        if (percent >= 40) return "Needs Work";
+        return "Critical";
+    }
+}

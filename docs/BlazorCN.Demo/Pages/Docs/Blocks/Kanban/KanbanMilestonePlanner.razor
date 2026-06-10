@@ -1,0 +1,211 @@
+@* ============================================================
+   Block: kanban-milestone-planner
+   Title: KanbanMilestonePlanner
+   Description: React milestone planning kanban board for Next.js with timeline header, progress tracking, and team assignments using shadcn/ui and Tailwind CSS
+   Source: original/blocks/kanban/kanban-milestone-planner.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="flag" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Milestone Planner</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    Q1 2026
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                    @_achievedCount/@_milestones.Length achieved
+                </span>
+                @if (_atRiskCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @_atRiskCount at risk
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Timeline header *@
+        <div class="border-b bg-muted/30 px-4 py-2.5">
+            <div class="flex items-center">
+                @foreach (var entry in _timelineEntries)
+                {
+                    var tDate = entry.Date;
+                    var tIdx = entry.Index;
+                    <div class="flex flex-1 flex-col items-center gap-1">
+                        <span class="@Cn.Merge("font-mono text-[10px]", tIdx == _todayIndex ? "font-semibold text-foreground" : tIdx < _todayIndex ? "text-muted-foreground/60" : "text-muted-foreground")">
+                            @tDate
+                        </span>
+                        <span class="@Cn.Merge("size-1.5 rounded-full", tIdx == _todayIndex ? "bg-foreground" : tIdx < _todayIndex ? "bg-muted-foreground/30" : "bg-muted-foreground/20")"></span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4">
+            @foreach (var col in _columns)
+            {
+                var colMilestones = _milestones.Where(m => m.Status == col.Id).OrderBy(m => UrgencyOrder(m.Urgency)).ToArray();
+                var isLast = col.Id == _columns[^1].Id;
+                <div class="@Cn.Merge(!isLast ? "border-r" : "")">
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b px-3 py-2.5">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", StatusDotClass(col.Id))"></span>
+                        <span class="font-medium text-xs">@col.Label</span>
+                        <span class="ml-auto font-mono text-muted-foreground/60 text-xs">@colMilestones.Length</span>
+                    </div>
+
+                    @* Cards *@
+                    <div class="flex flex-col gap-1 p-2">
+                        @foreach (var milestone in colMilestones)
+                        {
+                            var ms = milestone;
+                            <div class="overflow-hidden rounded-md transition-colors hover:bg-muted/50">
+                                @* Urgency bar *@
+                                <div class="@Cn.Merge("h-0.5", UrgencyBarClass(ms.Urgency))"></div>
+
+                                <div class="px-2.5 py-2">
+                                    <span class="line-clamp-2 text-xs font-medium">@ms.Name</span>
+
+                                    @* Due date + urgency *@
+                                    <div class="mt-1 flex items-center gap-1.5">
+                                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", UrgencyDotClass(ms.Urgency))"></span>
+                                        <span class="@Cn.Merge("text-[10px]", UrgencyTextClass(ms.Urgency))">
+                                            @ms.UrgencyLabel
+                                        </span>
+                                    </div>
+
+                                    @* Team + progress *@
+                                    <div class="mt-1.5 flex items-center justify-between">
+                                        <span class="flex items-center gap-1 text-muted-foreground">
+                                            <LucideIconCn Name="users" Size="10" Class="size-2.5" />
+                                            <span class="text-[10px]">@ms.Team</span>
+                                        </span>
+                                        <span class="font-mono text-[10px] text-muted-foreground tabular-nums">
+                                            @(ms.Progress)%
+                                        </span>
+                                    </div>
+
+                                    @* Progress bar *@
+                                    <div class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                                        <div class="@Cn.Merge("h-full rounded-full", ProgressBarClass(ms.Status))" style="@($"width:{ms.Progress}%")"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        @if (colMilestones.Length == 0)
+                        {
+                            <div class="rounded-md border border-dashed border-muted-foreground/20 px-2 py-3 text-center text-muted-foreground/40 text-xs">
+                                Empty
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @_milestones.Length milestones · @_achievedCount achieved
+            </span>
+            <span class="font-mono text-muted-foreground/60 text-xs">
+                @(Math.Round((double)_achievedCount / _milestones.Length * 100))% complete
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Milestone(string Id, string Name, string TargetDate, string Urgency, string UrgencyLabel, int Progress, string Team, string Status);
+    private record Column(string Id, string Label);
+    private record TimelineEntry(string Date, int Index);
+
+    private static readonly string[] _timelineDates = ["Mar 28", "Mar 29", "Mar 30", "Mar 31", "Apr 1", "Apr 2", "Apr 3"];
+    private const int _todayIndex = 4;
+
+    private static readonly TimelineEntry[] _timelineEntries = _timelineDates
+        .Select((d, i) => new TimelineEntry(d, i))
+        .ToArray();
+
+    private static readonly Column[] _columns =
+    [
+        new("planned",  "Planned"),
+        new("active",   "Active"),
+        new("at-risk",  "At Risk"),
+        new("achieved", "Achieved"),
+    ];
+
+    private static readonly Milestone[] _milestones =
+    [
+        new("m1",  "Core API v2 launch",          "Mar 28", "overdue", "2d overdue",  85,  "Backend",  "at-risk"),
+        new("m2",  "Mobile app beta release",      "Mar 30", "overdue", "1d overdue",  72,  "Mobile",   "at-risk"),
+        new("m3",  "SOC 2 compliance audit",       "Apr 1",  "today",   "Due today",   60,  "Security", "active"),
+        new("m4",  "Design system v3 rollout",     "Apr 1",  "today",   "Due today",   45,  "Design",   "active"),
+        new("m5",  "Data pipeline migration",      "Apr 3",  "week",    "2 days left", 30,  "Data Eng", "active"),
+        new("m6",  "Customer portal redesign",     "Apr 5",  "future",  "Apr 5",       15,  "Frontend", "planned"),
+        new("m7",  "Billing system overhaul",      "Apr 8",  "future",  "Apr 8",       5,   "Payments", "planned"),
+        new("m8",  "SSO enterprise integration",   "Apr 12", "future",  "Apr 12",      0,   "Platform", "planned"),
+        new("m9",  "Analytics dashboard v2",       "Mar 25", "overdue", "Completed",   100, "Frontend", "achieved"),
+        new("m10", "CI/CD pipeline upgrade",       "Mar 27", "overdue", "Completed",   100, "DevOps",   "achieved"),
+    ];
+
+    private int _atRiskCount  => _milestones.Count(m => m.Status == "at-risk");
+    private int _achievedCount => _milestones.Count(m => m.Status == "achieved");
+
+    private static int UrgencyOrder(string urgency) => urgency switch
+    {
+        "overdue" => 0,
+        "today"   => 1,
+        "week"    => 2,
+        "future"  => 3,
+        _         => 99,
+    };
+
+    private static string UrgencyDotClass(string urgency) => urgency switch
+    {
+        "overdue" => "bg-red-500",
+        "today"   => "bg-amber-500",
+        "week"    => "bg-blue-500",
+        _         => "bg-muted-foreground/40",
+    };
+
+    private static string UrgencyTextClass(string urgency) => urgency switch
+    {
+        "overdue" => "text-red-600 dark:text-red-400",
+        "today"   => "text-amber-600 dark:text-amber-400",
+        "week"    => "text-blue-600 dark:text-blue-400",
+        _         => "text-muted-foreground",
+    };
+
+    private static string UrgencyBarClass(string urgency) => urgency switch
+    {
+        "overdue" => "bg-red-500",
+        "today"   => "bg-amber-500",
+        "week"    => "bg-blue-500",
+        _         => "bg-muted-foreground/30",
+    };
+
+    private static string StatusDotClass(string status) => status switch
+    {
+        "planned"  => "bg-blue-500",
+        "active"   => "bg-amber-500",
+        "at-risk"  => "bg-red-500",
+        "achieved" => "bg-emerald-500",
+        _          => "",
+    };
+
+    private static string ProgressBarClass(string status) => status switch
+    {
+        "achieved" => "bg-emerald-500",
+        "at-risk"  => "bg-red-500",
+        _          => "bg-foreground",
+    };
+}

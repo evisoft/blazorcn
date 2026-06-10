@@ -1,0 +1,353 @@
+@* ============================================================
+   Block: music-music-quiz
+   Title: MusicMusicQuiz
+   Description: A music trivia quiz block for React and Next.js with question display, four answer options, animated score counter, timer bar, streak indicator, and results summary with correct and incorrect breakdown built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-music-quiz.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="trophy" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Music Quiz</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @if (_streak > 1)
+                {
+                    <div class="flex items-center gap-1">
+                        <LucideIconCn Name="flame" Size="12" Class="size-3 text-amber-500" />
+                        <span class="font-medium text-amber-600 text-xs dark:text-amber-400">
+                            @_streak streak
+                        </span>
+                    </div>
+                }
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_score/@Questions.Length
+                </BadgeCn>
+            </div>
+        </div>
+
+        @if (_quizComplete)
+        {
+            @* Results summary *@
+            <div class="border-b px-4 py-4">
+                <div class="text-center">
+                    <span class="block font-semibold text-2xl tabular-nums">
+                        @_score/@Questions.Length
+                    </span>
+                    <span class="block text-muted-foreground text-sm">
+                        @GetScoreMessage()
+                    </span>
+                </div>
+            </div>
+
+            @* Stats *@
+            <div class="grid grid-cols-3 border-b">
+                <div class="border-r px-4 py-3 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                        <LucideIconCn Name="check-circle-2" Size="12" Class="size-3 text-emerald-500" />
+                        <span class="font-semibold text-sm tabular-nums">@CorrectCount</span>
+                    </div>
+                    <span class="text-muted-foreground text-xs">Correct</span>
+                </div>
+                <div class="border-r px-4 py-3 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                        <LucideIconCn Name="x-circle" Size="12" Class="size-3 text-red-500" />
+                        <span class="font-semibold text-sm tabular-nums">@IncorrectCount</span>
+                    </div>
+                    <span class="text-muted-foreground text-xs">Incorrect</span>
+                </div>
+                <div class="px-4 py-3 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                        <LucideIconCn Name="flame" Size="12" Class="size-3 text-amber-500" />
+                        <span class="font-semibold text-sm tabular-nums">@_bestStreak</span>
+                    </div>
+                    <span class="text-muted-foreground text-xs">Best Streak</span>
+                </div>
+            </div>
+
+            @* Question breakdown *@
+            @foreach (var (q, i) in Questions.Select((item, idx) => (item, idx)))
+            {
+                var wasCorrect = i < _answers.Count && _answers[i];
+                var isLast = i == Questions.Length - 1;
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5", isLast ? "" : "border-b")">
+                    @if (wasCorrect)
+                    {
+                        <LucideIconCn Name="check-circle-2" Size="16" Class="size-4 shrink-0 text-emerald-500" />
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="x-circle" Size="16" Class="size-4 shrink-0 text-red-500" />
+                    }
+                    <div class="min-w-0 flex-1">
+                        <span class="block truncate text-sm">@q.Text</span>
+                        <span class="block text-muted-foreground text-xs">
+                            @q.Options[q.CorrectIndex]
+                        </span>
+                    </div>
+                </div>
+            }
+
+            @* Retry *@
+            <div class="border-t px-4 py-3">
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 w-full text-xs" OnClick="RestartQuiz">
+                    Play Again
+                </ButtonCn>
+            </div>
+        }
+        else
+        {
+            var question = Questions[_currentIndex];
+            var isCorrect = _selectedAnswer != null && _selectedAnswer == question.CorrectIndex;
+
+            @* Timer bar *@
+            <div class="h-1 w-full bg-muted">
+                <div class="h-full bg-foreground transition-all duration-300 ease-linear"
+                     style="@($"width:{(_timeLeft * 100 / TimerSeconds)}%")"></div>
+            </div>
+
+            @* Progress + timer *@
+            <div class="flex items-center justify-between border-b px-4 py-2.5">
+                <span class="text-muted-foreground text-xs">
+                    Question @(_currentIndex + 1) of @Questions.Length
+                </span>
+                <div class="flex items-center gap-2">
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                        @question.Category
+                    </BadgeCn>
+                    <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                        @(_timeLeft)s
+                    </span>
+                </div>
+            </div>
+
+            @* Question *@
+            <div class="border-b px-4 py-4">
+                <span class="block font-medium text-sm">@question.Text</span>
+            </div>
+
+            @* Options *@
+            <div class="border-b px-4 py-3">
+                <div class="flex flex-col gap-2">
+                    @foreach (var (option, index) in question.Options.Select((o, idx) => (o, idx)))
+                    {
+                        var optIdx = index;
+                        var optionStyle = "";
+                        if (_showResult)
+                        {
+                            if (optIdx == question.CorrectIndex)
+                                optionStyle = "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+                            else if (optIdx == _selectedAnswer && !isCorrect)
+                                optionStyle = "border-red-500 bg-red-500/10 text-red-700 dark:text-red-300";
+                            else
+                                optionStyle = "opacity-50";
+                        }
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                  Class="@Cn.Merge("h-9 w-full justify-start gap-2 text-xs", optionStyle)"
+                                  OnClick="@(() => HandleAnswer(optIdx))"
+                                  Disabled="@_showResult">
+                            <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs">
+                                @((char)('A' + optIdx))
+                            </span>
+                            @option
+                        </ButtonCn>
+                    }
+                </div>
+            </div>
+
+            @* Feedback *@
+            @if (_showResult)
+            {
+                <div class="px-4 py-2.5">
+                    @if (_selectedAnswer == -1)
+                    {
+                        <div class="flex items-center gap-2">
+                            <LucideIconCn Name="x-circle" Size="16" Class="size-4 text-red-500" />
+                            <span class="text-sm">
+                                Time's up! The answer was
+                                <span class="font-medium">@question.Options[question.CorrectIndex]</span>
+                            </span>
+                        </div>
+                    }
+                    else if (isCorrect)
+                    {
+                        <div class="flex items-center gap-2">
+                            <LucideIconCn Name="check-circle-2" Size="16" Class="size-4 text-emerald-500" />
+                            <span class="text-sm">Correct!</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex items-center gap-2">
+                            <LucideIconCn Name="x-circle" Size="16" Class="size-4 text-red-500" />
+                            <span class="text-sm">
+                                Incorrect. The answer was
+                                <span class="font-medium">@question.Options[question.CorrectIndex]</span>
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+    </div>
+</section>
+
+@code {
+    private record QuizQuestion(string Id, string Text, string[] Options, int CorrectIndex, string Category);
+
+    private const int TimerSeconds = 15;
+
+    private static readonly QuizQuestion[] Questions =
+    [
+        new("q1", "Who performed the hit song \"Bohemian Rhapsody\"?",
+            ["The Beatles", "Queen", "Led Zeppelin", "Pink Floyd"], 1, "Classic Rock"),
+        new("q2", "Which instrument has 88 keys?",
+            ["Guitar", "Violin", "Piano", "Accordion"], 2, "Instruments"),
+        new("q3", "What genre originated in the Bronx, New York in the 1970s?",
+            ["Jazz", "Hip Hop", "Blues", "Country"], 1, "Music History"),
+        new("q4", "Which artist released the album \"Thriller\"?",
+            ["Prince", "Stevie Wonder", "Michael Jackson", "Whitney Houston"], 2, "Pop"),
+        new("q5", "What does BPM stand for in music?",
+            ["Bass Per Measure", "Beats Per Minute", "Band Performance Mode", "Basic Pitch Modifier"], 1, "Music Theory"),
+    ];
+
+    private int _currentIndex = 0;
+    private int _score = 0;
+    private int _streak = 0;
+    private int _bestStreak = 0;
+    private int? _selectedAnswer = null;
+    private bool _showResult = false;
+    private bool _quizComplete = false;
+    private List<bool> _answers = new();
+    private int _timeLeft = TimerSeconds;
+
+    private System.Threading.Timer? _timer;
+
+    private int CorrectCount => _answers.Count(a => a);
+    private int IncorrectCount => _answers.Count(a => !a);
+
+    private string GetScoreMessage()
+    {
+        if (_score == Questions.Length) return "Perfect score!";
+        if (_score >= (int)(Questions.Length * 0.8)) return "Great job!";
+        if (_score >= (int)(Questions.Length * 0.5)) return "Not bad!";
+        return "Keep practicing!";
+    }
+
+    protected override void OnInitialized()
+    {
+        StartTimer();
+    }
+
+    private void StartTimer()
+    {
+        _timer?.Dispose();
+        if (_quizComplete || _showResult) return;
+        _timer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                if (_showResult || _quizComplete) return;
+                _timeLeft--;
+                if (_timeLeft <= 0)
+                {
+                    HandleTimeout();
+                }
+                StateHasChanged();
+            });
+        }, null, 1000, 1000);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void HandleTimeout()
+    {
+        if (_showResult || _quizComplete) return;
+        StopTimer();
+        _selectedAnswer = -1;
+        _showResult = true;
+        _streak = 0;
+        _answers.Add(false);
+        _ = Task.Delay(1500).ContinueWith(_ => InvokeAsync(() =>
+        {
+            AdvanceQuestion();
+            StateHasChanged();
+        }));
+    }
+
+    private void HandleAnswer(int index)
+    {
+        if (_showResult || _quizComplete) return;
+        StopTimer();
+        _selectedAnswer = index;
+        _showResult = true;
+
+        var correct = index == Questions[_currentIndex].CorrectIndex;
+        if (correct)
+        {
+            _score++;
+            var newStreak = _streak + 1;
+            _streak = newStreak;
+            if (newStreak > _bestStreak)
+                _bestStreak = newStreak;
+        }
+        else
+        {
+            _streak = 0;
+        }
+        _answers.Add(correct);
+        _ = Task.Delay(1500).ContinueWith(_ => InvokeAsync(() =>
+        {
+            AdvanceQuestion();
+            StateHasChanged();
+        }));
+    }
+
+    private void AdvanceQuestion()
+    {
+        if (_currentIndex < Questions.Length - 1)
+        {
+            _currentIndex++;
+            _selectedAnswer = null;
+            _showResult = false;
+            _timeLeft = TimerSeconds;
+            StartTimer();
+        }
+        else
+        {
+            _quizComplete = true;
+            StopTimer();
+        }
+    }
+
+    private void RestartQuiz()
+    {
+        StopTimer();
+        _currentIndex = 0;
+        _score = 0;
+        _streak = 0;
+        _bestStreak = 0;
+        _selectedAnswer = null;
+        _showResult = false;
+        _quizComplete = false;
+        _answers = new();
+        _timeLeft = TimerSeconds;
+        StartTimer();
+    }
+
+    public void Dispose()
+    {
+        StopTimer();
+    }
+}

@@ -1,0 +1,120 @@
+@* ============================================================
+   Block: stats-kpi-sparkline-tile-grid
+   Title: StatsKpiSparklineTileGrid
+   Description: A hybrid KPI tile grid stats block for React and Next.js with four tiles each pairing a tabular-nums headline value, a trend-keyed semantic delta, and an inline ChartContainer sparkline AreaChart built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-kpi-sparkline-tile-grid.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="mb-3 flex items-end justify-between">
+        <div>
+            <p class="text-sm font-medium">Product overview</p>
+            <p class="mt-0.5 text-xs text-muted-foreground">Last 12 weeks</p>
+        </div>
+        <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+            Snapshot
+        </p>
+    </div>
+
+    <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        @foreach (var metric in _metrics)
+        {
+            var isPositive = metric.Trend == TrendType.Positive;
+            var gradientId = $"spark-{metric.Id}";
+            var strokeColor = isPositive ? "oklch(0.646 0.222 41.116)" : "oklch(0.769 0.188 70.08)";
+            var sparkPath = BuildSparkPath(metric.Spark, 160, 48);
+            var areaPath = BuildAreaPath(metric.Spark, 160, 48);
+
+            <div class="overflow-hidden rounded-lg border bg-card">
+                <div class="px-4 py-3">
+                    <dt class="text-xs font-medium text-muted-foreground">@metric.Label</dt>
+                    <dd class="mt-1 text-2xl font-semibold tabular-nums">@metric.Value</dd>
+                    <div class="mt-1 flex items-center gap-1">
+                        @if (isPositive)
+                        {
+                            <LucideIconCn Name="trending-up" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="trending-down" Size="12" Class="size-3 text-red-600 dark:text-red-400" aria-hidden="true" />
+                        }
+                        <span class="@(Cn.Merge("text-xs font-medium tabular-nums", isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"))">
+                            @metric.Delta
+                        </span>
+                    </div>
+                </div>
+
+                <svg class="h-12 w-full" viewBox="0 0 160 48" preserveAspectRatio="none" aria-hidden="true">
+                    <defs>
+                        @((MarkupString)$"<linearGradient id=\"{gradientId}\" x1=\"0\" x2=\"0\" y1=\"0\" y2=\"1\"><stop offset=\"0%\" stop-color=\"{strokeColor}\" stop-opacity=\"0.35\"/><stop offset=\"100%\" stop-color=\"{strokeColor}\" stop-opacity=\"0\"/></linearGradient>")
+                    </defs>
+                    <path d="@areaPath" fill="@($"url(#{gradientId})")" />
+                    <path d="@sparkPath" fill="none" stroke="@strokeColor" stroke-width="1.5" />
+                </svg>
+            </div>
+        }
+    </dl>
+</section>
+
+@code {
+    private enum TrendType { Positive, Negative }
+
+    private record SparkPoint(int X, int Y);
+
+    private record KpiMetric(string Id, string Label, string Value, string Delta, TrendType Trend, SparkPoint[] Spark);
+
+    private static readonly KpiMetric[] _metrics =
+    [
+        new KpiMetric("mrr", "Monthly recurring revenue", "$187,420", "+12.4% vs last 30d", TrendType.Positive,
+        [
+            new SparkPoint(1, 142), new SparkPoint(2, 148), new SparkPoint(3, 151), new SparkPoint(4, 146),
+            new SparkPoint(5, 158), new SparkPoint(6, 164), new SparkPoint(7, 159), new SparkPoint(8, 171),
+            new SparkPoint(9, 177), new SparkPoint(10, 182), new SparkPoint(11, 179), new SparkPoint(12, 187),
+        ]),
+        new KpiMetric("dau", "Daily active users", "48,372", "+8.1% vs last 7d", TrendType.Positive,
+        [
+            new SparkPoint(1, 38), new SparkPoint(2, 39), new SparkPoint(3, 41), new SparkPoint(4, 40),
+            new SparkPoint(5, 42), new SparkPoint(6, 43), new SparkPoint(7, 45), new SparkPoint(8, 44),
+            new SparkPoint(9, 46), new SparkPoint(10, 47), new SparkPoint(11, 47), new SparkPoint(12, 48),
+        ]),
+        new KpiMetric("churn", "Monthly churn rate", "2.14%", "-0.32pt vs last 30d", TrendType.Positive,
+        [
+            new SparkPoint(1, 284), new SparkPoint(2, 278), new SparkPoint(3, 271), new SparkPoint(4, 269),
+            new SparkPoint(5, 262), new SparkPoint(6, 258), new SparkPoint(7, 249), new SparkPoint(8, 243),
+            new SparkPoint(9, 237), new SparkPoint(10, 228), new SparkPoint(11, 221), new SparkPoint(12, 214),
+        ]),
+        new KpiMetric("p99", "p99 API latency", "412ms", "+46ms vs last 24h", TrendType.Negative,
+        [
+            new SparkPoint(1, 362), new SparkPoint(2, 358), new SparkPoint(3, 365), new SparkPoint(4, 372),
+            new SparkPoint(5, 369), new SparkPoint(6, 378), new SparkPoint(7, 384), new SparkPoint(8, 391),
+            new SparkPoint(9, 388), new SparkPoint(10, 401), new SparkPoint(11, 408), new SparkPoint(12, 412),
+        ]),
+    ];
+
+    private static string BuildSparkPath(SparkPoint[] points, double width, double height)
+    {
+        if (points.Length == 0) return "";
+        var minY = double.MaxValue;
+        var maxY = double.MinValue;
+        foreach (var pt in points) { if (pt.Y < minY) minY = pt.Y; if (pt.Y > maxY) maxY = pt.Y; }
+        var rangeY = maxY - minY;
+        if (rangeY == 0) rangeY = 1;
+        var stepX = width / (points.Length - 1);
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < points.Length; i++)
+        {
+            var px = i * stepX;
+            var py = height - ((points[i].Y - minY) / rangeY * height);
+            sb.Append(i == 0 ? $"M {px:F1} {py:F1}" : $" L {px:F1} {py:F1}");
+        }
+        return sb.ToString();
+    }
+
+    private static string BuildAreaPath(SparkPoint[] points, double width, double height)
+    {
+        if (points.Length == 0) return "";
+        var line = BuildSparkPath(points, width, height);
+        var lastX = (points.Length - 1) * (width / (points.Length - 1));
+        return $"{line} L {lastX:F1} {height:F1} L 0 {height:F1} Z";
+    }
+}

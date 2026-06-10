@@ -1,0 +1,196 @@
+@* ============================================================
+   Block: stepper-status-badges
+   Title: StepperStatusBadges
+   Description: A vertical stepper with prominent color-coded status badges, expandable step details, and semantic indicators built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-status-badges.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Release pipeline</span>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    <span class="tabular-nums text-muted-foreground">
+                        @_completedCount/@_steps.Length done
+                    </span>
+                </span>
+                @if (_blockedCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        <span class="text-muted-foreground tabular-nums">@_blockedCount blocked</span>
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Steps *@
+        <div class="px-4 py-4">
+            @foreach (var stp in _steps)
+            {
+                var index = Array.IndexOf(_steps, stp);
+                var isSelected = index == _selectedStep;
+                var isLast = index == _steps.Length - 1;
+                var config = GetStatusConfig(stp.Status);
+                var lineStyle = "min-height:" + (isSelected ? "96px" : "24px");
+                <div class="flex gap-4">
+                    @* Circle + Line column *@
+                    <div class="flex flex-col items-center">
+                        <button
+                            type="button"
+                            @onclick="@(() => HandleStepClick(index))"
+                            class="@Cn.Merge("flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full font-medium text-xs tabular-nums transition-all duration-200", GetCircleColor(stp.Status))">
+                            <LucideIconCn Name="@config.IconName" Size="14" Class="size-3.5" />
+                        </button>
+
+                        @if (!isLast)
+                        {
+                            <div class="@Cn.Merge("my-1 w-0.5 flex-1 rounded-full transition-colors duration-300", GetLineColor(stp.Status))"
+                                 style="@lineStyle">
+                            </div>
+                        }
+                    </div>
+
+                    @* Content column *@
+                    <div class="@(isLast ? "pb-0" : "pb-6")">
+                        <div class="flex items-center gap-2 pt-1">
+                            <span class="font-medium text-sm">@stp.Label</span>
+                            <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("font-normal text-[11px]", config.BadgeClass)">
+                                @config.Label
+                            </BadgeCn>
+                        </div>
+                        <p class="mt-0.5 text-muted-foreground text-xs">@stp.Description</p>
+
+                        @* Expanded detail *@
+                        @if (isSelected)
+                        {
+                            <div class="mt-3">
+                                <div class="@Cn.Merge("rounded-md p-3", config.BgColor)">
+                                    <p class="text-sm leading-relaxed">@stp.Detail</p>
+                                    <div class="mt-2 flex items-center gap-2">
+                                        <span class="text-muted-foreground text-xs">Assigned to</span>
+                                        <span class="font-medium text-xs">@stp.Assignee</span>
+                                    </div>
+                                </div>
+                                @if (stp.Status == StepStatus.Blocked)
+                                {
+                                    <div class="mt-3">
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 border-red-500/30 text-red-600 text-xs hover:bg-red-500/10 dark:text-red-400">
+                                            <LucideIconCn Name="lock" Size="12" Class="size-3" />
+                                            Resolve blocker
+                                        </ButtonCn>
+                                    </div>
+                                }
+                                @if (stp.Status == StepStatus.Review)
+                                {
+                                    <div class="mt-3 flex items-center gap-2">
+                                        <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                            Approve
+                                        </ButtonCn>
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                                            Request changes
+                                        </ButtonCn>
+                                    </div>
+                                }
+                                @if (stp.Status == StepStatus.InProgress)
+                                {
+                                    <div class="mt-3">
+                                        <div class="mb-1.5 flex items-center justify-between">
+                                            <span class="text-muted-foreground text-xs">Progress</span>
+                                            <span class="font-medium text-xs tabular-nums">60%</span>
+                                        </div>
+                                        <div class="h-1.5 overflow-hidden rounded-full bg-muted-foreground/15">
+                                            <div class="h-full rounded-full bg-blue-500 transition-all duration-500 dark:bg-blue-600"
+                                                 style="width: 60%;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum StepStatus { Completed, Review, InProgress, Queued, Blocked }
+
+    private record StepItem(string Label, string Description, StepStatus Status, string Detail, string Assignee);
+    private record StatusConfigItem(string Label, string DotColor, string BadgeClass, string BgColor, string IconName);
+
+    private static readonly StepItem[] _steps =
+    [
+        new("Schema design", "Database models and relationships", StepStatus.Completed,
+            "PostgreSQL schema finalized with 14 tables, proper indexes, and foreign key constraints. Migration files generated and tested against staging.",
+            "Elena M."),
+        new("API endpoints", "REST routes and middleware", StepStatus.Review,
+            "All 23 endpoints implemented with input validation and error handling. Awaiting code review from the security team before merge.",
+            "James T."),
+        new("Frontend views", "React components and pages", StepStatus.InProgress,
+            "Dashboard and settings pages complete. Currently building the onboarding flow and notification center. 60% of components have tests.",
+            "Sarah K."),
+        new("Testing", "Unit, integration, and E2E tests", StepStatus.Queued,
+            "Test plan covers 45 integration scenarios and 12 E2E flows. Waiting for frontend views to stabilize before beginning full test execution.",
+            "Marcus L."),
+        new("Deployment", "CI/CD pipeline and production release", StepStatus.Blocked,
+            "Deployment pipeline configured. Blocked by pending security review on API endpoints. Cannot proceed until the review step is approved.",
+            "Priya R."),
+    ];
+
+    private int _selectedStep = 2;
+
+    private int _completedCount => _steps.Count(s => s.Status == StepStatus.Completed);
+    private int _blockedCount => _steps.Count(s => s.Status == StepStatus.Blocked);
+
+    private static StatusConfigItem GetStatusConfig(StepStatus status) => status switch
+    {
+        StepStatus.Completed => new("Completed", "bg-emerald-500",
+            "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+            "bg-emerald-500/10", "check"),
+        StepStatus.Review => new("In Review", "bg-amber-500",
+            "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+            "bg-amber-500/10", "search"),
+        StepStatus.InProgress => new("In Progress", "bg-blue-500",
+            "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+            "bg-blue-500/10", "circle-dot"),
+        StepStatus.Queued => new("Queued", "bg-muted-foreground/40",
+            "bg-muted/50 text-muted-foreground border-muted-foreground/20",
+            "bg-muted/50", "clock"),
+        StepStatus.Blocked => new("Blocked", "bg-red-500",
+            "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+            "bg-red-500/10", "lock"),
+        _ => new("Unknown", "", "", "", "circle"),
+    };
+
+    private static string GetCircleColor(StepStatus status) => status switch
+    {
+        StepStatus.Completed => "bg-emerald-500 text-white dark:bg-emerald-600",
+        StepStatus.Review => "bg-amber-500 text-white dark:bg-amber-600",
+        StepStatus.InProgress => "bg-blue-500 text-white ring-4 ring-blue-500/20 dark:bg-blue-600 dark:ring-blue-400/20",
+        StepStatus.Queued => "border border-muted-foreground/25 text-muted-foreground",
+        StepStatus.Blocked => "bg-red-500 text-white dark:bg-red-600",
+        _ => "",
+    };
+
+    private static string GetLineColor(StepStatus status) => status switch
+    {
+        StepStatus.Completed => "bg-emerald-500 dark:bg-emerald-600",
+        StepStatus.Review => "bg-amber-500/40",
+        StepStatus.InProgress => "bg-blue-500/40",
+        StepStatus.Queued => "bg-muted-foreground/15",
+        StepStatus.Blocked => "bg-red-500/40",
+        _ => "",
+    };
+
+    private void HandleStepClick(int index)
+    {
+        _selectedStep = index;
+    }
+}

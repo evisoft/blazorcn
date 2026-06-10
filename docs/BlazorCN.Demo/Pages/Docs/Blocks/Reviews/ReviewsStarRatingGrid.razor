@@ -1,0 +1,216 @@
+@* ============================================================
+   Block: reviews-star-rating-grid
+   Title: ReviewsStarRatingGrid
+   Description: A product rating comparison grid block for React and Next.js with star ratings, review counts, category scores, sort controls, and hover detail panels built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-star-rating-grid.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="package" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-sm">Product Ratings</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @(_products.Length) products
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="arrow-up-down" Size="12" Class="size-3 text-muted-foreground" />
+                <SelectCn Value="@_sortBy" ValueChanged="@((string? v) => SetSortBy(v))">
+                    <SelectTriggerCn Class="h-7 w-32 text-xs">
+                        <SelectValueCn />
+                    </SelectTriggerCn>
+                    <SelectContentCn>
+                        <SelectItemCn Value="rating">Highest rated</SelectItemCn>
+                        <SelectItemCn Value="reviews">Most reviewed</SelectItemCn>
+                        <SelectItemCn Value="recommend">Most recommended</SelectItemCn>
+                        <SelectItemCn Value="name">Name A-Z</SelectItemCn>
+                    </SelectContentCn>
+                </SelectCn>
+            </div>
+        </div>
+
+        @* Product grid *@
+        <div class="grid grid-cols-1 gap-px bg-muted sm:grid-cols-2 lg:grid-cols-3">
+            @foreach (var product in SortedProducts)
+            {
+                var prod = product;
+                var isExpanded = _expandedId == prod.Id;
+                <div class="bg-card">
+                    <button type="button" @onclick="@(() => ToggleExpanded(prod.Id))" class="w-full text-left transition-colors hover:bg-muted/30">
+                        <div class="px-4 py-3.5">
+                            @* Product name and category *@
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <span class="block font-medium text-sm">@prod.Name</span>
+                                    <span class="text-muted-foreground text-xs">@prod.Category</span>
+                                </div>
+                                @if (prod.Trend == "up")
+                                {
+                                    <div class="flex shrink-0 items-center gap-0.5 text-emerald-600">
+                                        <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                                        <span class="text-[10px] tabular-nums">@prod.TrendValue</span>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Rating display *@
+                            <div class="mt-2.5 flex items-center gap-2">
+                                <span class="@Cn.Merge("font-semibold text-xl tabular-nums", GetRatingColor(prod.OverallRating))">
+                                    @prod.OverallRating.ToString("F1")
+                                </span>
+                                <div class="flex items-center gap-0.5">
+                                    @for (int i = 0; i < 5; i++)
+                                    {
+                                        var idx = i;
+                                        <LucideIconCn Name="star" Size="14" Class="@Cn.Merge("size-3.5", idx < (int)Math.Round(prod.OverallRating) ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                    }
+                                </div>
+                            </div>
+
+                            @* Stats row *@
+                            <div class="mt-2 flex items-center gap-3 text-xs">
+                                <span class="text-muted-foreground tabular-nums">@prod.ReviewCount.ToString("N0") reviews</span>
+                                <span class="text-muted-foreground">@prod.RecommendRate% recommend</span>
+                            </div>
+
+                            @* Top quote *@
+                            <p class="mt-2 border-l-2 border-muted-foreground/20 pl-2 text-muted-foreground text-xs italic leading-relaxed">
+                                @prod.TopQuote
+                            </p>
+                        </div>
+                    </button>
+
+                    @* Expanded category scores *@
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden border-t">
+                            <div class="px-4 py-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Category Scores
+                                </span>
+                                <div class="space-y-2">
+                                    @foreach (var cat in prod.CategoryScores)
+                                    {
+                                        var catItem = cat;
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-20 shrink-0 text-xs">@catItem.Name</span>
+                                            <div class="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                                <div class="h-full rounded-full bg-foreground/60" style="@($"width:{GetBarWidth(catItem.Score)}")"></div>
+                                            </div>
+                                            <span class="@Cn.Merge("w-7 shrink-0 text-right text-xs tabular-nums", GetRatingColor(catItem.Score))">
+                                                @catItem.Score.ToString("F1")
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CategoryScore(string Name, double Score);
+
+    private record Product(
+        string Id,
+        string Name,
+        string Category,
+        double OverallRating,
+        int ReviewCount,
+        int RecommendRate,
+        string Trend,
+        string TrendValue,
+        CategoryScore[] CategoryScores,
+        string TopQuote
+    );
+
+    private string _sortBy = "rating";
+    private string? _expandedId = null;
+
+    private static readonly Product[] _products =
+    [
+        new("p1", "Vercel Pro Plan", "Hosting", 4.8, 2847, 96, "up", "+0.2",
+            [
+                new("Performance", 4.9),
+                new("Reliability", 4.8),
+                new("Support", 4.5),
+                new("Value", 4.3),
+            ],
+            "Fastest deploys we have ever experienced"),
+        new("p2", "Neon Serverless Postgres", "Database", 4.6, 1923, 93, "up", "+0.3",
+            [
+                new("Performance", 4.7),
+                new("Reliability", 4.5),
+                new("Support", 4.4),
+                new("Value", 4.8),
+            ],
+            "Branch-per-PR databases changed our workflow"),
+        new("p3", "Clerk Auth", "Authentication", 4.7, 1456, 95, "stable", "0.0",
+            [
+                new("Performance", 4.6),
+                new("Reliability", 4.8),
+                new("Support", 4.7),
+                new("Value", 4.4),
+            ],
+            "Auth setup in under 15 minutes, not days"),
+        new("p4", "Resend Email API", "Email", 4.5, 987, 91, "up", "+0.1",
+            [
+                new("Performance", 4.6),
+                new("Reliability", 4.4),
+                new("Support", 4.3),
+                new("Value", 4.7),
+            ],
+            "Finally an email API that developers actually like"),
+        new("p5", "Upstash Redis", "Cache", 4.4, 834, 89, "stable", "0.0",
+            [
+                new("Performance", 4.7),
+                new("Reliability", 4.3),
+                new("Support", 4.1),
+                new("Value", 4.5),
+            ],
+            "Serverless Redis that just works at the edge"),
+        new("p6", "Turso LibSQL", "Database", 4.3, 612, 87, "up", "+0.4",
+            [
+                new("Performance", 4.5),
+                new("Reliability", 4.2),
+                new("Support", 4.0),
+                new("Value", 4.6),
+            ],
+            "Embedded databases with global replication is a game changer"),
+    ];
+
+    private IEnumerable<Product> SortedProducts => _sortBy switch
+    {
+        "rating"    => _products.OrderByDescending(p => p.OverallRating),
+        "reviews"   => _products.OrderByDescending(p => p.ReviewCount),
+        "recommend" => _products.OrderByDescending(p => p.RecommendRate),
+        "name"      => _products.OrderBy(p => p.Name),
+        _           => _products,
+    };
+
+    private void SetSortBy(string? v)
+    {
+        if (v is not null) _sortBy = v;
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+
+    private static string GetRatingColor(double score)
+    {
+        if (score >= 4.5) return "text-emerald-600";
+        if (score >= 3.5) return "text-foreground";
+        return "text-amber-600";
+    }
+
+    private static string GetBarWidth(double score) => $"{(score / 5.0) * 100:F0}%";
+}

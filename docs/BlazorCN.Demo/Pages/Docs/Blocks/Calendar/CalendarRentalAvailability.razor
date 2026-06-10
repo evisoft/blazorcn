@@ -1,0 +1,168 @@
+@* ============================================================
+   Block: calendar-rental-availability
+   Title: CalendarRentalAvailability
+   Description: A rental property availability calendar block for Next.js with booking status, pricing tiers, guest management, and availability grid using shadcn/ui and Tailwind CSS
+   Source: original/blocks/calendar/calendar-rental-availability.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideHomeCn Size="16" class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Rental Availability</span>
+                    <p class="text-muted-foreground text-xs">Mar 24 - Mar 30, 2026</p>
+                </div>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_totalBooked/@_totalSlots nights booked
+            </span>
+        </div>
+
+        <div>
+            @for (var pi = 0; pi < _properties.Length; pi++)
+            {
+                var pIndex = pi;
+                var prop = _properties[pIndex];
+                var isExpanded = _expanded == prop.Id;
+                var bookedNights = prop.Slots.Count(s => s.Status == "booked");
+                var revenue = prop.Slots
+                    .Where(s => s.Status == "booked" || s.Status == "checkout")
+                    .Sum(s => s.Rate ?? 0);
+                <div class="@(pIndex < _properties.Length - 1 ? "border-b" : "")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? "" : prop.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@prop.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" class="font-normal text-[10px]">
+                                    @prop.Type
+                                </BadgeCn>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                <span class="flex items-center gap-1">
+                                    <LucideCalendarCn Size="12" class="size-3" />
+                                    @bookedNights nights booked
+                                </span>
+                                <span class="flex items-center gap-1 tabular-nums">
+                                    <LucideDollarSignCn Size="12" class="size-3" />$@revenue revenue
+                                </span>
+                            </div>
+                        </div>
+                        <LucideChevronRightCn Size="16" class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t">
+                            <div class="grid grid-cols-7 gap-px bg-muted/20">
+                                @foreach (var slot in prop.Slots)
+                                {
+                                    var cfg = _statusConfig[slot.Status];
+                                    <div class="@Cn.Merge("flex flex-col items-center gap-1 px-1 py-2", cfg.Bg)">
+                                        <span class="text-muted-foreground text-[10px]">@slot.DayOfWeek</span>
+                                        <span class="font-medium text-xs tabular-nums">@slot.Day</span>
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Dot)"></span>
+                                        @if (slot.Rate.HasValue)
+                                        {
+                                            <span class="text-muted-foreground text-[10px] tabular-nums">$@slot.Rate</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (HasGuests(prop))
+                            {
+                                <div class="px-4 py-2">
+                                    @foreach (var guest in GetGuests(prop))
+                                    {
+                                        var guestName = guest;
+                                        var guestNights = prop.Slots.Count(s => s.Guest == guestName && s.Status == "booked");
+                                        <div class="flex items-center gap-2 py-1 text-xs">
+                                            <LucideUserCn Size="12" class="size-3 text-muted-foreground" />
+                                            <span class="font-medium">@guestName</span>
+                                            <span class="text-muted-foreground tabular-nums">
+                                                @guestNights night@(guestNights != 1 ? "s" : "")
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="flex items-center gap-4 border-t bg-muted/20 px-4 py-2">
+            @foreach (var kvp in _statusConfig)
+            {
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", kvp.Value.Dot)"></span>
+                    @kvp.Value.Label
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatusConfig(string Bg, string Label, string Dot);
+    private record DateSlot(string Date, int Day, string DayOfWeek, string Status, string? Guest, int? Nights, int? Rate);
+    private record RentalProperty(string Id, string Name, string Type, DateSlot[] Slots, int BaseRate, int WeekendRate);
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["booked"]    = new("bg-blue-500/10",  "Booked",    "bg-blue-500"),
+        ["available"] = new("",                "Available", "bg-emerald-500"),
+        ["blocked"]   = new("bg-zinc-500/10",  "Blocked",   "bg-zinc-400"),
+        ["checkout"]  = new("bg-amber-500/10", "Checkout",  "bg-amber-500"),
+    };
+
+    private static readonly RentalProperty[] _properties =
+    [
+        new("1", "Lakeside Cottage", "Entire Home",
+        [
+            new("Mar 24", 24, "Tue", "booked",    "Sarah Chen",   4,    185),
+            new("Mar 25", 25, "Wed", "booked",    "Sarah Chen",   4,    185),
+            new("Mar 26", 26, "Thu", "booked",    "Sarah Chen",   4,    185),
+            new("Mar 27", 27, "Fri", "checkout",  "Sarah Chen",   null, 185),
+            new("Mar 28", 28, "Sat", "available", null,           null, 225),
+            new("Mar 29", 29, "Sun", "available", null,           null, 225),
+            new("Mar 30", 30, "Mon", "booked",    "James Park",   3,    185),
+        ], 185, 225),
+        new("2", "Downtown Studio", "Apartment",
+        [
+            new("Mar 24", 24, "Tue", "available", null,           null, 120),
+            new("Mar 25", 25, "Wed", "available", null,           null, 120),
+            new("Mar 26", 26, "Thu", "booked",    "Maria Santos", 5,    120),
+            new("Mar 27", 27, "Fri", "booked",    "Maria Santos", 5,    150),
+            new("Mar 28", 28, "Sat", "booked",    "Maria Santos", 5,    150),
+            new("Mar 29", 29, "Sun", "booked",    "Maria Santos", 5,    150),
+            new("Mar 30", 30, "Mon", "booked",    "Maria Santos", 5,    120),
+        ], 120, 150),
+        new("3", "Mountain Cabin", "Entire Home",
+        [
+            new("Mar 24", 24, "Tue", "blocked",   null,           null, null),
+            new("Mar 25", 25, "Wed", "blocked",   null,           null, null),
+            new("Mar 26", 26, "Thu", "available", null,           null, 210),
+            new("Mar 27", 27, "Fri", "available", null,           null, 280),
+            new("Mar 28", 28, "Sat", "booked",    "Alex Rivera",  2,    280),
+            new("Mar 29", 29, "Sun", "checkout",  "Alex Rivera",  null, 280),
+            new("Mar 30", 30, "Mon", "available", null,           null, 210),
+        ], 210, 280),
+    ];
+
+    private string _expanded = "1";
+
+    private int _totalBooked => _properties.Sum(p => p.Slots.Count(s => s.Status == "booked"));
+    private int _totalSlots => _properties.Sum(p => p.Slots.Length);
+
+    private static bool HasGuests(RentalProperty prop) =>
+        prop.Slots.Any(s => s.Guest != null);
+
+    private static IReadOnlyList<string> GetGuests(RentalProperty prop) =>
+        prop.Slots.Where(s => s.Guest != null).Select(s => s.Guest!).Distinct().ToList();
+}

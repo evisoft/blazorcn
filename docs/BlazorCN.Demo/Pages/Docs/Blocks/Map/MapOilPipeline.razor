@@ -1,0 +1,329 @@
+@* ============================================================
+   Block: map-oil-pipeline
+   Title: MapOilPipeline
+   Description: Interactive oil and gas pipeline network map with pipeline route lines, station markers, flow rate indicators, and infrastructure detail panels built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-oil-pipeline.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="fuel" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Pipeline Network</span>
+                <span class="text-xs text-muted-foreground">
+                    Texas · @_pipelines.Sum(p => p.Stations.Length) stations
+                </span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var pl in _pipelines)
+                {
+                    var pipeline = pl;
+                    var isSelected = _selectedPipeline == pipeline.Id;
+                    <button
+                        type="button"
+                        @onclick="@(() => _selectedPipeline = pipeline.Id)"
+                        class="@Cn.Merge("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", isSelected ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50")">
+                        <span class="@Cn.Merge("size-2 rounded-full", ProductDots(pipeline.Product))" />
+                        @pipeline.Name
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + Sidebar *@
+        <div class="flex">
+            @* Map area *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Grid background *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Texas, USA
+                </div>
+
+                @* Pipeline routes (SVG lines) *@
+                @foreach (var pl in _pipelines)
+                {
+                    var pipeline = pl;
+                    var isActiveLine = _selectedPipeline == pipeline.Id;
+                    var color = ProductColor(pipeline.Product);
+                    var strokeWidth = isActiveLine ? 4.0 : 2.0;
+                    var strokeOpacity = isActiveLine ? 0.9 : 0.25;
+                    var pathD = BuildRoutePath(pipeline.Coordinates);
+                    <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                        @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"{pathD}\" stroke=\"{color}\" stroke-width=\"{strokeWidth.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" stroke-opacity=\"{strokeOpacity.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\" /></svg>")
+                    </div>
+                    @* Clickable overlay *@
+                    <div class="absolute inset-0 overflow-hidden" @onclick="@(() => _selectedPipeline = pipeline.Id)" style="cursor:pointer">
+                        @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"{pathD}\" stroke=\"transparent\" stroke-width=\"12\" fill=\"none\" /></svg>")
+                    </div>
+                }
+
+                @* Station markers for active pipeline *@
+                @if (_activePipeline != null)
+                {
+                    @foreach (var st in _activePipeline.Stations)
+                    {
+                        var station = st;
+                        var leftPct = MapLonToPercent(station.Longitude) * 100;
+                        var topPct = MapLatToPercent(station.Latitude) * 100;
+                        var isPopupOpen = _selectedStation == station.Id;
+                        <div class="absolute group" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%); z-index:10")">
+                            @* Marker dot *@
+                            <button
+                                type="button"
+                                @onclick="@(() => _selectedStation = (isPopupOpen ? null : station.Id))"
+                                class="flex size-5 items-center justify-center rounded-full border-2 border-white bg-card shadow-md">
+                                <span class="@Cn.Merge("size-2 rounded-full", StatusDot(station.Status))" />
+                            </button>
+                            @* Tooltip on hover *@
+                            @if (!isPopupOpen)
+                            {
+                                <div class="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 hidden group-hover:flex items-center gap-1.5 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md" style="z-index:20">
+                                    <span class="font-medium">@station.Name</span>
+                                    <span class="text-muted-foreground">@station.Pressure PSI</span>
+                                </div>
+                            }
+                            @* Popup when selected *@
+                            @if (isPopupOpen)
+                            {
+                                <div class="absolute left-6 top-0 w-52 rounded border bg-popover px-3 py-2.5 shadow-md text-xs" style="z-index:30">
+                                    <div class="mb-2 flex items-start justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@station.Name</p>
+                                            <p class="capitalize text-muted-foreground">@station.Type station</p>
+                                        </div>
+                                        <span class="@Cn.Merge("size-2 rounded-full mt-1", StatusDot(station.Status))" />
+                                    </div>
+                                    <div class="space-y-1 border-t pt-2">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-muted-foreground">Pressure</span>
+                                            <span class="font-medium tabular-nums">@station.Pressure.ToString("N0") PSI</span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-muted-foreground">Flow rate</span>
+                                            <span class="font-medium tabular-nums">@station.FlowRate</span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-muted-foreground">Utilization</span>
+                                            <span class="font-medium tabular-nums">@station.Utilization%</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => _selectedStation = null)"
+                                        class="absolute right-1.5 top-1.5 flex size-4 items-center justify-center rounded text-muted-foreground hover:bg-muted">
+                                        <LucideIconCn Name="x" Size="10" Class="size-2.5" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+
+                @* Map controls *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                </div>
+            </div>
+
+            @* Detail sidebar *@
+            @if (_activePipeline != null)
+            {
+                <div class="w-64 shrink-0 border-l">
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            @if (_activePipeline.Product == "crude")
+                            {
+                                <LucideIconCn Name="droplets" Size="16" Class="size-4 text-muted-foreground" />
+                            }
+                            @if (_activePipeline.Product == "gas")
+                            {
+                                <LucideIconCn Name="flame" Size="16" Class="size-4 text-muted-foreground" />
+                            }
+                            @if (_activePipeline.Product == "refined")
+                            {
+                                <LucideIconCn Name="fuel" Size="16" Class="size-4 text-muted-foreground" />
+                            }
+                            <span class="text-sm font-medium">@_activePipeline.Name</span>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                @ProductLabel(_activePipeline.Product)
+                            </BadgeCn>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                @(_activePipeline.DiameterIn)" diameter
+                            </BadgeCn>
+                        </div>
+                        <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>@_activePipeline.LengthMi miles</span>
+                            <span>·</span>
+                            <span>@_activePipeline.CapacityBpd capacity</span>
+                        </div>
+                    </div>
+
+                    @* Stations list *@
+                    <div class="max-h-[380px] overflow-y-auto">
+                        @for (var idx = 0; idx < _activePipeline.Stations.Length; idx++)
+                        {
+                            var station = _activePipeline.Stations[idx];
+                            var isLast = idx == _activePipeline.Stations.Length - 1;
+                            var isExpanded = _expandedStation == station.Id;
+                            <div class="@(isLast ? "" : "border-b")">
+                                <button
+                                    type="button"
+                                    @onclick="@(() => { _expandedStation = (isExpanded ? null : station.Id); _selectedStation = station.Id; })"
+                                    class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", StatusDot(station.Status))" />
+                                    <div class="min-w-0 flex-1">
+                                        <span class="text-xs font-medium">@station.Name</span>
+                                        <p class="text-xs capitalize text-muted-foreground">@station.Type</p>
+                                    </div>
+                                    <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                                </button>
+                                @if (isExpanded)
+                                {
+                                    <div class="space-y-1 px-4 pb-3 pl-8">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-center gap-1">
+                                                <LucideIconCn Name="gauge" Size="12" Class="size-3 text-muted-foreground" />
+                                                <span class="text-xs text-muted-foreground">Pressure</span>
+                                            </div>
+                                            <span class="text-xs font-medium tabular-nums">@station.Pressure.ToString("N0") PSI</span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs text-muted-foreground">Flow</span>
+                                            <span class="text-xs tabular-nums">@station.FlowRate</span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs text-muted-foreground">Utilization</span>
+                                            <span class="text-xs tabular-nums">@station.Utilization%</span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var product in new[] { "crude", "gas", "refined" })
+            {
+                var prod = product;
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", ProductDots(prod))" />
+                    @ProductLabel(prod)
+                </span>
+            }
+            <span class="ml-auto text-xs text-muted-foreground">
+                @_pipelines.Sum(p => p.LengthMi).ToString("N0") total miles
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Station(
+        string Id, string Name, string Type, string Status,
+        int Pressure, string FlowRate, int Utilization,
+        double Longitude, double Latitude);
+
+    private record Pipeline(
+        string Id, string Name, string Product,
+        int DiameterIn, int LengthMi, string CapacityBpd,
+        double[][] Coordinates, Station[] Stations);
+
+    private static readonly Pipeline[] _pipelines =
+    [
+        new("pl1", "Gulf Mainline", "crude", 36, 480, "590,000 bpd",
+            [[-95.36, 29.76], [-95.8, 30.2], [-96.3, 30.55], [-96.8, 30.9], [-97.3, 31.2], [-97.74, 31.55]],
+            [
+                new("st1", "Houston Terminal",  "terminal",   "operational", 845,  "542,000 bpd", 92, -95.36, 29.76),
+                new("st2", "Brenham Pump",      "pump",       "operational", 790,  "538,000 bpd", 91, -96.3,  30.55),
+                new("st3", "Waco Junction",     "pump",       "maintenance", 620,  "410,000 bpd", 69, -97.3,  31.2),
+            ]),
+        new("pl2", "Permian Lateral", "gas", 42, 320, "2.1 Bcf/d",
+            [[-101.84, 31.99], [-101.2, 31.8], [-100.5, 31.55], [-99.8, 31.4], [-99.1, 31.3]],
+            [
+                new("st4", "Midland Compressor", "compressor", "operational", 1120, "1.8 Bcf/d",  86, -101.84, 31.99),
+                new("st5", "San Angelo Hub",     "compressor", "operational", 980,  "1.7 Bcf/d",  81, -100.5,  31.55),
+                new("st6", "Brady Meter",        "compressor", "offline",     0,    "0 Bcf/d",    0,  -99.1,   31.3),
+            ]),
+        new("pl3", "Coastal Products Line", "refined", 24, 210, "280,000 bpd",
+            [[-95.36, 29.76], [-95.0, 29.55], [-94.5, 29.4], [-94.1, 29.7], [-93.7, 30.05]],
+            [
+                new("st7", "Baytown Refinery",   "terminal", "operational", 710, "245,000 bpd", 88, -95.0, 29.55),
+                new("st8", "Beaumont Terminal",  "terminal", "operational", 685, "238,000 bpd", 85, -94.1, 29.7),
+                new("st9", "Lake Charles Depot", "pump",     "operational", 650, "231,000 bpd", 82, -93.7, 30.05),
+            ]),
+    ];
+
+    // Bounding box for Texas region
+    private const double _lonMin = -103.5;
+    private const double _lonMax = -93.0;
+    private const double _latMin = 28.5;
+    private const double _latMax = 33.0;
+
+    private string _selectedPipeline = "pl1";
+    private string? _selectedStation;
+    private string? _expandedStation;
+
+    private Pipeline? _activePipeline => _pipelines.FirstOrDefault(p => p.Id == _selectedPipeline);
+
+    private static string ProductColor(string product) => product switch
+    {
+        "crude"   => "#3b82f6",
+        "gas"     => "#eab308",
+        "refined" => "#22c55e",
+        _         => "#888888",
+    };
+
+    private static string ProductDots(string product) => product switch
+    {
+        "crude"   => "bg-blue-500",
+        "gas"     => "bg-amber-500",
+        "refined" => "bg-emerald-500",
+        _         => "bg-muted-foreground",
+    };
+
+    private static string ProductLabel(string product) => product switch
+    {
+        "crude"   => "Crude Oil",
+        "gas"     => "Natural Gas",
+        "refined" => "Refined",
+        _         => product,
+    };
+
+    private static string StatusDot(string status) => status switch
+    {
+        "operational" => "bg-emerald-500",
+        "maintenance" => "bg-amber-500",
+        "offline"     => "bg-red-500",
+        _             => "bg-muted-foreground",
+    };
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+
+    private string BuildRoutePath(double[][] coords)
+    {
+        if (coords.Length == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < coords.Length; i++)
+        {
+            var x = MapLonToPercent(coords[i][0]) * 100;
+            var y = MapLatToPercent(coords[i][1]) * 100;
+            var xStr = x.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            var yStr = y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            sb.Append(i == 0 ? $"M {xStr}% {yStr}%" : $" L {xStr}% {yStr}%");
+        }
+        return sb.ToString();
+    }
+}

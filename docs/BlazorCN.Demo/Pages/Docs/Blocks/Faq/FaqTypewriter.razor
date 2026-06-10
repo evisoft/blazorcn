@@ -1,0 +1,173 @@
+@* ============================================================
+   Block: faq-typewriter
+   Title: FaqTypewriter
+   Description: A typewriter-effect FAQ block for React and Next.js with character-by-character answer reveal on the active question, blinking cursor, accessible accordion, and a ShadcnioButton CTA pair built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/faq/faq-typewriter.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div>
+        @* Marketing headline cluster *@
+        <div class="mx-auto max-w-2xl text-center">
+            <p class="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                Frequently asked questions
+            </p>
+            <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
+                Watch the answers unfold.
+            </h2>
+            <p class="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
+                Each answer types itself character by character when you open it — a small moment of
+                delight on a page that usually feels routine.
+            </p>
+        </div>
+
+        @* Accordion *@
+        <div class="mt-10 overflow-hidden rounded-2xl border bg-card">
+            @foreach (var it in _faqItems)
+            {
+                var item = it;
+                var isOpen = _expanded == item.Id;
+                var panelId = $"faq-typewriter-{item.Id}-panel";
+                var triggerId = $"faq-typewriter-{item.Id}-trigger";
+                <div class="border-b last:border-0">
+                    <button
+                        type="button"
+                        id="@triggerId"
+                        aria-expanded="@isOpen.ToString().ToLower()"
+                        aria-controls="@panelId"
+                        @onclick="@(() => Toggle(item.Id))"
+                        class="flex w-full items-start justify-between gap-6 px-6 py-5 text-left transition-colors hover:bg-muted/40 sm:px-8 sm:py-6">
+                        <span class="text-base font-semibold text-foreground sm:text-lg">
+                            @item.Question
+                        </span>
+                        <LucideIconCn Name="chevron-down" Size="20" Class="@Cn.Merge("mt-1 size-5 shrink-0 text-muted-foreground transition-transform duration-300", isOpen ? "rotate-180" : "")" />
+                    </button>
+
+                    @if (isOpen)
+                    {
+                        <div id="@panelId" role="region" aria-labelledby="@triggerId" class="overflow-hidden">
+                            <p class="px-6 pb-6 text-base leading-relaxed text-muted-foreground sm:px-8 sm:pb-8">
+                                @_displayed
+                                @if (!_typingDone)
+                                {
+                                    <span aria-hidden="true" class="ml-0.5 inline-block animate-pulse text-foreground">|</span>
+                                }
+                            </p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* CTAs *@
+        <div class="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <ButtonCn Class="w-full sm:w-[220px]">Start free trial</ButtonCn>
+            <ButtonCn Variant="ButtonVariant.Ghost" Class="w-full sm:w-[210px]">Read the docs</ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private const int TypewriterSpeed = 14;
+
+    private string? _expanded = "library";
+    private string _displayed = string.Empty;
+    private bool _typingDone = true;
+    private System.Threading.Timer? _timer;
+    private int _charIndex = 0;
+    private string _targetText = string.Empty;
+
+    private record FaqItem(string Id, string Question, string Answer);
+
+    private static readonly FaqItem[] _faqItems =
+    [
+        new("library",
+            "What's included in the component library?",
+            "Six thousand premium blocks, every shadcn/ui primitive, weekly updates, full source with no obfuscation, and unlimited commercial use. You own what you ship — no vendor lock-in, no API quotas, no surprises."),
+        new("plans",
+            "What's the difference between Individual and Team plans?",
+            "Individual covers one developer. Team supports five developers with shared workspaces and priority support. Both include lifetime updates and the complete library; Team adds collaborative tokens and a private Slack channel."),
+        new("stack",
+            "What are the framework requirements?",
+            "Next.js 16, React 19, and Tailwind CSS 4. TypeScript 5+ is strongly recommended. Components use the App Router and Server Components by default with client components marked explicitly."),
+        new("customize",
+            "How customizable are the components?",
+            "Completely. You receive full source code — restyle with Tailwind, change props, restructure internals, or fork an entire archetype. No proprietary APIs and no compiled black boxes."),
+        new("support",
+            "What are the support response times?",
+            "Individual plans get email replies within 48 business hours. Team plans cut that to 12 hours and add a private Slack channel. Enterprise plans guarantee 2-hour responses on critical issues."),
+        new("commercial",
+            "Can I use components in commercial projects?",
+            "Yes. Build client work, SaaS products, and revenue apps without per-project fees. The only restriction is reselling the components themselves as a competing library."),
+    ];
+
+    protected override void OnInitialized()
+    {
+        // Start typewriter for the initially expanded item
+        var initial = Array.Find(_faqItems, f => f.Id == _expanded);
+        if (initial is not null)
+        {
+            StartTypewriter(initial.Answer);
+        }
+    }
+
+    private void Toggle(string id)
+    {
+        StopTimer();
+
+        if (_expanded == id)
+        {
+            _expanded = null;
+            _displayed = string.Empty;
+            _typingDone = true;
+        }
+        else
+        {
+            _expanded = id;
+            var found = Array.Find(_faqItems, f => f.Id == id);
+            if (found is not null)
+            {
+                StartTypewriter(found.Answer);
+            }
+        }
+    }
+
+    private void StartTypewriter(string text)
+    {
+        _targetText = text;
+        _charIndex = 0;
+        _displayed = string.Empty;
+        _typingDone = false;
+
+        _timer = new System.Threading.Timer(_ =>
+        {
+            _charIndex++;
+            var current = _targetText;
+            if (_charIndex >= current.Length)
+            {
+                _charIndex = current.Length;
+                _displayed = current;
+                _typingDone = true;
+                StopTimer();
+            }
+            else
+            {
+                _displayed = current[.._charIndex];
+            }
+            InvokeAsync(StateHasChanged);
+        }, null, TypewriterSpeed, TypewriterSpeed);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    public void Dispose()
+    {
+        StopTimer();
+    }
+}

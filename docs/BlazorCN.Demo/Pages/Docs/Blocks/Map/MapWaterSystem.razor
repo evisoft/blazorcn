@@ -1,0 +1,279 @@
+@* ============================================================
+   Block: map-water-system
+   Title: MapWaterSystem
+   Description: React water system infrastructure map block for Next.js with treatment plant markers, pipeline routes, reservoir level gauges, distribution zone indicators, and facility detail panels using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-water-system.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="droplets" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Water System</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_operationalCount operational
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_alertCount attention
+                </span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground">@_pipelines.Length pipelines</span>
+            </div>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[420px] overflow-hidden bg-muted/20">
+            @* Grid background *@
+            <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+            @* Map label *@
+            <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                New York, USA
+            </div>
+
+            @* Pipeline routes (SVG lines) *@
+            @foreach (var pl in _pipelines)
+            {
+                var pipeline = pl;
+                var color = PipelineColor(pipeline.Status);
+                var strokeWidth = pipeline.Status == "active" ? 3.0 : 2.0;
+                var strokeOpacity = pipeline.Status == "active" ? 0.7 : 0.5;
+                var pathD = BuildRoutePath(pipeline.Coordinates);
+                var dashArray = pipeline.Status == "maintenance" ? "6,4" : pipeline.Status == "planned" ? "3,6" : "";
+                var dashAttr = string.IsNullOrEmpty(dashArray) ? "" : $" stroke-dasharray=\"{dashArray}\"";
+                <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                    @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"{pathD}\" stroke=\"{color}\" stroke-width=\"{strokeWidth.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" stroke-opacity=\"{strokeOpacity.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\"{dashAttr} fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\" /></svg>")
+                </div>
+            }
+
+            @* Facility markers *@
+            @foreach (var fac in _facilities)
+            {
+                var f = fac;
+                var cfg = TypeConfig(f.Type);
+                var isSelected = _selected == f.Id;
+                var leftPct = MapLonToPercent(f.Longitude) * 100;
+                var topPct = MapLatToPercent(f.Latitude) * 100;
+                var markerSize = isSelected ? "size-9" : "size-7";
+                var iconSize = isSelected ? 16 : 12;
+                <div class="absolute group" style="@($"left:{leftPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%; top:{topPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%; transform:translate(-50%,-50%); z-index:10")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _selected = (_selected == f.Id ? null : f.Id))"
+                        class="relative flex items-center justify-center">
+                        <div class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background shadow-md transition-all", markerSize)"
+                             style="@($"background-color:{cfg.Color}")">
+                            @if (f.Type == "treatment")
+                            {
+                                <LucideIconCn Name="factory" Size="@iconSize" Class="text-white" />
+                            }
+                            else if (f.Type == "reservoir")
+                            {
+                                <LucideIconCn Name="droplet" Size="@iconSize" Class="text-white" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="gauge" Size="@iconSize" Class="text-white" />
+                            }
+                        </div>
+                        @if (f.Status != "operational")
+                        {
+                            <span class="@Cn.Merge("absolute -top-0.5 -right-0.5 size-2 rounded-full border border-background", StatusDot(f.Status))"></span>
+                        }
+                    </button>
+                    @* Tooltip on hover *@
+                    @if (!isSelected)
+                    {
+                        <div class="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 hidden group-hover:flex items-center gap-2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md" style="z-index:20">
+                            <span class="font-medium">@f.Name</span>
+                            <span class="text-muted-foreground">@cfg.Label</span>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Map controls *@
+            <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+            </div>
+        </div>
+
+        @* Facility list *@
+        <div>
+            @for (var idx = 0; idx < _facilities.Length; idx++)
+            {
+                var f = _facilities[idx];
+                var pct = (int)Math.Round((double)f.CurrentLevel / f.Capacity * 100);
+                var cfg = TypeConfig(f.Type);
+                var stCfg = StatusConfig(f.Status);
+                var isExpanded = _selected == f.Id;
+                var isLast = idx == _facilities.Length - 1;
+                var borderClass = (isLast && !isExpanded) ? "" : "border-t";
+                <div class="@borderClass">
+                    <button
+                        type="button"
+                        @onclick="@(() => _selected = (_selected == f.Id ? null : f.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", stCfg.Dot)"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@f.Name</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                @cfg.Label · @(f.FlowRate != "N/A" ? f.FlowRate : $"{f.CurrentLevel} MG")
+                            </p>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                            @stCfg.Label
+                        </BadgeCn>
+                        <div class="flex items-center gap-2">
+                            <div class="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
+                                <div class="@Cn.Merge("h-full rounded-full", LevelColor(pct))" style="@($"width:{pct}%")"></div>
+                            </div>
+                            <span class="@Cn.Merge("w-8 text-right text-xs font-medium tabular-nums", LevelTextColor(pct))">
+                                @pct%
+                            </span>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="grid grid-cols-3 gap-3 px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Capacity</span>
+                                <p class="mt-1 text-lg font-semibold tabular-nums">
+                                    @f.CurrentLevel
+                                    <span class="text-sm font-normal text-muted-foreground">/@f.Capacity @(f.Type == "reservoir" ? "MG" : "MGD")</span>
+                                </p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Pressure</span>
+                                <p class="mt-1 text-lg font-semibold tabular-nums">@f.Pressure</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Last inspection</span>
+                                <p class="mt-1 text-sm font-medium">@f.LastInspection</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record WaterFacility(
+        string Id, string Name, string Type, string Status,
+        double Longitude, double Latitude,
+        int Capacity, int CurrentLevel,
+        string FlowRate, string Pressure, string LastInspection);
+
+    private record PipelineRoute(
+        string Id, string FromId, string ToId,
+        double[][] Coordinates, string Diameter, string Status, string FlowRate);
+
+    private record TypeCfg(string Label, string Color);
+    private record StatusCfg(string Label, string Dot);
+
+    private static readonly WaterFacility[] _facilities =
+    [
+        new("f1", "Croton Treatment Plant",    "treatment",   "operational", -73.8912, 41.2087, 290, 248, "248 MGD", "62 PSI", "12 days ago"),
+        new("f2", "Kensico Reservoir",          "reservoir",   "operational", -73.7637, 41.075,  30,  26,  "N/A",     "N/A",    "3 days ago"),
+        new("f3", "Hillview Reservoir",         "reservoir",   "maintenance", -73.8521, 40.9284, 900, 612, "N/A",     "N/A",    "1 day ago"),
+        new("f4", "Jerome Park Pump Station",   "pump-station","operational", -73.8975, 40.8789, 150, 118, "118 MGD", "78 PSI", "8 days ago"),
+        new("f5", "Shaft 17B Pump Station",     "pump-station","alert",       -73.9234, 40.8312, 120, 108, "108 MGD", "44 PSI", "22 days ago"),
+        new("f6", "Central Park Reservoir",     "reservoir",   "operational", -73.9626, 40.7852, 1000,870, "N/A",     "N/A",    "5 days ago"),
+    ];
+
+    private static readonly PipelineRoute[] _pipelines =
+    [
+        new("p1", "f1", "f2", [[-73.8912,41.2087],[-73.84,41.15],[-73.7637,41.075]],      "72 in", "active",      "180 MGD"),
+        new("p2", "f2", "f3", [[-73.7637,41.075], [-73.81,41.0], [-73.8521,40.9284]],     "60 in", "active",      "145 MGD"),
+        new("p3", "f3", "f4", [[-73.8521,40.9284],[-73.87,40.905],[-73.8975,40.8789]],    "48 in", "maintenance", "92 MGD"),
+        new("p4", "f4", "f5", [[-73.8975,40.8789],[-73.91,40.855],[-73.9234,40.8312]],    "48 in", "active",      "118 MGD"),
+        new("p5", "f5", "f6", [[-73.9234,40.8312],[-73.94,40.81], [-73.9626,40.7852]],    "42 in", "active",      "105 MGD"),
+    ];
+
+    // Bounding box for the New York water system area
+    private const double _lonMin = -74.1;
+    private const double _lonMax = -73.65;
+    private const double _latMin = 40.72;
+    private const double _latMax = 41.28;
+
+    private string? _selected;
+
+    private int _operationalCount => _facilities.Count(f => f.Status == "operational");
+    private int _alertCount => _facilities.Count(f => f.Status == "alert" || f.Status == "maintenance");
+
+    private static TypeCfg TypeConfig(string type) => type switch
+    {
+        "treatment"    => new TypeCfg("Treatment",    "#3b82f6"),
+        "reservoir"    => new TypeCfg("Reservoir",    "#06b6d4"),
+        "pump-station" => new TypeCfg("Pump Station", "#8b5cf6"),
+        _              => new TypeCfg(type,            "#888888"),
+    };
+
+    private static StatusCfg StatusConfig(string status) => status switch
+    {
+        "operational" => new StatusCfg("Operational", "bg-emerald-500"),
+        "maintenance" => new StatusCfg("Maintenance", "bg-amber-500"),
+        "alert"       => new StatusCfg("Alert",       "bg-red-500"),
+        _             => new StatusCfg(status,         "bg-muted-foreground"),
+    };
+
+    private static string StatusDot(string status) => status switch
+    {
+        "maintenance" => "bg-amber-500",
+        "alert"       => "bg-red-500",
+        _             => "bg-muted-foreground",
+    };
+
+    private static string PipelineColor(string status) => status switch
+    {
+        "active"      => "#3b82f6",
+        "maintenance" => "#eab308",
+        "planned"     => "#a1a1aa",
+        _             => "#888888",
+    };
+
+    private static string LevelColor(int pct)
+    {
+        if (pct >= 85) return "bg-emerald-500";
+        if (pct >= 60) return "bg-blue-500";
+        if (pct >= 40) return "bg-amber-500";
+        return "bg-red-500";
+    }
+
+    private static string LevelTextColor(int pct)
+    {
+        if (pct >= 85) return "text-emerald-600 dark:text-emerald-400";
+        if (pct >= 60) return "text-blue-600 dark:text-blue-400";
+        if (pct >= 40) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+
+    private string BuildRoutePath(double[][] coords)
+    {
+        if (coords.Length == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < coords.Length; i++)
+        {
+            var x = MapLonToPercent(coords[i][0]) * 100;
+            var y = MapLatToPercent(coords[i][1]) * 100;
+            var xStr = x.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            var yStr = y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            sb.Append(i == 0 ? $"M {xStr}% {yStr}%" : $" L {xStr}% {yStr}%");
+        }
+        return sb.ToString();
+    }
+}

@@ -1,0 +1,183 @@
+@* ============================================================
+   Block: reviews-inline-rating-widget
+   Title: ReviewsInlineRatingWidget
+   Description: A compact interactive star rating widget for React and Next.js with hover previews, one-line comment input, submission feedback, and embedded product context. Built with shadcn/ui Input, Button, Popover, and Tailwind CSS.
+   Source: original/blocks/reviews/reviews-inline-rating-widget.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="text-sm font-medium">Rate your purchases</span>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Share quick feedback on recent orders
+            </p>
+        </div>
+
+        @* Product rating widgets *@
+        <div class="divide-y">
+            @foreach (var product in _products)
+            {
+                var prod = product;
+                var state = GetState(prod.Id);
+                var activeRating = state.HoverRating > 0 ? state.HoverRating : state.SelectedRating;
+
+                <div class="px-4 py-3">
+                    <div class="flex items-start gap-3">
+                        @* Product thumbnail placeholder *@
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-medium text-muted-foreground">
+                            @prod.Image
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+                            @* Product info row *@
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <span class="text-sm font-medium">@prod.Name</span>
+                                    <div class="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                                        <span>@prod.Category</span>
+                                        <span>Purchased @prod.PurchaseDate</span>
+                                    </div>
+                                </div>
+                                <div class="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="star" Size="12" Class="size-3 fill-foreground text-foreground" />
+                                    <span class="font-medium tabular-nums text-foreground">@prod.CurrentRating</span>
+                                    <span class="tabular-nums">(@prod.TotalReviews.ToString("N0"))</span>
+                                </div>
+                            </div>
+
+                            @* Rating widget *@
+                            @if (state.Submitted)
+                            {
+                                <div class="mt-2 flex items-center gap-2 rounded-md bg-emerald-500/5 px-3 py-2">
+                                    <LucideIconCn Name="check" Size="14" Class="size-3.5 text-emerald-600" />
+                                    <span class="text-xs text-emerald-600">
+                                        Thanks for your @state.SelectedRating-star rating@(state.Comment.Length > 0 ? " and comment" : "")
+                                    </span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mt-2">
+                                    <div class="flex items-center gap-3">
+                                        @* Stars *@
+                                        <div class="flex items-center gap-0.5">
+                                            @for (int i = 1; i <= 5; i++)
+                                            {
+                                                var starValue = i;
+                                                var isFilled = starValue <= activeRating;
+                                                <button type="button"
+                                                        class="rounded p-0.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                        aria-label="@($"Rate {starValue} star{(starValue > 1 ? "s" : "")}")"
+                                                        @onmouseenter="@(() => UpdateHover(prod.Id, starValue))"
+                                                        @onmouseleave="@(() => UpdateHover(prod.Id, 0))"
+                                                        @onclick="@(() => SelectRating(prod.Id, starValue))">
+                                                    <LucideIconCn Name="star" Size="20" Class="@Cn.Merge("size-5 transition-colors", isFilled ? "fill-amber-500 text-amber-500" : "text-muted-foreground/25")" />
+                                                </button>
+                                            }
+                                        </div>
+
+                                        @* Hover label *@
+                                        @if (activeRating > 0)
+                                        {
+                                            <span class="text-xs text-muted-foreground">
+                                                @_ratingLabels[activeRating - 1]
+                                            </span>
+                                        }
+                                    </div>
+
+                                    @* Comment input — appears after star selection *@
+                                    @if (state.ShowComment && state.SelectedRating > 0)
+                                    {
+                                        <div class="mt-2 flex items-center gap-2">
+                                            <div class="relative flex-1">
+                                                <LucideIconCn Name="message-square" Size="12" Class="pointer-events-none absolute left-2.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground/50" />
+                                                <InputCn Placeholder="Add a quick comment (optional)"
+                                                         Value="@state.Comment"
+                                                         ValueChanged="@((string v) => UpdateComment(prod.Id, v))"
+                                                         Class="h-8 pl-8 text-xs" />
+                                            </div>
+                                            <ButtonCn Size="ButtonSize.Sm" Class="h-8 text-xs"
+                                                      Disabled="@state.Submitting"
+                                                      OnClick="@(() => HandleSubmit(prod.Id))">
+                                                @(state.Submitting ? "Saving..." : "Submit")
+                                            </ButtonCn>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2">
+            <p class="text-[10px] text-muted-foreground">
+                Your ratings help other customers make informed decisions. All reviews are verified
+                against purchase history.
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Product(string Id, string Name, string Image, double CurrentRating, int TotalReviews, string Category, string PurchaseDate);
+
+    private class WidgetState
+    {
+        public int HoverRating { get; set; } = 0;
+        public int SelectedRating { get; set; } = 0;
+        public string Comment { get; set; } = "";
+        public bool ShowComment { get; set; } = false;
+        public bool Submitted { get; set; } = false;
+        public bool Submitting { get; set; } = false;
+    }
+
+    private static readonly string[] _ratingLabels = ["Terrible", "Poor", "Okay", "Good", "Excellent"];
+
+    private static readonly Product[] _products =
+    [
+        new("p1", "Ergonomic Mesh Chair Pro", "EMC", 4.3, 847, "Office Furniture", "Mar 12, 2026"),
+        new("p2", "Wireless Noise-Canceling Headphones", "WNC", 4.6, 2134, "Audio", "Mar 8, 2026"),
+        new("p3", "Mechanical Keyboard TKL", "MKT", 4.1, 563, "Peripherals", "Feb 28, 2026"),
+        new("p4", "USB-C Docking Station", "UCD", 3.8, 392, "Accessories", "Feb 20, 2026"),
+    ];
+
+    private Dictionary<string, WidgetState> _widgetStates = new();
+
+    private WidgetState GetState(string productId)
+    {
+        if (!_widgetStates.ContainsKey(productId))
+            _widgetStates[productId] = new WidgetState();
+        return _widgetStates[productId];
+    }
+
+    private void UpdateHover(string productId, int hoverRating)
+    {
+        GetState(productId).HoverRating = hoverRating;
+    }
+
+    private void SelectRating(string productId, int starValue)
+    {
+        var state = GetState(productId);
+        state.SelectedRating = starValue;
+        state.ShowComment = true;
+    }
+
+    private void UpdateComment(string productId, string comment)
+    {
+        GetState(productId).Comment = comment;
+    }
+
+    private async Task HandleSubmit(string productId)
+    {
+        var state = GetState(productId);
+        state.Submitting = true;
+        await Task.Delay(600);
+        state.Submitting = false;
+        state.Submitted = true;
+    }
+}

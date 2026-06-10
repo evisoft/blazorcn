@@ -1,0 +1,176 @@
+@* ============================================================
+   Block: file-upload-webhook-integration
+   Title: FileUploadWebhookIntegration
+   Description: File upload block with webhook event configuration for React and Next.js showing webhook URL, custom headers, payload format, event type toggles, test webhook, and upload trigger using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-webhook-integration.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="webhook" Size="16" Class="size-4 text-muted-foreground" />
+            <div>
+                <span class="font-medium text-sm">Webhook Configuration</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_enabledCount event @(_enabledCount == 1 ? "type" : "types") enabled
+                </p>
+            </div>
+        </div>
+
+        @* Webhook URL *@
+        <div class="space-y-1.5 border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">Endpoint URL</span>
+            <InputCn @bind-Value="_webhookUrl"
+                     Placeholder="@("https://your-app.com/webhooks/upload")"
+                     Class="h-8 font-mono text-sm" />
+        </div>
+
+        @* Signing secret *@
+        <div class="space-y-1.5 border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">Signing secret</span>
+            <InputCn @bind-Value="_secret"
+                     Placeholder="@("whsec_...")"
+                     Class="h-8 font-mono text-sm" />
+            <p class="text-muted-foreground text-xs">
+                Used to verify webhook signatures via HMAC-SHA256
+            </p>
+        </div>
+
+        @* Event types *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">Event types</span>
+            <div class="space-y-0">
+                @for (int i = 0; i < _events.Length; i++)
+                {
+                    var evt = _events[i];
+                    var isLast = i == _events.Length - 1;
+                    <span role="button"
+                          tabindex="0"
+                          @onclick="@(() => ToggleEvent(evt.Id))"
+                          class="@Cn.Merge("flex cursor-pointer items-center gap-3 py-2.5", isLast ? "" : "border-b")">
+                        <SwitchCn Checked="@evt.Enabled" OnCheckedChange="@(() => ToggleEvent(evt.Id))" />
+                        <div class="min-w-0 flex-1">
+                            <span class="font-mono text-sm">@evt.Name</span>
+                            <p class="text-muted-foreground text-xs">@evt.Description</p>
+                        </div>
+                        @if (evt.Enabled)
+                        {
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-normal text-xs">Active</BadgeCn>
+                        }
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Payload preview *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                Sample payload (JSON)
+            </span>
+            <div class="rounded-md bg-zinc-950 p-3">
+                <pre class="overflow-x-auto font-mono text-sm text-zinc-100 leading-relaxed">@_samplePayload</pre>
+            </div>
+        </div>
+
+        @* Test webhook *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                @if (_deliveryStatus == "delivered")
+                {
+                    <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span class="text-sm text-emerald-600 dark:text-emerald-400">Delivered (200 OK)</span>
+                }
+                @if (_deliveryStatus == "failed")
+                {
+                    <LucideIconCn Name="x-circle" Size="14" Class="size-3.5 text-red-600 dark:text-red-400" />
+                    <span class="text-red-600 text-sm dark:text-red-400">Delivery failed (timeout)</span>
+                }
+                @if (_deliveryStatus == "sending")
+                {
+                    <LucideIconCn Name="loader-2" Size="14" Class="size-3.5 animate-spin text-muted-foreground" />
+                    <span class="text-muted-foreground text-sm">Sending test event...</span>
+                }
+                @if (_deliveryStatus == "idle")
+                {
+                    <span class="text-muted-foreground text-xs">Send a test event to verify your endpoint</span>
+                }
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                      Class="h-7 gap-1 text-xs"
+                      OnClick="TestWebhook"
+                      Disabled="@(_deliveryStatus == "sending")">
+                <LucideIconCn Name="send" Size="12" Class="size-3" />
+                Test webhook
+            </ButtonCn>
+        </div>
+
+        @* Upload trigger *@
+        <div class="flex items-center justify-between px-4 py-3">
+            <div class="min-w-0 flex-1">
+                @if (_selectedFile != null)
+                {
+                    <span class="truncate font-mono text-sm">@_selectedFile</span>
+                }
+                else
+                {
+                    <span class="text-muted-foreground text-xs">Upload a file to trigger configured webhooks</span>
+                }
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Choose file
+                </ButtonCn>
+                <ButtonCn Size="ButtonSize.Sm"
+                          Class="h-7 gap-1 text-xs"
+                          Disabled="@(_selectedFile == null || _enabledCount == 0)">
+                    <LucideIconCn Name="cloud-upload" Size="14" Class="size-3.5" />
+                    Upload &amp; send
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record WebhookEvent(string Id, string Name, string Description, bool Enabled);
+
+    private WebhookEvent[] _events =
+    [
+        new("upload.started",   "upload.started",   "Fires when a file upload begins",          true),
+        new("upload.completed", "upload.completed", "Fires when a file upload succeeds",         true),
+        new("upload.failed",    "upload.failed",    "Fires when a file upload fails",            false),
+        new("upload.deleted",   "upload.deleted",   "Fires when an uploaded file is deleted",   false),
+    ];
+
+    private static readonly string _samplePayload =
+        "{\n" +
+        "  \"event\": \"upload.completed\",\n" +
+        "  \"timestamp\": \"2026-03-24T14:32:00Z\",\n" +
+        "  \"data\": {\n" +
+        "    \"file_id\": \"file_8a3b2c1d\",\n" +
+        "    \"filename\": \"quarterly-report.pdf\",\n" +
+        "    \"size\": 2458624,\n" +
+        "    \"mime_type\": \"application/pdf\"\n" +
+        "  }\n" +
+        "}";
+
+    private string _webhookUrl = "https://hooks.acme.com/upload-events";
+    private string _secret = "whsec_a1b2c3d4e5f6g7h8";
+    private string _deliveryStatus = "idle";
+    private string? _selectedFile = null;
+
+    private int _enabledCount => _events.Count(e => e.Enabled);
+
+    private void ToggleEvent(string id)
+    {
+        _events = _events.Select(e => e.Id == id ? e with { Enabled = !e.Enabled } : e).ToArray();
+    }
+
+    private async Task TestWebhook()
+    {
+        _deliveryStatus = "sending";
+        await Task.Delay(1200);
+        _deliveryStatus = "delivered";
+    }
+}

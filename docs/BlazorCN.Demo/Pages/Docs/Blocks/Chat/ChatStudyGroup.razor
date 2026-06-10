@@ -1,0 +1,285 @@
+@* ============================================================
+   Block: chat-study-group
+   Title: ChatStudyGroup
+   Description: React study group chat interface for Next.js with inline quiz cards, answer selection, score tracking, explanations, and discussion threads using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-study-group.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <div class="flex size-8 items-center justify-center rounded-full bg-muted">
+                <LucideIconCn Name="graduation-cap" Size="16" Class="size-4 text-muted-foreground" />
+            </div>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">CS Midterm Review</span>
+                <p class="text-muted-foreground text-xs">Aisha Patel, You</p>
+            </div>
+            @if (_answeredCount > 0)
+            {
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                        @_correctCount/@_answeredCount
+                    </span>
+                    <span class="text-muted-foreground">correct</span>
+                </div>
+            }
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="flex flex-col gap-3">
+                @foreach (var msg in _messages)
+                {
+                    var isMe = msg.Sender == "me";
+                    var showHeader = IsFirstInGroup(msg.Id);
+                    <div class="@Cn.Merge("flex flex-col", isMe ? "items-end" : "items-start")">
+                        @if (showHeader)
+                        {
+                            <div class="mb-0.5 flex items-center gap-1.5 px-1">
+                                <span class="font-medium text-xs">@msg.SenderName</span>
+                                <span class="text-muted-foreground text-[10px]">@msg.Timestamp</span>
+                            </div>
+                        }
+                        @if (msg.Type == "text" && msg.Content != null)
+                        {
+                            <div class="@Cn.Merge("max-w-[75%] rounded-2xl px-3 py-2 text-sm leading-relaxed", isMe ? "bg-foreground text-background" : "bg-muted text-foreground")">
+                                @msg.Content
+                            </div>
+                        }
+                        @if (msg.Type == "quiz" && msg.Quiz != null)
+                        {
+                            var quiz = msg.Quiz;
+                            var answered = _answers.ContainsKey(quiz.Id);
+                            var selectedAnswer = answered ? _answers[quiz.Id] : null;
+                            <div class="mt-1.5 w-full max-w-sm overflow-hidden rounded-md border">
+                                @* Quiz header *@
+                                <div class="flex items-center gap-2 border-b px-3 py-2">
+                                    <LucideIconCn Name="book-open" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    <span class="font-medium text-sm">Quiz</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-[10px]">
+                                        @quiz.Subject
+                                    </BadgeCn>
+                                </div>
+
+                                @* Question *@
+                                <div class="border-b px-3 py-2.5">
+                                    <p class="font-medium text-sm leading-relaxed">@quiz.Question</p>
+                                </div>
+
+                                @* Options *@
+                                <div class="flex flex-col gap-1.5 px-3 py-2.5">
+                                    @foreach (var opt in quiz.Options)
+                                    {
+                                        var optId = opt.Id;
+                                        var isCorrect = optId == quiz.CorrectAnswer;
+                                        var isSelected = optId == selectedAnswer;
+
+                                        var optionStyle = "border-muted-foreground/20 hover:border-muted-foreground/40";
+                                        if (answered && isCorrect)
+                                        {
+                                            optionStyle = "border-emerald-500/50 bg-emerald-500/5";
+                                        }
+                                        else if (answered && isSelected && !isCorrect)
+                                        {
+                                            optionStyle = "border-red-500/50 bg-red-500/5";
+                                        }
+                                        else if (isSelected && !answered)
+                                        {
+                                            optionStyle = "border-foreground";
+                                        }
+
+                                        var badgeStyle = (answered && isCorrect)
+                                            ? "border-emerald-500 bg-emerald-500 text-white"
+                                            : (answered && isSelected && !isCorrect)
+                                                ? "border-red-500 bg-red-500 text-white"
+                                                : "border-muted-foreground/30 text-muted-foreground";
+
+                                        var quizId = quiz.Id;
+                                        <button
+                                            type="button"
+                                            @onclick="@(() => HandleAnswer(quizId, optId))"
+                                            disabled="@(answered ? "disabled" : null)"
+                                            class="@Cn.Merge("flex items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors", optionStyle, answered ? "cursor-default" : "")">
+                                            <span class="@Cn.Merge("flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-medium", badgeStyle)">
+                                                @if (answered && isCorrect)
+                                                {
+                                                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                                }
+                                                else if (answered && isSelected && !isCorrect)
+                                                {
+                                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                                }
+                                                else
+                                                {
+                                                    @(opt.Id.ToUpper())
+                                                }
+                                            </span>
+                                            <span class="flex-1">@opt.Label</span>
+                                        </button>
+                                    }
+                                </div>
+
+                                @* Explanation toggle *@
+                                @if (answered)
+                                {
+                                    var showExp = _showExplanation.Contains(quiz.Id);
+                                    var explanationQuizId = quiz.Id;
+                                    <div class="border-t">
+                                        <button
+                                            type="button"
+                                            @onclick="@(() => ToggleExplanation(explanationQuizId))"
+                                            class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/50">
+                                            <span class="font-medium text-muted-foreground text-xs">
+                                                @(showExp ? "Hide explanation" : "Show explanation")
+                                            </span>
+                                        </button>
+                                        @if (showExp)
+                                        {
+                                            <div class="px-3 pb-3">
+                                                <div class="rounded-md bg-muted/50 p-3">
+                                                    <p class="text-sm leading-relaxed">@quiz.Explanation</p>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Score bar *@
+        @if (_answeredCount > 0 && _answeredCount < _totalQuizzes)
+        {
+            <div class="border-t px-4 py-2">
+                <div class="flex items-center gap-2">
+                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                            class="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
+                            style="@($"width:{(int)Math.Round((_answeredCount / (double)_totalQuizzes) * 100)}%")">
+                        </div>
+                    </div>
+                    <span class="text-muted-foreground text-xs tabular-nums">
+                        @_answeredCount/@_totalQuizzes
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <InputCn
+                    @bind-Value="_input"
+                    Placeholder="Discuss or ask a question..."
+                    Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn
+                    type="submit"
+                    Size="ButtonSize.Icon"
+                    Variant="ButtonVariant.Ghost"
+                    Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                    Class="size-9 shrink-0 text-muted-foreground hover:text-foreground"
+                    OnClick="@HandleSubmit">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string _input = "";
+    private Dictionary<string, string> _answers = new();
+    private HashSet<string> _showExplanation = new();
+
+    private record QuizOption(string Id, string Label);
+    private record QuizInfo(string Id, string Question, QuizOption[] Options, string CorrectAnswer, string Explanation, string Subject);
+    private record ChatMessage(string Id, string Type, string Sender, string SenderName, string Timestamp, string? Content = null, QuizInfo? Quiz = null);
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("1", "text", "them", "Aisha Patel", "4:00 PM",
+            Content: "Ready for the CS review session? I put together some practice questions."),
+        new("2", "text", "me", "You", "4:01 PM",
+            Content: "Let's do it. Start with data structures."),
+        new("3", "quiz", "them", "Aisha Patel", "4:02 PM",
+            Quiz: new QuizInfo("q1",
+                "What is the average time complexity of searching in a balanced binary search tree?",
+                [
+                    new("a", "O(1)"),
+                    new("b", "O(log n)"),
+                    new("c", "O(n)"),
+                    new("d", "O(n log n)"),
+                ],
+                "b",
+                "A balanced BST halves the search space at each level, giving O(log n) comparisons. An unbalanced tree degrades to O(n), which is why self-balancing variants like AVL and red-black trees are preferred.",
+                "Data Structures")),
+        new("4", "text", "me", "You", "4:04 PM",
+            Content: "Easy one. Hit me with something harder."),
+        new("5", "quiz", "them", "Aisha Patel", "4:05 PM",
+            Quiz: new QuizInfo("q2",
+                "Which sorting algorithm has the best worst-case time complexity?",
+                [
+                    new("a", "Quick Sort — O(n log n)"),
+                    new("b", "Merge Sort — O(n log n)"),
+                    new("c", "Bubble Sort — O(n²)"),
+                    new("d", "Insertion Sort — O(n²)"),
+                ],
+                "b",
+                "Merge Sort guarantees O(n log n) in all cases because it always divides the array in half and merges in linear time. Quick Sort averages O(n log n) but degrades to O(n²) with poor pivot selection.",
+                "Algorithms")),
+        new("6", "text", "them", "Aisha Patel", "4:08 PM",
+            Content: "Good question. Let me add a networking one."),
+        new("7", "quiz", "them", "Aisha Patel", "4:09 PM",
+            Quiz: new QuizInfo("q3",
+                "At which OSI layer does TCP operate?",
+                [
+                    new("a", "Layer 2 — Data Link"),
+                    new("b", "Layer 3 — Network"),
+                    new("c", "Layer 4 — Transport"),
+                    new("d", "Layer 5 — Session"),
+                ],
+                "c",
+                "TCP (Transmission Control Protocol) operates at Layer 4, the Transport layer. It provides reliable, ordered, and error-checked delivery of data between applications. Layer 3 (Network) is where IP operates.",
+                "Networking")),
+        new("8", "text", "me", "You", "4:12 PM",
+            Content: "These are perfect for the midterm. Keep them coming!"),
+    ];
+
+    private int _totalQuizzes => _messages.Count(m => m.Type == "quiz");
+    private int _answeredCount => _answers.Count;
+    private int _correctCount => _messages.Count(m =>
+        m.Type == "quiz" && m.Quiz != null &&
+        _answers.TryGetValue(m.Quiz.Id, out var ans) && ans == m.Quiz.CorrectAnswer);
+
+    private bool IsFirstInGroup(string messageId)
+    {
+        var index = Array.FindIndex(_messages, m => m.Id == messageId);
+        if (index == 0) return true;
+        return _messages[index - 1].SenderName != _messages[index].SenderName;
+    }
+
+    private void HandleAnswer(string quizId, string optionId)
+    {
+        if (_answers.ContainsKey(quizId)) return;
+        _answers[quizId] = optionId;
+    }
+
+    private void ToggleExplanation(string quizId)
+    {
+        if (!_showExplanation.Add(quizId))
+            _showExplanation.Remove(quizId);
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

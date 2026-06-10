@@ -1,0 +1,239 @@
+@* ============================================================
+   Block: kanban-api-tracker
+   Title: KanbanApiTracker
+   Description: React kanban API endpoint tracker for Next.js with shadcn/ui Command palette search by endpoint path and HTTP method, version badges, and four-column lifecycle pipeline using Tailwind CSS
+   Source: original/blocks/kanban/kanban-api-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="server" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">API Endpoints</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_endpoints.Length endpoints
+                </BadgeCn>
+            </div>
+            <PopoverCn Open="@_open" OpenChanged="@HandleOpenChanged">
+                <PopoverTriggerCn Class="flex h-7 items-center gap-1.5 rounded-md border bg-muted/50 px-2.5 text-muted-foreground text-xs transition-colors hover:bg-muted">
+                    <LucideIconCn Name="search" Size="12" Class="size-3" />
+                    Search endpoints
+                </PopoverTriggerCn>
+                <PopoverContentCn Class="w-80 p-0" Align="FloatingAlign.End">
+                    <CommandCn Class="border-0">
+                        <CommandInputCn Placeholder="Search paths, methods, versions..." Value="@_search" ValueChanged="@HandleSearchChanged" />
+                        <CommandListCn>
+                            @if (!HasMatches())
+                            {
+                                <CommandEmptyCn>No matching endpoints.</CommandEmptyCn>
+                            }
+                            @if (_search.Trim().Length > 0 && GetMatchedIds().Count > 0)
+                            {
+                                <CommandGroupCn Heading="Endpoints">
+                                    @foreach (var ep in _endpoints)
+                                    {
+                                        var epItem = ep;
+                                        @if (GetMatchedIds().Contains(epItem.Id))
+                                        {
+                                            var mc = GetMethodColor(epItem.Method);
+                                            <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                                <span class="@Cn.Merge("rounded px-1 py-0.5 font-mono text-[10px] font-medium", mc.Bg, mc.Text)">
+                                                    @epItem.Method
+                                                </span>
+                                                <div class="min-w-0 flex-1">
+                                                    <span class="block truncate font-mono text-sm">@epItem.Path</span>
+                                                    <span class="text-muted-foreground text-xs">
+                                                        @epItem.Title · @epItem.Version
+                                                    </span>
+                                                </div>
+                                            </CommandItemCn>
+                                        }
+                                    }
+                                </CommandGroupCn>
+                            }
+                            <CommandGroupCn Heading="Quick Actions">
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Promote to Stable
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="zap" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Mark as breaking
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="activity" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    View usage metrics
+                                </CommandItemCn>
+                            </CommandGroupCn>
+                        </CommandListCn>
+                    </CommandCn>
+                </PopoverContentCn>
+            </PopoverCn>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var colEndpoints = GetColumnEndpoints(column.Id);
+                <div>
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+                        <span class="text-muted-foreground">
+                            <LucideIconCn Name="@column.IconName" Size="14" Class="size-3.5" />
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@colEndpoints.Length</span>
+                    </div>
+                    <div class="p-2">
+                        <div class="flex flex-col gap-1.5">
+                            @foreach (var ep in colEndpoints)
+                            {
+                                var epCard = ep;
+                                var matchedIds = GetMatchedIds();
+                                var isMatch = matchedIds.Count == 0 || matchedIds.Contains(epCard.Id);
+                                var isDimmed = matchedIds.Count > 0 && !matchedIds.Contains(epCard.Id);
+                                var mc = GetMethodColor(epCard.Method);
+                                <div class="@Cn.Merge("rounded-md border bg-card p-2.5 transition-all hover:bg-muted/50", (isMatch && matchedIds.Count > 0) ? "ring-2 ring-foreground" : "", isDimmed ? "opacity-30" : "")">
+                                    <div class="mb-1.5 flex items-center gap-2">
+                                        <span class="@Cn.Merge("rounded px-1 py-0.5 font-mono text-[10px] font-medium", mc.Bg, mc.Text)">
+                                            @epCard.Method
+                                        </span>
+                                        <span class="min-w-0 flex-1 truncate font-mono text-sm">
+                                            @epCard.Path
+                                        </span>
+                                    </div>
+                                    <span class="mb-1.5 block text-muted-foreground text-xs">
+                                        @epCard.Title
+                                    </span>
+                                    <div class="flex items-center gap-2">
+                                        <span class="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                            @epCard.Version
+                                        </span>
+                                        @if (epCard.IsBreaking)
+                                        {
+                                            <span class="size-1.5 rounded-full bg-red-500"></span>
+                                            <span class="text-[10px] text-red-600 dark:text-red-400">
+                                                breaking
+                                            </span>
+                                        }
+                                        <span class="ml-auto text-muted-foreground text-[10px]">
+                                            @epCard.Owner
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                            @if (colEndpoints.Length == 0)
+                            {
+                                <div class="py-8 text-center text-muted-foreground/60 text-xs">
+                                    No endpoints
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @(_endpoints.Count(ep => ep.Status == "stable")) stable · @(_endpoints.Count(ep => ep.IsBreaking)) breaking changes
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Updated 3 min ago</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Endpoint(string Id, string Path, string Method, string Title, string Status, string Version, bool IsBreaking, string Owner);
+    private record ColumnDef(string Id, string Title, string IconName);
+    private record MethodColor(string Bg, string Text);
+
+    private bool _open = false;
+    private string _search = "";
+
+    private static readonly Endpoint[] _endpoints =
+    [
+        new("e1", "/api/users", "GET", "List users", "stable", "v3", false, "Auth Team"),
+        new("e2", "/api/users", "POST", "Create user", "stable", "v3", false, "Auth Team"),
+        new("e3", "/api/billing/invoices", "GET", "List invoices", "stable", "v2", false, "Billing Team"),
+        new("e4", "/api/webhooks", "POST", "Register webhook", "beta", "v2", false, "Platform Team"),
+        new("e5", "/api/webhooks/verify", "POST", "Verify signature", "beta", "v2", false, "Platform Team"),
+        new("e6", "/api/search", "GET", "Full-text search", "beta", "v1", false, "Search Team"),
+        new("e7", "/api/files", "POST", "Upload file", "beta", "v1", true, "Storage Team"),
+        new("e8", "/api/analytics/events", "POST", "Track event", "development", "v1", false, "Analytics Team"),
+        new("e9", "/api/analytics/query", "POST", "Query analytics", "development", "v1", false, "Analytics Team"),
+        new("e10", "/api/teams", "PUT", "Update team", "development", "v2", true, "Auth Team"),
+        new("e11", "/api/ai/completions", "POST", "Generate completion", "design", "v1", false, "AI Team"),
+        new("e12", "/api/ai/embeddings", "POST", "Create embeddings", "design", "v1", false, "AI Team"),
+        new("e13", "/api/billing/subscriptions", "DELETE", "Cancel subscription", "development", "v3", true, "Billing Team"),
+        new("e14", "/api/users/preferences", "PATCH", "Update preferences", "design", "v1", false, "Auth Team"),
+    ];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("design", "Design", "pencil-ruler"),
+        new("development", "Development", "settings"),
+        new("beta", "Beta", "beaker"),
+        new("stable", "Stable", "check-circle-2"),
+    ];
+
+    private Endpoint[] GetColumnEndpoints(string status) =>
+        _endpoints.Where(ep => ep.Status == status).ToArray();
+
+    private MethodColor GetMethodColor(string method) => method switch
+    {
+        "GET"    => new("bg-blue-500/10", "text-blue-700 dark:text-blue-400"),
+        "POST"   => new("bg-emerald-500/10", "text-emerald-700 dark:text-emerald-400"),
+        "PUT"    => new("bg-amber-500/10", "text-amber-700 dark:text-amber-400"),
+        "DELETE" => new("bg-red-500/10", "text-red-700 dark:text-red-400"),
+        "PATCH"  => new("bg-purple-500/10", "text-purple-700 dark:text-purple-400"),
+        _        => new("bg-muted/50", "text-muted-foreground"),
+    };
+
+    private HashSet<string> GetMatchedIds()
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return [];
+        var query = _search.Trim().ToLower();
+        var ids = new HashSet<string>();
+        foreach (var ep in _endpoints)
+        {
+            if (ep.Path.ToLower().Contains(query) ||
+                ep.Method.ToLower().Contains(query) ||
+                ep.Version.ToLower().Contains(query) ||
+                ep.Title.ToLower().Contains(query))
+            {
+                ids.Add(ep.Id);
+            }
+        }
+        return ids;
+    }
+
+    private bool HasMatches()
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return GetMatchedIds().Count > 0;
+    }
+
+    private async Task HandleOpenChanged(bool value)
+    {
+        _open = value;
+        if (!value) _search = "";
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleSearchChanged(string value)
+    {
+        _search = value;
+        await Task.CompletedTask;
+    }
+
+    private void ClosePopover()
+    {
+        _open = false;
+        _search = "";
+    }
+}

@@ -1,0 +1,258 @@
+@* ============================================================
+   Block: file-upload-virus-scan
+   Title: FileUploadVirusScan
+   Description: File upload with virus and malware scanning block for React and Next.js with scan progress, threat detection results, file hash display, and quarantine controls using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-virus-scan.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Virus scan</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Upload a file to scan for malware
+                </p>
+            </div>
+            @if (_scanStatus != "idle")
+            {
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs" OnClick="Reset">
+                    New scan
+                </ButtonCn>
+            }
+        </div>
+
+        @* Upload / Scan area *@
+        @if (_scanStatus == "idle")
+        {
+            <div class="border-b px-4 py-4">
+                <div
+                    role="button"
+                    tabindex="0"
+                    @onclick="HandleFileSelect"
+                    @onkeydown="@((KeyboardEventArgs e) => { if (e.Key == "Enter" || e.Key == " ") HandleFileSelect(); })"
+                    class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-muted-foreground/20 px-6 py-10 transition-colors hover:border-muted-foreground/40 hover:bg-muted/30">
+                    <LucideIconCn Name="cloud-upload" Size="32" Class="size-8 text-muted-foreground/60" />
+                    <div class="text-center">
+                        <span class="font-medium text-sm">Drop file to scan</span>
+                        <p class="mt-0.5 text-muted-foreground text-xs">
+                            or click to browse from your device
+                        </p>
+                    </div>
+                </div>
+                @* Demo toggle *@
+                <div class="mt-3 flex items-center justify-center gap-1.5">
+                    <span class="text-muted-foreground text-xs">Demo:</span>
+                    <ButtonCn
+                        Variant="@(_demoMode == "clean" ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 text-xs px-2"
+                        OnClick="@((MouseEventArgs e) => _demoMode = "clean")">
+                        Clean file
+                    </ButtonCn>
+                    <ButtonCn
+                        Variant="@(_demoMode == "threat" ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 text-xs px-2"
+                        OnClick="@((MouseEventArgs e) => _demoMode = "threat")">
+                        Threat file
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Scanning progress *@
+        @if (_scanStatus == "scanning")
+        {
+            <div class="border-b px-4 py-6">
+                <div class="flex flex-col items-center gap-3">
+                    <LucideIconCn Name="loader-2" Size="24" Class="size-6 animate-spin text-muted-foreground" />
+                    <div class="w-full max-w-xs space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium">Scanning file</span>
+                            <span class="text-muted-foreground text-xs tabular-nums">@_progress%</span>
+                        </div>
+                        <ProgressCn Value="@_progress" Class="h-1.5" />
+                    </div>
+                    <span class="text-muted-foreground text-xs">
+                        Checking against malware signatures...
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* Scan result *@
+        @if (_result != null)
+        {
+            @* Status banner *@
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                @if (_result.Status == "clean")
+                {
+                    <LucideIconCn Name="shield-check" Size="20" Class="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <div class="min-w-0 flex-1">
+                        <span class="font-medium text-sm text-emerald-600 dark:text-emerald-400">
+                            No threats detected
+                        </span>
+                        <p class="mt-0.5 text-muted-foreground text-xs">File is safe to use</p>
+                    </div>
+                }
+                else if (_quarantined)
+                {
+                    <LucideIconCn Name="shield-alert" Size="20" Class="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div class="min-w-0 flex-1">
+                        <span class="font-medium text-sm text-amber-600 dark:text-amber-400">
+                            File quarantined
+                        </span>
+                        <p class="mt-0.5 text-muted-foreground text-xs">
+                            Moved to quarantine storage
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <LucideIconCn Name="shield-x" Size="20" Class="size-5 shrink-0 text-red-600 dark:text-red-400" />
+                    <div class="min-w-0 flex-1">
+                        <span class="font-medium text-sm text-red-600 dark:text-red-400">
+                            Threat detected
+                        </span>
+                        <p class="mt-0.5 text-muted-foreground text-xs">@_result.ThreatName</p>
+                    </div>
+                    <ButtonCn
+                        Variant="ButtonVariant.Outline"
+                        Size="ButtonSize.Sm"
+                        Class="h-7 shrink-0 text-xs"
+                        OnClick="@((MouseEventArgs e) => _quarantined = true)">
+                        Quarantine
+                    </ButtonCn>
+                }
+            </div>
+
+            @* File info *@
+            <div class="flex items-center gap-3 border-b px-4 py-2.5">
+                <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <span class="truncate font-medium text-sm">@_result.FileName</span>
+                <span class="ml-auto shrink-0 text-muted-foreground text-xs">
+                    @_result.FileSize
+                </span>
+            </div>
+
+            @* Scan details *@
+            <div class="space-y-0">
+                @for (int i = 0; i < _scanDetails.Length; i++)
+                {
+                    var det = _scanDetails[i];
+                    var isLast = i == _scanDetails.Length - 1;
+                    var detValue = det.Key == "Engine" ? _result.Engine
+                                 : det.Key == "Scan time" ? _result.ScanTime
+                                 : _result.Hash;
+                    <div class="@Cn.Merge("flex items-start justify-between gap-4 px-4 py-2.5", isLast ? "" : "border-b")">
+                        <span class="shrink-0 text-muted-foreground text-xs font-medium">
+                            @det.Key
+                        </span>
+                        <span class="@Cn.Merge("text-right text-xs", det.Mono ? "font-mono break-all text-muted-foreground" : "")">
+                            @detValue
+                        </span>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Empty idle footer *@
+        @if (_scanStatus == "idle")
+        {
+            <div class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="shield-check" Size="14" Class="size-3.5 text-muted-foreground/60" />
+                    <span class="text-muted-foreground text-xs">
+                        Files are scanned locally before upload
+                    </span>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record ScanResult(string Status, string FileName, string FileSize, string Engine, string ScanTime, string Hash, string? ThreatName);
+    private record DetailRow(string Key, bool Mono);
+
+    private static readonly ScanResult CleanResult = new(
+        "clean",
+        "quarterly-report.pdf",
+        "2.4 MB",
+        "ClamAV 1.4.1",
+        "1.2s",
+        "a7f3b2e91c4d8e0f5a6b3c7d9e1f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d0e2",
+        null);
+
+    private static readonly ScanResult ThreatResult = new(
+        "threat",
+        "free-software-keygen.exe",
+        "892 KB",
+        "ClamAV 1.4.1",
+        "0.8s",
+        "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4",
+        "Win.Trojan.Agent-7892451");
+
+    private static readonly DetailRow[] _scanDetails =
+    [
+        new("Engine",    false),
+        new("Scan time", false),
+        new("SHA-256",   true),
+    ];
+
+    private string _scanStatus = "idle";
+    private int _progress = 0;
+    private ScanResult? _result = null;
+    private bool _quarantined = false;
+    private string _demoMode = "clean";
+
+    private System.Threading.Timer? _timer;
+
+    private void HandleFileSelect()
+    {
+        _result = null;
+        _quarantined = false;
+        _progress = 0;
+        _scanStatus = "scanning";
+
+        _timer?.Dispose();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_progress >= 100)
+                {
+                    _timer?.Dispose();
+                    _timer = null;
+                    var finalResult = _demoMode == "clean" ? CleanResult : ThreatResult;
+                    _result = finalResult;
+                    _scanStatus = finalResult.Status;
+                    StateHasChanged();
+                    return;
+                }
+                _progress = Math.Min(_progress + 4, 100);
+                StateHasChanged();
+            });
+        }, null, 80, 80);
+    }
+
+    private void Reset()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        _scanStatus = "idle";
+        _progress = 0;
+        _result = null;
+        _quarantined = false;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+}

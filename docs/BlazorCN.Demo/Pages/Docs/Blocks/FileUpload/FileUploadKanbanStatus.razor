@@ -1,0 +1,145 @@
+@* ============================================================
+   Block: file-upload-kanban-status
+   Title: FileUploadKanbanStatus
+   Description: Kanban-style file upload status board for React and Next.js with drag columns for queued, uploading, processing, and complete stages using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-kanban-status.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Upload pipeline</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_files.Length files across @_columns.Length stages
+                </p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                @_files.Count(f => f.Status == "complete")/@_files.Length complete
+            </BadgeCn>
+        </div>
+
+        @* Kanban columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var colDef = col;
+                var colFiles = _files.Where(f => f.Status == colDef.Status).ToArray();
+                <div class="min-h-[320px]">
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b px-3 py-2.5">
+                        <span class="@($"size-1.5 rounded-full {colDef.Dot}")" />
+                        <span class="font-medium text-xs">@colDef.Label</span>
+                        <span class="ml-auto text-muted-foreground text-xs tabular-nums">
+                            @colFiles.Length
+                        </span>
+                    </div>
+
+                    @* Column files *@
+                    <div class="space-y-0 divide-y">
+                        @foreach (var file in colFiles)
+                        {
+                            var f = file;
+                            var nextStatus = GetNextStatus(f.Status);
+                            var nextLabel = nextStatus != null ? _columns.FirstOrDefault(c => c.Status == nextStatus)?.Label : null;
+                            <div class="group px-3 py-2.5 transition-colors hover:bg-muted/50">
+                                <div class="flex items-start gap-2">
+                                    <LucideIconCn Name="file" Size="14" Class="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                                    <div class="min-w-0 flex-1">
+                                        <span class="block truncate font-medium text-xs">@f.Name</span>
+                                        <span class="text-muted-foreground text-xs">@f.Size</span>
+                                    </div>
+                                </div>
+
+                                @* Progress bar for uploading files *@
+                                @if (f.Status == "uploading")
+                                {
+                                    <div class="mt-2 flex items-center gap-2">
+                                        <ProgressCn Value="@f.Progress" Class="h-1" />
+                                        <span class="shrink-0 text-muted-foreground text-xs tabular-nums">
+                                            @(f.Progress)%
+                                        </span>
+                                    </div>
+                                }
+
+                                @* Processing spinner *@
+                                @if (f.Status == "processing")
+                                {
+                                    <div class="mt-1.5 flex items-center gap-1.5">
+                                        <LucideIconCn Name="loader-2" Size="12" Class="size-3 animate-spin text-amber-500" />
+                                        <span class="text-muted-foreground text-xs">Processing</span>
+                                    </div>
+                                }
+
+                                @* Advance button *@
+                                @if (nextStatus != null)
+                                {
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Ghost"
+                                        Size="ButtonSize.Sm"
+                                        Class="mt-1.5 h-6 w-full justify-center gap-1 px-2 text-xs opacity-0 transition-opacity group-hover:opacity-100"
+                                        OnClick="@(() => MoveFile(f.Id, nextStatus))">
+                                        Move to @nextLabel
+                                    </ButtonCn>
+                                }
+                            </div>
+                        }
+
+                        @if (colFiles.Length == 0)
+                        {
+                            <div class="px-3 py-6 text-center">
+                                <span class="text-muted-foreground text-xs">No files</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record UploadFile(string Id, string Name, string Size, string Status, int Progress);
+    private record KanbanColumn(string Status, string Label, string IconName, string Dot);
+
+    private static readonly KanbanColumn[] _columns =
+    [
+        new("queued",     "Queued",     "clock",          "bg-muted-foreground"),
+        new("uploading",  "Uploading",  "upload",         "bg-blue-500"),
+        new("processing", "Processing", "cpu",            "bg-amber-500"),
+        new("complete",   "Complete",   "check-circle-2", "bg-emerald-500"),
+    ];
+
+    private UploadFile[] _files =
+    [
+        new("f1",  "quarterly-report.pdf",   "2.4 MB",  "complete",   100),
+        new("f2",  "product-hero.png",        "4.1 MB",  "complete",   100),
+        new("f3",  "dashboard-export.csv",    "890 KB",  "processing", 100),
+        new("f4",  "onboarding-video.mp4",    "128 MB",  "processing", 100),
+        new("f5",  "api-docs.pdf",            "1.8 MB",  "uploading",   72),
+        new("f6",  "brand-assets.zip",        "34 MB",   "uploading",   45),
+        new("f7",  "user-avatars.zip",        "12 MB",   "uploading",   18),
+        new("f8",  "release-notes.md",        "24 KB",   "queued",       0),
+        new("f9",  "schema-migration.sql",    "156 KB",  "queued",       0),
+        new("f10", "design-tokens.json",      "8 KB",    "queued",       0),
+        new("f11", "changelog-2026.md",       "42 KB",   "queued",       0),
+    ];
+
+    private static string? GetNextStatus(string current)
+    {
+        string[] order = ["queued", "uploading", "processing", "complete"];
+        var idx = Array.IndexOf(order, current);
+        return idx >= 0 && idx < order.Length - 1 ? order[idx + 1] : null;
+    }
+
+    private void MoveFile(string id, string newStatus)
+    {
+        var newProgress = newStatus == "complete" || newStatus == "processing" ? 100
+                        : newStatus == "uploading" ? 0
+                        : _files.FirstOrDefault(f => f.Id == id)?.Progress ?? 0;
+        _files = _files.Select(f =>
+            f.Id == id ? f with { Status = newStatus, Progress = newProgress } : f
+        ).ToArray();
+    }
+}

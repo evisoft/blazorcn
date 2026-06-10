@@ -1,0 +1,274 @@
+@* ============================================================
+   Block: map-earthquake-monitor
+   Title: MapEarthquakeMonitor
+   Description: React earthquake activity monitor map block for Next.js with magnitude-scaled markers, depth indicators, recent quake timeline, and seismic detail tooltips using mapcn and shadcn/ui
+   Source: original/blocks/map/map-earthquake-monitor.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="activity" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Earthquake Monitor</span>
+                <span class="text-xs text-muted-foreground">· @_filtered.Length events</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    Shallow @_countShallow
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    Medium @_countMedium
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    Deep @_countDeep
+                </span>
+            </div>
+        </div>
+
+        @* Magnitude filter *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2">
+            <span class="text-xs text-muted-foreground mr-1">Min magnitude:</span>
+            @foreach (var mag in new[] { 0, 2, 3, 4, 5 })
+            {
+                var m = mag;
+                <ButtonCn
+                    Variant="@(_minMag == m ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                    Size="ButtonSize.Sm"
+                    Class="h-6 px-2 text-xs tabular-nums"
+                    OnClick="@(() => SetMinMag(m))">
+                    @(m == 0 ? "All" : $"M{m}+")
+                </ButtonCn>
+            }
+            <span class="ml-auto text-xs text-muted-foreground">
+                Largest: <span class="@Cn.Merge("font-medium tabular-nums", MagnitudeColor(_maxMag))">M@(_maxMag)</span>
+            </span>
+        </div>
+
+        @* Map placeholder *@
+        <div class="relative h-[460px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Quake markers *@
+                @foreach (var quake in _filtered)
+                {
+                    var q = quake;
+                    var pos = GetMarkerPosition(quake.Lng, quake.Lat);
+                    var dotClass = DepthDot(quake.DepthCategory);
+                    var sizeClass = MagnitudeSize(quake.Magnitude);
+                    var isSelected = _selected == quake.Id;
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%")">
+                        <button
+                            type="button"
+                            class="flex items-center justify-center"
+                            title="@($"M{quake.Magnitude} · {quake.Location}")"
+                            @onclick="@(() => ToggleSelected(q.Id))">
+                            <div class="@Cn.Merge("rounded-full border-2 border-background shadow-sm opacity-80", sizeClass, dotClass)"></div>
+                        </button>
+
+                        @if (isSelected)
+                        {
+                            @* Popup *@
+                            <div class="absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 w-60 rounded-lg border bg-card p-3 shadow-lg">
+                                <div class="mb-1 flex items-center justify-between">
+                                    <span class="@Cn.Merge("text-lg font-semibold tabular-nums", MagnitudeColor(quake.Magnitude))">
+                                        M@(quake.Magnitude)
+                                    </span>
+                                    <button
+                                        type="button"
+                                        class="rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                                        @onclick:stopPropagation
+                                        @onclick="@(() => _selected = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                                <p class="mb-2 text-xs text-muted-foreground">@quake.Location</p>
+                                <div class="mb-2 flex items-center gap-2">
+                                    <BadgeCn Class="@Cn.Merge("text-[10px] font-normal", DepthText(quake.DepthCategory))">
+                                        @(quake.Depth) km deep
+                                    </BadgeCn>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                        @quake.Status
+                                    </BadgeCn>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="rounded bg-muted/50 p-2">
+                                        <span class="text-[10px] text-muted-foreground">Intensity</span>
+                                        <p class="text-xs font-medium">@quake.Intensity</p>
+                                    </div>
+                                    <div class="rounded bg-muted/50 p-2">
+                                        <span class="text-[10px] text-muted-foreground">Time</span>
+                                        <p class="text-xs font-medium">@quake.TimeAgo</p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            @* Tooltip on hover — simple title attr used; markup tooltip omitted to keep lightweight *@
+                        }
+                    </div>
+                }
+            </div>
+            <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded absolute bottom-2 left-1/2 -translate-x-1/2">
+                Map view — Southern California / Nevada
+            </div>
+        </div>
+
+        @* Quake timeline list *@
+        <div>
+            @for (var idx = 0; idx < _filtered.Length; idx++)
+            {
+                var quake = _filtered[idx];
+                var isExpanded = _selected == quake.Id;
+                var isLast = idx == _filtered.Length - 1;
+                var q = quake;
+                <div class="@(isLast && !isExpanded ? "" : "border-t")">
+                    <button
+                        type="button"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                        @onclick="@(() => ToggleSelected(q.Id))">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", DepthDot(quake.DepthCategory))"></span>
+                        <span class="@Cn.Merge("w-10 shrink-0 text-sm font-semibold tabular-nums", MagnitudeColor(quake.Magnitude))">
+                            M@(quake.Magnitude)
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@quake.Location</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                @(quake.Depth) km deep · @quake.Intensity
+                            </p>
+                        </div>
+                        <span class="shrink-0 text-xs text-muted-foreground">@quake.TimeAgo</span>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="grid grid-cols-4 gap-3 px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Magnitude</span>
+                                <p class="@Cn.Merge("mt-1 text-lg font-semibold tabular-nums", MagnitudeColor(quake.Magnitude))">
+                                    @(quake.Magnitude)
+                                </p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Depth</span>
+                                <p class="mt-1 text-lg font-semibold tabular-nums">@(quake.Depth) km</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Intensity</span>
+                                <p class="mt-1 text-sm font-medium">@quake.Intensity</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">UTC Time</span>
+                                <p class="mt-1 text-xs font-mono font-medium">@quake.Time</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Earthquake(
+        string Id,
+        string Location,
+        double Lng,
+        double Lat,
+        double Magnitude,
+        double Depth,
+        string DepthCategory,
+        string Time,
+        string TimeAgo,
+        string Intensity,
+        string Status
+    );
+
+    private static readonly Earthquake[] _quakes =
+    [
+        new("eq1", "14 km SW of Searles Valley, CA", -117.4553, 35.6942, 5.4, 8.2,  "shallow", "2026-03-30 08:14 UTC", "2h ago",  "V - Moderate",   "Reviewed"),
+        new("eq2", "22 km NE of Ridgecrest, CA",      -117.5824, 35.6734, 3.8, 5.1,  "shallow", "2026-03-30 07:52 UTC", "2h ago",  "III - Weak",     "Reviewed"),
+        new("eq3", "8 km W of Coso Junction, CA",     -117.9981, 36.0534, 4.2, 12.4, "medium",  "2026-03-30 06:28 UTC", "4h ago",  "IV - Light",     "Reviewed"),
+        new("eq4", "31 km S of Lone Pine, CA",        -118.0631, 36.3284, 2.7, 3.6,  "shallow", "2026-03-30 05:41 UTC", "5h ago",  "II - Weak",      "Automatic"),
+        new("eq5", "45 km NW of Beatty, NV",          -117.2108, 37.1426, 3.1, 42.8, "medium",  "2026-03-30 04:17 UTC", "6h ago",  "II - Weak",      "Reviewed"),
+        new("eq6", "12 km E of Mammoth Lakes, CA",    -118.8424, 37.6514, 4.7, 78.3, "deep",    "2026-03-30 02:05 UTC", "8h ago",  "IV - Light",     "Reviewed"),
+        new("eq7", "6 km N of The Geysers, CA",       -122.7548, 38.8212, 2.3, 2.1,  "shallow", "2026-03-30 01:33 UTC", "9h ago",  "I - Not felt",   "Automatic"),
+        new("eq8", "19 km SW of Hawthorne, NV",       -118.7012, 38.4628, 3.5, 88.6, "deep",    "2026-03-29 22:48 UTC", "11h ago", "III - Weak",     "Reviewed"),
+    ];
+
+    private string? _selected = null;
+    private int _minMag = 0;
+
+    private Earthquake[] _filtered => Array.FindAll(_quakes, q => q.Magnitude >= _minMag);
+    private double _maxMag => _quakes.Length > 0 ? _quakes.Max(q => q.Magnitude) : 0;
+
+    private int _countShallow => Array.FindAll(_filtered, q => q.DepthCategory == "shallow").Length;
+    private int _countMedium  => Array.FindAll(_filtered, q => q.DepthCategory == "medium").Length;
+    private int _countDeep    => Array.FindAll(_filtered, q => q.DepthCategory == "deep").Length;
+
+    private void SetMinMag(int mag)
+    {
+        _minMag = mag;
+        _selected = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static string MagnitudeSize(double mag)
+    {
+        if (mag >= 6) return "size-7";
+        if (mag >= 5) return "size-5";
+        if (mag >= 4) return "size-4";
+        if (mag >= 3) return "size-3";
+        return "size-2";
+    }
+
+    private static string MagnitudeColor(double mag)
+    {
+        if (mag >= 5) return "text-red-600 dark:text-red-400";
+        if (mag >= 4) return "text-amber-600 dark:text-amber-400";
+        return "text-muted-foreground";
+    }
+
+    private static string DepthDot(string depthCategory) => depthCategory switch
+    {
+        "shallow" => "bg-red-500",
+        "medium"  => "bg-amber-500",
+        "deep"    => "bg-blue-500",
+        _         => "bg-muted",
+    };
+
+    private static string DepthText(string depthCategory) => depthCategory switch
+    {
+        "shallow" => "text-red-700 dark:text-red-400 bg-red-500/10",
+        "medium"  => "text-amber-700 dark:text-amber-400 bg-amber-500/10",
+        "deep"    => "text-blue-700 dark:text-blue-400 bg-blue-500/10",
+        _         => "",
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-123.5, -116.5], lat [34.5, 39.5]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -123.5, lonMax = -116.5;
+        const double latMin = 34.5,   latMax = 39.5;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

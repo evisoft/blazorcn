@@ -1,0 +1,121 @@
+@* ============================================================
+   Block: timeline-deployment-pipeline
+   Title: TimelineDeploymentPipeline
+   Description: React CI/CD pipeline timeline built with Next.js, shadcn/ui, and Tailwind CSS.
+   Source: original/blocks/timeline/timeline-deployment-pipeline.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <div class="flex-1">
+                <span class="font-medium text-sm">Deploy #1847</span>
+                <p class="text-muted-foreground text-xs">
+                    main · a3f8c2d · feat: add user dashboard
+                </p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                <span class="mr-1.5 size-1.5 rounded-full bg-red-500"></span>
+                Failed
+            </BadgeCn>
+        </div>
+
+        @* Pipeline stages *@
+        <div class="px-4 py-5">
+            @foreach (var stg in _stages)
+            {
+                var stgIndex = System.Array.IndexOf(_stages, stg);
+                var isLast = stgIndex == _stages.Length - 1;
+                var config = _statusConfig[stg.Status];
+                var isExpanded = _expanded == stg.Id;
+
+                <div class="relative flex gap-4">
+                    @* Node + Line *@
+                    <div class="flex flex-col items-center">
+                        @* Status circle *@
+                        <div class="@Cn.Merge("relative flex size-8 shrink-0 items-center justify-center", stg.Status == StageStatus.Running ? "animate-pulse" : "")">
+                            <LucideIconCn Name="@config.IconName" Size="24" Class="@($"size-6 {config.Color}")" />
+                        </div>
+
+                        @* Connecting line *@
+                        @if (!isLast)
+                        {
+                            <div class="@($"my-1 w-0.5 {(isExpanded ? "h-full" : "h-8")}")">
+                                @if (stg.Status == StageStatus.Pending)
+                                {
+                                    <div class="h-full w-full border-l-2 border-dashed border-muted-foreground/20"></div>
+                                }
+                                else
+                                {
+                                    <div class="@($"h-full w-full {config.LineColor}")"></div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @* Content *@
+                    <div class="@($"flex-1 {(isLast ? "pb-0" : "pb-3")}")">
+                        <button type="button"
+                                @onclick="@(() => _expanded = (isExpanded ? null : stg.Id))"
+                                class="flex w-full items-center gap-2 text-left">
+                            <span class="@($"font-medium text-sm {(stg.Status == StageStatus.Pending ? "text-muted-foreground" : "text-foreground")}")">
+                                @stg.Label
+                            </span>
+                            <div class="flex items-center gap-1 text-muted-foreground">
+                                <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                <span class="font-mono text-xs">@stg.Duration</span>
+                            </div>
+                        </button>
+
+                        @* Log preview *@
+                        @if (isExpanded)
+                        {
+                            <div class="mt-2 overflow-hidden rounded-md bg-zinc-950 p-3">
+                                @foreach (var logEntry in stg.Logs)
+                                {
+                                    var logIdx = System.Array.IndexOf(stg.Logs, logEntry);
+                                    var isError = logEntry.ToLower().Contains("error");
+                                    <p class="@($"font-mono text-xs leading-relaxed {(isError ? "text-red-400" : "text-zinc-400")}")">
+                                        <span class="mr-2 text-zinc-600 select-none">@(logIdx + 1)</span>
+                                        @logEntry
+                                    </p>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum StageStatus { Passed, Failed, Running, Pending }
+
+    private record StatusConfig(string IconName, string Color, string LineColor, string Label);
+
+    private record PipelineStage(string Id, string Label, StageStatus Status, string Duration, string[] Logs);
+
+    private string? _expanded = "stage";
+
+    private static readonly Dictionary<StageStatus, StatusConfig> _statusConfig = new()
+    {
+        [StageStatus.Passed]  = new("check-circle-2",  "text-emerald-600 dark:text-emerald-400", "bg-foreground", "Passed"),
+        [StageStatus.Failed]  = new("x-circle",        "text-red-600 dark:text-red-400",          "bg-red-500",    "Failed"),
+        [StageStatus.Running] = new("circle-dot",       "text-foreground",                         "bg-foreground", "Running"),
+        [StageStatus.Pending] = new("circle",           "text-muted-foreground/40",                "bg-muted-foreground/20", "Pending"),
+    };
+
+    private static readonly PipelineStage[] _stages =
+    [
+        new("build", "Build", StageStatus.Passed, "1m 42s",
+            ["Installing dependencies... done", "Compiling TypeScript... 0 errors"]),
+        new("test", "Test", StageStatus.Passed, "3m 18s",
+            ["Running 847 tests...", "847 passed, 0 failed, 0 skipped"]),
+        new("stage", "Stage", StageStatus.Failed, "0m 52s",
+            ["Deploying to staging-us-east-1...", "Error: Health check failed on /api/health"]),
+        new("deploy", "Deploy", StageStatus.Pending, "--",
+            ["Waiting for staging to pass..."]),
+    ];
+}

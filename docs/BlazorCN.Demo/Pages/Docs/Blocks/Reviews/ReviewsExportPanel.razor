@@ -1,0 +1,297 @@
+@* ============================================================
+   Block: reviews-export-panel
+   Title: ReviewsExportPanel
+   Description: An admin export panel for React and Next.js with format selection, date range filtering, field picker, export history table, and download management built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-export-panel.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="download" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Export Reviews</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal tabular-nums">
+                    1,247 reviews matched
+                </BadgeCn>
+            </div>
+            <span class="text-[10px] text-muted-foreground">
+                @_selectedFields.Count fields selected
+            </span>
+        </div>
+
+        @* Config + History split *@
+        <div class="grid grid-cols-5">
+            @* Left: Configuration *@
+            <div class="col-span-2 border-r">
+                @* Format selection *@
+                <div class="border-b px-4 py-3">
+                    <span class="text-xs font-medium text-muted-foreground">Format</span>
+                    <div class="mt-2 space-y-1">
+                        @foreach (var fmt in _formats)
+                        {
+                            var f = fmt;
+                            var isActive = _format == f.Key;
+                            <button type="button"
+                                    @onclick="@(() => _format = f.Key)"
+                                    class="@Cn.Merge("flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors", isActive ? "bg-muted/50" : "hover:bg-muted/30")">
+                                <LucideIconCn Name="@f.Icon" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                                <div class="min-w-0 flex-1">
+                                    <span class="block text-xs font-medium">@f.Label</span>
+                                    <span class="block text-[10px] text-muted-foreground">@f.Description</span>
+                                </div>
+                                @if (isActive)
+                                {
+                                    <LucideIconCn Name="check" Size="12" Class="size-3 shrink-0 text-foreground" />
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @* Date range *@
+                <div class="border-b px-4 py-3">
+                    <span class="text-xs font-medium text-muted-foreground">Date Range</span>
+                    <div class="mt-2 space-y-1.5">
+                        <div class="flex items-center gap-2">
+                            <span class="w-10 text-[10px] text-muted-foreground">From</span>
+                            <InputCn type="date" @bind-Value="_dateFrom" Class="h-7 text-[10px]" />
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-10 text-[10px] text-muted-foreground">To</span>
+                            <InputCn type="date" @bind-Value="_dateTo" Class="h-7 text-[10px]" />
+                        </div>
+                    </div>
+                </div>
+
+                @* Status filter *@
+                <div class="border-b px-4 py-3">
+                    <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        <LucideIconCn Name="filter" Size="12" Class="size-3" />
+                        Status
+                    </span>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                        @foreach (var opt in _statusFilters)
+                        {
+                            var option = opt;
+                            <button type="button"
+                                    @onclick="@(() => _statusFilter = option.Key)"
+                                    class="@Cn.Merge("rounded-md px-2 py-1 text-[10px] transition-colors", _statusFilter == option.Key ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:bg-muted")">
+                                @option.Label
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @* Field selection *@
+                <div class="border-b px-4 py-3">
+                    <span class="text-xs font-medium text-muted-foreground">Fields</span>
+                    <div class="mt-2 space-y-1.5">
+                        @foreach (var fld in _exportFields)
+                        {
+                            var field = fld;
+                            <span class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-muted/30"
+                                  @onclick="@(() => ToggleField(field.Id))"
+                                  role="checkbox"
+                                  aria-checked="@(_selectedFields.Contains(field.Id) ? "true" : "false")"
+                                  tabindex="0">
+                                <CheckboxCn Class="size-3.5"
+                                            Checked="@_selectedFields.Contains(field.Id)"
+                                            CheckedChanged="@((bool _) => ToggleField(field.Id))" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-[10px] font-medium">@field.Label</span>
+                                    <span class="block text-[9px] text-muted-foreground">@field.Description</span>
+                                </span>
+                            </span>
+                        }
+                    </div>
+                </div>
+
+                @* Export button *@
+                <div class="px-4 py-3">
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-8 w-full gap-1.5 text-xs"
+                              @onclick="HandleExport"
+                              Disabled="@(_selectedFields.Count == 0)">
+                        @if (_exporting)
+                        {
+                            <span class="flex items-center gap-1.5">
+                                <LucideIconCn Name="refresh-cw" Size="14" Class="size-3.5 animate-spin" />
+                                Generating...
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="flex items-center gap-1.5">
+                                <LucideIconCn Name="download" Size="14" Class="size-3.5" />
+                                Export @_format.ToUpper()
+                            </span>
+                        }
+                    </ButtonCn>
+                    <p class="mt-1.5 text-center text-[9px] text-muted-foreground">
+                        ~1,247 rows, @_selectedFields.Count columns
+                    </p>
+                </div>
+            </div>
+
+            @* Right: Export history table *@
+            <div class="col-span-3">
+                <div class="border-b px-4 py-2.5">
+                    <div class="flex items-center gap-1.5">
+                        <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground" />
+                        <span class="text-xs font-medium text-muted-foreground">Export History</span>
+                    </div>
+                </div>
+                <table class="w-full caption-bottom text-sm">
+                    <thead class="[&_tr]:border-b">
+                        <tr class="border-b transition-colors hover:bg-transparent">
+                            <th class="h-8 px-4 text-left align-middle text-[10px] font-medium text-muted-foreground">File</th>
+                            <th class="h-8 px-4 text-left align-middle text-[10px] font-medium text-muted-foreground">Rows</th>
+                            <th class="h-8 px-4 text-left align-middle text-[10px] font-medium text-muted-foreground">Size</th>
+                            <th class="h-8 px-4 text-right align-middle text-[10px] font-medium text-muted-foreground">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="[&_tr:last-child]:border-0">
+                        @foreach (var entry in _exportHistory)
+                        {
+                            var ext = GetExtension(entry.Format);
+                            var badgeColor = GetStatusColor(entry.Status);
+                            var badgeLabel = GetStatusLabel(entry.Status);
+                            <tr class="border-b last:border-b-0 transition-colors hover:bg-muted/30">
+                                <td class="px-4 py-2.5 align-middle">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="@GetFormatIcon(entry.Format)" Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                        <div>
+                                            <span class="block text-[10px] font-medium">@(entry.FileName + ext)</span>
+                                            <span class="block text-[9px] text-muted-foreground">@entry.CreatedAt · @entry.Filters</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-2.5 align-middle text-[10px] tabular-nums text-muted-foreground">
+                                    @entry.RowCount.ToString("N0")
+                                </td>
+                                <td class="px-4 py-2.5 align-middle text-[10px] text-muted-foreground">
+                                    @entry.FileSize
+                                </td>
+                                <td class="px-4 py-2.5 text-right align-middle">
+                                    <span class="@($"text-[10px] {badgeColor}")">@badgeLabel</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @* History footer *@
+                <div class="border-t px-4 py-2">
+                    <p class="text-[9px] text-muted-foreground">
+                        Exports are retained for 30 days. Total storage: 15.2 MB used of 100 MB.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _format = "csv";
+    private string _dateFrom = "2026-01-01";
+    private string _dateTo = "2026-03-24";
+    private string _statusFilter = "all";
+    private HashSet<string> _selectedFields = new() { "author", "rating", "content", "date" };
+    private bool _exporting = false;
+
+    private record FormatOption(string Key, string Label, string Description, string Icon, string Extension);
+    private record ExportField(string Id, string Label, string Description, bool Default);
+    private record StatusFilter(string Key, string Label);
+
+    private class ExportHistoryEntry
+    {
+        public string Id { get; set; } = "";
+        public string Format { get; set; } = "";
+        public string FileName { get; set; } = "";
+        public int RowCount { get; set; }
+        public string FileSize { get; set; } = "";
+        public string CreatedAt { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Filters { get; set; } = "";
+    }
+
+    private static readonly FormatOption[] _formats =
+    [
+        new("csv", "CSV", "Spreadsheet compatible", "file-spreadsheet", ".csv"),
+        new("json", "JSON", "Structured data", "file-json", ".json"),
+        new("pdf", "PDF", "Printable report", "file-text", ".pdf"),
+    ];
+
+    private static readonly ExportField[] _exportFields =
+    [
+        new("author",    "Author",       "Name and email",              true),
+        new("rating",    "Rating",       "Star rating",                 true),
+        new("content",   "Review body",  "Full text",                   true),
+        new("date",      "Date",         "Submission date",             true),
+        new("status",    "Status",       "Published, pending, flagged", false),
+        new("sentiment", "Sentiment",    "AI sentiment score",          false),
+        new("helpful",   "Helpful votes","Up and down counts",          false),
+        new("response",  "Response",     "Merchant reply",              false),
+    ];
+
+    private static readonly StatusFilter[] _statusFilters =
+    [
+        new("all",       "All"),
+        new("published", "Published"),
+        new("pending",   "Pending"),
+        new("flagged",   "Flagged"),
+    ];
+
+    private static readonly ExportHistoryEntry[] _exportHistory =
+    [
+        new() { Id = "exp-001", Format = "csv",  FileName = "reviews-export-2026-03-24",      RowCount = 1247, FileSize = "2.3 MB", CreatedAt = "Mar 24, 2026", Status = "completed", Filters = "Published, 4+ stars" },
+        new() { Id = "exp-002", Format = "json", FileName = "reviews-api-backup-2026-03-18",  RowCount = 3891, FileSize = "8.1 MB", CreatedAt = "Mar 18, 2026", Status = "completed", Filters = "All statuses, all ratings" },
+        new() { Id = "exp-003", Format = "pdf",  FileName = "reviews-report-q1-2026",         RowCount = 892,  FileSize = "4.7 MB", CreatedAt = "Mar 15, 2026", Status = "completed", Filters = "Published, 3+ stars" },
+        new() { Id = "exp-004", Format = "csv",  FileName = "reviews-flagged-audit",          RowCount = 47,   FileSize = "89 KB",  CreatedAt = "Mar 10, 2026", Status = "completed", Filters = "Flagged only" },
+    ];
+
+    private void ToggleField(string fieldId)
+    {
+        if (!_selectedFields.Add(fieldId))
+            _selectedFields.Remove(fieldId);
+    }
+
+    private async Task HandleExport()
+    {
+        _exporting = true;
+        await Task.Delay(2000);
+        _exporting = false;
+    }
+
+    private static string GetFormatIcon(string format) => format switch
+    {
+        "csv"  => "file-spreadsheet",
+        "json" => "file-json",
+        "pdf"  => "file-text",
+        _      => "file",
+    };
+
+    private static string GetExtension(string format) => format switch
+    {
+        "csv"  => ".csv",
+        "json" => ".json",
+        "pdf"  => ".pdf",
+        _      => "",
+    };
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "completed"  => "text-emerald-600 dark:text-emerald-400",
+        "processing" => "text-amber-600 dark:text-amber-400",
+        "failed"     => "text-red-600 dark:text-red-400",
+        _            => "",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "completed"  => "Completed",
+        "processing" => "Processing",
+        "failed"     => "Failed",
+        _            => status,
+    };
+}

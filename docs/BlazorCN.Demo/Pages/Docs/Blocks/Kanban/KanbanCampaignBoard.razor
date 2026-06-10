@@ -1,0 +1,328 @@
+@* ============================================================
+   Block: kanban-campaign-board
+   Title: KanbanCampaignBoard
+   Description: React kanban board for Next.js with marketing campaign columns, budget tracking, and a Sheet side panel showing channel mix, KPIs, performance metrics, and timeline using shadcn/ui Sheet and Tailwind CSS.
+   Source: original/blocks/kanban/kanban-campaign-board.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="megaphone" Size="16" Class="size-4 text-muted-foreground" />
+            <h2 class="text-sm font-medium">Campaign Board</h2>
+            <span class="text-xs text-muted-foreground">@_campaigns.Length campaigns</span>
+            <span class="text-xs text-muted-foreground">·</span>
+            <span class="text-xs text-muted-foreground">
+                @FormatCurrency(_campaigns.Sum(c => c.Budget)) total budget
+            </span>
+        </div>
+
+        @* Kanban columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var colCampaigns = _campaigns.Where(c => c.Stage == col.Stage).ToArray();
+                var colBudget = colCampaigns.Sum(c => c.Budget);
+                <div class="min-h-[480px]">
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", StageDotClass(col.Stage))"></span>
+                        <span class="text-xs font-medium">@col.Label</span>
+                        <span class="ml-auto text-xs text-muted-foreground tabular-nums">
+                            @FormatCurrency(colBudget)
+                        </span>
+                    </div>
+                    <div class="divide-y">
+                        @foreach (var campaign in colCampaigns)
+                        {
+                            var camp = campaign;
+                            <button type="button"
+                                    @onclick="@(() => _selectedId = camp.Id)"
+                                    class="@Cn.Merge("flex w-full flex-col gap-1 border-l-4 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", StageBorderClass(camp.Stage), _selectedId == camp.Id ? "bg-muted/50 ring-2 ring-foreground ring-inset" : "")">
+                                <span class="truncate text-sm font-medium">@camp.Name</span>
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach (var ch in camp.Channels.Take(2))
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">@ch</BadgeCn>
+                                    }
+                                    @if (camp.Channels.Length > 2)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">+@(camp.Channels.Length - 2)</BadgeCn>
+                                    }
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-muted-foreground tabular-nums">
+                                        @FormatCurrency(camp.Budget)
+                                    </span>
+                                    <span class="ml-auto flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground">
+                                        @camp.Initials
+                                    </span>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@* Sheet side panel *@
+<SheetCn Open="@(_selectedCampaign != null)" OpenChanged="@(v => { if (!v) _selectedId = null; })">
+    <SheetContentCn Class="overflow-y-auto sm:max-w-md">
+        @if (_selectedCampaign != null)
+        {
+            var sel = _selectedCampaign;
+            <SheetHeaderCn>
+                <SheetTitleCn Class="text-sm font-medium">@sel.Name</SheetTitleCn>
+                <SheetDescriptionCn>
+                    <span class="flex items-center gap-2">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", StageDotClass(sel.Stage))"></span>
+                        <span class="capitalize text-xs">@sel.Stage</span>
+                    </span>
+                </SheetDescriptionCn>
+            </SheetHeaderCn>
+
+            @* Description *@
+            <div class="border-b px-4 pb-4">
+                <p class="text-sm leading-relaxed text-muted-foreground">
+                    @sel.Description
+                </p>
+            </div>
+
+            @* Channels *@
+            <div class="border-b px-4 py-4">
+                <span class="text-xs font-medium text-muted-foreground">Channels</span>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                    @foreach (var ch in sel.Channels)
+                    {
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@ch</BadgeCn>
+                    }
+                </div>
+            </div>
+
+            @* Budget *@
+            <div class="border-b px-4 py-4">
+                <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <LucideIconCn Name="dollar-sign" Size="14" Class="size-3.5" />
+                    Budget
+                </span>
+                <div class="mt-2 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">Total</span>
+                        <span class="font-semibold tabular-nums">@FormatCurrency(sel.Budget)</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">Spent</span>
+                        <span class="font-medium tabular-nums">@FormatCurrency(sel.Spent)</span>
+                    </div>
+                    <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div class="@Cn.Merge("h-full rounded-full transition-all", BudgetBarColor(sel.Spent, sel.Budget))"
+                             style="@($"width:{BudgetPct(sel.Spent, sel.Budget)}%")">
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>@BudgetPct(sel.Spent, sel.Budget)% utilized</span>
+                        <span class="tabular-nums">@FormatCurrency(sel.Budget - sel.Spent) remaining</span>
+                    </div>
+                </div>
+            </div>
+
+            @* KPIs *@
+            <div class="border-b px-4 py-4">
+                <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <LucideIconCn Name="target" Size="14" Class="size-3.5" />
+                    KPIs
+                </span>
+                <div class="mt-2 space-y-1.5">
+                    @foreach (var kpi in sel.Kpis)
+                    {
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="size-1 rounded-full bg-foreground/30"></span>
+                            <span>@kpi</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Performance metrics *@
+            <div class="border-b px-4 py-4">
+                <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <LucideIconCn Name="bar-chart-3" Size="14" Class="size-3.5" />
+                    Performance
+                </span>
+                <div class="mt-2 grid grid-cols-2 gap-3">
+                    @foreach (var m in sel.Metrics)
+                    {
+                        <div class="rounded-md bg-muted/50 p-2.5">
+                            <span class="block text-[10px] text-muted-foreground">@m.Label</span>
+                            <span class="block text-sm font-semibold tabular-nums">@m.Value</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Timeline *@
+            <div class="border-b px-4 py-4">
+                <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <LucideIconCn Name="calendar" Size="14" Class="size-3.5" />
+                    Timeline
+                </span>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                    <span>@sel.StartDate</span>
+                    <div class="mx-3 h-px flex-1 bg-border"></div>
+                    <span>@sel.EndDate</span>
+                </div>
+                <div class="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Start</span>
+                    <span>End</span>
+                </div>
+            </div>
+
+            @* Owner *@
+            <div class="px-4 py-4">
+                <span class="text-xs font-medium text-muted-foreground">Owner</span>
+                <div class="mt-2 flex items-center gap-2">
+                    <span class="flex size-6 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                        @sel.Initials
+                    </span>
+                    <span class="text-xs font-medium">@sel.Owner</span>
+                </div>
+            </div>
+
+            @* Actions *@
+            <div class="flex gap-2 border-t px-4 py-3">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Edit campaign
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs text-muted-foreground">
+                    View report
+                </ButtonCn>
+            </div>
+        }
+    </SheetContentCn>
+</SheetCn>
+
+@code {
+    private record Metric(string Label, string Value);
+    private record Campaign(
+        string Id, string Name, string Stage, string[] Channels,
+        int Budget, int Spent, string StartDate, string EndDate,
+        string Owner, string Initials, string[] Kpis, Metric[] Metrics, string Description);
+    private record KanbanColumn(string Stage, string Label);
+
+    private string? _selectedId;
+    private Campaign? _selectedCampaign => _campaigns.FirstOrDefault(c => c.Id == _selectedId);
+
+    private static readonly Campaign[] _campaigns =
+    [
+        new("c1",  "Summer Product Launch",     "planning",
+            ["Paid Social", "Email", "Influencer"],
+            45000, 2100, "Apr 15", "Jun 30", "Sarah Kim", "SK",
+            ["500K impressions", "15K site visits", "2.5% conversion rate"],
+            [new("Impressions","--"), new("Clicks","--"), new("Conversions","--"), new("CPA","--")],
+            "Multi-channel launch for the summer collection targeting millennial homeowners. Phased rollout starting with teaser content, followed by influencer partnerships, then paid amplification."),
+        new("c2",  "Enterprise Webinar Series",  "planning",
+            ["LinkedIn Ads", "Email", "Content"],
+            18000, 800, "Apr 20", "May 30", "Omar Hassan", "OH",
+            ["2K registrations", "45% attendance rate", "200 MQLs"],
+            [new("Registrations","--"), new("Attendance","--"), new("MQLs","--"), new("Cost/MQL","--")],
+            "Four-part webinar series targeting VP-level buyers at mid-market companies. Topics cover industry trends, product use cases, customer stories, and a live demo."),
+        new("c3",  "Brand Awareness Push",       "active",
+            ["Display", "YouTube", "Podcast"],
+            62000, 34800, "Mar 1", "May 31", "Mia Torres", "MT",
+            ["2M impressions", "85% viewability", "12% brand lift"],
+            [new("Impressions","1.2M"), new("Viewability","87%"), new("Brand lift","8.3%"), new("CPM","$14.20")],
+            "Top-of-funnel awareness campaign running across display networks, YouTube pre-roll, and three industry podcasts. Focus on reaching new audiences outside our existing customer base."),
+        new("c4",  "Retargeting Optimization",   "active",
+            ["Google Ads", "Meta Ads"],
+            28000, 16400, "Mar 10", "Apr 30", "James Lin", "JL",
+            ["8% CTR", "4.2% conversion rate", "$28 CPA"],
+            [new("Impressions","340K"), new("CTR","7.8%"), new("Conversions","486"), new("CPA","$31.40")],
+            "A/B testing new retargeting ad creatives and audience segments for site visitors who viewed product pages but did not convert. Testing dynamic product ads versus lifestyle imagery."),
+        new("c5",  "SEO Content Sprint",          "active",
+            ["Organic Search", "Blog"],
+            12000, 7200, "Feb 15", "Apr 30", "Priya Patel", "PP",
+            ["30 articles published", "50K organic visits", "Top 10 for 15 keywords"],
+            [new("Articles","22"), new("Organic visits","38.4K"), new("Keywords top 10","11"), new("Avg position","7.2")],
+            "Targeted content production sprint focused on high-intent buyer keywords in the project management and productivity tool categories. Each article includes comparison tables and CTAs."),
+        new("c6",  "Partner Referral Program",    "active",
+            ["Email", "In-App", "Partner Portal"],
+            22000, 14600, "Mar 1", "May 15", "Sarah Kim", "SK",
+            ["150 referrals", "20% signup rate", "$45 CAC"],
+            [new("Referrals","98"), new("Signups","24"), new("Revenue","$18.2K"), new("CAC","$52")],
+            "Incentivized referral campaign for existing agency partners. Two-tier reward structure with $200 per qualified signup and $500 per converted customer within 30 days."),
+        new("c7",  "Holiday Email Campaign",      "paused",
+            ["Email"],
+            8000, 5600, "Nov 15", "Dec 31", "Omar Hassan", "OH",
+            ["35% open rate", "5% click rate", "$120K revenue"],
+            [new("Sends","245K"), new("Open rate","32.1%"), new("Click rate","4.6%"), new("Revenue","$94K")],
+            "Seasonal email campaign paused for review after underperforming on click-through rate. Creative refresh planned before reactivation for next holiday cycle."),
+        new("c8",  "Trade Show Follow-Up",        "paused",
+            ["Email", "LinkedIn Ads"],
+            15000, 9800, "Jan 20", "Mar 15", "Mia Torres", "MT",
+            ["40% email reply rate", "25 demos booked", "10 proposals sent"],
+            [new("Contacts","312"), new("Reply rate","28%"), new("Demos booked","18"), new("Proposals","7")],
+            "Nurture sequence for leads collected at IndustryExpo. Paused while sales team processes the pipeline backlog. Will resume after demo scheduling catches up."),
+        new("c9",  "Product Hunt Launch",         "completed",
+            ["Product Hunt", "X", "Hacker News"],
+            5000, 4800, "Feb 1", "Feb 7", "James Lin", "JL",
+            ["#3 Product of Day", "5K signups", "500 upvotes"],
+            [new("Ranking","#2"), new("Upvotes","687"), new("Signups","6.2K"), new("Cost/signup","$0.77")],
+            "Coordinated launch across Product Hunt, X, and Hacker News. Exceeded all KPIs with organic amplification from the developer community. Resulted in 6,200 signups in one week."),
+        new("c10", "Customer Story Video Series", "completed",
+            ["YouTube", "LinkedIn", "Website"],
+            35000, 33200, "Jan 5", "Mar 10", "Priya Patel", "PP",
+            ["6 videos produced", "100K views", "15% watch completion"],
+            [new("Videos","6"), new("Total views","128K"), new("Completion rate","18.4%"), new("Leads sourced","42")],
+            "Six customer testimonial videos featuring mid-market and enterprise customers. Distributed across YouTube, LinkedIn native, and embedded on case study landing pages."),
+        new("c11", "G2 Review Campaign",          "completed",
+            ["Email", "In-App"],
+            6000, 5900, "Jan 15", "Feb 28", "Sarah Kim", "SK",
+            ["100 new reviews", "4.5+ star average", "Top 5 in category"],
+            [new("Reviews","134"), new("Avg rating","4.6"), new("Category rank","#3"), new("Cost/review","$44")],
+            "Incentivized review collection campaign targeting power users. Offered $25 gift cards for verified G2 reviews. Helped move from #8 to #3 in the project management category."),
+    ];
+
+    private static readonly KanbanColumn[] _columns =
+    [
+        new("planning",  "Planning"),
+        new("active",    "Active"),
+        new("paused",    "Paused"),
+        new("completed", "Completed"),
+    ];
+
+    private static string StageDotClass(string stage) => stage switch
+    {
+        "planning"  => "bg-blue-500",
+        "active"    => "bg-emerald-500",
+        "paused"    => "bg-amber-500",
+        "completed" => "bg-zinc-400",
+        _           => ""
+    };
+
+    private static string StageBorderClass(string stage) => stage switch
+    {
+        "planning"  => "border-l-blue-500",
+        "active"    => "border-l-emerald-500",
+        "paused"    => "border-l-amber-500",
+        "completed" => "border-l-zinc-400",
+        _           => ""
+    };
+
+    private static int BudgetPct(int spent, int budget) =>
+        budget == 0 ? 0 : Math.Min(100, (int)Math.Round((double)spent / budget * 100));
+
+    private static string BudgetBarColor(int spent, int budget)
+    {
+        var ratio = budget == 0 ? 0.0 : (double)spent / budget;
+        return ratio > 0.9 ? "bg-red-500" : ratio > 0.7 ? "bg-amber-500" : "bg-emerald-500";
+    }
+
+    private static string FormatCurrency(int value)
+    {
+        if (value >= 1000)
+            return $"${value / 1000}K";
+        return $"${value}";
+    }
+}

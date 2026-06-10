@@ -1,0 +1,258 @@
+@* ============================================================
+   Block: chat-canned-responses
+   Title: ChatCannedResponses
+   Description: React support agent chat with canned response picker for Next.js featuring categorized template popover with greetings, troubleshooting, and closing categories using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-canned-responses.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8">
+                <AvatarFallbackCn Class="text-xs">SK</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Sarah Kim</span>
+                <p class="text-muted-foreground text-xs">Customer</p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                Ticket #4821
+            </BadgeCn>
+        </div>
+
+        @* Messages — flat layout with sender grouping *@
+        <div class="flex-1 overflow-y-auto py-2">
+            @for (int idx = 0; idx < _messages.Count; idx++)
+            {
+                var msg = _messages[idx];
+                var prevMsg = idx > 0 ? _messages[idx - 1] : null;
+                var isFirstInGroup = prevMsg == null || prevMsg.SenderId != msg.SenderId;
+
+                if (isFirstInGroup)
+                {
+                    <div key="@msg.Id" class="flex gap-2 px-2 hover:bg-accent">
+                        <div class="flex w-10 shrink-0 justify-center pt-1">
+                            <AvatarCn Class="size-8 rounded-full">
+                                <AvatarFallbackCn Class="text-xs">@msg.SenderInitials</AvatarFallbackCn>
+                            </AvatarCn>
+                        </div>
+                        <div class="flex flex-1 flex-col">
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="font-medium">@msg.SenderName</span>
+                                <span class="text-xs text-muted-foreground">@msg.Timestamp</span>
+                            </div>
+                            <div class="text-sm">@msg.Content</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="group flex gap-2 px-2 hover:bg-accent">
+                        <div class="flex w-10 shrink-0 justify-center pt-1">
+                            <span class="invisible text-right text-[10px] text-muted-foreground group-hover:visible">
+                                @msg.Timestamp
+                            </span>
+                        </div>
+                        <div class="flex flex-1 flex-col">
+                            <div class="text-sm">@msg.Content</div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Toolbar — sticky bottom, bordered rounded container *@
+        <div class="sticky bottom-0 bg-card p-2 pt-0">
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="flex flex-wrap items-start gap-x-2 rounded-md border px-3 py-2">
+                <div class="order-1 flex h-10 items-center gap-1.5">
+                    @* Popover trigger — canned responses *@
+                    <div class="relative">
+                        <ButtonCn
+                            Type="button"
+                            Variant="ButtonVariant.Ghost"
+                            Size="ButtonSize.Icon"
+                            Class="size-8 text-muted-foreground"
+                            OnClick="@(() => _popoverOpen = !_popoverOpen)">
+                            <LucideIconCn Name="zap" Size="16" Class="size-4" />
+                        </ButtonCn>
+
+                        @if (_popoverOpen)
+                        {
+                            @* Overlay to close on outside click *@
+                            <div class="fixed inset-0 z-40" @onclick="@(() => { _popoverOpen = false; _search = ""; })"></div>
+
+                            @* Popover content *@
+                            <div class="absolute bottom-full left-0 z-50 mb-1 w-80 rounded-md border bg-popover p-0 text-popover-foreground shadow-md">
+                                <div class="border-b px-3 py-2">
+                                    <div class="relative">
+                                        <LucideIconCn Name="search" Size="14" Class="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                                        <InputCn
+                                            @bind-Value="_search"
+                                            Placeholder="Search templates..."
+                                            Class="h-8 border-0 bg-transparent pl-7 text-sm shadow-none focus-visible:ring-0" />
+                                    </div>
+                                </div>
+                                <div class="max-h-64 overflow-y-auto">
+                                    @{
+                                        var filtered = GetFilteredResponses();
+                                    }
+                                    @foreach (var category in filtered)
+                                    {
+                                        <div>
+                                            <div class="px-3 pt-3 pb-1">
+                                                <span class="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+                                                    @category.Category
+                                                </span>
+                                            </div>
+                                            @foreach (var item in category.Items)
+                                            {
+                                                var cannedItem = item;
+                                                <button
+                                                    type="button"
+                                                    @onclick="@(() => HandleSelectTemplate(cannedItem.Text))"
+                                                    class="flex w-full flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-muted/50">
+                                                    <div class="flex items-center justify-between gap-2">
+                                                        <span class="font-medium text-sm">@cannedItem.Title</span>
+                                                        <span class="shrink-0 text-[10px] text-muted-foreground">
+                                                            Used @cannedItem.UsedCount times
+                                                        </span>
+                                                    </div>
+                                                    <span class="line-clamp-1 text-muted-foreground text-xs">
+                                                        @cannedItem.Text
+                                                    </span>
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                    @if (!filtered.Any())
+                                    {
+                                        <div class="px-3 py-4 text-center text-muted-foreground text-sm">
+                                            No templates found
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="order-2 grid min-w-0 flex-1">
+                    <textarea
+                        value="@_input"
+                        @oninput="@((e) => _input = e.Value?.ToString() ?? "")"
+                        placeholder="Type a response..."
+                        class="h-fit min-h-10 resize-none border-none bg-transparent px-1 text-sm shadow-none outline-none placeholder:text-muted-foreground"
+                        rows="1">
+                    </textarea>
+                </div>
+                <div class="order-3 flex h-10 items-center gap-1.5">
+                    <button
+                        type="submit"
+                        disabled="@(string.IsNullOrWhiteSpace(_input))"
+                        class="@Cn.Merge("flex size-7 shrink-0 items-center justify-center rounded-full transition-all", !string.IsNullOrWhiteSpace(_input) ? "bg-foreground text-background" : "bg-muted text-muted-foreground/40")">
+                        <LucideIconCn Name="arrow-up" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string SenderId, string SenderName, string SenderInitials, string Content, string Timestamp);
+
+    private record CannedItem(string Id, string Title, string Text, int UsedCount);
+
+    private record CannedCategory(string Category, List<CannedItem> Items);
+
+    private static readonly CannedCategory[] _cannedResponses =
+    [
+        new("Greetings",
+        [
+            new("g1", "Welcome", "Hi there! Thanks for reaching out to Acme Support. How can I help you today?", 142),
+            new("g2", "Return visitor", "Welcome back! I see you've contacted us before. Let me pull up your previous conversation for context.", 67),
+            new("g3", "Acknowledge wait", "Thanks for your patience while waiting. I'm here now and ready to help. What can I do for you?", 89),
+        ]),
+        new("Troubleshooting",
+        [
+            new("t1", "Clear cache", "Could you try clearing your browser cache and cookies, then restart your browser? This resolves most display and login issues.", 203),
+            new("t2", "Check status page", "I'd like to check if this is a known issue. Could you visit status.acme.com and let me know if any services show degraded performance?", 45),
+            new("t3", "Request screenshot", "Could you share a screenshot of the error you're seeing? That will help me pinpoint the issue faster.", 118),
+            new("t4", "Escalate to engineering", "I'm going to escalate this to our engineering team for a deeper investigation. You'll receive an update via email within 24 hours.", 23),
+        ]),
+        new("Closing",
+        [
+            new("c1", "Resolved", "Glad we could get that sorted! If you run into anything else, don't hesitate to reach out. Have a great rest of your day!", 187),
+            new("c2", "Follow-up", "I'll follow up on this within 24 hours. In the meantime, feel free to reply here if anything changes. Thank you for your patience!", 76),
+            new("c3", "Feedback", "Thanks for contacting Acme Support! If you have a moment, we'd appreciate your feedback on this interaction. A short survey will arrive in your inbox shortly.", 54),
+        ]),
+    ];
+
+    private List<ChatMessage> _messages = default!;
+    private string _input = "";
+    private bool _popoverOpen = false;
+    private string _search = "";
+
+    protected override void OnInitialized()
+    {
+        _messages =
+        [
+            new("m1", "customer", "Sarah Kim", "SK",
+                "Hi, I can't log into my account. It keeps saying invalid credentials but I'm sure my password is correct.",
+                "9:42 AM"),
+            new("m2", "agent", "You (Agent)", "AG",
+                "Hi Sarah, thanks for reaching out! I'd be happy to help you with your login issue. Let me look into your account right away.",
+                "9:43 AM"),
+            new("m3", "customer", "Sarah Kim", "SK",
+                "I've tried resetting my password twice but the reset email never arrives.",
+                "9:44 AM"),
+            new("m4", "agent", "You (Agent)", "AG",
+                "I see that the reset emails were sent to an older email address on file. I've updated it to your current one. Could you try the password reset again?",
+                "9:45 AM"),
+            new("m5", "customer", "Sarah Kim", "SK",
+                "Got it! The reset email just came through. I'm logged in now. Thank you!",
+                "9:48 AM"),
+        ];
+    }
+
+    private void HandleSelectTemplate(string text)
+    {
+        _input = text;
+        _popoverOpen = false;
+        _search = "";
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        var newMsg = new ChatMessage(
+            $"m{_messages.Count + 1}",
+            "agent",
+            "You (Agent)",
+            "AG",
+            _input,
+            "Now"
+        );
+        _messages = [.._messages, newMsg];
+        _input = "";
+    }
+
+    private List<CannedCategory> GetFilteredResponses()
+    {
+        var trimmed = _search.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return [.._cannedResponses];
+
+        var lower = trimmed.ToLowerInvariant();
+        var result = new List<CannedCategory>();
+        foreach (var cat in _cannedResponses)
+        {
+            var matchingItems = cat.Items
+                .Where(i => i.Title.ToLowerInvariant().Contains(lower) || i.Text.ToLowerInvariant().Contains(lower))
+                .ToList();
+            if (matchingItems.Count > 0)
+                result.Add(new CannedCategory(cat.Category, matchingItems));
+        }
+        return result;
+    }
+}

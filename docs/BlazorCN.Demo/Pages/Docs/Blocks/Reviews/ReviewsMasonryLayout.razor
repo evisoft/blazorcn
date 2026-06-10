@@ -1,0 +1,169 @@
+@* ============================================================
+   Block: reviews-masonry-layout
+   Title: ReviewsMasonryLayout
+   Description: A Pinterest-style masonry grid reviews block for React and Next.js with varying card heights, star ratings, filter tabs, verified badges, helpful vote counts, and staggered entrance animations built with shadcn/ui Badge and Button components, motion/react animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-masonry-layout.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with stats *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-medium">Customer Reviews</span>
+                <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div class="flex items-center gap-0.5">
+                        @for (int i = 0; i < 5; i++)
+                        {
+                            var idx = i;
+                            <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("size-3", idx < (int)Math.Round(double.Parse(_avgRating)) ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                        }
+                    </div>
+                    <span class="font-medium tabular-nums text-foreground">@_avgRating</span>
+                    <span>from @_totalReviews reviews</span>
+                </div>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                @_verifiedCount verified
+            </BadgeCn>
+        </div>
+
+        @* Filter tabs *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2">
+            @foreach (var opt in _filterOptions)
+            {
+                var option = opt;
+                var count = option.Value == "all"
+                    ? _totalReviews
+                    : _reviews.Count(r => r.Rating == int.Parse(option.Value));
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = option.Value)"
+                    class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs transition-colors", _filter == option.Value ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:bg-muted")">
+                    @option.Label<span class="ml-1 tabular-nums opacity-60">@count</span>
+                </button>
+            }
+        </div>
+
+        @* Masonry grid *@
+        <div class="columns-1 gap-3 p-4 sm:columns-2 lg:columns-3">
+            @foreach (var review in FilteredReviews)
+            {
+                var rev = review;
+                <div class="mb-3 break-inside-avoid">
+                    <div class="rounded-md border bg-card p-3 transition-colors hover:bg-muted/30">
+                        @* Stars + date row *@
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-0.5">
+                                @for (int i = 0; i < 5; i++)
+                                {
+                                    var idx = i;
+                                    <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("size-3", idx < rev.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                }
+                            </div>
+                            <span class="text-[10px] text-muted-foreground">@rev.Date</span>
+                        </div>
+
+                        @* Title *@
+                        <p class="mt-2 text-sm font-medium leading-snug">@rev.Title</p>
+
+                        @* Body *@
+                        <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                            @rev.Body
+                        </p>
+
+                        @* Author + metadata footer *@
+                        <div class="mt-3 flex items-center gap-2 border-t pt-2.5">
+                            <div class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+                                @rev.Initials
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="truncate text-xs font-medium">@rev.Author</span>
+                                    @if (rev.Verified)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 px-1 text-[9px] font-normal">
+                                            Verified
+                                        </BadgeCn>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrEmpty(rev.PurchaseType))
+                                {
+                                    <span class="text-[10px] text-muted-foreground">
+                                        @rev.PurchaseType
+                                    </span>
+                                }
+                            </div>
+                            <button
+                                type="button"
+                                @onclick="@(() => HandleVote(rev.Id))"
+                                class="@Cn.Merge("flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] transition-colors", _votedReviews.Contains(rev.Id) ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:bg-muted")">
+                                <LucideIconCn Name="thumbs-up" Size="12" Class="@Cn.Merge("size-3", _votedReviews.Contains(rev.Id) ? "fill-current" : "")" />
+                                <span class="tabular-nums">@(rev.HelpfulCount + (_votedReviews.Contains(rev.Id) ? 1 : 0))</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer summary *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">
+                Showing @FilteredReviews.Length of @_totalReviews reviews
+            </span>
+            <span class="text-[10px] text-muted-foreground">
+                @_positiveCount positive reviews (@_positivePercent%)
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ReviewItem(string Id, string Author, string Initials, int Rating, string Date, bool Verified, string Title, string Body, int HelpfulCount, string? PurchaseType = null);
+    private record FilterOption(string Label, string Value);
+
+    private string _filter = "all";
+    private readonly HashSet<string> _votedReviews = [];
+
+    private static readonly ReviewItem[] _reviews =
+    [
+        new("r1", "Sarah Chen", "SC", 5, "Mar 22, 2026", true, "Transformed our development workflow", "Every component follows consistent patterns. The TypeScript types are thorough and the Tailwind integration is seamless. We shipped a complete SaaS dashboard in under a week using these blocks. The code quality meant zero cleanup was needed after integration and our designers approved the result on first review.", 34, "Team Plan"),
+        new("r2", "Marcus Johnson", "MJ", 4, "Mar 19, 2026", true, "Great defaults, easy to customize", "Solid components that work out of the box. Minor theming adjustments were straightforward.", 12),
+        new("r3", "Elena Rodriguez", "ER", 5, "Mar 16, 2026", false, "Best React component library available", "We migrated from a custom design system and the transition was surprisingly smooth. Accessibility is handled well and everything composes naturally. The documentation is clear and the examples cover real-world use cases, not just trivial demos. Our entire frontend team adopted it within the first sprint.", 48, "Enterprise"),
+        new("r4", "David Kim", "DK", 3, "Mar 13, 2026", true, "Solid foundation with room to grow", "Works well for standard layouts. Would appreciate more data table patterns and complex form examples.", 7, "Individual"),
+        new("r5", "Priya Patel", "PP", 5, "Mar 10, 2026", true, "Worth every penny for agencies", "The premium blocks saved our team from building common patterns from scratch. We combined hero, features, and pricing blocks and had a complete landing page running in production within hours. Our clients consistently praise the polished look and the responsive behavior works perfectly across devices. Already used on 6 client projects.", 61, "Team Plan"),
+        new("r6", "James O'Brien", "JO", 4, "Mar 7, 2026", true, "Clean, maintainable code", "The copy-paste model gives full control. No dependency bloat. Easy to read and extend for our specific needs.", 19),
+        new("r7", "Aisha Mohammed", "AM", 5, "Mar 4, 2026", true, "Shipped our MVP in record time", "We went from concept to deployed product in two weeks. The consistency across all components means everything works together without friction. Our investors were impressed with the professional look and the speed of delivery. The motion animations add that premium feel without any performance overhead.", 42, "Individual"),
+        new("r8", "Thomas Weber", "TW", 4, "Mar 1, 2026", false, "Polished and professional", "Impressive attention to detail in spacing, typography, and color usage. Dark mode support is excellent.", 15),
+        new("r9", "Lisa Nakamura", "LN", 5, "Feb 26, 2026", true, "Perfect for agency work", "We use these blocks as the foundation for every client project. Consistent quality across all deliverables and significantly faster turnaround times. The theming system lets us customize for each brand while keeping the structural quality intact. We have delivered 14 projects so far using this as our starting point.", 53, "Enterprise"),
+        new("r10", "Carlos Rivera", "CR", 3, "Feb 22, 2026", true, "Good but needs edge case polish", "Most components are excellent. A few edge cases with form validation needed workarounds. RTL support could be improved.", 8, "Individual"),
+        new("r11", "Nina Kowalski", "NK", 5, "Feb 18, 2026", true, "Exceptional developer experience", "Clean API design, comprehensive TypeScript support, and sensible defaults. Onboarding new developers to our codebase takes minutes now instead of days.", 37, "Team Plan"),
+        new("r12", "Ryan Foster", "RF", 4, "Feb 14, 2026", false, "Reliable and well-maintained", "Regular updates with no breaking changes. Responsive maintainers who address issues quickly. This is exactly what you want from a component library you depend on in production.", 22),
+    ];
+
+    private static readonly FilterOption[] _filterOptions =
+    [
+        new("All", "all"),
+        new("5 stars", "5"),
+        new("4 stars", "4"),
+        new("3 stars", "3"),
+    ];
+
+    private static readonly int _totalReviews = _reviews.Length;
+    private static readonly string _avgRating = (_reviews.Sum(r => r.Rating) / (double)_totalReviews).ToString("F1");
+    private static readonly int _verifiedCount = _reviews.Count(r => r.Verified);
+    private static readonly int _positiveCount = _reviews.Count(r => r.Rating >= 4);
+    private static readonly int _positivePercent = (int)Math.Round(_positiveCount / (double)_totalReviews * 100);
+
+    private ReviewItem[] FilteredReviews =>
+        _filter == "all" ? _reviews : _reviews.Where(r => r.Rating == int.Parse(_filter)).ToArray();
+
+    private void HandleVote(string reviewId)
+    {
+        if (_votedReviews.Contains(reviewId))
+            _votedReviews.Remove(reviewId);
+        else
+            _votedReviews.Add(reviewId);
+    }
+}

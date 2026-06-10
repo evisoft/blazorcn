@@ -1,0 +1,323 @@
+@* ============================================================
+   Block: map-power-grid
+   Title: MapPowerGrid
+   Description: React power grid visualization map block for Next.js with substation markers, transmission line routes, load indicators, and grid capacity detail panels using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-power-grid.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="circuit-board" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Power Grid</span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="text-muted-foreground text-xs tabular-nums">
+                    @_overallUtil% system load
+                </span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var statusKey in new[] { "normal", "elevated", "critical" })
+                {
+                    var sk = statusKey;
+                    var cfg = _statusConfig[sk];
+                    var count = _substations.Count(sub => sub.Status == sk);
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Dot)" />
+                        @count
+                    </span>
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Map *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Grid background *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    New York, USA
+                </div>
+
+                @* Transmission lines (SVG) *@
+                @foreach (var tl in _transmissionLines)
+                {
+                    var line = tl;
+                    var lineColor = GetLineColor(line.Utilization);
+                    var lineWidth = Math.Max(2, (int)Math.Round(line.Utilization / 25.0));
+                    var pathD = BuildRoutePath(line.Coordinates);
+                    <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                        @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"{pathD}\" stroke=\"{lineColor}\" stroke-width=\"{lineWidth}\" stroke-opacity=\"0.7\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\" /></svg>")
+                    </div>
+                }
+
+                @* Substation markers *@
+                @foreach (var ss in _substations)
+                {
+                    var sub = ss;
+                    var isSelected = _selectedId == sub.Id;
+                    var cfg = _statusConfig[sub.Status];
+                    var leftPct = MapLonToPercent(sub.Longitude) * 100;
+                    var topPct = MapLatToPercent(sub.Latitude) * 100;
+                    var markerSize = isSelected ? "size-11" : "size-8";
+                    var zapSize = isSelected ? "size-4" : "size-3";
+                    var textSize = isSelected ? "text-[10px]" : "text-[8px]";
+                    <div class="absolute group" style="@($"left:{leftPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%; top:{topPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%; transform:translate(-50%,-50%); z-index:10")">
+                        <button
+                            type="button"
+                            @onclick="@(() => _selectedId = (isSelected ? null : sub.Id))"
+                            class="@Cn.Merge("flex items-center justify-center rounded-lg border-2 border-background shadow-lg transition-all", markerSize)"
+                            style="@($"background-color:{cfg.Color}")">
+                            <div class="flex flex-col items-center">
+                                <LucideIconCn Name="zap" Size="16" Class="@Cn.Merge("text-white", zapSize)" />
+                                <span class="@Cn.Merge("font-semibold text-white tabular-nums", textSize)">
+                                    @sub.LoadPercent%
+                                </span>
+                            </div>
+                        </button>
+                        @* Tooltip on hover *@
+                        <div class="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 hidden group-hover:flex items-center gap-1.5 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md flex-col gap-0.5" style="z-index:20">
+                            <span class="font-medium">@sub.Name</span>
+                            <span class="text-muted-foreground">@sub.CurrentLoadMW/@sub.CapacityMW MW (@sub.LoadPercent%)</span>
+                        </div>
+                    </div>
+                }
+
+                @* Map controls *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                </div>
+            </div>
+
+            @* Detail Panel *@
+            <div class="w-64 shrink-0 border-l">
+                @if (_selected != null)
+                {
+                    var sel = _selected;
+                    var selCfg = _statusConfig[sel.Status];
+                    var loadColor = sel.LoadPercent >= 85
+                        ? "text-red-600 dark:text-red-400"
+                        : sel.LoadPercent >= 60
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-emerald-600 dark:text-emerald-400";
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium text-sm">@sel.Name</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-1 px-1.5 font-normal text-[10px]">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", selCfg.Dot)" />
+                                @selCfg.Label
+                            </BadgeCn>
+                        </div>
+                        <div class="mt-2 flex items-baseline gap-1">
+                            <span class="@Cn.Merge("font-semibold text-2xl tabular-nums", loadColor)">
+                                @sel.LoadPercent%
+                            </span>
+                            <span class="text-muted-foreground text-xs">load</span>
+                        </div>
+                        <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                                class="h-full rounded-full transition-all"
+                                style="@($"width:{sel.LoadPercent}%; background-color:{selCfg.Color}")">
+                            </div>
+                        </div>
+                        <span class="mt-1 block text-muted-foreground text-xs tabular-nums">
+                            @sel.CurrentLoadMW / @sel.CapacityMW MW
+                        </span>
+                    </div>
+
+                    @* Grid stats *@
+                    <div class="grid grid-cols-2 border-b">
+                        <div class="border-r px-4 py-2.5">
+                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                <LucideIconCn Name="gauge" Size="12" Class="size-3" />
+                                Voltage
+                            </span>
+                            <span class="font-semibold text-sm tabular-nums">
+                                @sel.Voltage kV
+                            </span>
+                        </div>
+                        <div class="px-4 py-2.5">
+                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                <LucideIconCn Name="activity" Size="12" Class="size-3" />
+                                Frequency
+                            </span>
+                            <span class="font-semibold text-sm tabular-nums">
+                                @sel.Frequency Hz
+                            </span>
+                        </div>
+                    </div>
+
+                    @* Feeders *@
+                    <div class="px-4 py-2.5 border-b">
+                        <span class="font-medium text-muted-foreground text-xs">
+                            @sel.Feeders.Length feeders
+                        </span>
+                    </div>
+                    <div class="max-h-[220px] overflow-y-auto">
+                        @for (var fi = 0; fi < sel.Feeders.Length; fi++)
+                        {
+                            var feeder = sel.Feeders[fi];
+                            var isLast = fi == sel.Feeders.Length - 1;
+                            var isExpanded = _expandedFeeder == feeder.Id;
+                            var feederStatus = feeder.Load >= 85 ? "critical" : feeder.Load >= 60 ? "elevated" : "normal";
+                            var feederCfg = _statusConfig[feederStatus];
+                            <div class="@(isLast ? "" : "border-b")">
+                                <button
+                                    type="button"
+                                    @onclick="@(() => _expandedFeeder = (isExpanded ? null : feeder.Id))"
+                                    class="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted/50">
+                                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", feederCfg.Dot)" />
+                                    <span class="min-w-0 flex-1 truncate text-xs">@feeder.Name</span>
+                                    <span class="font-medium text-xs tabular-nums">@feeder.Load%</span>
+                                    <LucideIconCn Name="chevron-right" Size="12" Class="@Cn.Merge("size-3 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                                </button>
+                                @if (isExpanded)
+                                {
+                                    <div class="px-4 pb-2.5 pl-8">
+                                        <div class="h-1 w-full overflow-hidden rounded-full bg-muted">
+                                            <div
+                                                class="h-full rounded-full"
+                                                style="@($"width:{feeder.Load}%; background-color:{feederCfg.Color}")">
+                                            </div>
+                                        </div>
+                                        <span class="mt-1 block text-muted-foreground text-xs tabular-nums">
+                                            @feeder.Customers.ToString("N0") customers
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="flex h-full items-center justify-center p-4">
+                        <span class="text-center text-muted-foreground text-xs">
+                            Select a substation to view details
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatusConfig(string Label, string Dot, string Color);
+
+    private record Feeder(string Id, string Name, int Load, int Customers);
+
+    private record Substation(
+        string Id, string Name,
+        double Longitude, double Latitude,
+        int CapacityMW, int CurrentLoadMW, int LoadPercent,
+        double Voltage, double Frequency,
+        string Status, Feeder[] Feeders);
+
+    private record TransmissionLine(
+        string Id, string From, string To,
+        int VoltagekV, int CapacityMW, int CurrentFlowMW,
+        int Utilization, double[][] Coordinates);
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["normal"]   = new StatusConfig("Normal",   "bg-emerald-500", "#22c55e"),
+        ["elevated"] = new StatusConfig("Elevated", "bg-amber-500",   "#eab308"),
+        ["critical"] = new StatusConfig("Critical", "bg-red-500",     "#ef4444"),
+    };
+
+    private static readonly Substation[] _substations =
+    [
+        new("ss1", "Manhattan Central", -73.9857, 40.7484, 450, 382, 85, 138.2, 60.01, "critical",
+        [
+            new("f1", "Feeder 101-A", 88, 12400),
+            new("f2", "Feeder 101-B", 76, 9800),
+            new("f3", "Feeder 102-A", 92, 15200),
+            new("f4", "Feeder 102-B", 81, 11300),
+        ]),
+        new("ss2", "Brooklyn Grid", -73.9442, 40.6782, 380, 258, 68, 137.8, 60.0, "elevated",
+        [
+            new("f5", "Feeder 201-A", 72, 8900),
+            new("f6", "Feeder 201-B", 65, 7600),
+            new("f7", "Feeder 202-A", 69, 10200),
+        ]),
+        new("ss3", "Queens East", -73.7949, 40.7282, 520, 286, 55, 138.0, 60.0, "normal",
+        [
+            new("f8",  "Feeder 301-A", 52, 14100),
+            new("f9",  "Feeder 301-B", 48, 12800),
+            new("f10", "Feeder 302-A", 61, 9400),
+            new("f11", "Feeder 302-B", 58, 11600),
+        ]),
+        new("ss4", "Bronx North", -73.8648, 40.8448, 310, 165, 53, 138.1, 59.99, "normal",
+        [
+            new("f12", "Feeder 401-A", 55, 6700),
+            new("f13", "Feeder 401-B", 50, 5900),
+        ]),
+        new("ss5", "Jersey Hub", -74.0776, 40.7282, 600, 468, 78, 137.6, 60.01, "elevated",
+        [
+            new("f14", "Feeder 501-A", 82, 18400),
+            new("f15", "Feeder 501-B", 74, 16200),
+            new("f16", "Feeder 502-A", 79, 14800),
+            new("f17", "Feeder 502-B", 71, 13500),
+            new("f18", "Feeder 503-A", 68, 11900),
+        ]),
+    ];
+
+    private static readonly TransmissionLine[] _transmissionLines =
+    [
+        new("tl1", "ss5", "ss1", 345, 800, 620, 78,
+            [[-74.0776, 40.7282], [-74.03, 40.738], [-73.9857, 40.7484]]),
+        new("tl2", "ss1", "ss2", 138, 400, 185, 46,
+            [[-73.9857, 40.7484], [-73.97, 40.715], [-73.9442, 40.6782]]),
+        new("tl3", "ss1", "ss3", 345, 600, 340, 57,
+            [[-73.9857, 40.7484], [-73.92, 40.745], [-73.85, 40.735], [-73.7949, 40.7282]]),
+        new("tl4", "ss1", "ss4", 138, 350, 148, 42,
+            [[-73.9857, 40.7484], [-73.95, 40.78], [-73.91, 40.815], [-73.8648, 40.8448]]),
+        new("tl5", "ss3", "ss4", 138, 250, 92, 37,
+            [[-73.7949, 40.7282], [-73.82, 40.78], [-73.8648, 40.8448]]),
+    ];
+
+    // Bounding box for NYC region
+    private const double _lonMin = -74.15;
+    private const double _lonMax = -73.70;
+    private const double _latMin = 40.60;
+    private const double _latMax = 40.92;
+
+    private string? _selectedId = "ss1";
+    private string? _expandedFeeder;
+
+    private Substation? _selected => _substations.FirstOrDefault(s => s.Id == _selectedId);
+
+    private int _overallUtil => (int)Math.Round(
+        (double)_substations.Sum(s => s.CurrentLoadMW) /
+        _substations.Sum(s => s.CapacityMW) * 100);
+
+    private static string GetLineColor(int utilization)
+    {
+        if (utilization >= 80) return "#ef4444";
+        if (utilization >= 60) return "#eab308";
+        return "#22c55e";
+    }
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+
+    private string BuildRoutePath(double[][] coords)
+    {
+        if (coords.Length == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < coords.Length; i++)
+        {
+            var x = MapLonToPercent(coords[i][0]) * 100;
+            var y = MapLatToPercent(coords[i][1]) * 100;
+            var xStr = x.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            var yStr = y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            sb.Append(i == 0 ? $"M {xStr}% {yStr}%" : $" L {xStr}% {yStr}%");
+        }
+        return sb.ToString();
+    }
+}

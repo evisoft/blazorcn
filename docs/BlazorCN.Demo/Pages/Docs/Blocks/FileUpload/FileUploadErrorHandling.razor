@@ -1,0 +1,152 @@
+@* ============================================================
+   Block: file-upload-error-handling
+   Title: FileUploadErrorHandling
+   Description: A file upload error states showcase with network error, file too large, invalid type, server error, and timeout states each with icon, message, retry button, and help link using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-error-handling.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Upload errors</span>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_criticalCount
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_warningCount
+                </span>
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <span class="font-semibold text-2xl tabular-nums text-red-600 dark:text-red-400">
+                @_errors.Length
+            </span>
+            <span class="text-muted-foreground text-xs">failed uploads</span>
+            <span class="text-muted-foreground text-xs">&middot;</span>
+            <span class="text-muted-foreground text-xs">@_retried.Count retried</span>
+        </div>
+
+        @* Error list *@
+        <div>
+            @for (int i = 0; i < _errors.Length; i++)
+            {
+                var error = _errors[i];
+                var isLast = i == _errors.Length - 1;
+                var isExpanded = _expanded == error.Id;
+                var wasRetried = _retried.Contains(error.Id);
+                var dotClass = GetErrorDotClass(error.Type);
+                var iconName = GetErrorIconName(error.Type);
+                var iconClass = GetErrorIconClass(error.Type);
+                <div class="@Cn.Merge("", isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpand(error.Id, isExpanded))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", dotClass)"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@error.Title</span>
+                            <p class="mt-0.5 truncate text-muted-foreground text-xs">
+                                @error.FileName &middot; @error.FileSize
+                            </p>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <p class="mb-3 text-muted-foreground text-sm leading-relaxed">
+                                @error.Description
+                            </p>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="mb-2 flex items-center gap-2">
+                                    <LucideIconCn Name="@iconName" Size="16" Class="@Cn.Merge("size-4", iconClass)" />
+                                    <span class="text-sm">@error.HelpText</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Outline"
+                                        Size="ButtonSize.Sm"
+                                        Class="h-7 gap-1 text-xs"
+                                        OnClick="@((MouseEventArgs e) => HandleRetry(error.Id))"
+                                        Disabled="@wasRetried">
+                                        <LucideIconCn Name="refresh-cw" Size="12" Class="size-3" />
+                                        @(wasRetried ? "Retrying..." : "Retry upload")
+                                    </ButtonCn>
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Ghost"
+                                        Size="ButtonSize.Sm"
+                                        Class="h-7 text-muted-foreground text-xs">
+                                        View help
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record UploadError(string Id, string Type, string FileName, string FileSize, string Title, string Description, string HelpText);
+
+    private static readonly UploadError[] _errors =
+    [
+        new("1", "network",      "quarterly-report.pdf",    "4.2 MB",  "Network connection lost",    "The upload was interrupted because the network connection dropped. Your file was not saved.",                                               "Check your internet connection and try again."),
+        new("2", "too-large",    "design-assets-full.zip",  "256 MB",  "File exceeds size limit",    "The file is 256 MB but the maximum allowed size is 50 MB. Reduce the file size or split it into smaller parts.",                         "Compress the file or remove unused assets."),
+        new("3", "invalid-type", "presentation.pptx",       "18.7 MB", "File type not supported",    "PPTX files are not accepted. Supported formats are PNG, JPG, PDF, and ZIP.",                                                            "Convert the file to a supported format."),
+        new("4", "server",       "analytics-export.csv",    "1.8 MB",  "Server error",               "The server returned a 502 error while processing the upload. This is usually temporary.",                                              "Wait a moment and try uploading again."),
+        new("5", "timeout",      "video-recording.mp4",     "48.3 MB", "Upload timed out",           "The upload did not complete within 120 seconds. This may be caused by a slow connection or server load.",                              "Try uploading during off-peak hours."),
+    ];
+
+    private string? _expanded = "1";
+    private HashSet<string> _retried = [];
+
+    private int _criticalCount => _errors.Count(e => e.Type == "network" || e.Type == "server");
+    private int _warningCount  => _errors.Count(e => e.Type == "too-large" || e.Type == "invalid-type" || e.Type == "timeout");
+
+    private void ToggleExpand(string id, bool isCurrentlyExpanded)
+    {
+        _expanded = isCurrentlyExpanded ? null : id;
+    }
+
+    private void HandleRetry(string id)
+    {
+        _retried.Add(id);
+    }
+
+    private static string GetErrorDotClass(string type) => type switch
+    {
+        "network"      => "bg-red-500",
+        "server"       => "bg-red-500",
+        "too-large"    => "bg-amber-500",
+        "invalid-type" => "bg-amber-500",
+        "timeout"      => "bg-amber-500",
+        _              => "bg-muted-foreground",
+    };
+
+    private static string GetErrorIconName(string type) => type switch
+    {
+        "network"      => "wifi-off",
+        "too-large"    => "hard-drive",
+        "invalid-type" => "file-warning",
+        "server"       => "alert-circle",
+        "timeout"      => "clock",
+        _              => "alert-circle",
+    };
+
+    private static string GetErrorIconClass(string type) => type switch
+    {
+        "network" => "text-red-500",
+        "server"  => "text-red-500",
+        _         => "text-amber-500",
+    };
+}

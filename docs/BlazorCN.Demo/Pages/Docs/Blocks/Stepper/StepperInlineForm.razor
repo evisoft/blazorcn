@@ -1,0 +1,214 @@
+@* ============================================================
+   Block: stepper-inline-form
+   Title: StepperInlineForm
+   Description: An inline form stepper with numbered section badges, expandable form areas, collapsible summaries, and progressive disclosure built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-inline-form.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Service inquiry</span>
+                <p class="text-muted-foreground text-xs">Complete all sections to submit</p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs tabular-nums">
+                @_completed.Count/@_sections.Length
+            </BadgeCn>
+        </div>
+
+        @* Form sections *@
+        <div>
+            @foreach (var entry in _sections.Select((s, i) => new { Sec = s, Index = i }))
+            {
+                var idx = entry.Index;
+                var sec = entry.Sec;
+                var isActive = _activeStep == idx;
+                var isCompleted = _completed.Contains(idx);
+                var isUpcoming = idx > _activeStep && !isCompleted;
+                var isLast = idx == _sections.Length - 1;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    @* Section header row *@
+                    <div
+                        class="@Cn.Merge("flex items-center gap-3 px-4 py-3", isActive ? "" : isCompleted ? "cursor-pointer hover:bg-muted/30" : "")"
+                        @onclick="@(() => { if (_completed.Contains(idx)) EditSection(idx); })"
+                        @onkeydown="@((KeyboardEventArgs e) => HandleHeaderKeyDown(e, idx))"
+                        role="@(isCompleted ? "button" : null)"
+                        tabindex="@(isCompleted ? "0" : null)">
+
+                        @* Step number badge *@
+                        <span class="@Cn.Merge("flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium tabular-nums", isCompleted ? "bg-emerald-500 text-white" : isActive ? "bg-blue-500 text-white" : "bg-muted text-muted-foreground")">
+                            @if (isCompleted)
+                            {
+                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                            }
+                            else
+                            {
+                                @(idx + 1)
+                            }
+                        </span>
+
+                        @* Title + summary *@
+                        <div class="min-w-0 flex-1">
+                            <span class="@Cn.Merge("font-medium text-sm", isUpcoming ? "text-muted-foreground" : "text-foreground")">
+                                @sec.Title
+                            </span>
+                            @if (isCompleted && !isActive)
+                            {
+                                <p class="mt-0.5 truncate text-muted-foreground text-xs">
+                                    @sec.Summary
+                                </p>
+                            }
+                            @if (isUpcoming)
+                            {
+                                <p class="mt-0.5 text-muted-foreground/60 text-xs">
+                                    @sec.Description
+                                </p>
+                            }
+                        </div>
+
+                        @* Edit button for completed sections *@
+                        @if (isCompleted && !isActive)
+                        {
+                            <div @onclick:stopPropagation>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs text-muted-foreground" OnClick="@(() => EditSection(idx))">
+                                    <LucideIconCn Name="pen-line" Size="12" Class="size-3" />
+                                    Edit
+                                </ButtonCn>
+                            </div>
+                        }
+                    </div>
+
+                    @* Expanded form content *@
+                    @if (isActive)
+                    {
+                        <div class="px-4 pb-4 pl-[52px]">
+                            <p class="mb-3 text-muted-foreground text-xs">@sec.Description</p>
+
+                            <div class="mb-4 rounded-md bg-muted/30 p-3">
+                                @foreach (var fEntry in sec.Fields.Select((f, fi) => new { Field = f, FieldIndex = fi }))
+                                {
+                                    var field = fEntry.Field;
+                                    var fieldIdx = fEntry.FieldIndex;
+                                    <div class="@Cn.Merge("flex items-center justify-between py-2", fieldIdx < sec.Fields.Length - 1 ? "border-b border-border/50" : "")">
+                                        <span class="text-muted-foreground text-xs">@field.Label</span>
+                                        <span class="font-medium text-sm">@field.Value</span>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                @if (idx > 0)
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs" OnClick="@(() => SetActiveStep(idx - 1))">
+                                        Back
+                                    </ButtonCn>
+                                }
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" OnClick="@(() => MarkCompleteAndNext(idx))">
+                                    @(isLast ? "Submit inquiry" : "Continue")
+                                    @if (!isLast)
+                                    {
+                                        <LucideIconCn Name="chevron-right" Size="12" Class="size-3" />
+                                    }
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer progress *@
+        <div class="flex items-center gap-3 border-t px-4 py-3">
+            <div class="flex flex-1 items-center gap-1">
+                @foreach (var pEntry in _sections.Select((s, i) => new { Sec = s, Index = i }))
+                {
+                    var pidx = pEntry.Index;
+                    <div class="@Cn.Merge("h-1 flex-1 rounded-full transition-colors duration-300", _completed.Contains(pidx) ? "bg-emerald-500" : pidx == _activeStep ? "bg-blue-500" : "bg-muted-foreground/15")" />
+                }
+            </div>
+            <span class="shrink-0 text-muted-foreground text-xs tabular-nums">
+                @((int)Math.Round((double)_completed.Count / _sections.Length * 100))%
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record FormField(string Label, string Value);
+    private record FormSection(string Id, string Title, string Description, FormField[] Fields, string Summary);
+
+    private int _activeStep = 0;
+    private HashSet<int> _completed = new();
+
+    private static readonly FormSection[] _sections =
+    [
+        new("contact", "Contact info", "Your name and how to reach you.",
+            [
+                new("Full name", "Jordan Rivera"),
+                new("Email address", "jordan@acmecorp.com"),
+                new("Phone number", "+1 (555) 867-5309"),
+                new("Preferred contact", "Email"),
+            ],
+            "Jordan Rivera — jordan@acmecorp.com"),
+        new("company", "Company details", "Tell us about your organization.",
+            [
+                new("Company name", "Acme Corp"),
+                new("Industry", "Software & Technology"),
+                new("Company size", "51-200 employees"),
+                new("Website", "acmecorp.com"),
+            ],
+            "Acme Corp — Software & Technology, 51-200 employees"),
+        new("services", "Service preferences", "Select the services you're interested in.",
+            [
+                new("Primary service", "Cloud Infrastructure"),
+                new("Secondary service", "DevOps Consulting"),
+                new("Budget range", "$5,000 - $15,000 / month"),
+                new("Start date", "Next quarter"),
+            ],
+            "Cloud Infrastructure + DevOps — $5k-$15k/mo"),
+        new("notes", "Additional notes", "Anything else we should know?",
+            [
+                new("Requirements", "SOC 2 compliance required"),
+                new("Current provider", "AWS (migrating from)"),
+                new("Decision timeline", "Within 30 days"),
+                new("Referral source", "Partner recommendation"),
+            ],
+            "SOC 2 required — Migrating from AWS, 30-day timeline"),
+        new("review", "Review & submit", "Verify your information before submitting.",
+            [
+                new("Contact", "Jordan Rivera, jordan@acmecorp.com"),
+                new("Company", "Acme Corp (51-200 employees)"),
+                new("Services", "Cloud Infrastructure + DevOps"),
+                new("Budget", "$5,000 - $15,000 / month"),
+            ],
+            "All sections completed — Ready to submit"),
+    ];
+
+    private void MarkCompleteAndNext(int index)
+    {
+        _completed.Add(index);
+        if (index < _sections.Length - 1)
+        {
+            _activeStep = index + 1;
+        }
+    }
+
+    private void EditSection(int index)
+    {
+        _activeStep = index;
+    }
+
+    private void SetActiveStep(int index)
+    {
+        _activeStep = index;
+    }
+
+    private void HandleHeaderKeyDown(KeyboardEventArgs e, int index)
+    {
+        if (_completed.Contains(index) && (e.Key == "Enter" || e.Key == " "))
+            EditSection(index);
+    }
+}

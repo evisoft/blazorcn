@@ -1,0 +1,170 @@
+@* ============================================================
+   Block: form-autosave
+   Title: FormAutosave
+   Description: A form that automatically saves changes as users type with debounced save detection and visual status indicators
+   Source: original/blocks/form/form-autosave.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with save status *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h2 class="text-sm font-medium">Profile Settings</h2>
+                <p class="mt-0.5 text-xs text-muted-foreground">Changes are saved automatically</p>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (_saveStatus == "unsaved")
+                {
+                    <LucideCloudCn Size="16" Class="size-4 text-muted-foreground/60" />
+                    <span class="text-xs text-muted-foreground">Unsaved changes</span>
+                }
+                @if (_saveStatus == "saving")
+                {
+                    <LucideLoaderCn Size="16" Class="size-4 animate-spin text-muted-foreground" />
+                    <span class="text-xs text-muted-foreground">Saving...</span>
+                }
+                @if (_saveStatus == "saved")
+                {
+                    <LucideCheckCn Size="16" Class="size-4 text-emerald-500" />
+                    <span class="text-xs text-emerald-600">All changes saved</span>
+                }
+            </div>
+        </div>
+
+        @* Form *@
+        <div class="p-4">
+            <div class="space-y-4">
+                @* Full Name field *@
+                <div class="space-y-2">
+                    <LabelCn For="name">Full Name</LabelCn>
+                    <InputCn Id="name"
+                             Value="@_name"
+                             ValueChanged="@((string? v) => OnNameChanged(v))"
+                             Placeholder="Enter your full name"
+                             autocomplete="name" />
+                    @if (_nameError != null)
+                    {
+                        <p class="text-sm text-destructive">@_nameError</p>
+                    }
+                </div>
+
+                @* Email Address field *@
+                <div class="space-y-2">
+                    <LabelCn For="email">Email Address</LabelCn>
+                    <InputCn Id="email"
+                             Type="email"
+                             Value="@_email"
+                             ValueChanged="@((string? v) => OnEmailChanged(v))"
+                             Placeholder="@("you@example.com")"
+                             autocomplete="email" />
+                    @if (_emailError != null)
+                    {
+                        <p class="text-sm text-destructive">@_emailError</p>
+                    }
+                </div>
+
+                @* Bio field *@
+                <div class="space-y-2">
+                    <LabelCn For="bio">Bio</LabelCn>
+                    <TextareaCn Id="bio"
+                                Value="@_bio"
+                                ValueChanged="@((string? v) => OnBioChanged(v))"
+                                Placeholder="Tell us about yourself"
+                                Rows="4"
+                                Class="resize-none" />
+                    <p class="text-sm text-muted-foreground">@_bio.Length/500 characters</p>
+                    @if (_bioError != null)
+                    {
+                        <p class="text-sm text-destructive">@_bioError</p>
+                    }
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" @onclick="HandleManualSave">
+                    Save Manually
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _saveStatus = "saved";
+    private string _name = "Sarah Chen";
+    private string _email = "sarah.chen@example.com";
+    private string _bio = "Product designer focused on accessibility and user experience.";
+
+    private string? _nameError;
+    private string? _emailError;
+    private string? _bioError;
+
+    private System.Threading.CancellationTokenSource? _debounceCts;
+
+    private void OnNameChanged(string? value)
+    {
+        _name = value ?? "";
+        TriggerAutosave();
+    }
+
+    private void OnEmailChanged(string? value)
+    {
+        _email = value ?? "";
+        TriggerAutosave();
+    }
+
+    private void OnBioChanged(string? value)
+    {
+        _bio = value ?? "";
+        TriggerAutosave();
+    }
+
+    private void TriggerAutosave()
+    {
+        _saveStatus = "unsaved";
+        _debounceCts?.Cancel();
+        _debounceCts = new System.Threading.CancellationTokenSource();
+        var token = _debounceCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1000, token);
+                await InvokeAsync(() =>
+                {
+                    _saveStatus = "saving";
+                    StateHasChanged();
+                });
+                await Task.Delay(800, token);
+                await InvokeAsync(() =>
+                {
+                    _saveStatus = "saved";
+                    StateHasChanged();
+                });
+            }
+            catch (TaskCanceledException)
+            {
+                // debounce cancelled — a newer change came in
+            }
+        }, token);
+    }
+
+    private async Task HandleManualSave()
+    {
+        ValidateForm();
+        if (_nameError != null || _emailError != null || _bioError != null)
+            return;
+
+        _saveStatus = "saving";
+        await Task.Delay(800);
+        _saveStatus = "saved";
+    }
+
+    private void ValidateForm()
+    {
+        _nameError = _name.Length < 2 ? "Name must be at least 2 characters" : null;
+        _emailError = !_email.Contains('@') ? "Invalid email address" : null;
+        _bioError = _bio.Length > 500 ? "Bio must be less than 500 characters" : null;
+    }
+}

@@ -1,0 +1,170 @@
+@* ============================================================
+   Block: file-upload-notification-settings
+   Title: FileUploadNotificationSettings
+   Description: Upload notification preferences panel for React and Next.js with per-event toggles for upload complete, failed, storage warning, and shared access, channel selector for email, in-app, and SMS, and quiet hours configuration using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-notification-settings.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bell" Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Notification settings</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        Configure alerts for upload events
+                    </p>
+                </div>
+            </div>
+            <span class="text-muted-foreground text-xs">
+                @_activeEventCount of @_notificationEvents.Length active
+            </span>
+        </div>
+
+        @* Event toggles *@
+        <div class="border-b">
+            <div class="px-4 py-2.5">
+                <span class="font-medium text-muted-foreground text-xs">Events</span>
+            </div>
+            @for (int i = 0; i < _notificationEvents.Length; i++)
+            {
+                var evt = _notificationEvents[i];
+                var isLast = i == _notificationEvents.Length - 1;
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-3", isLast ? "" : "border-b")">
+                    <span class="text-muted-foreground">
+                        <LucideIconCn Name="@evt.IconName" Size="14" Class="size-3.5" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-sm">@evt.Label</span>
+                            @if (evt.Critical)
+                            {
+                                <span class="size-1.5 rounded-full bg-red-500"></span>
+                            }
+                        </div>
+                        <p class="mt-0.5 text-muted-foreground text-xs">@evt.Description</p>
+                    </div>
+                    <SwitchCn Checked="@(_enabledEvents.ContainsKey(evt.Id) && _enabledEvents[evt.Id])"
+                               OnCheckedChange="@(() => ToggleEvent(evt.Id))" />
+                </div>
+            }
+        </div>
+
+        @* Channel selector *@
+        <div class="border-b">
+            <div class="flex items-center justify-between px-4 py-2.5">
+                <span class="font-medium text-muted-foreground text-xs">Channels</span>
+                <span class="text-muted-foreground text-xs">@_activeChannelCount active</span>
+            </div>
+            @for (int i = 0; i < _channels.Length; i++)
+            {
+                var ch = _channels[i];
+                var isLast = i == _channels.Length - 1;
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-3", isLast ? "" : "border-b")">
+                    <span class="text-muted-foreground">
+                        <LucideIconCn Name="@ch.IconName" Size="14" Class="size-3.5" />
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <span class="font-medium text-sm">@ch.Label</span>
+                        <p class="mt-0.5 text-muted-foreground text-xs">@ch.Description</p>
+                    </div>
+                    <SwitchCn Checked="@(_enabledChannels.ContainsKey(ch.Id) && _enabledChannels[ch.Id])"
+                               OnCheckedChange="@(() => ToggleChannel(ch.Id))" />
+                </div>
+            }
+        </div>
+
+        @* Quiet hours *@
+        <div class="px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bell-off" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-muted-foreground text-xs">Quiet hours</span>
+            </div>
+            <p class="mt-1 mb-3 text-muted-foreground text-xs">
+                Non-critical notifications are paused during quiet hours
+            </p>
+            <div class="flex items-center gap-1">
+                @foreach (var option in _quietHoursOptions)
+                {
+                    var opt = option;
+                    <button type="button"
+                            @onclick="@(() => _quietHours = opt)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs transition-colors", _quietHours == opt ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        @opt
+                    </button>
+                }
+            </div>
+            @if (_quietHours != "Off")
+            {
+                <div class="mt-3 flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
+                    <LucideIconCn Name="clock" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                    <span class="text-muted-foreground text-xs">
+                        Notifications for <span class="font-medium text-foreground">Upload complete</span> and <span class="font-medium text-foreground">Shared file accessed</span> will be held until @GetQuietHoursEnd()
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record NotificationEvent(string Id, string Label, string Description, string IconName, bool Critical);
+    private record ChannelConfig(string Id, string Label, string IconName, string Description);
+
+    private static readonly NotificationEvent[] _notificationEvents =
+    [
+        new("upload-complete",  "Upload complete",      "When a file finishes uploading successfully",   "check-circle-2",  false),
+        new("upload-failed",    "Upload failed",        "When a file upload encounters an error",         "x-circle",        true),
+        new("storage-warning",  "Storage warning",      "When storage usage exceeds 80% of quota",        "shield-alert",    true),
+        new("shared-access",    "Shared file accessed", "When someone downloads a file you shared",       "monitor",         false),
+    ];
+
+    private static readonly ChannelConfig[] _channels =
+    [
+        new("email",  "Email",  "mail",          "sarah@acme.com"),
+        new("in-app", "In-app", "message-square", "Browser and desktop"),
+        new("sms",    "SMS",    "smartphone",     "+1 (555) 012-3456"),
+    ];
+
+    private static readonly string[] _quietHoursOptions = ["Off", "10 PM - 7 AM", "11 PM - 8 AM", "12 AM - 9 AM"];
+
+    private Dictionary<string, bool> _enabledEvents = new()
+    {
+        ["upload-complete"]  = true,
+        ["upload-failed"]    = true,
+        ["storage-warning"]  = true,
+        ["shared-access"]    = false,
+    };
+
+    private Dictionary<string, bool> _enabledChannels = new()
+    {
+        ["email"]  = true,
+        ["in-app"] = true,
+        ["sms"]    = false,
+    };
+
+    private string _quietHours = "10 PM - 7 AM";
+
+    private int _activeEventCount => _enabledEvents.Values.Count(v => v);
+    private int _activeChannelCount => _enabledChannels.Values.Count(v => v);
+
+    private void ToggleEvent(string id)
+    {
+        if (_enabledEvents.ContainsKey(id))
+            _enabledEvents[id] = !_enabledEvents[id];
+    }
+
+    private void ToggleChannel(string id)
+    {
+        if (_enabledChannels.ContainsKey(id))
+            _enabledChannels[id] = !_enabledChannels[id];
+    }
+
+    private string GetQuietHoursEnd()
+    {
+        var parts = _quietHours.Split(" - ");
+        return parts.Length > 1 ? parts[1] : _quietHours;
+    }
+}

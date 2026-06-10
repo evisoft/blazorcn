@@ -1,0 +1,127 @@
+@* ============================================================
+   Block: monitoring-git-commit-activity
+   Title: MonitoringGitCommitActivity
+   Description: A repository monitoring dashboard tracking commit frequency, author contributions, and code churn over time.
+   Source: original/blocks/monitoring/monitoring-git-commit-activity.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <div class="flex items-center justify-between border-b px-6 py-4 bg-zinc-500/[0.02]">
+            <div class="flex items-center gap-3">
+                <div class="flex size-10 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                    <LucideIconCn Name="code-2" Size="20" Class="size-5 text-zinc-900 dark:text-zinc-100" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold tracking-tight">Repository Activity</h3>
+                    <p class="mt-0.5 text-muted-foreground text-[11px] font-semibold">
+                        shadcnio/main · Last commit 12m ago
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-black uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700">
+                    Synced
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x border-b">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                var strokeColor = s.Status == "warning" ? "#f59e0b" : "#71717a";
+                var trendPoints = BuildPolylinePoints(s.Trend, 120, 40);
+                var fillPoints = BuildFillPoints(s.Trend, 120, 40);
+                <div class="p-6 group hover:bg-muted/5 transition-colors">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-black text-muted-foreground uppercase tracking-widest">@s.Label</span>
+                        <LucideIconCn Name="@s.IconName" Size="16" Class="size-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-3xl font-black tabular-nums tracking-tighter">
+                            @s.Value
+                        </span>
+                        <span class="text-muted-foreground text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+
+                    <div class="h-10 w-full mt-6">
+                        <svg viewBox="0 0 120 40" preserveAspectRatio="none" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="@($"grad-{s.Label.Replace(" ", "")}")" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stop-color="@strokeColor" stop-opacity="0.15" />
+                                    <stop offset="95%" stop-color="@strokeColor" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="@fillPoints" fill="@($"url(#grad-{s.Label.Replace(" ", "")})")" />
+                            <polyline points="@trendPoints" fill="none" stroke="@strokeColor" stroke-width="2" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="px-6 py-3.5 bg-muted/20 flex items-center justify-between">
+            <div class="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                <div class="flex items-center gap-1.5">
+                    <div class="size-1.5 rounded-full bg-emerald-500"></div>
+                    <span>CI/CD Passing</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-foreground">Coverage:</span>
+                    <span class="text-emerald-600">94.2%</span>
+                </div>
+            </div>
+            <button type="button" class="text-[10px] font-black uppercase text-zinc-600 dark:text-zinc-400 hover:text-foreground transition-colors">
+                Full History →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TrendPoint(int Value);
+    private record StatItem(string Label, int Value, string Unit, string IconName, string Status, TrendPoint[] Trend);
+
+    private static readonly TrendPoint[] _commitTrend =
+    [
+        new(12), new(18), new(15), new(24),
+        new(20), new(28), new(32), new(25),
+        new(22), new(30), new(35), new(31),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Weekly Commits", 124, "pushed", "git-commit-horizontal", "healthy", _commitTrend),
+        new("Active Authors", 18, "users", "users", "healthy",
+            [new(9), new(11), new(10), new(13), new(12), new(14), new(16), new(13), new(12), new(15), new(17), new(16)]),
+        new("Open PRs", 14, "active", "git-pull-request", "warning",
+            [new(6), new(9), new(7), new(12), new(10), new(14), new(16), new(12), new(11), new(15), new(17), new(15)]),
+    ];
+
+    private static string BuildPolylinePoints(TrendPoint[] data, int width, int height)
+    {
+        if (data.Length == 0) return "";
+        var minVal = data.Min(d => d.Value);
+        var maxVal = data.Max(d => d.Value);
+        var range = maxVal - minVal == 0 ? 1 : maxVal - minVal;
+        var count = data.Length;
+        var parts = new System.Text.StringBuilder();
+        for (int i = 0; i < count; i++)
+        {
+            double x = count <= 1 ? 0 : (double)width / (count - 1) * i;
+            double y = height - (double)(data[i].Value - minVal) / range * (height - 4) - 2;
+            if (i > 0) parts.Append(' ');
+            parts.Append($"{x:F1},{y:F1}");
+        }
+        return parts.ToString();
+    }
+
+    private static string BuildFillPoints(TrendPoint[] data, int width, int height)
+    {
+        if (data.Length == 0) return "";
+        var line = BuildPolylinePoints(data, width, height);
+        return $"0,{height} {line} {width},{height}";
+    }
+}

@@ -1,0 +1,190 @@
+@* ============================================================
+   Block: music-equalizer-visualizer
+   Title: MusicEqualizerVisualizer
+   Description: A music equalizer visualizer block for React and Next.js with animated frequency bars, genre preset buttons, frequency labels, volume control area, and flat reset button built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-equalizer-visualizer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="volume-2" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Equalizer</span>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Ghost"
+                      Size="ButtonSize.Sm"
+                      Class="h-7 gap-1 text-xs text-muted-foreground"
+                      OnClick="@ResetToFlat">
+                <LucideIconCn Name="rotate-ccw" Size="12" Class="size-3" />
+                Flat
+            </ButtonCn>
+        </div>
+
+        @* Genre presets *@
+        <div class="flex flex-wrap items-center gap-1.5 border-b px-4 py-3">
+            @foreach (var presetName in _presetNames)
+            {
+                var name = presetName;
+                <ButtonCn Variant="@(_activePreset == name ? ButtonVariant.Default : ButtonVariant.Outline)"
+                          Size="ButtonSize.Sm"
+                          Class="h-7 text-xs"
+                          OnClick="@(() => ApplyPreset(name))">
+                    @name
+                </ButtonCn>
+            }
+        </div>
+
+        @* Equalizer bars *@
+        <div class="border-b px-4 py-4">
+
+            @* dB scale labels *@
+            <div class="mb-2 flex items-center justify-between">
+                <span class="font-mono text-muted-foreground text-xs">+12dB</span>
+                <span class="font-mono text-muted-foreground text-xs">0dB</span>
+                <span class="font-mono text-muted-foreground text-xs">-12dB</span>
+            </div>
+
+            @* Bars visualization *@
+            <div class="flex items-end justify-between gap-1" style="height:140px">
+                @foreach (var band in _frequencyBands)
+                {
+                    var gain = _gains.TryGetValue(band.Id, out var g) ? g : 0;
+                    var height = GainToHeight(gain);
+                    <div class="flex flex-1 flex-col items-center gap-1">
+                        <div class="relative w-full" style="height:120px">
+                            <div class="absolute inset-x-0 bottom-0 flex justify-center">
+                                <div class="@Cn.Merge("w-full max-w-3 rounded-t-sm transition-all duration-300", GainToBarColor(gain))"
+                                     style="@($"height:{height:F1}%")"></div>
+                            </div>
+                            @* Zero line *@
+                            <div class="pointer-events-none absolute inset-x-0 top-1/2 border-muted-foreground/20 border-t border-dashed"></div>
+                        </div>
+                        <span class="font-mono text-muted-foreground text-[10px]">@band.Label</span>
+                    </div>
+                }
+            </div>
+
+            @* Gain display *@
+            <div class="mt-2 flex justify-between">
+                @foreach (var band in _frequencyBands)
+                {
+                    var gain = _gains.TryGetValue(band.Id, out var g) ? g : 0;
+                    <div class="flex flex-1 justify-center">
+                        <span class="font-mono text-muted-foreground text-[10px] tabular-nums">
+                            @(gain > 0 ? "+" : "")@gain
+                        </span>
+                    </div>
+                }
+            </div>
+
+        </div>
+
+        @* Band sliders *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2 flex items-center justify-between">
+                <span class="font-medium text-muted-foreground text-xs">Band adjustment</span>
+                <span class="text-muted-foreground text-xs">Drag to fine-tune</span>
+            </div>
+            <div class="grid grid-cols-5 gap-x-3 gap-y-2">
+                @foreach (var band in _frequencyBands)
+                {
+                    var b = band;
+                    var sliderVal = (_gains.TryGetValue(b.Id, out var gv) ? gv : 0) + 12;
+                    <div class="flex flex-col items-center gap-1">
+                        <span class="font-mono text-muted-foreground text-[10px]">@b.Frequency</span>
+                        <SliderCn Value="@((double)sliderVal)"
+                                  ValueChanged="@((double v) => { UpdateBand(b.Id, (int)v - 12); })"
+                                  Min="0"
+                                  Max="24"
+                                  Step="1"
+                                  Class="w-full"
+                                  aria-label="@($"{b.Frequency} gain")" />
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Volume control *@
+        <div class="flex items-center gap-3 px-4 py-3">
+            <LucideIconCn Name="volume-2" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+            <span class="font-medium text-muted-foreground text-xs">Master</span>
+            <SliderCn Value="@((double)_volume)"
+                      ValueChanged="@((double v) => { _volume = (int)v; })"
+                      Min="0"
+                      Max="100"
+                      Step="1"
+                      Class="flex-1"
+                      aria-label="Master volume" />
+            <span class="w-7 text-right font-mono text-muted-foreground text-xs tabular-nums">@_volume</span>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record FrequencyBand(string Id, string Label, string Frequency);
+
+    private static readonly FrequencyBand[] _frequencyBands =
+    [
+        new("b1",  "60",  "60Hz"),
+        new("b2",  "170", "170Hz"),
+        new("b3",  "310", "310Hz"),
+        new("b4",  "600", "600Hz"),
+        new("b5",  "1K",  "1kHz"),
+        new("b6",  "3K",  "3kHz"),
+        new("b7",  "6K",  "6kHz"),
+        new("b8",  "12K", "12kHz"),
+        new("b9",  "14K", "14kHz"),
+        new("b10", "16K", "16kHz"),
+    ];
+
+    private static readonly string[] _presetNames = ["Rock", "Jazz", "Classical", "Pop", "Hip-Hop"];
+
+    private static readonly Dictionary<string, Dictionary<string, int>> _presets = new()
+    {
+        ["Flat"]      = new() { ["b1"]=0,  ["b2"]=0,  ["b3"]=0, ["b4"]=0,  ["b5"]=0,  ["b6"]=0,  ["b7"]=0, ["b8"]=0,  ["b9"]=0,  ["b10"]=0  },
+        ["Rock"]      = new() { ["b1"]=5,  ["b2"]=4,  ["b3"]=2, ["b4"]=0,  ["b5"]=-1, ["b6"]=1,  ["b7"]=3, ["b8"]=5,  ["b9"]=5,  ["b10"]=4  },
+        ["Jazz"]      = new() { ["b1"]=3,  ["b2"]=2,  ["b3"]=1, ["b4"]=2,  ["b5"]=-1, ["b6"]=-1, ["b7"]=0, ["b8"]=2,  ["b9"]=3,  ["b10"]=3  },
+        ["Classical"] = new() { ["b1"]=4,  ["b2"]=3,  ["b3"]=2, ["b4"]=1,  ["b5"]=0,  ["b6"]=0,  ["b7"]=1, ["b8"]=2,  ["b9"]=3,  ["b10"]=4  },
+        ["Pop"]       = new() { ["b1"]=-1, ["b2"]=2,  ["b3"]=4, ["b4"]=4,  ["b5"]=3,  ["b6"]=1,  ["b7"]=-1,["b8"]=-1, ["b9"]=0,  ["b10"]=-1 },
+        ["Hip-Hop"]   = new() { ["b1"]=6,  ["b2"]=5,  ["b3"]=3, ["b4"]=1,  ["b5"]=0,  ["b6"]=-1, ["b7"]=0, ["b8"]=1,  ["b9"]=2,  ["b10"]=3  },
+    };
+
+    private Dictionary<string, int> _gains = new(_presets["Rock"]);
+    private string _activePreset = "Rock";
+    private int _volume = 75;
+
+    private static double GainToHeight(int gain) => ((gain + 12.0) / 24.0) * 100.0;
+
+    private static string GainToBarColor(int gain)
+    {
+        if (gain > 4)  return "bg-foreground";
+        if (gain > 0)  return "bg-foreground/80";
+        if (gain == 0) return "bg-muted-foreground/60";
+        return "bg-muted-foreground/40";
+    }
+
+    private void ApplyPreset(string name)
+    {
+        if (_presets.TryGetValue(name, out var preset))
+        {
+            _gains = new Dictionary<string, int>(preset);
+            _activePreset = name;
+        }
+    }
+
+    private void UpdateBand(string id, int value)
+    {
+        _gains[id] = value;
+        _activePreset = "Flat";
+    }
+
+    private void ResetToFlat()
+    {
+        _gains = new Dictionary<string, int>(_presets["Flat"]);
+        _activePreset = "Flat";
+    }
+}

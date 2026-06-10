@@ -1,0 +1,230 @@
+@* ============================================================
+   Block: map-user-distribution
+   Title: MapUserDistribution
+   Description: React user distribution analytics map block for Next.js with cluster visualization, region stats overlay, top cities sidebar, and user count tooltips using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-user-distribution.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header stats *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="users" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">User distribution</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="globe" Size="12" Class="size-3" />
+                    @_countriesCount countries
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                    @_avgGrowth.ToString("F1")% avg growth
+                </span>
+            </div>
+        </div>
+
+        @* Summary metrics *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            <div>
+                <span class="text-2xl font-semibold tabular-nums">@_totalUsers.ToString("N0")</span>
+                <span class="ml-1 text-xs text-muted-foreground">total users</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <span class="text-xs text-muted-foreground">Top region:</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">North America</BadgeCn>
+                <span class="text-xs tabular-nums text-muted-foreground">25,280</span>
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Cities sidebar *@
+            <div class="w-56 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Top cities</span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var cityItem in _cities)
+                    {
+                        var city = cityItem;
+                        var idx = Array.IndexOf(_cities, city);
+                        <button
+                            type="button"
+                            class="@Cn.Merge("flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/50", _selectedCityId == city.Id ? "bg-muted/50" : "")"
+                            @onclick="@(() => SelectCity(city))"
+                        >
+                            <span class="w-4 text-xs tabular-nums text-muted-foreground">@(idx + 1)</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1">
+                                    <span class="truncate text-sm font-medium">@city.City</span>
+                                    <span class="text-[10px] text-muted-foreground">@city.Country</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5">
+                                <span class="text-xs font-medium tabular-nums">@city.Users.ToString("N0")</span>
+                                <span class="@Cn.Merge("flex items-center gap-0.5 text-[10px] tabular-nums", city.Growth >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                    @if (city.Growth >= 0)
+                                    {
+                                        <LucideIconCn Name="arrow-up" Size="10" Class="size-2.5" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="arrow-down" Size="10" Class="size-2.5" />
+                                    }
+                                    @Math.Abs(city.Growth)%
+                                </span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map area — Map/MapClusterLayer/MapControls/MapPopup are not available in BlazorCN; rendered as a styled placeholder with city dot markers *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated world map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* City cluster dot markers positioned over approximate world coordinates *@
+                    @foreach (var cityItem in _cities)
+                    {
+                        var city = cityItem;
+                        var pos = GetCityPosition(city.Id);
+                        var isSelected = _selectedCityId == city.Id;
+                        var dotSize = 14 + (int)(city.Users / 1200);
+                        var dotColor = GetClusterColor(city.Users);
+                        <button
+                            type="button"
+                            class="absolute flex items-center justify-center rounded-full border-2 border-white/80 shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none"
+                            style="@($"width:{dotSize}px;height:{dotSize}px;left:{pos.X}%;top:{pos.Y}%;background-color:{dotColor};opacity:{(isSelected ? 1.0 : 0.75)}")"
+                            @onclick="@(() => SelectCity(city))"
+                            title="@city.City — @city.Users.ToString("N0") users"
+                        >
+                        </button>
+                    }
+
+                    @* Popup for selected city *@
+                    @if (_popupCity != null)
+                    {
+                        var popup = _popupCity;
+                        var pos = GetCityPosition(popup.Id);
+                        <div
+                            class="absolute z-20 w-44 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - 16px))")"
+                        >
+                            <div class="mb-1.5 flex items-center justify-between">
+                                <span class="text-sm font-medium">@popup.City</span>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-[10px] text-muted-foreground">@popup.Country</span>
+                                    <button type="button" class="text-muted-foreground hover:text-foreground" @onclick="@(() => { _popupCity = null; _selectedCityId = null; })">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Users</span>
+                                    <span class="font-medium tabular-nums">@popup.Users.ToString("N0")</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Growth</span>
+                                    <span class="@Cn.Merge("flex items-center gap-0.5 font-medium tabular-nums", popup.Growth >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                        @if (popup.Growth >= 0)
+                                        {
+                                            <LucideIconCn Name="arrow-up" Size="12" Class="size-3" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="arrow-down" Size="12" Class="size-3" />
+                                        }
+                                        @Math.Abs(popup.Growth)%
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">% of total</span>
+                                    <span class="font-medium tabular-nums">@(((double)popup.Users / _totalUsers * 100).ToString("F1"))%</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                    Map view — World
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-3 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                &lt;100
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                100-750
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                750+
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">Cluster size by user count</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CityStats(string Id, string City, string Country, int Users, double Growth, double Lon, double Lat);
+
+    private static readonly CityStats[] _cities =
+    [
+        new("c1",  "San Francisco", "US", 12480,  14.2, -122.4194,  37.7749),
+        new("c2",  "New York",      "US",  9850,   8.7,  -74.0060,  40.7128),
+        new("c3",  "London",        "UK",  7340,  11.3,   -0.1276,  51.5074),
+        new("c4",  "Berlin",        "DE",  5120,  22.1,   13.4050,  52.5200),
+        new("c5",  "Tokyo",         "JP",  4890,   6.4,  139.6917,  35.6895),
+        new("c6",  "Sydney",        "AU",  3210,  -2.1,  151.2093, -33.8688),
+        new("c7",  "Toronto",       "CA",  2950,  18.5,  -79.3832,  43.6532),
+        new("c8",  "Singapore",     "SG",  2740,  31.2,  103.8198,   1.3521),
+        new("c9",  "Amsterdam",     "NL",  2180,   9.8,    4.9041,  52.3676),
+        new("c10", "Sao Paulo",     "BR",  1960,  -5.4,  -46.6333, -23.5505),
+    ];
+
+    private static readonly int _totalUsers = _cities.Sum(c => c.Users);
+    private static readonly double _avgGrowth = _cities.Sum(c => c.Growth) / _cities.Length;
+    private static readonly int _countriesCount = _cities.Select(c => c.Country).Distinct().Count();
+
+    private string? _selectedCityId = null;
+    private CityStats? _popupCity = null;
+
+    private void SelectCity(CityStats city)
+    {
+        _selectedCityId = city.Id;
+        _popupCity = city;
+    }
+
+    // Map lon/lat to approximate X%/Y% within a Mercator-ish world viewport
+    // Viewport: lon [-180, 180], lat [~-60, ~80] (typical web-map crop)
+    private static (double X, double Y) GetCityPosition(string id)
+    {
+        var city = Array.Find(_cities, c => c.Id == id);
+        if (city == null) return (50.0, 50.0);
+        // lon: -180..180 -> 0..100%
+        double x = (city.Lon + 180.0) / 360.0 * 100.0;
+        // lat: 80..-60 -> 0..100% (top = north)
+        double y = (80.0 - city.Lat) / 140.0 * 100.0;
+        // Clamp to keep markers inside
+        x = Math.Max(3.0, Math.Min(97.0, x));
+        y = Math.Max(5.0, Math.Min(90.0, y));
+        return (Math.Round(x, 1), Math.Round(y, 1));
+    }
+
+    // Colour mirrors the clusterColors in the TSX: green < 100pts, amber 100-750, red 750+
+    // Here we scale by users: <3000 green, 3000-7000 amber, 7000+ red
+    private static string GetClusterColor(int users) =>
+        users >= 7000 ? "#ef4444"
+        : users >= 3000 ? "#eab308"
+        : "#22c55e";
+}

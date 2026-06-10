@@ -1,0 +1,168 @@
+@* ============================================================
+   Block: todo-list-email-queue
+   Title: TodoListEmailQueue
+   Description: An email management queue todo list block for React and Next.js with campaign labels, delivery status, open rate tracking, and send scheduling built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-email-queue.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="mail" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Email Queue</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var s in _statusOrder)
+                {
+                    var sDot = StatusDotClass(s);
+                    var sCount = _items.Count(e => e.Status == s);
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@($"size-1.5 rounded-full {sDot}")"></span>
+                        @sCount
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Emails *@
+        <div>
+            @for (int i = 0; i < _items.Count; i++)
+            {
+                var email = _items[i];
+                var capturedId = email.Id;
+                var isExpanded = _expanded == email.Id;
+                var isLast = i == _items.Count - 1;
+                var priorityDot = PriorityDotClass(email.Priority);
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                        <CheckboxCn Checked="@email.Completed" CheckedChanged="@((bool _) => Toggle(capturedId))" Class="mt-0.5" />
+                        <button type="button" @onclick="@(() => { _expanded = isExpanded ? null : capturedId; })" class="min-w-0 flex-1 text-left">
+                            <div class="flex items-center gap-2">
+                                @if (!string.IsNullOrEmpty(priorityDot))
+                                {
+                                    <span class="@($"size-1.5 shrink-0 rounded-full {priorityDot}")"></span>
+                                }
+                                <span class="@Cn.Merge("font-medium text-sm transition-all duration-200", email.Completed ? "text-muted-foreground line-through" : "")">
+                                    @email.Subject
+                                </span>
+                            </div>
+                            <div class="mt-1 flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@email.Campaign</BadgeCn>
+                                <span class="text-muted-foreground text-xs tabular-nums">@email.Recipients.ToString("N0") recipients</span>
+                                <span class="text-muted-foreground text-xs">·</span>
+                                <span class="text-muted-foreground text-xs">@email.SendDate</span>
+                                @if (email.OpenRate.HasValue)
+                                {
+                                    <span class="text-muted-foreground text-xs">·</span>
+                                    <span class="font-mono text-muted-foreground text-xs tabular-nums">@(email.OpenRate)% opened</span>
+                                }
+                            </div>
+                        </button>
+                        <div class="flex shrink-0 items-center gap-2 pt-0.5">
+                            <span class="@($"size-1.5 rounded-full {StatusDotClass(email.Status)}")"></span>
+                            <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        </div>
+                    </div>
+                    @if (isExpanded)
+                    {
+                        <div class="flex gap-2 px-4 pb-3 pl-10">
+                            @if (email.Status == EmailStatus.Draft)
+                            {
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                                    <LucideIconCn Name="send" Size="12" Class="size-3" />
+                                    Send Now
+                                </ButtonCn>
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                                    Schedule
+                                </ButtonCn>
+                            }
+                            @if (email.Status == EmailStatus.Failed)
+                            {
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                                    Retry
+                                </ButtonCn>
+                            }
+                            @if (email.Status == EmailStatus.Queued)
+                            {
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                                    Cancel
+                                </ButtonCn>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">
+                @(_items.Count(e => e.Status == EmailStatus.Draft || e.Status == EmailStatus.Queued)) emails pending
+            </span>
+            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                @(_items.Sum(e => e.Recipients).ToString("N0")) total recipients
+            </span>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private enum EmailStatus { Draft, Queued, Sent, Failed }
+    private enum Priority { High, Medium, Normal }
+
+    private class EmailItem
+    {
+        public string Id { get; set; } = "";
+        public string Subject { get; set; } = "";
+        public string Campaign { get; set; } = "";
+        public int Recipients { get; set; }
+        public string SendDate { get; set; } = "";
+        public EmailStatus Status { get; set; }
+        public Priority Priority { get; set; }
+        public double? OpenRate { get; set; }
+        public bool Completed { get; set; }
+    }
+
+    private static readonly EmailStatus[] _statusOrder =
+        [EmailStatus.Draft, EmailStatus.Queued, EmailStatus.Sent, EmailStatus.Failed];
+
+    private List<EmailItem> _items =
+    [
+        new() { Id = "e1", Subject = "Welcome to our platform — here's what to do first",   Campaign = "Onboarding",    Recipients = 1240,  SendDate = "Apr 5, 10:00 AM", Status = EmailStatus.Queued, Priority = Priority.High,   OpenRate = null, Completed = false },
+        new() { Id = "e2", Subject = "Your weekly product digest — March Week 4",            Campaign = "Newsletter",    Recipients = 8450,  SendDate = "Apr 7, 9:00 AM",  Status = EmailStatus.Draft,  Priority = Priority.Normal, OpenRate = null, Completed = false },
+        new() { Id = "e3", Subject = "New feature: Real-time collaboration is here",             Campaign = "Product Update",Recipients = 12800, SendDate = "Apr 3, 2:00 PM",  Status = EmailStatus.Sent,   Priority = Priority.High,   OpenRate = 34.2, Completed = true  },
+        new() { Id = "e4", Subject = "Your trial expires in 3 days — upgrade now",          Campaign = "Conversion",    Recipients = 320,   SendDate = "Apr 6, 8:00 AM",  Status = EmailStatus.Queued, Priority = Priority.High,   OpenRate = null, Completed = false },
+        new() { Id = "e5", Subject = "April community meetup — register your spot",         Campaign = "Events",        Recipients = 5600,  SendDate = "Apr 4, 11:00 AM", Status = EmailStatus.Sent,   Priority = Priority.Medium, OpenRate = 28.7, Completed = true  },
+        new() { Id = "e6", Subject = "Security update: Two-factor authentication changes",       Campaign = "Transactional", Recipients = 15200, SendDate = "Apr 2, 6:00 PM",  Status = EmailStatus.Sent,   Priority = Priority.High,   OpenRate = 52.1, Completed = true  },
+        new() { Id = "e7", Subject = "Win a free year — refer a friend today",              Campaign = "Referral",      Recipients = 9800,  SendDate = "Apr 8, 10:00 AM", Status = EmailStatus.Draft,  Priority = Priority.Medium, OpenRate = null, Completed = false },
+        new() { Id = "e8", Subject = "Invoice #4821 payment failed — action required",      Campaign = "Transactional", Recipients = 45,    SendDate = "Apr 5, 3:00 PM",  Status = EmailStatus.Failed, Priority = Priority.High,   OpenRate = null, Completed = false },
+    ];
+
+    private string? _expanded;
+
+    private static string StatusDotClass(EmailStatus status) => status switch
+    {
+        EmailStatus.Draft  => "bg-zinc-400",
+        EmailStatus.Queued => "bg-blue-500",
+        EmailStatus.Sent   => "bg-emerald-500",
+        EmailStatus.Failed => "bg-red-500",
+        _                  => ""
+    };
+
+    private static string PriorityDotClass(Priority priority) => priority switch
+    {
+        Priority.High   => "bg-red-500",
+        Priority.Medium => "bg-amber-500",
+        _               => ""
+    };
+
+    private void Toggle(string id)
+    {
+        var item = _items.Find(e => e.Id == id);
+        if (item != null) item.Completed = !item.Completed;
+    }
+}

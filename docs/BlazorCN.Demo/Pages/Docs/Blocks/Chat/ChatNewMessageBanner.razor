@@ -1,0 +1,154 @@
+@* ============================================================
+   Block: chat-new-message-banner
+   Title: ChatNewMessageBanner
+   Description: React chat block with floating new messages banner for Next.js that shows an unread count pill and scrolls to bottom on click using TypeScript, shadcn/ui, Tailwind CSS, and framer-motion
+   Source: original/blocks/chat/chat-new-message-banner.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8">
+                <AvatarFallbackCn Class="text-[10px]">MP</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Maya Patel</span>
+                <p class="text-muted-foreground text-xs">Online</p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                      Class="h-7 text-xs"
+                      OnClick="@HandleHeaderButtonClick">
+                @(_isScrolledUp ? "Jump to bottom" : "Simulate scroll up")
+            </ButtonCn>
+        </div>
+
+        @* Messages *@
+        <div class="relative flex-1 overflow-y-auto py-2">
+            @for (int i = 0; i < _visibleMessages.Count; i++)
+            {
+                var msg = _visibleMessages[i];
+                var idx = i;
+                var prev = idx > 0 ? _visibleMessages[idx - 1] : null;
+                var showAvatar = prev == null || prev.Sender != msg.Sender;
+
+                <div class="group flex gap-2 px-3 py-1 hover:bg-accent/50">
+                    <div class="w-8 shrink-0 pt-0.5">
+                        @if (showAvatar)
+                        {
+                            <AvatarCn Class="size-8">
+                                <AvatarFallbackCn Class="text-[10px]">@msg.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                        }
+                        else
+                        {
+                            <span class="hidden items-center justify-center text-[10px] text-muted-foreground group-hover:flex h-full">
+                                @StripAmPm(msg.Time)
+                            </span>
+                        }
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        @if (showAvatar)
+                        {
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@msg.Sender</span>
+                                <span class="text-[10px] text-muted-foreground">@msg.Time</span>
+                            </div>
+                        }
+                        <p class="text-sm leading-relaxed">@msg.Content</p>
+                    </div>
+                </div>
+            }
+
+            @* New messages banner (framer-motion animation omitted — static show/hide) *@
+            @if (_isScrolledUp && _unreadCount > 0)
+            {
+                <div class="absolute bottom-4 left-1/2 -translate-x-1/2">
+                    <button type="button"
+                            @onclick="HandleScrollToBottom"
+                            class="flex items-center gap-2 rounded-full bg-foreground px-4 py-1.5 shadow-lg transition-colors hover:bg-foreground/90">
+                        <LucideIconCn Name="arrow-down" Size="14" Class="size-3.5 text-background" />
+                        <span class="font-medium text-background text-xs">
+                            @_unreadCount new message@(_unreadCount != 1 ? "s" : "")
+                        </span>
+                    </button>
+                </div>
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-3 py-3">
+            <form @onsubmit="HandleSubmit" class="flex items-end gap-2 rounded-lg border bg-background px-3 py-2">
+                <textarea @bind="_input" @bind:event="oninput"
+                          placeholder="Type a message..."
+                          rows="1"
+                          class="min-h-0 max-h-32 resize-none border-0 bg-transparent p-0 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 flex-1 min-w-0 outline-none"></textarea>
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Sender, string Initials, string Content, string Time);
+
+    private static readonly List<ChatMessage> _initialMessages =
+    [
+        new("1", "Maya Patel", "MP", "The staging environment is back up. I fixed the DNS config.", "3:01 PM"),
+        new("2", "You", "YO", "Nice, that was fast. Did the SSL cert propagate?", "3:02 PM"),
+        new("3", "Maya Patel", "MP", "Yes, verified on all three regions. Latency looks normal too.", "3:03 PM"),
+        new("4", "You", "YO", "Perfect. I'll kick off the integration test suite now.", "3:04 PM"),
+        new("5", "Maya Patel", "MP", "Sounds good. Also the Redis cluster failover test passed — recovery time was under 2 seconds.", "3:06 PM"),
+        new("6", "You", "YO", "That's well within our SLA. Great work on the sentinel config.", "3:07 PM"),
+        new("7", "Maya Patel", "MP", "Thanks! One more thing — the monitoring dashboard needs the new Grafana panels. Can you review my PR?", "3:09 PM"),
+        new("8", "You", "YO", "Sure, send me the link. I'll look at it after the tests finish.", "3:10 PM"),
+    ];
+
+    private static readonly List<ChatMessage> _newMessages =
+    [
+        new("9",  "Maya Patel", "MP", "PR #312 — it adds p95 latency panels and error rate heatmaps.", "3:14 PM"),
+        new("10", "Maya Patel", "MP", "Also pushed a hotfix for the webhook retry logic. It was dropping events after 3 failures.", "3:15 PM"),
+        new("11", "Maya Patel", "MP", "Let me know when you're caught up and we can sync on the rollout plan.", "3:16 PM"),
+    ];
+
+    private List<ChatMessage> _visibleMessages = new(_initialMessages);
+    private bool _isScrolledUp = true;
+    private int _unreadCount = 3;
+    private string _input = "";
+
+    private void HandleScrollToBottom()
+    {
+        _visibleMessages = [.._initialMessages, .._newMessages];
+        _isScrolledUp = false;
+        _unreadCount = 0;
+    }
+
+    private void HandleHeaderButtonClick()
+    {
+        if (_isScrolledUp)
+        {
+            HandleScrollToBottom();
+        }
+        else
+        {
+            _visibleMessages = new(_initialMessages);
+            _isScrolledUp = true;
+            _unreadCount = 3;
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+
+    private static string StripAmPm(string time) =>
+        time.Replace(" PM", "").Replace(" AM", "");
+}

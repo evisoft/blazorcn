@@ -1,0 +1,219 @@
+@* ============================================================
+   Block: kanban-cleanup-tasks
+   Title: KanbanCleanupTasks
+   Description: A code cleanup kanban board for React and Next.js with bulk selection via shadcn/ui Checkbox, floating action bar, file path display, and issue type badges built with Tailwind CSS
+   Source: original/blocks/kanban/kanban-cleanup-tasks.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="relative overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="code" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Code Cleanup</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_tasks.Count tasks
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var issueType in _issueTypes)
+                {
+                    var it = issueType;
+                    <span class="text-muted-foreground text-xs">
+                        @_tasks.Count(t => t.IssueType == it) @it
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-3 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var columnTasks = _tasks.Where(t => t.Column == column.Id).ToList();
+                var columnIds = columnTasks.Select(t => t.Id).ToList();
+                var allSelected = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+                var someSelected = columnIds.Any(id => _selected.Contains(id));
+
+                <div>
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                        <span class="flex items-center" role="button" tabindex="0"
+                              @onclick="@(() => ToggleColumnAll(column.Id))">
+                            <CheckboxCn Checked="@(allSelected || someSelected)"
+                                        CheckedChanged="@((bool _) => ToggleColumnAll(column.Id))" />
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@columnTasks.Count</span>
+                    </div>
+
+                    @* Tasks *@
+                    <div>
+                        @foreach (var task in columnTasks)
+                        {
+                            var isLast = task == columnTasks[columnTasks.Count - 1];
+                            var isChecked = _selected.Contains(task.Id);
+                            var capturedTask = task;
+                            <div class="@Cn.Merge("flex items-start gap-2.5 px-4 py-2.5 transition-colors hover:bg-muted/50", !isLast ? "border-b" : "", isChecked ? "bg-muted/30" : "")">
+                                <span class="mt-0.5 flex shrink-0 items-center">
+                                    <CheckboxCn Checked="@isChecked"
+                                                CheckedChanged="@((bool _) => ToggleSelect(capturedTask.Id))" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("truncate font-medium text-sm", column.Id == "cleaned" ? "text-muted-foreground line-through" : "")">
+                                            @task.Title
+                                        </span>
+                                    </div>
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <span class="truncate font-mono text-muted-foreground text-xs">
+                                            @task.FilePath
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="flex shrink-0 items-center gap-2">
+                                    <BadgeCn Variant="BadgeVariant.Secondary"
+                                             Class="@Cn.Merge("border-0 font-normal text-[10px]", IssueColor(task.IssueType))">
+                                        @task.IssueType
+                                    </BadgeCn>
+                                    <span class="flex size-5 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground">
+                                        @task.Assignee
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @_tasks.Count(t => t.Column == "cleaned") of @_tasks.Count cleaned
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Updated 5 min ago</span>
+        </div>
+
+        @* Floating Action Bar *@
+        @if (_selected.Count > 0)
+        {
+            <div class="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-lg border bg-card px-4 py-2.5 shadow-lg">
+                <span class="font-medium text-sm">@_selected.Count selected</span>
+                <div class="flex items-center gap-2">
+                    <SelectCn Value="@_moveTarget" ValueChanged="@((string val) => MoveSelected(val))" Class="h-7 w-[130px] text-xs">
+                        <SelectTriggerCn class="h-7 w-[130px] text-xs">
+                            <SelectValueCn Placeholder="Move to..." />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var col in _columns)
+                            {
+                                var c = col;
+                                <SelectItemCn Value="@c.Id" class="text-xs">@c.Title</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="ArchiveSelected">
+                        <LucideIconCn Name="archive" Size="12" Class="size-3" />
+                        Archive
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="DeselectAll">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        Deselect
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record CleanupTask(string Id, string FilePath, string IssueType, string Title, string Assignee, string Column)
+    {
+        public string Column { get; set; } = Column;
+    }
+
+    private record ColumnDef(string Id, string Title);
+
+    private static readonly string[] _issueTypes = ["lint", "style", "deprecated"];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("found", "Found"),
+        new("assigned", "Assigned"),
+        new("cleaned", "Cleaned"),
+    ];
+
+    private static readonly Dictionary<string, string> _issueColorMap = new()
+    {
+        ["lint"] = "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        ["style"] = "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        ["deprecated"] = "bg-red-500/10 text-red-700 dark:text-red-400",
+    };
+
+    private string IssueColor(string issueType) =>
+        _issueColorMap.TryGetValue(issueType, out var cls) ? cls : "";
+
+    private List<CleanupTask> _tasks =
+    [
+        new("ct1",  "src/utils/format.ts",         "lint",       "Unused variable in formatDate",              "MK", "found"),
+        new("ct2",  "src/hooks/useAuth.ts",         "deprecated", "Replace legacy context API",                 "SL", "found"),
+        new("ct3",  "src/components/Modal.tsx",     "style",      "Inconsistent className ordering",            "RJ", "found"),
+        new("ct4",  "src/lib/api-client.ts",        "lint",       "Missing return type annotation",             "MK", "found"),
+        new("ct5",  "src/pages/dashboard.tsx",      "deprecated", "Replace getServerSideProps with app router", "SL", "assigned"),
+        new("ct6",  "src/styles/globals.css",       "style",      "Dead CSS selectors from old layout",         "RJ", "assigned"),
+        new("ct7",  "src/utils/debounce.ts",        "lint",       "Any type used in generic parameter",         "MK", "assigned"),
+        new("ct8",  "src/components/Table.tsx",     "style",      "Magic numbers in padding values",            "SL", "assigned"),
+        new("ct9",  "src/lib/redis.ts",             "deprecated", "Replace ioredis v4 callbacks",               "RJ", "cleaned"),
+        new("ct10", "src/middleware.ts",             "lint",       "Unreachable code after redirect",            "MK", "cleaned"),
+        new("ct11", "src/components/Form.tsx",      "style",      "Inconsistent spacing in JSX",                "SL", "cleaned"),
+        new("ct12", "src/utils/crypto.ts",          "deprecated", "Replace crypto.createCipher with createCipheriv", "RJ", "cleaned"),
+    ];
+
+    private readonly HashSet<string> _selected = [];
+    private string? _moveTarget = null;
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Remove(id))
+            _selected.Add(id);
+    }
+
+    private void ToggleColumnAll(string columnId)
+    {
+        var columnTaskIds = _tasks.Where(t => t.Column == columnId).Select(t => t.Id).ToList();
+        var allSel = columnTaskIds.All(id => _selected.Contains(id));
+        if (allSel)
+        {
+            foreach (var id in columnTaskIds)
+                _selected.Remove(id);
+        }
+        else
+        {
+            foreach (var id in columnTaskIds)
+                _selected.Add(id);
+        }
+    }
+
+    private void MoveSelected(string targetColumn)
+    {
+        var toMove = _selected.ToList();
+        foreach (var task in _tasks.Where(t => toMove.Contains(t.Id)))
+            task.Column = targetColumn;
+        _selected.Clear();
+        _moveTarget = null;
+    }
+
+    private void ArchiveSelected()
+    {
+        _tasks = _tasks.Where(t => !_selected.Contains(t.Id)).ToList();
+        _selected.Clear();
+    }
+
+    private void DeselectAll()
+    {
+        _selected.Clear();
+    }
+}

@@ -1,0 +1,280 @@
+@* ============================================================
+   Block: chat-poll-messages
+   Title: ChatPollMessages
+   Description: React in-chat polling interface for Next.js with interactive poll cards, vote buttons, percentage progress bars, total voter counts, and message history using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-poll-messages.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <div class="flex size-8 items-center justify-center rounded-full bg-muted">
+                <span class="font-medium text-muted-foreground text-xs">@("#")</span>
+            </div>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">sprint-planning</span>
+                <p class="text-muted-foreground text-xs">4 members</p>
+            </div>
+            <LucideIconCn Name="bar-chart-3" Size="16" Class="size-4 text-muted-foreground" />
+        </div>
+
+        @* Messages *@
+        <div class="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
+            @foreach (var msg in _msgs)
+            {
+                if (msg.Type == "text")
+                {
+                    var isMe = msg.Sender == "me";
+                    var alignClass = isMe ? "items-end" : "items-start";
+                    var bubbleClass = isMe
+                        ? "max-w-[75%] rounded-2xl px-3 py-2 text-sm leading-relaxed bg-foreground text-background"
+                        : "max-w-[75%] rounded-2xl px-3 py-2 text-sm leading-relaxed bg-muted text-foreground";
+                    <div class="flex flex-col @alignClass">
+                        <div class="mb-0.5 flex items-center gap-1.5 px-1">
+                            <span class="font-medium text-xs">@msg.SenderName</span>
+                            <span class="text-muted-foreground text-[10px]">@msg.Timestamp</span>
+                        </div>
+                        <div class="@bubbleClass">
+                            @msg.Content
+                        </div>
+                    </div>
+                }
+                else if (msg.Type == "poll" && msg.Poll != null)
+                {
+                    var poll = msg.Poll;
+                    var totalVotes = GetTotalVotes(poll);
+                    var userVote = _votedPolls.TryGetValue(poll.Id, out var uv) ? uv : null;
+
+                    <div class="flex flex-col items-start">
+                        <div class="mb-0.5 flex items-center gap-1.5 px-1">
+                            <span class="font-medium text-xs">@msg.SenderName</span>
+                            <span class="text-muted-foreground text-[10px]">@msg.Timestamp</span>
+                        </div>
+                        <div class="w-full max-w-[85%] overflow-hidden rounded-lg border bg-card">
+                            <div class="flex items-center gap-2 border-b px-3 py-2">
+                                <LucideIconCn Name="bar-chart-3" Size="14" Class="size-3.5 text-muted-foreground" />
+                                <span class="font-medium text-sm">Poll</span>
+                            </div>
+                            <div class="px-3 py-2.5">
+                                <p class="font-medium text-sm">@poll.Question</p>
+                                <div class="mt-2.5 flex flex-col gap-1.5">
+                                    @foreach (var opt in poll.Options)
+                                    {
+                                        var capturedPollId = poll.Id;
+                                        var capturedOptId = opt.Id;
+                                        var percent = totalVotes > 0 ? (int)Math.Round((double)opt.Votes / totalVotes * 100) : 0;
+                                        var isSelected = userVote == opt.Id;
+                                        var btnClass = isSelected
+                                            ? "group relative overflow-hidden rounded-md border px-3 py-2 text-left transition-colors border-foreground"
+                                            : "group relative overflow-hidden rounded-md border px-3 py-2 text-left transition-colors border-muted-foreground/20 hover:border-muted-foreground/40";
+                                        var labelClass = isSelected ? "text-sm font-medium" : "text-sm";
+                                        <button type="button"
+                                                @onclick="@(() => HandleVote(capturedPollId, capturedOptId))"
+                                                class="@btnClass">
+                                            @* Progress bar background *@
+                                            <div class="absolute inset-y-0 left-0 bg-muted/50 transition-[width] duration-400 ease-out"
+                                                 style="@($"width:{percent}%")"></div>
+                                            <div class="relative flex items-center justify-between">
+                                                <div class="flex items-center gap-2">
+                                                    @if (isSelected)
+                                                    {
+                                                        <LucideIconCn Name="check" Size="12" Class="size-3 text-foreground" />
+                                                    }
+                                                    <span class="@labelClass">@opt.Label</span>
+                                                </div>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="font-mono text-muted-foreground text-xs">@opt.Votes</span>
+                                                    <span class="w-8 text-right font-mono text-muted-foreground text-xs">@(percent)%</span>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    }
+                                </div>
+                                <div class="mt-2 flex items-center gap-1.5 text-muted-foreground">
+                                    <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                    <span class="text-xs">@totalVotes @(totalVotes == 1 ? "vote" : "votes")</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Poll Builder *@
+        <div class="@(_showPollBuilder ? "grid overflow-hidden border-t transition-[grid-template-rows] duration-200 ease-out grid-rows-[1fr]" : "grid overflow-hidden border-t transition-[grid-template-rows] duration-200 ease-out grid-rows-[0fr]")">
+            <div class="overflow-hidden">
+                <div class="px-4 py-3">
+                    <div class="flex items-center justify-between">
+                        <span class="font-medium text-sm">Create Poll</span>
+                        <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon"
+                                  OnClick="@(() => _showPollBuilder = false)"
+                                  Class="size-6 text-muted-foreground">
+                            <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                    </div>
+                    <div class="mt-2 flex flex-col gap-2">
+                        <InputCn @bind-Value="_pollQuestion" Placeholder="Ask a question..." Class="h-8 text-sm" />
+                        @for (int i = 0; i < _pollOptions.Count; i++)
+                        {
+                            var idx = i;
+                            <input type="text"
+                                   value="@_pollOptions[idx]"
+                                   @oninput="@((e) => UpdatePollOption(idx, e.Value?.ToString() ?? ""))"
+                                   placeholder="@($"Option {idx + 1}")"
+                                   class="flex h-8 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                        }
+                        <div class="flex items-center gap-2">
+                            @if (_pollOptions.Count < 6)
+                            {
+                                <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                          OnClick="AddPollOption"
+                                          Class="h-7 gap-1 px-2 text-muted-foreground text-xs">
+                                    <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                                    Add option
+                                </ButtonCn>
+                            }
+                            <ButtonCn type="button" Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                      OnClick="HandleCreatePoll"
+                                      Disabled="@(!CanCreatePoll())"
+                                      Class="ml-auto h-7 text-xs">
+                                Create
+                            </ButtonCn>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" class="flex items-center gap-2">
+                <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon"
+                          OnClick="@(() => _showPollBuilder = !_showPollBuilder)"
+                          Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="bar-chart-3" Size="16" Class="size-4" />
+                </ButtonCn>
+                <InputCn @bind-Value="_input" Placeholder="Type a message..." Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn type="submit" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                          Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                          Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record PollOption(string Id, string Label, int Votes);
+
+    private record Poll(string Id, string Question, List<PollOption> Options, string CreatedBy, string Timestamp);
+
+    private record ChatMessage(string Id, string Type, string Sender, string SenderName, string Timestamp, string? Content = null, Poll? Poll = null);
+
+    private List<ChatMessage> _msgs = new()
+    {
+        new("1", "text", "them", "Jordan", "2:00 PM", Content: "Hey team, let's decide on the sprint retrospective format."),
+        new("2", "poll", "them", "Jordan", "2:01 PM", Poll: new(
+            "poll-1",
+            "Which retrospective format should we use?",
+            new()
+            {
+                new("opt-1", "Start, Stop, Continue", 5),
+                new("opt-2", "4Ls (Liked, Learned, Lacked, Longed)", 3),
+                new("opt-3", "Mad, Sad, Glad", 2),
+                new("opt-4", "Sailboat Metaphor", 1),
+            },
+            "Jordan", "2:01 PM")),
+        new("3", "text", "me", "You", "2:03 PM", Content: "I voted for Start, Stop, Continue. It's the most actionable."),
+        new("4", "text", "them", "Mara", "2:04 PM", Content: "Good point. The 4Ls can get too reflective without clear next steps."),
+        new("5", "poll", "them", "Mara", "2:05 PM", Poll: new(
+            "poll-2",
+            "What day works best for the retro?",
+            new()
+            {
+                new("day-1", "Monday afternoon", 4),
+                new("day-2", "Wednesday morning", 6),
+                new("day-3", "Friday after standup", 3),
+            },
+            "Mara", "2:05 PM")),
+        new("6", "text", "me", "You", "2:07 PM", Content: "Wednesday morning works for me. Less meeting fatigue than Friday."),
+    };
+
+    private Dictionary<string, string> _votedPolls = new();
+    private string _input = "";
+    private bool _showPollBuilder = false;
+    private string _pollQuestion = "";
+    private List<string> _pollOptions = new() { "", "" };
+
+    private void HandleVote(string pollId, string optionId)
+    {
+        var previousVote = _votedPolls.TryGetValue(pollId, out var prev) ? prev : null;
+        _votedPolls[pollId] = optionId;
+
+        for (int i = 0; i < _msgs.Count; i++)
+        {
+            var msg = _msgs[i];
+            if (msg.Type != "poll" || msg.Poll == null || msg.Poll.Id != pollId) continue;
+
+            var updatedOptions = msg.Poll.Options.Select(opt =>
+            {
+                if (opt.Id == optionId) return opt with { Votes = opt.Votes + 1 };
+                if (opt.Id == previousVote) return opt with { Votes = Math.Max(0, opt.Votes - 1) };
+                return opt;
+            }).ToList();
+
+            _msgs[i] = msg with { Poll = msg.Poll with { Options = updatedOptions } };
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+
+    private void HandleCreatePoll()
+    {
+        var filledOptions = _pollOptions.Where(o => !string.IsNullOrWhiteSpace(o)).ToList();
+        if (string.IsNullOrWhiteSpace(_pollQuestion) || filledOptions.Count < 2) return;
+
+        var newMsg = new ChatMessage(
+            $"msg-{_msgs.Count + 1}",
+            "poll",
+            "me",
+            "You",
+            "Now",
+            Poll: new(
+                $"poll-{_msgs.Count + 1}",
+                _pollQuestion.Trim(),
+                filledOptions.Select((label, i) => new PollOption($"new-opt-{i}", label.Trim(), 0)).ToList(),
+                "You",
+                "Now"
+            )
+        );
+
+        _msgs.Add(newMsg);
+        _pollQuestion = "";
+        _pollOptions = new() { "", "" };
+        _showPollBuilder = false;
+    }
+
+    private bool CanCreatePoll() =>
+        !string.IsNullOrWhiteSpace(_pollQuestion) && _pollOptions.Count(o => !string.IsNullOrWhiteSpace(o)) >= 2;
+
+    private void AddPollOption()
+    {
+        _pollOptions.Add("");
+    }
+
+    private void UpdatePollOption(int index, string value)
+    {
+        if (index >= 0 && index < _pollOptions.Count)
+            _pollOptions[index] = value;
+    }
+
+    private static int GetTotalVotes(Poll poll) =>
+        poll.Options.Sum(opt => opt.Votes);
+}

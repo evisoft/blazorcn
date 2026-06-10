@@ -1,0 +1,164 @@
+@* ============================================================
+   Block: kanban-qa-workflow
+   Title: KanbanQaWorkflow
+   Description: React QA workflow kanban board for Next.js with test progress bars, WIP limits, pass rate metrics, and regression tracking using shadcn/ui Progress and Tailwind CSS
+   Source: original/blocks/kanban/kanban-qa-workflow.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Board header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="flask-conical" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">QA Workflow</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_testItems.Length items
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="clipboard-check" Size="12" Class="size-3" />
+                    @_totalTestCases tests
+                </span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", _passRate >= 70 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")">
+                    <LucideIconCn Name="check-circle-2" Size="12" Class="size-3" />
+                    @_passRate% pass rate
+                </span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", _regressionCount > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                    <LucideIconCn Name="bug" Size="12" Class="size-3" />
+                    @_regressionCount regressions
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4">
+            @foreach (var col in _columns)
+            {
+                var colItems = _testItems.Where(t => t.Status == col.Id).ToArray();
+                var count = colItems.Length;
+                var ratio = (double)count / col.Capacity;
+                var percent = Math.Min(ratio * 100, 100);
+                var colTestCases = colItems.Sum(t => t.TestCases);
+                var isLast = col.Id == _columns[^1].Id;
+                <div class="@Cn.Merge(!isLast ? "border-r" : "")">
+                    @* Column header with progress *@
+                    <div class="border-b px-3 py-3">
+                        <div class="mb-2 flex items-center justify-between">
+                            <span class="font-medium text-sm">@col.Label</span>
+                            <span class="@Cn.Merge("font-mono text-xs tabular-nums", GetProgressTextColor(ratio))">
+                                @count/@col.Capacity
+                            </span>
+                        </div>
+                        @* ProgressCn has no IndicatorClass param; render raw progress bar to support dynamic color *@
+                        <div class="cn-progress relative flex h-2 w-full items-center overflow-x-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow="@((int)percent)" aria-valuemin="0" aria-valuemax="100">
+                            <div class="@Cn.Merge("h-full transition-all duration-700", GetProgressColor(ratio))" style="@($"width:{percent:F1}%")"></div>
+                        </div>
+                        <div class="mt-1.5 flex items-center justify-between">
+                            <span class="text-muted-foreground text-xs">@colTestCases tests</span>
+                            @if (ratio > 1)
+                            {
+                                <span class="font-medium text-red-600 text-xs dark:text-red-400">
+                                    Over limit!
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    @* Test item cards *@
+                    <div class="flex flex-col gap-1 p-2">
+                        @foreach (var item in colItems)
+                        {
+                            var it = item;
+                            <div class="flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors hover:bg-muted/50">
+                                @if (it.Status == "regression")
+                                {
+                                    <span class="size-1.5 shrink-0 rounded-full bg-red-500"></span>
+                                }
+                                @if (it.Status == "signed-off")
+                                {
+                                    <span class="size-1.5 shrink-0 rounded-full bg-emerald-500"></span>
+                                }
+                                <div class="min-w-0 flex-1">
+                                    <span class="line-clamp-1 text-xs">@it.Title</span>
+                                </div>
+                                <span class="font-mono text-muted-foreground/60 text-[10px]">
+                                    @(it.TestCases)tc
+                                </span>
+                                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium">
+                                    @it.Tester
+                                </span>
+                            </div>
+                        }
+                        @if (colItems.Length == 0)
+                        {
+                            <div class="rounded-md border border-dashed border-muted-foreground/20 px-2 py-3 text-center text-muted-foreground/40 text-xs">
+                                Empty
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                WIP limit: 4 per column · @_passedItems of @_testItems.Length signed off
+            </span>
+            <span class="font-mono text-muted-foreground/60 text-xs">@_passRate% complete</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TestItem(string Id, string Title, string Tester, string Status, int TestCases, bool Passed);
+    private record Column(string Id, string Label, int Capacity);
+
+    private static readonly TestItem[] _testItems =
+    [
+        new("t1",  "Login flow validation",            "AK", "awaiting",   12, false),
+        new("t2",  "Payment checkout edge cases",      "LM", "awaiting",   18, false),
+        new("t3",  "User profile CRUD operations",     "RJ", "awaiting",    8, false),
+        new("t4",  "Search filtering and sorting",     "AK", "awaiting",   15, false),
+        new("t5",  "Dashboard data aggregation",       "LM", "testing",    22, false),
+        new("t6",  "File upload size validation",      "RJ", "testing",     6, false),
+        new("t7",  "Notification delivery timing",     "AK", "testing",    10, false),
+        new("t8",  "API rate limit responses",         "LM", "regression", 14, false),
+        new("t9",  "CSV export encoding",              "RJ", "regression",  5, false),
+        new("t10", "Role permission boundaries",       "AK", "signed-off", 20, true),
+        new("t11", "Email template rendering",         "LM", "signed-off",  9, true),
+        new("t12", "Webhook payload schema",           "RJ", "signed-off",  7, true),
+        new("t13", "Two-factor auth setup",            "AK", "signed-off", 11, true),
+    ];
+
+    private static readonly Column[] _columns =
+    [
+        new("awaiting",   "Awaiting QA", 4),
+        new("testing",    "In Testing",  4),
+        new("regression", "Regression",  4),
+        new("signed-off", "Signed Off",  4),
+    ];
+
+    private int _totalTestCases => _testItems.Sum(t => t.TestCases);
+    private int _passedItems    => _testItems.Count(t => t.Passed);
+    private int _passRate       => (int)Math.Round((double)_passedItems / _testItems.Length * 100);
+    private int _regressionCount => _testItems.Count(t => t.Status == "regression");
+
+    private static string GetProgressColor(double ratio)
+    {
+        if (ratio > 1) return "bg-red-500";
+        if (ratio >= 0.7) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    private static string GetProgressTextColor(double ratio)
+    {
+        if (ratio > 1) return "text-red-600 dark:text-red-400";
+        if (ratio >= 0.7) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+}

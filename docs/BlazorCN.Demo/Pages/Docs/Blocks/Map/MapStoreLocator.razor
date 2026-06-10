@@ -1,0 +1,240 @@
+@* ============================================================
+   Block: map-store-locator
+   Title: MapStoreLocator
+   Description: React store locator map block for Next.js with search input, clustered store markers, store info popups with hours and address, and distance indicators using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-store-locator.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="store" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Store Locator</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_openCount open
+                </span>
+                <span class="text-xs text-muted-foreground">-</span>
+                <span class="text-xs text-muted-foreground">@_stores.Length locations</span>
+            </div>
+        </div>
+
+        @* Search bar *@
+        <div class="flex items-center gap-2 border-b px-4 py-2.5">
+            <LucideIconCn Name="search" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+            <InputCn @bind-Value="_search" Placeholder="Search by name, address, or city..." Class="h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+            <ButtonCn Size="ButtonSize.Sm" Variant="@(_showOpenOnly ? ButtonVariant.Default : ButtonVariant.Outline)" Class="h-6 shrink-0 px-2 text-xs" OnClick="@(() => _showOpenOnly = !_showOpenOnly)">
+                Open now
+            </ButtonCn>
+        </div>
+
+        <div class="flex">
+            @* Store list *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="max-h-[448px] overflow-y-auto">
+                    @foreach (var st in _filtered)
+                    {
+                        var store = st;
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(store.Id))"
+                            class="@Cn.Merge("flex w-full flex-col gap-1 border-b px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedId == store.Id ? "bg-muted/50" : "")">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium">@store.Name</span>
+                                <span class="tabular-nums text-xs text-muted-foreground">@store.Distance</span>
+                            </div>
+                            <span class="truncate text-xs text-muted-foreground">@store.Address, @store.City</span>
+                            <div class="flex items-center gap-2">
+                                <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                    @store.Hours
+                                </span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("ml-auto h-4 px-1.5 font-normal text-[10px]", store.IsOpen ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                                    @(store.IsOpen ? "Open" : "Closed")
+                                </BadgeCn>
+                            </div>
+                        </button>
+                    }
+                    @if (_filtered.Length == 0)
+                    {
+                        <div class="px-3 py-8 text-center text-xs text-muted-foreground">
+                            No stores match your search.
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map — Map/MapMarker/MarkerContent/MarkerTooltip/MarkerPopup are custom registry
+               components with no BlazorCN equivalent; rendered as a styled static map placeholder
+               with interactive markers and popups. *@
+            <div class="relative h-[500px] flex-1 bg-muted/30">
+                @* Map background grid lines *@
+                <div class="absolute inset-0 overflow-hidden opacity-20">
+                    <div class="grid h-full grid-cols-8 grid-rows-8">
+                        @for (int gi = 0; gi < 64; gi++)
+                        {
+                            <div class="border border-border/50"></div>
+                        }
+                    </div>
+                </div>
+
+                @* Road-like lines *@
+                <div class="absolute inset-0 opacity-30">
+                    <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+                </div>
+
+                @* Map label *@
+                <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    New York City — Manhattan &amp; Brooklyn
+                </div>
+
+                @* Map zoom controls (bottom-right) *@
+                <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="locate" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+
+                @* Store markers plotted by relative position *@
+                @foreach (var st in _filtered)
+                {
+                    var store = st;
+                    var isSelected = _selectedId == store.Id;
+                    var pos = GetMarkerPosition(store);
+                    <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(store.Id))"
+                            class="group relative flex flex-col items-center">
+                            @* Marker pin *@
+                            <div class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background shadow-lg transition-all", isSelected ? "size-8" : "size-6", store.IsOpen ? "bg-emerald-500" : "bg-zinc-400")">
+                                <LucideIconCn Name="store" Size="@(isSelected ? 16 : 12)" Class="@(isSelected ? "size-4 text-white" : "size-3 text-white")" />
+                            </div>
+                            @* Tooltip (shown on hover via group-hover) *@
+                            <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[120px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium">@store.Name</span>
+                                    <span class="@(store.IsOpen ? "text-emerald-300" : "text-zinc-400")">@(store.IsOpen ? "Open" : "Closed")</span>
+                                </div>
+                            </div>
+                        </button>
+
+                        @* Popup (shown when selected) *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <div class="mb-1 text-sm font-medium">@store.Name</div>
+                                <div class="mb-2 space-y-1">
+                                    <div class="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                        <LucideIconCn Name="map-pin" Size="12" Class="mt-0.5 size-3 shrink-0" />
+                                        <span>@store.Address, @store.City</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        <LucideIconCn Name="phone" Size="12" Class="size-3 shrink-0" />
+                                        <span>@store.Phone</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        <LucideIconCn Name="clock" Size="12" Class="size-3 shrink-0" />
+                                        <span>@store.Hours</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("h-4 px-1.5 font-normal text-[10px]", store.IsOpen ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                                            @(store.IsOpen ? "Open" : "Closed")
+                                        </BadgeCn>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="tabular-nums text-xs text-muted-foreground">@store.Distance away</span>
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-6 text-xs">Get directions</ButtonCn>
+                                </div>
+                                @* Close button *@
+                                <button type="button" @onclick="@(() => _selectedId = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Store(
+        string Id,
+        string Name,
+        string Address,
+        string City,
+        string Phone,
+        string Hours,
+        string Distance,
+        bool IsOpen,
+        double Lng,
+        double Lat
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly Store[] _stores =
+    [
+        new("s1", "Downtown Flagship",   "350 5th Ave",         "New York, NY 10118",  "(212) 736-3100", "9am - 9pm",  "0.3 mi", true,  -73.9857, 40.7484),
+        new("s2", "SoHo Gallery Store",  "575 Broadway",        "New York, NY 10012",  "(212) 226-5500", "10am - 8pm", "0.8 mi", true,  -73.9969, 40.7233),
+        new("s3", "Upper East Side",     "1000 Madison Ave",    "New York, NY 10075",  "(212) 434-2700", "10am - 7pm", "1.2 mi", true,  -73.9650, 40.7743),
+        new("s4", "Brooklyn Heights",    "210 Joralemon St",    "Brooklyn, NY 11201",  "(718) 625-4400", "9am - 8pm",  "2.1 mi", true,  -73.9907, 40.6920),
+        new("s5", "Chelsea Market",      "75 9th Ave",          "New York, NY 10011",  "(212) 652-2110", "8am - 9pm",  "1.5 mi", true,  -74.0048, 40.7425),
+        new("s6", "Williamsburg",        "234 Bedford Ave",     "Brooklyn, NY 11249",  "(718) 384-1700", "10am - 7pm", "2.8 mi", false, -73.9572, 40.7143),
+        new("s7", "Financial District",  "85 Broad St",         "New York, NY 10004",  "(212) 269-3500", "8am - 6pm",  "1.9 mi", false, -74.0112, 40.7038),
+        new("s8", "Midtown East",        "599 Lexington Ave",   "New York, NY 10022",  "(212) 521-4000", "9am - 8pm",  "0.6 mi", true,  -73.9718, 40.7580),
+    ];
+
+    private string _search = "";
+    private string? _selectedId = null;
+    private bool _showOpenOnly = false;
+
+    private int _openCount => _stores.Count(s => s.IsOpen);
+
+    private Store[] _filtered => _stores.Where(s =>
+    {
+        if (_showOpenOnly && !s.IsOpen) return false;
+        if (!string.IsNullOrEmpty(_search))
+        {
+            var q = _search.ToLower();
+            return s.Name.ToLower().Contains(q) ||
+                   s.Address.ToLower().Contains(q) ||
+                   s.City.ToLower().Contains(q);
+        }
+        return true;
+    }).ToArray();
+
+    private void ToggleSelected(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+    }
+
+    // Map bounding box covers all 8 stores:
+    // lon [-74.015, -73.955], lat [40.695, 40.780]
+    private static MarkerPos GetMarkerPosition(Store store)
+    {
+        var lonMin = -74.015;
+        var lonMax = -73.955;
+        var latMin = 40.695;
+        var latMax = 40.780;
+        var left = (store.Lng - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - store.Lat) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

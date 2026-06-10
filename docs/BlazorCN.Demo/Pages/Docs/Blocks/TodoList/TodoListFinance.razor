@@ -1,0 +1,164 @@
+@* ============================================================
+   Block: todo-list-finance
+   Title: TodoListFinance
+   Description: A financial task checklist block for React and Next.js with monthly bill sections, investment tasks, tax prep items, auto-pay indicators, overdue highlighting, and paid amount tracking built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-finance.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="wallet" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">April 2026 Finances</span>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span class="tabular-nums">@_paidCount/@_tasks.Count done</span>
+                @if (_overdueCount > 0)
+                {
+                    <span class="flex items-center gap-1 text-red-500">
+                        <LucideIconCn Name="alert-circle" Size="12" Class="size-3" />
+                        @_overdueCount overdue
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-baseline gap-1">
+                <span class="font-semibold text-2xl tabular-nums">@($"${_totalDue:N0}")</span>
+                <span class="text-muted-foreground text-xs">remaining</span>
+            </div>
+            <span class="text-muted-foreground/40 text-xs">·</span>
+            <span class="text-muted-foreground text-xs tabular-nums">@($"${_totalPaid:N0}") paid</span>
+        </div>
+
+        @* Sections *@
+        @for (int secIdx = 0; secIdx < _sections.Length; secIdx++)
+        {
+            var secName = _sections[secIdx];
+            var secTasks = _tasks.Where(t => t.Section == secName).ToList();
+            @if (secTasks.Count > 0)
+            {
+                var isCollapsed = _collapsed.Contains(secName);
+                var secPaid = secTasks.Count(t => t.Paid);
+                var secTotal = secTasks.Where(t => !t.Paid && t.Amount > 0).Sum(t => t.Amount);
+                bool isLastSec = secIdx == _sections.Length - 1;
+                <div>
+                    <button type="button"
+                            @onclick="@(() => ToggleSection(secName))"
+                            class="flex w-full items-center gap-2 border-b bg-muted/30 px-4 py-2 text-left transition-colors hover:bg-muted/50">
+                        <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground/60 transition-transform duration-200", isCollapsed ? "" : "rotate-90")" />
+                        <span class="font-medium text-xs">@secName</span>
+                        <span class="text-muted-foreground text-xs tabular-nums">@secPaid/@secTasks.Count</span>
+                        @if (secTotal > 0)
+                        {
+                            <span class="ml-auto font-mono text-muted-foreground text-xs tabular-nums">@($"${secTotal:N0}") due</span>
+                        }
+                    </button>
+                    @if (!isCollapsed)
+                    {
+                        @for (int taskIdx = 0; taskIdx < secTasks.Count; taskIdx++)
+                        {
+                            var task = secTasks[taskIdx];
+                            bool isLastTask = taskIdx == secTasks.Count - 1;
+                            bool showBorder = !(isLastTask && isLastSec);
+                            var taskId = task.Id;
+                            <div class="@Cn.Merge("group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", showBorder ? "border-b" : "")">
+                                <CheckboxCn Id="@($"fin-{task.Id}")"
+                                            Checked="@task.Paid"
+                                            CheckedChanged="@((bool _) => TogglePaid(taskId))" />
+                                @if (task.Overdue && !task.Paid)
+                                {
+                                    <span class="size-1.5 shrink-0 rounded-full bg-red-500"></span>
+                                }
+                                <div class="min-w-0 flex-1">
+                                    <span class="@Cn.Merge("text-sm", task.Paid ? "text-muted-foreground line-through" : "")">
+                                        @task.Name
+                                    </span>
+                                    <p class="mt-0.5 text-muted-foreground text-xs">
+                                        Due @task.DueDate
+                                        @if (task.Overdue && !task.Paid)
+                                        {
+                                            <span class="ml-1 text-red-500">— overdue</span>
+                                        }
+                                    </p>
+                                </div>
+                                @if (task.AutoPay)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-xs">
+                                        <LucideIconCn Name="credit-card" Size="12" Class="size-3" />
+                                        Auto
+                                    </BadgeCn>
+                                }
+                                @if (task.Amount > 0)
+                                {
+                                    <span class="@Cn.Merge("font-mono text-xs tabular-nums", (task.Overdue && !task.Paid) ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                                        @($"${task.Amount:N0}")
+                                    </span>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        }
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">@(_tasks.Count - _paidCount) tasks remaining</span>
+            <span class="font-mono text-muted-foreground text-xs tabular-nums">Total due: @($"${_totalDue:N0}")</span>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record FinanceTask(string Id, string Name, string Section, int Amount, string DueDate, bool AutoPay, bool Overdue, bool Paid);
+
+    private static readonly string[] _sections = ["Bills Due", "Investments", "Tax Prep", "Reviews"];
+
+    private List<FinanceTask> _tasks =
+    [
+        new("1",  "Rent payment",                "Bills Due",   2450, "Apr 1",  true,  false, true),
+        new("2",  "Electric bill",               "Bills Due",    142, "Apr 5",  true,  false, true),
+        new("3",  "Internet (Comcast)",           "Bills Due",     89, "Apr 8",  true,  false, false),
+        new("4",  "Car insurance",               "Bills Due",    186, "Apr 10", false, false, false),
+        new("5",  "Credit card minimum",         "Bills Due",    320, "Apr 2",  false, true,  false),
+        new("6",  "Phone bill",                  "Bills Due",     65, "Apr 12", true,  false, false),
+        new("7",  "Roth IRA contribution",       "Investments",  500, "Apr 15", false, false, false),
+        new("8",  "Brokerage transfer",          "Investments",  300, "Apr 15", true,  false, false),
+        new("9",  "Review 401k allocation",      "Investments",    0, "Apr 20", false, false, false),
+        new("10", "Gather W-2 and 1099s",        "Tax Prep",       0, "Apr 1",  false, true,  false),
+        new("11", "File federal tax return",     "Tax Prep",    2840, "Apr 15", false, false, false),
+        new("12", "File state tax return",       "Tax Prep",     620, "Apr 15", false, false, false),
+        new("13", "Review monthly budget",       "Reviews",        0, "Apr 30", false, false, false),
+        new("14", "Check credit score",          "Reviews",        0, "Apr 30", false, false, false),
+        new("15", "Audit recurring subscriptions","Reviews",       0, "Apr 30", false, false, false),
+    ];
+
+    private HashSet<string> _collapsed = new HashSet<string>();
+
+    private int _paidCount => _tasks.Count(t => t.Paid);
+    private int _totalDue  => _tasks.Where(t => !t.Paid && t.Amount > 0).Sum(t => t.Amount);
+    private int _totalPaid => _tasks.Where(t => t.Paid  && t.Amount > 0).Sum(t => t.Amount);
+    private int _overdueCount => _tasks.Count(t => t.Overdue && !t.Paid);
+
+    private void TogglePaid(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Paid = !_tasks[idx].Paid };
+    }
+
+    private void ToggleSection(string secName)
+    {
+        if (_collapsed.Contains(secName))
+            _collapsed.Remove(secName);
+        else
+            _collapsed.Add(secName);
+    }
+}

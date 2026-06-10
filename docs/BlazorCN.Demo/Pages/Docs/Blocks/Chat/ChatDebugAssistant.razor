@@ -1,0 +1,252 @@
+@* ============================================================
+   Block: chat-debug-assistant
+   Title: ChatDebugAssistant
+   Description: React debugging assistant chat block for Next.js with stack trace cards, error severity indicators, code snippet display, fix suggestions, and copy-to-clipboard using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-debug-assistant.tsx
+   ============================================================ *@
+
+@inject IJSRuntime JS
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-7">
+                <AvatarFallbackCn Class="bg-muted text-xs">
+                    <LucideIconCn Name="bug" Size="14" Class="size-3.5" />
+                </AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Debug Assistant</span>
+                <p class="text-muted-foreground text-xs">Stack trace analysis</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_errorCount
+                </span>
+                <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                    <LucideIconCn Name="triangle-alert" Size="12" Class="size-3 text-amber-500" />
+                    @_warningCount
+                </span>
+            </div>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-4">
+            <div class="flex flex-col gap-4">
+                @foreach (var msg in _messages)
+                {
+                    var message = msg;
+                    <div class="@Cn.Merge("flex", message.Role == "developer" ? "justify-end" : "justify-start")">
+                        <div class="@Cn.Merge("max-w-[85%]", message.Role == "developer" ? "rounded-2xl rounded-br-sm bg-primary px-3.5 py-2.5 text-primary-foreground" : "rounded-2xl rounded-bl-sm bg-muted/50 px-3.5 py-2.5")">
+                            @if (!string.IsNullOrEmpty(message.Content))
+                            {
+                                <p class="text-sm leading-relaxed">@message.Content</p>
+                            }
+                            @if (message.Error != null)
+                            {
+                                var err = message.Error;
+                                <div class="mt-2 rounded-md border bg-card p-3">
+                                    @* Error header *@
+                                    <div class="mb-2 flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="@Cn.Merge("size-2 shrink-0 rounded-full", GetSeverityDot(err.Severity))"></span>
+                                            <span class="font-medium font-mono text-sm">@err.ErrorType</span>
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                                @GetSeverityLabel(err.Severity)
+                                            </BadgeCn>
+                                        </div>
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="h-6 gap-1 px-2 text-xs"
+                                                  OnClick="@(() => HandleCopy(err.Id + "-trace", BuildFullTrace(err)))">
+                                            @if (_copied == err.Id + "-trace")
+                                            {
+                                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                                <span>Copied</span>
+                                            }
+                                            else
+                                            {
+                                                <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                                <span>Copy</span>
+                                            }
+                                        </ButtonCn>
+                                    </div>
+
+                                    <p class="mb-2.5 text-sm text-red-600 dark:text-red-400">@err.Message</p>
+
+                                    @* Stack frames *@
+                                    <div class="mb-3 overflow-hidden rounded-md bg-zinc-950 p-3">
+                                        <div class="space-y-0.5">
+                                            @foreach (var frame in err.Frames)
+                                            {
+                                                var f = frame;
+                                                <div class="@Cn.Merge("rounded px-2 py-1 font-mono text-xs", f.IsRoot ? "bg-amber-500/10 text-amber-300" : "text-zinc-400")">
+                                                    <span class="text-zinc-500">at </span>
+                                                    <span class="@(f.IsRoot ? "text-amber-300" : "text-zinc-300")">@f.Func</span>
+                                                    <span class="text-zinc-600"> (</span>
+                                                    <span class="@(f.IsRoot ? "text-amber-400/80" : "text-zinc-500")">@f.File:@f.Line:@f.Column</span>
+                                                    <span class="text-zinc-600">)</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @* Suggested fix *@
+                                    <div class="rounded-md bg-muted/50 p-3">
+                                        <div class="mb-1.5 flex items-center justify-between">
+                                            <span class="font-medium text-muted-foreground text-xs">Suggested fix</span>
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                      Class="h-6 gap-1 px-2 text-xs"
+                                                      OnClick="@(() => HandleCopy(err.Id + "-fix", err.SuggestedCode))">
+                                                @if (_copied == err.Id + "-fix")
+                                                {
+                                                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                                    <span>Copied</span>
+                                                }
+                                                else
+                                                {
+                                                    <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                                    <span>Copy</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                        <p class="mb-2.5 text-muted-foreground text-sm leading-relaxed">@err.Suggestion</p>
+                                        <div class="overflow-hidden rounded-md bg-zinc-950 p-3">
+                                            <pre class="overflow-x-auto font-mono text-xs text-zinc-300 leading-relaxed"><code>@err.SuggestedCode</code></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            <span class="@Cn.Merge("mt-1 block text-right text-xs", message.Role == "developer" ? "text-primary-foreground/60" : "text-muted-foreground")">
+                                @message.Timestamp
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="relative">
+                <TextareaCn @bind-Value="_input"
+                            Placeholder="Paste an error or describe the bug..."
+                            Rows="1"
+                            Class="max-h-32 min-h-0 resize-none border-0 bg-transparent pr-12 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0" />
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="absolute top-1/2 right-1 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StackFrame(string File, int Line, int Column, string Func, bool IsRoot);
+
+    private record ErrorCard(string Id, string ErrorType, string Message, string Severity, StackFrame[] Frames, string Suggestion, string SuggestedCode);
+
+    private record Message(string Id, string Role, string Content, string Timestamp, ErrorCard? Error = null);
+
+    private string _input = "";
+    private string? _copied = null;
+    private System.Threading.CancellationTokenSource? _copyCts;
+
+    private static readonly Message[] _messages =
+    [
+        new("1", "developer",
+            "I'm getting a TypeError in production when users try to submit the checkout form. It only happens when the shipping address is optional and left blank. Here's the stack trace.",
+            "3:14 PM"),
+        new("2", "assistant",
+            "I can see the issue. The error occurs because the code tries to access a property on a null shipping address object. Let me break down the trace:",
+            "3:14 PM"),
+        new("3", "assistant", "", "3:15 PM",
+            new ErrorCard("e1", "TypeError",
+                "Cannot read properties of null (reading 'street')",
+                "error",
+                [
+                    new("src/utils/address-formatter.ts", 23, 18, "formatAddress", true),
+                    new("src/services/checkout.ts", 87, 12, "processCheckout", false),
+                    new("src/hooks/use-checkout.ts", 45, 8, "handleSubmit", false),
+                    new("src/components/checkout-form.tsx", 112, 5, "CheckoutForm", false),
+                    new("node_modules/react-dom/cjs/react-dom.development.js", 4084, 14, "commitWork", false),
+                ],
+                "The formatAddress function assumes the address parameter is always defined. When shipping is optional and left blank, null is passed. Add a null check at the top of formatAddress before accessing properties.",
+                "function formatAddress(address: Address | null): string {\n  if (!address) return \"\"\n  return `${address.street}, ${address.city}, ${address.state} ${address.zip}`\n}")),
+        new("4", "developer",
+            "That makes sense. We also have a similar pattern in the billing address formatter — should I fix that too?",
+            "3:17 PM"),
+        new("5", "assistant",
+            "Yes, definitely. I checked the codebase and found the same pattern in 3 places. Here's the second one that's also vulnerable:",
+            "3:18 PM"),
+        new("6", "assistant", "", "3:18 PM",
+            new ErrorCard("e2", "Potential TypeError",
+                "Unsafe property access on nullable billingAddress in formatBillingLabel",
+                "warning",
+                [
+                    new("src/utils/billing-formatter.ts", 11, 22, "formatBillingLabel", true),
+                    new("src/services/invoice.ts", 34, 8, "generateInvoice", false),
+                    new("src/components/invoice-preview.tsx", 67, 14, "InvoicePreview", false),
+                ],
+                "Same pattern as the checkout bug. The billingAddress can be null when a user has not entered billing details. Use optional chaining and a fallback string.",
+                "function formatBillingLabel(address: Address | null): string {\n  return address?.street\n    ? `${address.street}, ${address.city}`\n    : \"No billing address\"\n}")),
+        new("7", "developer",
+            "Got it. I'll apply the same pattern to all 3 locations. Is there a way to prevent this from happening again?",
+            "3:20 PM"),
+        new("8", "assistant",
+            "Enable strict null checks in your tsconfig.json if not already enabled. Set \"strictNullChecks\": true. This will surface all nullable property accesses at compile time. You should also add a lint rule for no-unsafe-member-access from @@typescript-eslint to catch these in CI.",
+            "3:21 PM"),
+    ];
+
+    private static readonly int _errorCount = _messages.Count(m => m.Error?.Severity == "error");
+    private static readonly int _warningCount = _messages.Count(m => m.Error?.Severity == "warning");
+
+    private static string GetSeverityDot(string severity) => severity switch
+    {
+        "error"   => "bg-red-500",
+        "warning" => "bg-amber-500",
+        _         => "bg-blue-500",
+    };
+
+    private static string GetSeverityLabel(string severity) => severity switch
+    {
+        "error"   => "Error",
+        "warning" => "Warning",
+        _         => "Info",
+    };
+
+    private static string BuildFullTrace(ErrorCard error)
+    {
+        var frames = string.Join("\n", error.Frames.Select(f => $"  at {f.Func} ({f.File}:{f.Line}:{f.Column})"));
+        return $"{error.ErrorType}: {error.Message}\n{frames}";
+    }
+
+    private async Task HandleCopy(string id, string text)
+    {
+        _copyCts?.Cancel();
+        _copyCts = new System.Threading.CancellationTokenSource();
+        var cts = _copyCts;
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        _copied = id;
+        StateHasChanged();
+
+        await Task.Delay(2000);
+        if (!cts.IsCancellationRequested)
+        {
+            _copied = null;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

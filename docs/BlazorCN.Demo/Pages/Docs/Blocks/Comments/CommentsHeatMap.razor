@@ -1,0 +1,193 @@
+@* ============================================================
+   Block: comments-heat-map
+   Title: CommentsHeatMap
+   Description: A comment density heat map visualization for React and Next.js with hourly activity grids, day-of-week patterns, intensity indicators, and peak time detection built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-heat-map.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Activity Heat Map</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">Comment density by day and hour</p>
+        </div>
+
+        @* Stats row *@
+        <div class="grid grid-cols-3 border-b">
+            <div class="border-r px-4 py-3">
+                <div class="mb-1 flex items-center gap-1.5">
+                    <LucideIconCn Name="clock" Size="14" Class="size-3.5 text-muted-foreground/60" />
+                    <span class="text-xs text-muted-foreground">Peak time</span>
+                </div>
+                <div class="text-lg font-semibold">
+                    @(_days[_peakCell.Day]) @(_peakCell.Hour):00
+                </div>
+            </div>
+            <div class="border-r px-4 py-3">
+                <div class="mb-1 flex items-center gap-1.5">
+                    <LucideIconCn Name="trending-up" Size="14" Class="size-3.5 text-muted-foreground/60" />
+                    <span class="text-xs text-muted-foreground">Peak count</span>
+                </div>
+                <div class="text-lg font-semibold tabular-nums">@_peakCell.Count</div>
+            </div>
+            <div class="px-4 py-3">
+                <span class="mb-1 block text-xs text-muted-foreground">Avg/hour</span>
+                <div class="text-lg font-semibold tabular-nums">@_avgPerHour</div>
+            </div>
+        </div>
+
+        @* Heat map *@
+        <div class="border-b px-4 py-4">
+            <div class="mb-3 flex items-center justify-between">
+                <span class="text-xs font-medium text-muted-foreground">Hourly breakdown</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-muted-foreground">Less</span>
+                    <div class="flex gap-1">
+                        <div class="size-3 rounded-sm bg-primary/20"></div>
+                        <div class="size-3 rounded-sm bg-primary/40"></div>
+                        <div class="size-3 rounded-sm bg-primary/70"></div>
+                        <div class="size-3 rounded-sm bg-primary"></div>
+                    </div>
+                    <span class="text-[10px] text-muted-foreground">More</span>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <div class="flex gap-1">
+                    @* Day labels *@
+                    <div class="flex flex-col gap-1 pt-5">
+                        @foreach (var day in _days)
+                        {
+                            <div class="flex h-4 items-center justify-end pr-2">
+                                <span class="text-[10px] text-muted-foreground">@day</span>
+                            </div>
+                        }
+                    </div>
+                    @* Grid *@
+                    <div class="flex-1">
+                        @* Hour labels (every 3 hours) *@
+                        <div class="mb-1 flex gap-1">
+                            @foreach (var hr in _hours.Where(h => h % 3 == 0))
+                            {
+                                <div class="flex-1 text-center">
+                                    <span class="text-[10px] text-muted-foreground">@hr</span>
+                                </div>
+                            }
+                        </div>
+                        @* Rows *@
+                        <div class="flex flex-col gap-1">
+                            @for (int dayIndex = 0; dayIndex < _days.Length; dayIndex++)
+                            {
+                                var di = dayIndex;
+                                <div class="flex gap-1">
+                                    @foreach (var hr in _hours)
+                                    {
+                                        var count = GetCellData(di, hr);
+                                        var isPeak = di == _peakCell.Day && hr == _peakCell.Hour;
+                                        <div class="@Cn.Merge("h-4 flex-1 rounded-sm transition-all", GetIntensity(count), isPeak ? "ring-2 ring-primary ring-offset-1" : "")"
+                                             title="@($"{_days[di]} {hr}:00 - {count} comments")"></div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Insights *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs font-medium text-muted-foreground">Insights</span>
+            <div class="space-y-1.5">
+                <div class="flex items-start gap-2">
+                    <span class="size-1.5 mt-1.5 shrink-0 rounded-full bg-primary"></span>
+                    <p class="text-sm leading-relaxed">
+                        Peak activity occurs on Fridays at 3pm with 52 comments
+                    </p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="size-1.5 mt-1.5 shrink-0 rounded-full bg-primary"></span>
+                    <p class="text-sm leading-relaxed">
+                        Weekday mornings (9-11am) show consistent engagement
+                    </p>
+                </div>
+                <div class="flex items-start gap-2">
+                    <span class="size-1.5 mt-1.5 shrink-0 rounded-full bg-primary"></span>
+                    <p class="text-sm leading-relaxed">
+                        Weekend activity is significantly lower than weekdays
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5">
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>Last 7 days</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span>Updated 10 min ago</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record HeatMapCell(int Day, int Hour, int Count);
+
+    private static readonly string[] _days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    private static readonly int[] _hours = Enumerable.Range(0, 24).ToArray();
+
+    private static readonly HeatMapCell[] _heatMapData =
+    [
+        new(0, 9,  24),
+        new(0, 10, 32),
+        new(0, 11, 28),
+        new(0, 14, 35),
+        new(0, 15, 41),
+        new(1, 9,  28),
+        new(1, 10, 38),
+        new(1, 11, 31),
+        new(1, 14, 39),
+        new(1, 15, 45),
+        new(2, 9,  22),
+        new(2, 10, 29),
+        new(2, 14, 33),
+        new(3, 9,  26),
+        new(3, 10, 35),
+        new(3, 14, 38),
+        new(3, 15, 42),
+        new(4, 9,  31),
+        new(4, 10, 41),
+        new(4, 14, 44),
+        new(4, 15, 52),
+        new(5, 10, 18),
+        new(5, 11, 22),
+        new(6, 10, 15),
+        new(6, 11, 19),
+    ];
+
+    private static readonly int _maxCount = _heatMapData.Max(c => c.Count);
+
+    private static readonly HeatMapCell _peakCell = _heatMapData.Aggregate((max, c) => c.Count > max.Count ? c : max);
+
+    private int _totalComments => _heatMapData.Sum(c => c.Count);
+    private int _avgPerHour => (int)Math.Round((double)_totalComments / _heatMapData.Length);
+
+    private static string GetIntensity(int count)
+    {
+        if (count == 0) return "bg-muted/30";
+        var ratio = (double)count / _maxCount;
+        if (ratio >= 0.75) return "bg-primary";
+        if (ratio >= 0.5)  return "bg-primary/70";
+        if (ratio >= 0.25) return "bg-primary/40";
+        return "bg-primary/20";
+    }
+
+    private static int GetCellData(int day, int hour)
+    {
+        var cell = _heatMapData.FirstOrDefault(c => c.Day == day && c.Hour == hour);
+        return cell?.Count ?? 0;
+    }
+}

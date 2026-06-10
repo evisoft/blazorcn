@@ -1,0 +1,193 @@
+@* ============================================================
+   Block: todo-list-delegation
+   Title: TodoListDelegation
+   Description: React todo list delegation workflow block for Next.js with assignee dropdowns, delegation chains, status badges, and notification indicators using shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-delegation.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="send" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Task Delegation</span>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (_pendingCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <LucideIconCn Name="bell" Size="12" Class="size-3" />
+                        @_pendingCount pending
+                    </span>
+                }
+                <span class="text-muted-foreground text-xs">@_tasks.Count tasks</span>
+            </div>
+        </div>
+
+        @* Tasks *@
+        <div>
+            @for (var i = 0; i < _tasks.Count; i++)
+            {
+                var task = _tasks[i];
+                var creator = GetMember(task.CreatedBy);
+                var assignee = task.AssignedTo != null ? GetMember(task.AssignedTo) : null;
+                var isLast = i == _tasks.Count - 1;
+                var isDropdownOpen = _openDropdown == task.Id;
+                var taskId = task.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="px-4 py-3">
+                        <div class="flex items-start gap-3">
+                            @* Notification dot *@
+                            <div class="flex shrink-0 pt-1">
+                                @if (task.Status == DelStatus.Pending)
+                                {
+                                    <span class="size-2 rounded-full bg-blue-500"></span>
+                                }
+                                else
+                                {
+                                    <span class="size-2"></span>
+                                }
+                            </div>
+
+                            <div class="min-w-0 flex-1">
+                                <span class="font-medium text-sm">@task.Title</span>
+
+                                @* Delegation chain *@
+                                <div class="mt-1.5 flex items-center gap-1.5 text-muted-foreground text-xs">
+                                    @if (creator != null)
+                                    {
+                                        <span class="flex items-center gap-1">
+                                            <span class="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[8px]">
+                                                @creator.Initials
+                                            </span>
+                                            @creator.Name
+                                        </span>
+                                    }
+                                    @if (assignee != null)
+                                    {
+                                        <LucideIconCn Name="arrow-right" Size="12" Class="size-3" />
+                                        <span class="flex items-center gap-1">
+                                            <span class="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[8px]">
+                                                @assignee.Initials
+                                            </span>
+                                            @assignee.Name
+                                        </span>
+                                    }
+                                    @if (task.DelegatedAt != null)
+                                    {
+                                        <span>·</span>
+                                        <span>@task.DelegatedAt</span>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Status / Assign button *@
+                            <div class="flex shrink-0 items-center gap-2">
+                                @if (task.Status.HasValue)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"text-[10px] {GetStatusClass(task.Status.Value)}")">
+                                        @GetStatusLabel(task.Status.Value)
+                                    </BadgeCn>
+                                }
+                                else
+                                {
+                                    <div class="relative">
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs"
+                                            @onclick="@(() => _openDropdown = isDropdownOpen ? null : taskId)">
+                                            <LucideIconCn Name="user-plus" Size="12" Class="size-3" />
+                                            Assign
+                                            <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                                        </ButtonCn>
+
+                                        @if (isDropdownOpen)
+                                        {
+                                            <div class="absolute top-8 right-0 z-10 w-44 overflow-hidden rounded-md border bg-card shadow-md">
+                                                @foreach (var mem in _teamMembers.Where(m => m.Id != task.CreatedBy))
+                                                {
+                                                    var member = mem;
+                                                    var capturedTaskId = taskId;
+                                                    <button type="button"
+                                                        class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+                                                        @onclick="@(() => AssignTask(capturedTaskId, member.Id))">
+                                                        <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[8px]">
+                                                            @member.Initials
+                                                        </span>
+                                                        @member.Name
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum DelStatus { Pending, Accepted, Declined }
+
+    private record TeamMember(string Id, string Name, string Initials);
+    private record TaskItem(string Id, string Title, string CreatedBy, string? AssignedTo, DelStatus? Status, string? DelegatedAt);
+
+    private static readonly TeamMember[] _teamMembers =
+    [
+        new("u1", "Alex Chen", "AC"),
+        new("u2", "Jordan Lee", "JL"),
+        new("u3", "Sam Rivera", "SR"),
+        new("u4", "Taylor Kim", "TK"),
+        new("u5", "Morgan Wu", "MW"),
+    ];
+
+    private List<TaskItem> _tasks =
+    [
+        new("t1", "Write API documentation for v2 endpoints", "u1", "u2", DelStatus.Accepted, "2 hours ago"),
+        new("t2", "Fix authentication token refresh logic", "u1", "u3", DelStatus.Pending, "30 min ago"),
+        new("t3", "Design onboarding flow wireframes", "u2", "u4", DelStatus.Declined, "1 day ago"),
+        new("t4", "Set up staging environment variables", "u3", null, null, null),
+        new("t5", "Review pull request for payment module", "u1", "u5", DelStatus.Accepted, "3 hours ago"),
+        new("t6", "Update error handling middleware", "u4", "u1", DelStatus.Pending, "15 min ago"),
+    ];
+
+    private string? _openDropdown;
+
+    private int _pendingCount => _tasks.Count(t => t.Status == DelStatus.Pending);
+
+    private TeamMember? GetMember(string id) => _teamMembers.FirstOrDefault(m => m.Id == id);
+
+    private string GetStatusClass(DelStatus status) => status switch
+    {
+        DelStatus.Pending  => "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+        DelStatus.Accepted => "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        DelStatus.Declined => "bg-red-500/10 text-red-600 dark:text-red-400",
+        _                  => "",
+    };
+
+    private string GetStatusLabel(DelStatus status) => status switch
+    {
+        DelStatus.Pending  => "Pending",
+        DelStatus.Accepted => "Accepted",
+        DelStatus.Declined => "Declined",
+        _                  => "",
+    };
+
+    private void AssignTask(string taskId, string memberId)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == taskId);
+        if (idx >= 0)
+        {
+            _tasks[idx] = _tasks[idx] with
+            {
+                AssignedTo = memberId,
+                Status = DelStatus.Pending,
+                DelegatedAt = "Just now",
+            };
+        }
+        _openDropdown = null;
+    }
+}

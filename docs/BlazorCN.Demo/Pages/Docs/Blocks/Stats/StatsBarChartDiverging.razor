@@ -1,0 +1,141 @@
+@* ============================================================
+   Block: stats-bar-chart-diverging
+   Title: StatsBarChartDiverging
+   Description: A diverging bar chart stats card for React and Next.js with Recharts BarChart rendering positive and negative bars from a zero baseline, emerald gains and red losses, a ReferenceLine at zero, and tabular-nums axis labels built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-bar-chart-diverging.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Sector performance</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Daily change S&amp;P 500</p>
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Net
+                </p>
+                <p class="mt-0.5 text-sm font-semibold tabular-nums text-muted-foreground">
+                    @(_netTotal >= 0 ? "+" : "")@(_netTotal.ToString("F1"))%
+                </p>
+            </div>
+        </div>
+
+        <dl class="grid grid-cols-2 divide-x border-b">
+            <div class="px-4 py-3">
+                <dt class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="trending-up" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    Best mover
+                </dt>
+                <dd class="mt-1 flex items-baseline gap-2">
+                    <span class="text-sm font-medium">@_bestMover.Sector</span>
+                    <span class="text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                        +@(_bestMover.Change.ToString("F1"))%
+                    </span>
+                </dd>
+            </div>
+            <div class="px-4 py-3">
+                <dt class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="trending-down" Size="12" Class="size-3 text-red-600 dark:text-red-400" aria-hidden="true" />
+                    Worst mover
+                </dt>
+                <dd class="mt-1 flex items-baseline gap-2">
+                    <span class="text-sm font-medium">@_worstMover.Sector</span>
+                    <span class="text-xs font-medium tabular-nums text-red-600 dark:text-red-400">
+                        @(_worstMover.Change.ToString("F1"))%
+                    </span>
+                </dd>
+            </div>
+        </dl>
+
+        <div class="px-4 py-4">
+            <div class="h-[200px] w-full">
+                @{
+                    double domainMin = -6.0;
+                    double domainMax = 6.0;
+                    double domainRange = domainMax - domainMin;
+                    double zeroFraction = (0.0 - domainMin) / domainRange;
+                    int chartHeight = 160;
+                    int barAreaHeight = chartHeight - 16;
+                    int zeroY = (int)(barAreaHeight * (1.0 - zeroFraction)) + 8;
+                    int barCount = _chartData.Length;
+                    double barWidthFraction = 0.55;
+                    double gapFraction = (1.0 - barWidthFraction * barCount) / (barCount + 1);
+
+                    double[] tickValues = [-6, -4, -2, 0, 2, 4, 6];
+                }
+                <svg class="w-full" height="200" viewBox="0 0 480 200" preserveAspectRatio="xMidYMid meet">
+                    @* Y-axis grid lines and labels *@
+                    @foreach (var tick in tickValues)
+                    {
+                        double yFrac = 1.0 - (tick - domainMin) / domainRange;
+                        int yPos = (int)(yFrac * barAreaHeight) + 8;
+                        string tickLabel = tick > 0 ? $"+{(int)tick}%" : $"{(int)tick}%";
+                        <line x1="40" y1="@yPos" x2="480" y2="@yPos" stroke="var(--border)" stroke-dasharray="3 3" stroke-width="1" />
+                        @((MarkupString)$"<text x=\"36\" y=\"{yPos + 4}\" font-size=\"11\" fill=\"var(--muted-foreground)\" text-anchor=\"end\">{tickLabel}</text>")
+                    }
+                    @* Zero reference line (solid) *@
+                    <line x1="40" y1="@zeroY" x2="480" y2="@zeroY" stroke="var(--border)" stroke-width="1" />
+
+                    @* Bars *@
+                    @for (int i = 0; i < _chartData.Length; i++)
+                    {
+                        var entry = _chartData[i];
+                        double slotWidth = (480.0 - 40.0) / barCount;
+                        double barWidth = slotWidth * barWidthFraction;
+                        double gapLeft = slotWidth * (1.0 - barWidthFraction) / 2.0;
+                        double xLeft = 40.0 + i * slotWidth + gapLeft;
+                        double valueFrac = (entry.Change - domainMin) / domainRange;
+                        int barTop, barBottom;
+                        if (entry.Change >= 0)
+                        {
+                            barTop = (int)((1.0 - valueFrac) * barAreaHeight) + 8;
+                            barBottom = zeroY;
+                        }
+                        else
+                        {
+                            barTop = zeroY;
+                            barBottom = (int)((1.0 - valueFrac) * barAreaHeight) + 8;
+                        }
+                        int barH = Math.Max(barBottom - barTop, 2);
+                        string fill = entry.Change >= 0 ? "oklch(0.696 0.17 162.48)" : "oklch(0.645 0.246 16.439)";
+                        int bx = (int)xLeft;
+                        int bw = (int)barWidth;
+                        <rect x="@bx" y="@barTop" width="@bw" height="@barH" fill="@fill" rx="4" ry="4" />
+                    }
+
+                    @* X-axis labels *@
+                    @for (int i = 0; i < _chartData.Length; i++)
+                    {
+                        var entry = _chartData[i];
+                        double slotWidth = (480.0 - 40.0) / barCount;
+                        double xCenter = 40.0 + i * slotWidth + slotWidth / 2.0;
+                        int xLabel = (int)xCenter;
+                        @((MarkupString)$"<text x=\"{xLabel}\" y=\"190\" font-size=\"11\" fill=\"var(--muted-foreground)\" text-anchor=\"middle\">{entry.Sector}</text>")
+                    }
+                </svg>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SectorChange(string Id, string Sector, double Change);
+
+    private static readonly SectorChange[] _chartData =
+    [
+        new("tech",  "Tech",        4.8),
+        new("hlth",  "Health",      2.3),
+        new("fin",   "Financials",  1.6),
+        new("cons",  "Consumer",    0.7),
+        new("utl",   "Utilities",  -0.9),
+        new("mat",   "Materials",  -1.8),
+        new("enrg",  "Energy",     -3.4),
+        new("rlst",  "Real Estate",-4.7),
+    ];
+
+    private static readonly double _netTotal = _chartData.Sum(d => d.Change);
+    private static readonly SectorChange _bestMover = _chartData.MaxBy(d => d.Change)!;
+    private static readonly SectorChange _worstMover = _chartData.MinBy(d => d.Change)!;
+}

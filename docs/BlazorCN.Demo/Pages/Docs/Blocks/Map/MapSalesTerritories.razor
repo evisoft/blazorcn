@@ -1,0 +1,235 @@
+@* ============================================================
+   Block: map-sales-territories
+   Title: MapSalesTerritories
+   Description: Sales territory map with color-coded regional markers, rep assignment badges, revenue stats per territory, and performance metrics built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-sales-territories.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="dollar-sign" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Sales Territories</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    Q1 2026
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                <span class="flex items-center gap-1.5">
+                    Revenue <span class="font-medium tabular-nums text-foreground">@FormatCurrency(_totalRevenue)</span>
+                </span>
+                <span>·</span>
+                <span class="flex items-center gap-1.5">
+                    Quota <span class="font-medium tabular-nums text-foreground">@_attainment%</span>
+                </span>
+                <span>·</span>
+                <span class="flex items-center gap-1.5">
+                    Deals <span class="font-medium tabular-nums text-foreground">@_totalDeals</span>
+                </span>
+            </div>
+        </div>
+
+        @* Map placeholder *@
+        <div class="relative h-[420px] border-b">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                @* Territory markers *@
+                @foreach (var t in _territories)
+                {
+                    var territory = t;
+                    var isSelected = _selected == territory.Id;
+                    var pos = GetMarkerPosition(territory.Longitude, territory.Latitude);
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")"
+                    >
+                        <button
+                            type="button"
+                            class="flex flex-col items-center cursor-pointer"
+                            @onclick="@(() => ToggleSelected(territory.Id))"
+                            title="@territory.Name"
+                        >
+                            <div class="@Cn.Merge("flex items-center gap-1 rounded-full px-2 py-0.5 text-white shadow-md", territory.Color)">
+                                <span class="text-[10px] font-medium">@FormatCurrency(territory.Revenue)</span>
+                            </div>
+                            <div class="mt-0.5 size-2 rounded-full border border-white bg-foreground shadow-sm"></div>
+                        </button>
+                        @* Popup on select *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 z-10 mt-1.5 w-60 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg text-popover-foreground">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@territory.Name</p>
+                                        <p class="text-xs text-muted-foreground">@territory.Region</p>
+                                    </div>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                        <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                        @territory.Rep
+                                    </BadgeCn>
+                                </div>
+                                <div class="mb-2 grid grid-cols-3 gap-2">
+                                    <div>
+                                        <p class="text-xs text-muted-foreground">Revenue</p>
+                                        <p class="text-sm font-medium tabular-nums">@FormatCurrency(territory.Revenue)</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-muted-foreground">Attainment</p>
+                                        <p class="text-sm font-medium tabular-nums">@(Math.Round((double)territory.Revenue / territory.Quota * 100))%</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-muted-foreground">Deals</p>
+                                        <div class="flex items-center gap-1">
+                                            <p class="text-sm font-medium tabular-nums">@territory.Deals</p>
+                                            @if (territory.Trend == "up")
+                                            {
+                                                <LucideIconCn Name="trending-up" Size="12" Class="size-3 text-emerald-500" />
+                                            }
+                                            else
+                                            {
+                                                <LucideIconCn Name="trending-down" Size="12" Class="size-3 text-red-500" />
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="border-t pt-2">
+                                    <p class="mb-1 text-xs font-medium text-muted-foreground">Top accounts</p>
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach (var acct in territory.TopAccounts)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs font-normal">@acct</BadgeCn>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="pointer-events-none select-none absolute bottom-2 left-2 z-10 rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                Map view — United States
+            </div>
+        </div>
+
+        @* Territory list *@
+        <div>
+            @for (var i = 0; i < _territories.Length; i++)
+            {
+                var territory = _territories[i];
+                var isLast = i == _territories.Length - 1;
+                var isExpanded = _expanded == territory.Id;
+                var pct = (int)Math.Round((double)territory.Revenue / territory.Quota * 100);
+                var barColor = pct >= 100 ? "bg-emerald-500" : pct >= 75 ? "bg-blue-500" : "bg-amber-500";
+                var trendColor = territory.Trend == "up"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400";
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpanded(territory.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                    >
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", territory.Color)"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@territory.Name</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@territory.Rep · @territory.Region</p>
+                        </div>
+                        <div class="flex items-center gap-3 text-xs">
+                            <span class="font-medium tabular-nums">@FormatCurrency(territory.Revenue)</span>
+                            <span class="@Cn.Merge("flex items-center gap-0.5 tabular-nums", trendColor)">
+                                @territory.TrendValue
+                            </span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal tabular-nums">@(pct)%</BadgeCn>
+                        </div>
+                        <LucideIconCn
+                            Name="chevron-right"
+                            Size="16"
+                            Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")"
+                        />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-9">
+                            <div class="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                <div
+                                    class="@Cn.Merge("h-full rounded-full", barColor)"
+                                    style="@($"width:{Math.Min(pct, 100)}%")"
+                                ></div>
+                            </div>
+                            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span>Quota: @FormatCurrency(territory.Quota)</span>
+                                <span>·</span>
+                                <span>@territory.Deals deals closed</span>
+                                <span>·</span>
+                                <span>Avg deal: $@(Math.Round((double)territory.Revenue / territory.Deals / 1000))K</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Territory(
+        string Id,
+        string Name,
+        string Region,
+        string Rep,
+        int Revenue,
+        int Quota,
+        int Deals,
+        string Trend,
+        string TrendValue,
+        string[] TopAccounts,
+        double Longitude,
+        double Latitude,
+        string Color
+    );
+
+    private static readonly Territory[] _territories =
+    [
+        new("t1", "Northeast", "NY / NJ / CT", "Sarah Chen",      2450000, 2800000, 34, "up",   "+12%", ["Acme Corp", "Globex Inc", "Initech"],                     -73.98, 40.75, "bg-blue-500"),
+        new("t2", "Southeast", "FL / GA / NC", "Marcus Johnson",  1890000, 2200000, 28, "up",    "+8%", ["Umbrella Corp", "Stark Industries", "Wayne Enterprises"], -81.65, 30.33, "bg-emerald-500"),
+        new("t3", "Midwest",   "IL / OH / MI", "Emily Rodriguez", 1650000, 2000000, 22, "down",  "-3%", ["Cyberdyne", "Soylent Corp", "Tyrell Corp"],                -87.63, 41.88, "bg-amber-500"),
+        new("t4", "Southwest", "TX / AZ / NM", "David Kim",       2100000, 2400000, 31, "up",   "+15%", ["Oscorp", "LexCorp", "Massive Dynamic"],                   -96.80, 32.78, "bg-violet-500"),
+        new("t5", "West Coast","CA / WA / OR", "Lisa Patel",      3200000, 3000000, 42, "up",   "+22%", ["Hooli", "Pied Piper", "Raviga Capital"],                 -122.42, 37.77, "bg-rose-500"),
+    ];
+
+    private static readonly int _totalRevenue = 2450000 + 1890000 + 1650000 + 2100000 + 3200000;
+    private static readonly int _totalQuota   = 2800000 + 2200000 + 2000000 + 2400000 + 3000000;
+    private static readonly int _totalDeals   = 34 + 28 + 22 + 31 + 42;
+    private static readonly int _attainment   = (int)Math.Round((double)_totalRevenue / _totalQuota * 100);
+
+    private string? _selected = null;
+    private string? _expanded = null;
+
+    private static string FormatCurrency(int v) => $"${(v / 1_000_000.0):F1}M";
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-125, -65], lat [24, 50] (continental US bounding box)
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -125.0, lonMax = -65.0;
+        const double latMin = 24.0,   latMax = 50.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 90);
+        y = Math.Clamp(y, 5, 90);
+        return (x, y);
+    }
+}

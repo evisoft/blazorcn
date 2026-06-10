@@ -1,0 +1,161 @@
+@* ============================================================
+   Block: todo-list-team-workload
+   Title: TodoListTeamWorkload
+   Description: React todo list team workload balance block for Next.js with task distribution bars, assignee avatars, and rebalance suggestions using shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-team-workload.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="users" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Team Workload</span>
+            </div>
+            <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                <span>@_members.Length members</span>
+                <span>·</span>
+                <span>@TotalTasks tasks</span>
+            </div>
+        </div>
+
+        @* Members *@
+        <div>
+            @for (var i = 0; i < _members.Length; i++)
+            {
+                var member = _members[i];
+                var percent = GetLoadPercent(member);
+                var isExpanded = _expanded == member.Id;
+                var memberTasks = _tasks.Where(t => t.MemberId == member.Id).ToArray();
+                var isLast = i == _members.Length - 1;
+                var memberId = member.Id;
+
+                <div class="@((!isLast || isExpanded) ? "border-b" : "")">
+                    <button type="button"
+                        @onclick="@(() => { _expanded = isExpanded ? null : memberId; })"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <AvatarCn Class="size-8">
+                            <AvatarFallbackCn Class="text-[10px]">@member.Initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@member.Name</span>
+                                <span class="text-muted-foreground text-xs">@member.Role</span>
+                            </div>
+                            <div class="mt-1.5 flex items-center gap-2">
+                                <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                    <div class="@Cn.Merge("h-full rounded-full transition-all", GetLoadColor(percent))"
+                                        style="@($"width:{percent}%")"></div>
+                                </div>
+                                <span class="shrink-0 text-muted-foreground text-xs tabular-nums">
+                                    @member.TaskCount/@member.Capacity
+                                </span>
+                            </div>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary"
+                            Class="@Cn.Merge("shrink-0 text-[10px]", percent >= 85 ? "bg-red-500/10 text-red-600 dark:text-red-400" : percent >= 60 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400")">
+                            @GetLoadLabel(percent)
+                        </BadgeCn>
+                        <LucideIconCn Name="chevron-right" Size="16"
+                            Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-3 pl-12">
+                                @if (memberTasks.Length > 0)
+                                {
+                                    <div class="space-y-1.5">
+                                        @foreach (var task in memberTasks)
+                                        {
+                                            <div class="flex items-center gap-2">
+                                                <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", PriorityDotClass(task.Priority))"></span>
+                                                <span class="text-sm">@task.Title</span>
+                                                <span class="text-muted-foreground text-xs">@task.Priority</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted-foreground text-xs">No tasks assigned</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Rebalance suggestion *@
+        @if (Overloaded.Length > 0)
+        {
+            <div class="border-t px-4 py-3">
+                <div class="rounded-md bg-muted/50 p-3">
+                    <div class="mb-1.5 flex items-center gap-1.5">
+                        <LucideIconCn Name="lightbulb" Size="14" Class="size-3.5 text-muted-foreground" />
+                        <span class="font-medium text-muted-foreground text-xs">
+                            Rebalance suggestion
+                        </span>
+                    </div>
+                    <p class="text-sm leading-relaxed">
+                        Move 2 tasks from <span class="font-medium">@Overloaded[0].Name</span> to
+                        <span class="font-medium">@LightestMember.Name</span>
+                        to balance the workload evenly across the team.
+                    </p>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-2 h-7 text-xs">
+                        Apply suggestion
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record TeamMember(string Id, string Name, string Initials, string Role, int TaskCount, int Capacity);
+    private record TodoTask(string Id, string Title, string Priority, string MemberId);
+
+    private static readonly TeamMember[] _members =
+    [
+        new("m1", "Alex Chen", "AC", "Frontend", 12, 10),
+        new("m2", "Jordan Lee", "JL", "Backend", 7, 10),
+        new("m3", "Sam Rivera", "SR", "Design", 9, 10),
+        new("m4", "Taylor Kim", "TK", "QA", 3, 10),
+        new("m5", "Morgan Wu", "MW", "DevOps", 5, 10),
+    ];
+
+    private static readonly TodoTask[] _tasks =
+    [
+        new("t1", "Refactor auth module", "high", "m1"),
+        new("t2", "Fix login redirect loop", "high", "m1"),
+        new("t3", "Update dashboard charts", "medium", "m1"),
+        new("t4", "Add pagination to API", "medium", "m2"),
+        new("t5", "Optimize database queries", "high", "m2"),
+        new("t6", "Redesign settings page", "medium", "m3"),
+        new("t7", "Create icon set", "low", "m3"),
+        new("t8", "Write E2E tests", "low", "m4"),
+        new("t9", "Set up CI pipeline", "medium", "m5"),
+        new("t10", "Configure monitoring", "high", "m5"),
+    ];
+
+    private string? _expanded;
+
+    private int TotalTasks => _members.Sum(m => m.TaskCount);
+    private TeamMember[] Overloaded => _members.Where(m => GetLoadPercent(m) >= 85).ToArray();
+    private TeamMember LightestMember => _members.OrderBy(m => m.TaskCount).First();
+
+    private static int GetLoadPercent(TeamMember member) =>
+        Math.Min((int)Math.Round((double)member.TaskCount / member.Capacity * 100), 100);
+
+    private static string GetLoadColor(int percent) =>
+        percent >= 85 ? "bg-red-500" : percent >= 60 ? "bg-amber-500" : "bg-emerald-500";
+
+    private static string GetLoadLabel(int percent) =>
+        percent >= 85 ? "Overloaded" : percent >= 60 ? "Moderate" : "Light";
+
+    private static string PriorityDotClass(string priority) =>
+        priority == "high" ? "bg-red-500" : priority == "medium" ? "bg-amber-500" : "bg-blue-500";
+}

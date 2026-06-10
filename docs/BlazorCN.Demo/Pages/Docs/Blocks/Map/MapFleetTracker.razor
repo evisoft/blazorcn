@@ -1,0 +1,220 @@
+@* ============================================================
+   Block: map-fleet-tracker
+   Title: MapFleetTracker
+   Description: React fleet vehicle tracking dashboard map block for Next.js with animated truck markers, real-time status indicators, route paths, and vehicle info tooltips using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-fleet-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="truck" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Fleet Tracker</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var statusKey in new[] { "en-route", "idle", "delayed", "offline" })
+                {
+                    var sk = statusKey;
+                    var count = Array.FindAll(_vehicles, v => v.Status == sk).Length;
+                    var dotClass = GetStatusDot(sk);
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {dotClass}")"></span>
+                        @count
+                    </span>
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-60 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">
+                        @_vehicles.Length vehicles
+                    </span>
+                </div>
+                <div class="max-h-[448px] overflow-y-auto">
+                    @foreach (var vehicle in _vehicles)
+                    {
+                        var v = vehicle;
+                        var cfg = GetStatusConfig(v.Status);
+                        var isSelected = _selectedId == v.Id;
+                        <button
+                            type="button"
+                            class="@($"flex w-full flex-col gap-1 border-b px-3 py-2.5 text-left transition-colors hover:bg-muted/50{(isSelected ? " bg-muted/50" : "")}")"
+                            @onclick="@(() => ToggleSelected(v.Id))">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium">@v.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-1 px-1.5 font-normal text-[10px]">
+                                    <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                                    @cfg.Label
+                                </BadgeCn>
+                            </div>
+                            <span class="text-xs text-muted-foreground">@v.Driver</span>
+                            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="gauge" Size="12" Class="size-3" />
+                                    @v.Speed mph
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="fuel" Size="12" Class="size-3" />
+                                    @v.Fuel%
+                                </span>
+                                <span class="ml-auto tabular-nums">@v.Eta</span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Route lines (SVG overlay) *@
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                        @foreach (var vehicle in _vehicles)
+                        {
+                            var v = vehicle;
+                            if (v.Route != null && v.Route.Length >= 2)
+                            {
+                                var cfg = GetStatusConfig(v.Status);
+                                var isSelected = _selectedId == v.Id;
+                                var strokeWidth = isSelected ? "4" : "2";
+                                var opacity = isSelected ? "0.9" : "0.4";
+                                var points = string.Join(" ", v.Route.Select(c =>
+                                {
+                                    var p = GetMarkerPosition(c[0], c[1]);
+                                    return $"{p.X:F1}%,{p.Y:F1}%";
+                                }));
+                                if (v.Status == "delayed")
+                                {
+                                    @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"{cfg.Color}\" stroke-width=\"{strokeWidth}\" stroke-opacity=\"{opacity}\" stroke-dasharray=\"4 4\" />")
+                                }
+                                else
+                                {
+                                    @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"{cfg.Color}\" stroke-width=\"{strokeWidth}\" stroke-opacity=\"{opacity}\" />")
+                                }
+                            }
+                        }
+                    </svg>
+
+                    @* Vehicle markers *@
+                    @foreach (var vehicle in _vehicles)
+                    {
+                        var v = vehicle;
+                        var cfg = GetStatusConfig(v.Status);
+                        var isSelected = _selectedId == v.Id;
+                        var pos = GetMarkerPosition(v.Lng, v.Lat);
+                        var markerSize = isSelected ? "size-8" : "size-6";
+                        var iconSize = isSelected ? 16 : 12;
+                        var iconClass = isSelected ? "size-4 text-white" : "size-3 text-white";
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                            <button
+                                type="button"
+                                class="relative"
+                                title="@($"{v.Name} · {v.Driver}")"
+                                @onclick="@(() => ToggleSelected(v.Id))">
+                                <div
+                                    class="@($"flex items-center justify-center rounded-full border-2 border-background shadow-lg transition-all {markerSize}")"
+                                    style="@($"background-color:{cfg.Color}")">
+                                    <LucideIconCn Name="truck" Size="@iconSize" Class="@iconClass" />
+                                </div>
+                            </button>
+
+                            @if (isSelected)
+                            {
+                                <div class="absolute left-1/2 top-full z-50 mt-1 w-48 -translate-x-1/2 rounded-lg border bg-card p-2.5 shadow-lg">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium">@v.Name</span>
+                                        <span class="text-xs text-muted-foreground">
+                                            @v.Driver @(v.Speed > 0 ? $"- {v.Speed} mph" : "- Parked")
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                    Map view — New York City
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Vehicle(
+        string Id,
+        string Name,
+        string Driver,
+        string Status,
+        int Speed,
+        int Fuel,
+        string Eta,
+        double Lng,
+        double Lat,
+        double[][]? Route
+    );
+
+    private record StatusConfig(string Label, string Dot, string Color);
+
+    private static readonly Vehicle[] _vehicles =
+    [
+        new("v1", "Truck 101", "Marcus Rivera", "en-route", 62, 78, "35 min",   -73.9857, 40.7484,
+            [[-73.9857, 40.7484], [-73.976, 40.758], [-73.965, 40.768], [-73.954, 40.778]]),
+        new("v2", "Truck 204", "Sarah Chen",    "en-route", 45, 54, "1h 12min", -73.9442, 40.6782,
+            [[-73.9442, 40.6782], [-73.95, 40.69], [-73.96, 40.705], [-73.97, 40.72]]),
+        new("v3", "Van 087",   "James Okafor",  "idle",     0,  91, "Parked",   -74.006,  40.7128, null),
+        new("v4", "Truck 312", "Priya Patel",   "delayed",  12, 33, "2h 45min", -73.9712, 40.7831,
+            [[-73.9712, 40.7831], [-73.96, 40.775], [-73.95, 40.765]]),
+        new("v5", "Van 115",   "Carlos Diaz",   "offline",  0,  15, "N/A",      -74.0445, 40.6892, null),
+        new("v6", "Truck 078", "Lena Johansson","en-route", 58, 62, "22 min",   -73.935,  40.758,
+            [[-73.935, 40.758], [-73.945, 40.75], [-73.955, 40.742], [-73.965, 40.734]]),
+    ];
+
+    private string? _selectedId = "v1";
+
+    private void ToggleSelected(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+    }
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "en-route" => new StatusConfig("En Route", "bg-emerald-500", "#22c55e"),
+        "idle"     => new StatusConfig("Idle",     "bg-blue-500",    "#3b82f6"),
+        "delayed"  => new StatusConfig("Delayed",  "bg-amber-500",   "#eab308"),
+        "offline"  => new StatusConfig("Offline",  "bg-zinc-400",    "#a1a1aa"),
+        _          => new StatusConfig(status,     "bg-muted",       "#888888"),
+    };
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "en-route" => "bg-emerald-500",
+        "idle"     => "bg-blue-500",
+        "delayed"  => "bg-amber-500",
+        "offline"  => "bg-zinc-400",
+        _          => "bg-muted",
+    };
+
+    // Map longitude/latitude to CSS percentage positions.
+    // Viewport: lon [-74.06, -73.92], lat [40.67, 40.80]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.06, lonMax = -73.92;
+        const double latMin = 40.67,  latMax = 40.80;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

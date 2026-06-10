@@ -1,0 +1,273 @@
+@* ============================================================
+   Block: map-weather-alerts
+   Title: MapWeatherAlerts
+   Description: React weather alert map block for Next.js with colored severity markers, alert detail panel, affected area indicators, and severity badges using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-weather-alerts.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="alert-triangle" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Weather Alerts</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var sev in new[] { "extreme", "severe", "moderate", "minor" })
+                {
+                    var s = sev;
+                    var cnt = _alerts.Count(a => a.Severity == s);
+                    if (cnt > 0)
+                    {
+                        <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span class="@Cn.Merge("size-1.5 rounded-full", SeverityDot(s))"></span>
+                            @cnt
+                        </span>
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Alert list sidebar *@
+            <div class="w-72 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">
+                        @_alerts.Length active alerts
+                    </span>
+                </div>
+                <div class="max-h-[448px] overflow-y-auto">
+                    @foreach (var alert in _sorted)
+                    {
+                        var al = alert;
+                        var isExpanded = _expandedId == alert.Id;
+                        <div class="border-b">
+                            <button
+                                type="button"
+                                class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedId == alert.Id ? "bg-muted/50" : "")"
+                                @onclick="@(() => ToggleAlert(al.Id))">
+                                <span class="@Cn.Merge("size-2 shrink-0 rounded-full", SeverityDot(alert.Severity))"></span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <LucideIconCn Name="@AlertIcon(alert.Icon)" Size="12" Class="size-3 text-muted-foreground" />
+                                        <span class="text-sm font-medium">@alert.Type</span>
+                                    </div>
+                                    <div class="mt-0.5 flex items-center gap-2">
+                                        <span class="truncate text-xs text-muted-foreground">
+                                            @alert.Area
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="flex shrink-0 flex-col items-end gap-1">
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("h-4 px-1.5 font-normal text-[10px]", SeverityText(alert.Severity))">
+                                        @SeverityLabel(alert.Severity)
+                                    </BadgeCn>
+                                    <span class="tabular-nums text-[10px] text-muted-foreground">
+                                        @alert.Expires
+                                    </span>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+
+                            @if (isExpanded)
+                            {
+                                <div class="px-3 pb-3 pl-8">
+                                    <p class="mb-2 text-xs leading-relaxed text-muted-foreground">
+                                        @alert.Description
+                                    </p>
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <span class="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                            Guidance
+                                        </span>
+                                        <p class="text-xs leading-relaxed">@alert.Guidance</p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Alert markers *@
+                    @foreach (var alert in _alerts)
+                    {
+                        var al = alert;
+                        var pos = GetMarkerPosition(alert.Lng, alert.Lat);
+                        var isSelected = _selectedId == alert.Id;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%")">
+                            <button
+                                type="button"
+                                class="relative flex items-center justify-center"
+                                title="@($"{alert.Type} · {alert.Area}")"
+                                @onclick="@(() => SelectAlert(al.Id))">
+                                <div class="relative">
+                                    <div class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background shadow-lg transition-all", SeverityBg(alert.Severity), isSelected ? "size-9" : "size-7")">
+                                        <LucideIconCn Name="@AlertIcon(alert.Icon)" Size="@(isSelected ? 16 : 12)" Class="@Cn.Merge("text-white", isSelected ? "size-4" : "size-3")" />
+                                    </div>
+                                    @if (alert.Severity == "extreme")
+                                    {
+                                        <span class="absolute -right-0.5 -top-0.5 size-2.5 animate-pulse rounded-full border border-background bg-red-500"></span>
+                                    }
+                                </div>
+                            </button>
+
+                            @if (isSelected)
+                            {
+                                @* Popup *@
+                                <div class="absolute left-1/2 top-full z-50 mt-1 w-60 -translate-x-1/2 rounded-lg border bg-card p-3 shadow-lg">
+                                    <div class="mb-1 flex items-center gap-2">
+                                        <LucideIconCn Name="@AlertIcon(alert.Icon)" Size="14" Class="size-3.5 text-muted-foreground" />
+                                        <span class="text-sm font-medium">@alert.Type</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("h-4 px-1.5 font-normal text-[10px]", SeverityText(alert.Severity))">
+                                            @SeverityLabel(alert.Severity)
+                                        </BadgeCn>
+                                    </div>
+                                    <p class="mb-2 text-xs leading-relaxed text-muted-foreground">
+                                        @alert.Headline
+                                    </p>
+                                    <div class="mb-2 rounded-md bg-muted/50 p-2">
+                                        <p class="text-xs leading-relaxed">@alert.Guidance</p>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs text-muted-foreground">
+                                        <span>@alert.Area</span>
+                                        <span class="tabular-nums">@alert.Expires</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="absolute right-2 top-2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                                        @onclick:stopPropagation
+                                        @onclick="@(() => _selectedId = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                    Map view — Illinois / Missouri region
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record WeatherAlert(
+        string Id,
+        string Type,
+        string Severity,
+        string Headline,
+        string Description,
+        string Area,
+        string Expires,
+        string Guidance,
+        string Icon,
+        double Lng,
+        double Lat
+    );
+
+    private static readonly WeatherAlert[] _alerts =
+    [
+        new("a1", "Tornado Warning",      "extreme",  "Tornado Warning in effect until 8:45 PM",            "A confirmed tornado was located near Springfield moving northeast at 35 mph. Flying debris will be dangerous to those caught without shelter.",       "Central Springfield, Greenfield Township", "45 min remaining",   "Take shelter immediately in an interior room on the lowest floor of a sturdy building.",                       "storm", -89.6437, 39.7817),
+        new("a2", "Severe Thunderstorm",  "severe",   "Severe Thunderstorm Warning until 10:00 PM",          "Radar indicated a severe thunderstorm producing 60 mph wind gusts and quarter-size hail over the metro area.",                                         "Metro East, Collinsville, Maryville",      "2h 15min remaining", "Move to an interior room on the lowest floor. Large hail and damaging winds expected.",                         "storm", -89.9845, 38.7458),
+        new("a3", "Flash Flood Warning",  "severe",   "Flash Flood Warning in effect until midnight",        "Doppler radar indicated heavy rain causing flash flooding in low-lying areas. Up to 4 inches of rain has fallen in the past 2 hours.",                 "East St. Louis, Cahokia, Sauget",          "4h remaining",       "Turn around, don't drown. Avoid driving through flooded roadways.",                                             "rain",  -90.151,  38.6163),
+        new("a4", "Wind Advisory",        "moderate", "Wind Advisory from 6 AM to 6 PM Thursday",           "Northwest winds 25 to 35 mph with gusts up to 55 mph expected. Unsecured objects may become projectiles.",                                             "Sangamon County, Menard County",           "8h remaining",       "Secure outdoor objects. Use extra caution when driving, especially high-profile vehicles.",                      "wind",  -89.53,   39.85),
+        new("a5", "Heat Advisory",        "moderate", "Heat Advisory in effect until 8 PM Friday",           "Heat index values up to 110 degrees expected. Extended outdoor exposure can lead to heat exhaustion or heat stroke.",                                  "St. Clair County, Madison County",         "1d 6h remaining",    "Drink plenty of fluids, stay in air-conditioned rooms, and check on relatives and neighbors.",                   "heat",  -90.07,   38.52),
+        new("a6", "Frost Advisory",       "minor",    "Frost Advisory overnight into early morning",         "Sub-freezing temperatures expected overnight. Sensitive outdoor vegetation may be damaged or killed.",                                                 "Northern Macoupin County, Montgomery County", "10h remaining",   "Cover sensitive plants and bring pets indoors overnight.",                                                       "wind",  -89.71,   39.28),
+    ];
+
+    private static readonly WeatherAlert[] _sorted =
+        _alerts.OrderByDescending(a => SeverityWeight(a.Severity)).ToArray();
+
+    private string? _selectedId = "a1";
+    private string? _expandedId = "a1";
+
+    private void ToggleAlert(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+        _selectedId = id;
+    }
+
+    private void SelectAlert(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+        _expandedId = id;
+    }
+
+    private static int SeverityWeight(string severity) => severity switch
+    {
+        "extreme"  => 4,
+        "severe"   => 3,
+        "moderate" => 2,
+        "minor"    => 1,
+        _          => 0,
+    };
+
+    private static string SeverityLabel(string severity) => severity switch
+    {
+        "extreme"  => "Extreme",
+        "severe"   => "Severe",
+        "moderate" => "Moderate",
+        "minor"    => "Minor",
+        _          => severity,
+    };
+
+    private static string SeverityDot(string severity) => severity switch
+    {
+        "extreme"  => "bg-red-500",
+        "severe"   => "bg-amber-500",
+        "moderate" => "bg-blue-500",
+        "minor"    => "bg-zinc-400",
+        _          => "bg-muted",
+    };
+
+    private static string SeverityBg(string severity) => severity switch
+    {
+        "extreme"  => "bg-red-500",
+        "severe"   => "bg-amber-500",
+        "moderate" => "bg-blue-500",
+        "minor"    => "bg-zinc-400",
+        _          => "bg-muted",
+    };
+
+    private static string SeverityText(string severity) => severity switch
+    {
+        "extreme"  => "text-red-600 dark:text-red-400",
+        "severe"   => "text-amber-600 dark:text-amber-400",
+        "moderate" => "text-blue-600 dark:text-blue-400",
+        "minor"    => "text-muted-foreground",
+        _          => "",
+    };
+
+    private static string AlertIcon(string icon) => icon switch
+    {
+        "storm" => "cloud-lightning",
+        "rain"  => "cloud-rain",
+        "wind"  => "wind",
+        "heat"  => "thermometer",
+        _       => "alert-triangle",
+    };
+
+    // Map longitude/latitude to CSS percentage positions.
+    // Viewport: lon [-90.8, -89.0], lat [38.2, 40.2]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -90.8, lonMax = -89.0;
+        const double latMin = 38.2,  latMax = 40.2;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

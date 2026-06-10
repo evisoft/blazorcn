@@ -1,0 +1,257 @@
+@* ============================================================
+   Block: map-delivery-zones
+   Title: MapDeliveryZones
+   Description: React delivery zone map block for Next.js with radius circles, zone boundaries, estimated delivery times per zone, and zone statistics panel using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-delivery-zones.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="truck" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Delivery zones</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="package" Size="12" Class="size-3" />
+                    @_totalOrders active orders
+                </span>
+                <span class="text-xs text-muted-foreground">@_totalDrivers drivers online</span>
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">
+                        @_zones.Length zones
+                    </span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var z in _zones)
+                    {
+                        var zone = z;
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectZone(zone))"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedZoneId == zone.Id ? "bg-muted/50" : "")">
+                            <span
+                                class="size-2 shrink-0 rounded-full"
+                                style="@($"background-color:{zone.Color}")">
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@zone.Name</span>
+                                <div class="mt-0.5 flex items-center gap-2">
+                                    <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                        @zone.EstimatedTime
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5">
+                                <span class="text-xs font-medium tabular-nums">@zone.ActiveOrders</span>
+                                <span class="@Cn.Merge("size-1.5 rounded-full", _statusDot[zone.Status])"></span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map — Map/MapMarker/MapRoute/MapPopup are Next.js registry components with no
+               BlazorCN equivalent; rendered as a styled static map placeholder with
+               SVG circles simulating delivery zone radii and positioned pin markers. *@
+            <div class="relative h-[500px] flex-1 bg-muted/30">
+                @* Map background grid *@
+                <div class="absolute inset-0 overflow-hidden opacity-20">
+                    <div class="grid h-full grid-cols-8 grid-rows-8">
+                        @for (int gi = 0; gi < 64; gi++)
+                        {
+                            <div class="border border-border/50"></div>
+                        }
+                    </div>
+                </div>
+
+                @* Road-like lines *@
+                <div class="absolute inset-0 opacity-30">
+                    <div class="absolute left-0 right-0 top-[28%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[50%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[72%] h-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[22%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[48%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[74%] top-0 w-px bg-border"></div>
+                </div>
+
+                @* SVG zone circles *@
+                <svg class="absolute inset-0 h-full w-full" style="pointer-events:none">
+                    @foreach (var z in _zones)
+                    {
+                        var pos = GetMarkerPosition(z);
+                        var radiusPct = z.RadiusKm * 12.0;
+                        @((MarkupString)$"<circle cx=\"{pos.Left:F1}%\" cy=\"{pos.Top:F1}%\" r=\"{radiusPct:F1}%\" fill=\"{z.Color}\" fill-opacity=\"0.12\" stroke=\"{z.Color}\" stroke-width=\"2\" stroke-opacity=\"0.6\" />")
+                    }
+                </svg>
+
+                @* Map label *@
+                <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Manhattan, New York City
+                </div>
+
+                @* Map zoom controls *@
+                <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+
+                @* Zone markers *@
+                @foreach (var z in _zones)
+                {
+                    var zone = z;
+                    var pos = GetMarkerPosition(zone);
+                    <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectZone(zone))"
+                            class="group relative flex flex-col items-center">
+                            @* Colored pin *@
+                            <div
+                                class="flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md"
+                                style="@($"background-color:{zone.Color}")">
+                                <LucideIconCn Name="map-pin" Size="14" Class="size-3.5 text-white" />
+                            </div>
+                            @* Hover tooltip *@
+                            <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block" style="white-space:nowrap">
+                                @zone.Name - @zone.EstimatedTime
+                            </div>
+                        </button>
+
+                        @* Popup (shown when this zone is selected) *@
+                        @if (_popupZoneId == zone.Id)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg" style="z-index:10">
+                                <div class="mb-2 flex items-center justify-between">
+                                    <span class="text-sm font-medium">@zone.Name</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">
+                                        @_statusLabel[zone.Status]
+                                    </BadgeCn>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">ETA</span>
+                                        <span class="font-medium">@zone.EstimatedTime</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Orders</span>
+                                        <span class="tabular-nums font-medium">@zone.ActiveOrders</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Drivers</span>
+                                        <span class="tabular-nums font-medium">@zone.DriversAvailable</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Radius</span>
+                                        <span class="tabular-nums font-medium">@zone.RadiusKm km</span>
+                                    </div>
+                                </div>
+                                @* Close button *@
+                                <button type="button" @onclick="@(() => _popupZoneId = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_zones.Count(z => z.Status == "active") active
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @_zones.Count(z => z.Status == "busy") busy
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @_zones.Count(z => z.Status == "limited") limited
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                Coverage: @_zones.Length zones in Manhattan
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DeliveryZone(
+        string Id,
+        string Name,
+        double Lng,
+        double Lat,
+        double RadiusKm,
+        string Status,
+        string EstimatedTime,
+        int ActiveOrders,
+        int DriversAvailable,
+        string Color
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly DeliveryZone[] _zones =
+    [
+        new("z1", "Downtown Core",   -73.9857, 40.7484, 1.2, "busy",    "15-20 min", 47,  12, "#ef4444"),
+        new("z2", "Midtown East",    -73.9712, 40.7527, 1.5, "active",  "20-30 min", 31,  8,  "#22c55e"),
+        new("z3", "Chelsea",         -74.0005, 40.7465, 1.0, "active",  "20-25 min", 18,  6,  "#3b82f6"),
+        new("z4", "Upper West Side", -73.9757, 40.7831, 1.8, "limited", "35-45 min", 9,   3,  "#f59e0b"),
+        new("z5", "East Village",    -73.9845, 40.7265, 1.1, "active",  "15-25 min", 24,  7,  "#8b5cf6"),
+    ];
+
+    private static readonly System.Collections.Generic.Dictionary<string, string> _statusDot = new()
+    {
+        ["active"]  = "bg-emerald-500",
+        ["busy"]    = "bg-red-500",
+        ["limited"] = "bg-amber-500",
+    };
+
+    private static readonly System.Collections.Generic.Dictionary<string, string> _statusLabel = new()
+    {
+        ["active"]  = "Active",
+        ["busy"]    = "Busy",
+        ["limited"] = "Limited",
+    };
+
+    private int _totalOrders   => _zones.Sum(z => z.ActiveOrders);
+    private int _totalDrivers  => _zones.Sum(z => z.DriversAvailable);
+
+    private string? _selectedZoneId = null;
+    private string? _popupZoneId    = null;
+
+    private void SelectZone(DeliveryZone zone)
+    {
+        _popupZoneId    = _popupZoneId == zone.Id ? null : zone.Id;
+        _selectedZoneId = zone.Id;
+    }
+
+    // Map bounding box: lon [-74.010, -73.960], lat [40.720, 40.795]
+    private static MarkerPos GetMarkerPosition(DeliveryZone z)
+    {
+        const double lonMin = -74.010;
+        const double lonMax = -73.960;
+        const double latMin = 40.720;
+        const double latMax = 40.795;
+        var left = (z.Lng - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - z.Lat) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

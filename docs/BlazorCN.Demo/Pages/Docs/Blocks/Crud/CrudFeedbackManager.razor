@@ -1,0 +1,189 @@
+@* ============================================================
+   Block: crud-feedback-manager
+   Title: CrudFeedbackManager
+   Description: Feedback collection and response management with sentiment tracking, categories, status workflow, and reply capabilities
+   Source: original/blocks/crud/crud-feedback-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="message-square" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Feedback</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_items.Length items · @(_items.Count(f => f.Status == "new")) new
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    Add Feedback
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search feedback..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var s in _filterOptions)
+                {
+                    var slug = s;
+                    <button type="button"
+                            @onclick="@(() => _filter = slug)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == slug ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @(slug == "in-review" ? "In Review" : char.ToUpper(slug[0]) + slug.Substring(1))
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @foreach (var feedbackItem in Filtered)
+            {
+                var fi = feedbackItem;
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", SentimentColor(fi.Sentiment))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@fi.Title</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="px-1.5 py-0 text-[10px]">
+                                    @fi.Category
+                                </BadgeCn>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+                                @fi.Message
+                            </p>
+                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span>@fi.Author</span>
+                                <span>·</span>
+                                <span>@fi.Date</span>
+                                <span>·</span>
+                                <span class="tabular-nums">@fi.Votes votes</span>
+                                <span class="@Cn.Merge("ml-1 size-1.5 rounded-full", StatusColor(fi.Status))"></span>
+                                <span>
+                                    @(fi.Status == "in-review" ? "In Review" : char.ToUpper(fi.Status[0]) + fi.Status.Substring(1))
+                                </span>
+                            </div>
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn AsChild="true">
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn OnClick="@(() => HandleStatusChange(fi.Id, "in-review"))">
+                                    Mark In Review
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn OnClick="@(() => HandleStatusChange(fi.Id, "responded"))">
+                                    Mark Responded
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn OnClick="@(() => HandleStatusChange(fi.Id, "closed"))">
+                                    Close
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(fi.Id))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (!Filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No feedback found
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class FeedbackItem
+    {
+        public int Id { get; init; }
+        public string Title { get; init; } = "";
+        public string Message { get; init; } = "";
+        public string Author { get; init; } = "";
+        public string Email { get; init; } = "";
+        public string Sentiment { get; init; } = "";
+        public string Category { get; init; } = "";
+        public string Status { get; set; } = "";
+        public string Date { get; init; } = "";
+        public int Votes { get; init; }
+    }
+
+    private static readonly string[] _filterOptions = ["all", "new", "in-review", "responded", "closed"];
+
+    private FeedbackItem[] _items =
+    [
+        new FeedbackItem { Id = 1, Title = "Love the new dashboard redesign",
+            Message = "The updated layout is much more intuitive. Navigation feels snappy and the data visualization is excellent.",
+            Author = "Rachel Kim", Email = "rachel@example.com", Sentiment = "positive", Category = "UI/UX", Status = "responded", Date = "Mar 22, 2026", Votes = 24 },
+        new FeedbackItem { Id = 2, Title = "Search is slow on large datasets",
+            Message = "When filtering through 10k+ records, the search takes 3-4 seconds to return results. Expected near-instant.",
+            Author = "James Porter", Email = "james@example.com", Sentiment = "negative", Category = "Performance", Status = "in-review", Date = "Mar 21, 2026", Votes = 18 },
+        new FeedbackItem { Id = 3, Title = "Add keyboard shortcuts for common actions",
+            Message = "Would love to have Cmd+K for search, Cmd+N for new item, and Esc to close dialogs.",
+            Author = "Mia Zhang", Email = "mia@example.com", Sentiment = "neutral", Category = "Feature Request", Status = "new", Date = "Mar 23, 2026", Votes = 42 },
+        new FeedbackItem { Id = 4, Title = "Export to CSV is missing columns",
+            Message = "The CSV export doesn't include the 'created_at' and 'updated_at' columns. These are essential for our reporting.",
+            Author = "David Chen", Email = "david@example.com", Sentiment = "negative", Category = "Bug", Status = "in-review", Date = "Mar 20, 2026", Votes = 9 },
+        new FeedbackItem { Id = 5, Title = "Great onboarding experience",
+            Message = "The step-by-step onboarding flow made it easy to get started. Completed setup in under 5 minutes.",
+            Author = "Sarah Lewis", Email = "sarah@example.com", Sentiment = "positive", Category = "Onboarding", Status = "closed", Date = "Mar 18, 2026", Votes = 15 },
+        new FeedbackItem { Id = 6, Title = "Mobile view needs improvement",
+            Message = "Tables are hard to read on mobile. Consider a card-based layout for smaller screens.",
+            Author = "Tom Bradley", Email = "tom@example.com", Sentiment = "neutral", Category = "UI/UX", Status = "new", Date = "Mar 24, 2026", Votes = 31 },
+    ];
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private IEnumerable<FeedbackItem> Filtered =>
+        _items
+            .Where(f => _filter == "all" || f.Status == _filter)
+            .Where(f => f.Title.ToLower().Contains(_search.ToLower()) || f.Author.ToLower().Contains(_search.ToLower()));
+
+    private void HandleDelete(int id)
+    {
+        _items = _items.Where(f => f.Id != id).ToArray();
+    }
+
+    private void HandleStatusChange(int id, string status)
+    {
+        foreach (var item in _items)
+        {
+            if (item.Id == id)
+                item.Status = status;
+        }
+    }
+
+    private static string SentimentColor(string sentiment) => sentiment switch
+    {
+        "positive" => "bg-emerald-500",
+        "neutral"  => "bg-blue-500",
+        "negative" => "bg-red-500",
+        _          => ""
+    };
+
+    private static string StatusColor(string status) => status switch
+    {
+        "new"       => "bg-blue-500",
+        "in-review" => "bg-amber-500",
+        "responded" => "bg-emerald-500",
+        "closed"    => "bg-muted-foreground/40",
+        _           => ""
+    };
+}

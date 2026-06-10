@@ -1,0 +1,171 @@
+@* ============================================================
+   Block: todo-list-notification
+   Title: TodoListNotification
+   Description: React todo list notification panel block for Next.js with grouped notifications, read and unread states, type icons, and mark-all-as-read using shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-notification.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bell" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Notifications</span>
+                @if (_unreadCount > 0)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="bg-blue-500/10 text-[10px] text-blue-600 dark:text-blue-400">
+                        @_unreadCount new
+                    </BadgeCn>
+                }
+            </div>
+            @if (_unreadCount > 0)
+            {
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="@((MouseEventArgs _) => MarkAllAsRead())">
+                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                    Mark all read
+                </ButtonCn>
+            }
+        </div>
+
+        @* Grouped notifications *@
+        <div>
+            @foreach (var grpEntry in GetGroups())
+            {
+                var grp = grpEntry;
+                var groupItems = grp.Items;
+                <div>
+                    @* Group header *@
+                    <div class="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
+                        <span class="font-medium text-muted-foreground text-xs">@grp.Name</span>
+                        <span class="text-muted-foreground text-xs">
+                            @groupItems.Count notification@(groupItems.Count != 1 ? "s" : "")
+                        </span>
+                    </div>
+
+                    @* Notifications in group *@
+                    @foreach (var notifEntry in groupItems)
+                    {
+                        var notif = notifEntry;
+                        var hasBorder = notif.Id != _lastNotifId;
+                        <div class="@(hasBorder ? "border-b" : "")">
+                            <button type="button" @onclick="@(() => MarkAsRead(notif.Id))"
+                                class="@Cn.Merge("flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", !notif.IsRead ? "bg-blue-500/5" : "")">
+                                @* Unread dot *@
+                                <div class="flex shrink-0 pt-1.5">
+                                    @if (!notif.IsRead)
+                                    {
+                                        <span class="size-2 rounded-full bg-blue-500"></span>
+                                    }
+                                    else
+                                    {
+                                        <span class="size-2"></span>
+                                    }
+                                </div>
+
+                                @* Icon *@
+                                <div class="flex shrink-0 pt-0.5">
+                                    <div class="@($"flex size-7 items-center justify-center rounded-full {GetIconBgClass(notif.Kind)}")">
+                                        <LucideIconCn Name="@GetIconName(notif.Kind)" Size="14" Class="@($"size-3.5 {GetIconTextClass(notif.Kind)}")" />
+                                    </div>
+                                </div>
+
+                                @* Content *@
+                                <div class="min-w-0 flex-1">
+                                    <span class="@Cn.Merge("text-sm", !notif.IsRead ? "font-medium" : "")">@notif.Title</span>
+                                    <p class="mt-0.5 text-muted-foreground text-xs">@notif.Description</p>
+                                    <div class="mt-1 flex items-center gap-1.5 text-muted-foreground text-xs">
+                                        <AvatarCn Class="size-4">
+                                            <AvatarFallbackCn Class="text-[8px]">@notif.User.Initials</AvatarFallbackCn>
+                                        </AvatarCn>
+                                        <span>@notif.User.Name</span>
+                                        <span>·</span>
+                                        <span>@notif.Timestamp</span>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum NotificationKind { Assigned, Comment, Completed, Overdue }
+
+    private record UserInfo(string Name, string Initials);
+
+    private record NotificationItem(
+        string Id,
+        NotificationKind Kind,
+        string Title,
+        string Description,
+        UserInfo User,
+        string Timestamp,
+        bool IsRead,
+        string Group);
+
+    private List<NotificationItem> _notifications =
+    [
+        new("n1", NotificationKind.Assigned,  "Task assigned to you",  "Alex Chen assigned 'Implement search filters' to you",      new("Alex Chen",  "AC"), "5 min ago",   false, "Today"),
+        new("n2", NotificationKind.Overdue,   "Task overdue",           "'Update API documentation' was due 2 hours ago",           new("System",     "SY"), "2 hours ago", false, "Today"),
+        new("n3", NotificationKind.Comment,   "Comment added",          "Jordan Lee commented on 'Fix login redirect loop'",        new("Jordan Lee", "JL"), "3 hours ago", false, "Today"),
+        new("n4", NotificationKind.Completed, "Task completed",         "Sam Rivera completed 'Design onboarding wireframes'",      new("Sam Rivera", "SR"), "4 hours ago", true,  "Today"),
+        new("n5", NotificationKind.Assigned,  "Task reassigned",        "Taylor Kim reassigned 'Set up monitoring' to Morgan Wu",   new("Taylor Kim", "TK"), "6 hours ago", true,  "Today"),
+        new("n6", NotificationKind.Comment,   "Comment added",          "Morgan Wu commented on 'Refactor auth module'",            new("Morgan Wu",  "MW"), "Yesterday",   true,  "Yesterday"),
+        new("n7", NotificationKind.Completed, "Task completed",         "Alex Chen completed 'Add rate limiting middleware'",       new("Alex Chen",  "AC"), "Yesterday",   true,  "Yesterday"),
+        new("n8", NotificationKind.Overdue,   "Task overdue",           "'Review PR for payment module' is 1 day overdue",         new("System",     "SY"), "Yesterday",   true,  "Yesterday"),
+        new("n9", NotificationKind.Assigned,  "Task assigned to you",   "Jordan Lee assigned 'Optimize database queries' to you",  new("Jordan Lee", "JL"), "Yesterday",   true,  "Yesterday"),
+    ];
+
+    private int _unreadCount => _notifications.Count(n => !n.IsRead);
+    private string _lastNotifId => _notifications.Count > 0 ? _notifications[_notifications.Count - 1].Id : "";
+
+    private (string Name, List<NotificationItem> Items)[] GetGroups() =>
+        _notifications
+            .GroupBy(n => n.Group)
+            .Select(g => (g.Key, g.ToList()))
+            .ToArray();
+
+    private void MarkAsRead(string id)
+    {
+        var idx = _notifications.FindIndex(n => n.Id == id);
+        if (idx < 0) return;
+        _notifications[idx] = _notifications[idx] with { IsRead = true };
+    }
+
+    private void MarkAllAsRead()
+    {
+        for (int i = 0; i < _notifications.Count; i++)
+            _notifications[i] = _notifications[i] with { IsRead = true };
+    }
+
+    private static string GetIconName(NotificationKind kind) => kind switch
+    {
+        NotificationKind.Assigned  => "user-plus",
+        NotificationKind.Comment   => "message-square",
+        NotificationKind.Completed => "check-circle-2",
+        NotificationKind.Overdue   => "clock",
+        _                          => "bell"
+    };
+
+    private static string GetIconBgClass(NotificationKind kind) => kind switch
+    {
+        NotificationKind.Assigned  => "bg-blue-500/10",
+        NotificationKind.Comment   => "bg-purple-500/10",
+        NotificationKind.Completed => "bg-emerald-500/10",
+        NotificationKind.Overdue   => "bg-red-500/10",
+        _                          => "bg-gray-500/10"
+    };
+
+    private static string GetIconTextClass(NotificationKind kind) => kind switch
+    {
+        NotificationKind.Assigned  => "text-blue-500",
+        NotificationKind.Comment   => "text-purple-500",
+        NotificationKind.Completed => "text-emerald-500",
+        NotificationKind.Overdue   => "text-red-500",
+        _                          => "text-gray-500"
+    };
+}

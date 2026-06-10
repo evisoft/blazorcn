@@ -1,0 +1,185 @@
+@* ============================================================
+   Block: chat-scheduled-messages
+   Title: ChatScheduledMessages
+   Description: React scheduled message chat block for Next.js with schedule send dropdown, time badges on pending messages, clock indicators, and send-now or schedule-later options using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-scheduled-messages.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8">
+                <AvatarFallbackCn Class="text-xs">PS</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Priya Sharma</span>
+                <p class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    Online
+                </p>
+            </div>
+        </div>
+
+        @* Messages *@
+        <div class="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+            @foreach (var msg in _messages)
+            {
+                var isMe = msg.Sender == "me";
+                var outerClass = Cn.Merge("flex items-end gap-2", isMe ? "flex-row-reverse" : "flex-row");
+                var innerClass = Cn.Merge("flex max-w-[75%] flex-col", isMe ? "items-end" : "items-start");
+                var bubbleClass = Cn.Merge(
+                    "rounded-2xl px-3 py-2 text-sm leading-relaxed",
+                    isMe ? "rounded-br-sm bg-foreground text-background" : "rounded-bl-sm bg-muted text-foreground",
+                    msg.IsScheduled ? "border border-dashed border-amber-500/30" : ""
+                );
+
+                <div class="@outerClass">
+                    @if (!isMe)
+                    {
+                        <AvatarCn Class="size-7">
+                            <AvatarFallbackCn Class="text-[10px]">PS</AvatarFallbackCn>
+                        </AvatarCn>
+                    }
+                    <div class="@innerClass">
+                        @* Scheduled label *@
+                        @if (msg.IsScheduled && msg.ScheduledFor != null)
+                        {
+                            <div class="mb-1 flex items-center gap-1.5 px-1">
+                                <LucideIconCn Name="clock" Size="12" Class="size-3 text-amber-600 dark:text-amber-400" />
+                                <span class="text-amber-600 text-[10px] dark:text-amber-400">
+                                    Scheduled for @msg.ScheduledFor
+                                </span>
+                            </div>
+                        }
+                        <div class="@bubbleClass">
+                            @msg.Content
+                        </div>
+                        <div class="mt-0.5 flex items-center gap-2 px-1">
+                            <span class="text-muted-foreground text-[10px]">@msg.Time</span>
+                            @if (msg.IsScheduled)
+                            {
+                                <div class="flex items-center gap-1">
+                                    <button type="button" class="text-muted-foreground transition-colors hover:text-foreground">
+                                        <LucideIconCn Name="pencil" Size="10" Class="size-2.5" />
+                                    </button>
+                                    <button type="button" class="text-muted-foreground transition-colors hover:text-foreground">
+                                        <LucideIconCn Name="x" Size="10" Class="size-2.5" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Input with split send button *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" class="flex items-center gap-2">
+                <InputCn @bind-Value="_input"
+                         Placeholder="Type a message..."
+                         Class="h-9 flex-1 border-0 bg-muted/50 text-sm shadow-none focus-visible:ring-0" />
+                <div class="flex shrink-0 items-center">
+                    <ButtonCn type="submit"
+                              Size="ButtonSize.Sm"
+                              Variant="ButtonVariant.Outline"
+                              Disabled="@string.IsNullOrWhiteSpace(_input)"
+                              Class="h-8 gap-1 rounded-r-none border-r-0 px-3 text-xs">
+                        <LucideIconCn Name="send" Size="12" Class="size-3" />
+                        Send
+                    </ButtonCn>
+                    <DropdownMenuCn>
+                        <DropdownMenuTriggerCn>
+                            <ButtonCn type="button"
+                                      Size="ButtonSize.Sm"
+                                      Variant="ButtonVariant.Outline"
+                                      Disabled="@string.IsNullOrWhiteSpace(_input)"
+                                      Class="h-8 rounded-l-none px-1.5">
+                                <LucideIconCn Name="chevron-down" Size="14" Class="size-3.5" />
+                            </ButtonCn>
+                        </DropdownMenuTriggerCn>
+                        <DropdownMenuContentCn Align="FloatingAlign.End" Class="w-48">
+                            <DropdownMenuItemCn OnClick="@(() => HandleSubmit())">
+                                <LucideIconCn Name="send" Size="14" Class="mr-2 size-3.5" />
+                                <span class="text-xs">Send now</span>
+                            </DropdownMenuItemCn>
+                            <DropdownMenuSeparatorCn />
+                            @foreach (var opt in _scheduleOptions)
+                            {
+                                var optValue = opt.Value;
+                                <DropdownMenuItemCn OnClick="@(() => HandleSchedule(optValue))">
+                                    <LucideIconCn Name="clock" Size="14" Class="mr-2 size-3.5" />
+                                    <span class="text-xs">@opt.Label</span>
+                                </DropdownMenuItemCn>
+                            }
+                        </DropdownMenuContentCn>
+                    </DropdownMenuCn>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(
+        string Id,
+        string Sender,
+        string Name,
+        string Content,
+        string Time,
+        string? ScheduledFor = null,
+        bool IsScheduled = false
+    );
+
+    private record ScheduleOption(string Label, string Value);
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("m1", "them", "Priya Sharma",
+            "Hey! Can you send me the updated proposal before the client meeting tomorrow?",
+            "1:30 PM"),
+        new("m2", "me", "You",
+            "Sure, I'm finishing up the revenue projections now. Should have it done within the hour.",
+            "1:32 PM"),
+        new("m3", "them", "Priya Sharma",
+            "Great. Also, remind me to update the stakeholder list before the call. I keep forgetting.",
+            "1:33 PM"),
+        new("m4", "me", "You",
+            "I'll send you a reminder right before the meeting.",
+            "1:35 PM"),
+        new("m5", "me", "You",
+            "Don't forget to update the stakeholder list before the 3 PM call with Meridian.",
+            "2:55 PM", "3:00 PM", true),
+        new("m6", "me", "You",
+            "Here's the updated proposal with the Q3 revenue projections. Let me know if anything needs changes before we present.",
+            "4:00 PM", "4:00 PM", true),
+        new("m7", "them", "Priya Sharma",
+            "Perfect timing on both. The meeting went well, and the proposal looks solid.",
+            "4:15 PM"),
+        new("m8", "me", "You",
+            "Glad to hear it! Want to debrief over coffee tomorrow morning?",
+            "4:18 PM"),
+    ];
+
+    private static readonly ScheduleOption[] _scheduleOptions =
+    [
+        new("In 30 minutes", "30m"),
+        new("In 1 hour", "1h"),
+        new("Tomorrow 9:00 AM", "tomorrow-9"),
+    ];
+
+    private string _input = "";
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+
+    private void HandleSchedule(string option)
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

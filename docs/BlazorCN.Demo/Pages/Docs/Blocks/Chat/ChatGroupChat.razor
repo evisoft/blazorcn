@@ -1,0 +1,191 @@
+@* ============================================================
+   Block: chat-group-chat
+   Title: ChatGroupChat
+   Description: React multi-person group chat block for Next.js with overlapping avatar stack, color-coded sender names, admin badges, member panel, invite link, and typing indicator using shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-group-chat.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            @* Overlapping avatar stack *@
+            <div class="flex -space-x-1.5">
+                @foreach (var m in _memberList.Take(3))
+                {
+                    var member = m;
+                    <AvatarCn Class="size-8 ring-2 ring-card">
+                        <AvatarFallbackCn Class="@Cn.Merge("text-white text-[10px]", member.AvatarColor)">@member.Initials</AvatarFallbackCn>
+                    </AvatarCn>
+                }
+                <div class="flex size-8 items-center justify-center rounded-full bg-muted text-[10px] font-medium ring-2 ring-card">
+                    +@(_memberCount - 3)
+                </div>
+            </div>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">@_groupName</span>
+                <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="users" Size="12" Class="size-3" />
+                    <span>@_memberCount members</span>
+                </div>
+            </div>
+            @* Group info toggle *@
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="@(() => _showInfo = !_showInfo)">
+                Group info
+                <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 transition-transform duration-200", _showInfo ? "rotate-90" : "")" />
+            </ButtonCn>
+        </div>
+
+        @* Group info panel (expandable) *@
+        @if (_showInfo)
+        {
+            <div class="border-b">
+                <div class="px-4 py-3">
+                    <span class="mb-2 block font-medium text-muted-foreground text-xs">Members</span>
+                    <div class="flex flex-col gap-2">
+                        @foreach (var m in _memberList)
+                        {
+                            var member = m;
+                            <div class="flex items-center gap-2.5">
+                                <AvatarCn Class="size-7">
+                                    <AvatarFallbackCn Class="@Cn.Merge("text-white text-[10px]", member.AvatarColor)">@member.Initials</AvatarFallbackCn>
+                                </AvatarCn>
+                                <span class="@Cn.Merge("text-sm", member.NameColor)">@member.Name</span>
+                                @if (member.IsAdmin)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 font-normal text-[10px]">
+                                        <LucideIconCn Name="shield-check" Size="10" Class="size-2.5" />
+                                        Admin
+                                    </BadgeCn>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+                @* Invite link *@
+                <div class="border-t px-4 py-3">
+                    <span class="mb-1.5 block text-muted-foreground text-xs">Invite link</span>
+                    <div class="flex items-center gap-2">
+                        <div class="flex min-w-0 flex-1 items-center gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5">
+                            <LucideIconCn Name="link" Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                            <span class="truncate font-mono text-muted-foreground text-xs">@_inviteLink</span>
+                        </div>
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="@HandleCopyLink">
+                            <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                            @(_copied ? "Copied" : "Copy")
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Messages — flat layout with grouping and color-coded names *@
+        <div class="flex flex-1 flex-col overflow-y-auto">
+            @for (int i = 0; i < _initialMessages.Length; i++)
+            {
+                var idx = i;
+                var msg = _initialMessages[idx];
+                var member = _members.TryGetValue(msg.UserId, out var m) ? m : null;
+                if (member == null) continue;
+                var prevMsg = idx > 0 ? _initialMessages[idx - 1] : null;
+                var showHeader = prevMsg == null || prevMsg.UserId != msg.UserId;
+                <div class="@Cn.Merge("group flex gap-2 px-4 transition-colors hover:bg-accent", showHeader ? "pt-2.5 pb-0.5" : "py-0.5")">
+                    @* Avatar column *@
+                    <div class="w-10 shrink-0">
+                        @if (showHeader)
+                        {
+                            <AvatarCn Class="size-8">
+                                <AvatarFallbackCn Class="@Cn.Merge("text-white text-[10px]", member.AvatarColor)">@member.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                        }
+                    </div>
+                    @* Body *@
+                    <div class="min-w-0 flex-1">
+                        @if (showHeader)
+                        {
+                            <div class="flex items-baseline gap-2">
+                                <span class="@Cn.Merge("font-medium text-sm", member.NameColor)">@member.Name</span>
+                                @if (member.IsAdmin)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">Admin</BadgeCn>
+                                }
+                                <span class="text-muted-foreground text-xs">@msg.Timestamp</span>
+                            </div>
+                        }
+                        <p class="text-sm leading-relaxed">@msg.Content</p>
+                        @if (!showHeader)
+                        {
+                            <span class="hidden text-muted-foreground text-[10px] group-hover:inline">@msg.Timestamp</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <InputCn @bind-Value="_input" Placeholder="Type a message..." Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Disabled="@(string.IsNullOrWhiteSpace(_input))" OnClick="@HandleSubmit" Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string _input = "";
+    private bool _showInfo = false;
+    private bool _copied = false;
+
+    private const string _groupName = "Weekend Hiking Trip";
+    private const int _memberCount = 5;
+    private const string _inviteLink = "https://chat.app/invite/hike-2026";
+
+    private record GroupMember(string Id, string Name, string Initials, string AvatarColor, string NameColor, bool IsAdmin = false);
+    private record Message(string Id, string UserId, string Content, string Timestamp);
+
+    private static readonly Dictionary<string, GroupMember> _members = new()
+    {
+        ["u1"] = new("u1", "You", "YO", "bg-zinc-700", "text-foreground", IsAdmin: true),
+        ["u2"] = new("u2", "Sarah Kim", "SK", "bg-rose-600", "text-rose-600 dark:text-rose-400"),
+        ["u3"] = new("u3", "Marcus Chen", "MC", "bg-blue-600", "text-blue-600 dark:text-blue-400", IsAdmin: true),
+        ["u4"] = new("u4", "Aisha Patel", "AP", "bg-violet-600", "text-violet-600 dark:text-violet-400"),
+        ["u5"] = new("u5", "Tom Brennan", "TB", "bg-emerald-600", "text-emerald-600 dark:text-emerald-400"),
+    };
+
+    private static readonly IReadOnlyList<GroupMember> _memberList = [
+        new("u1", "You", "YO", "bg-zinc-700", "text-foreground", IsAdmin: true),
+        new("u2", "Sarah Kim", "SK", "bg-rose-600", "text-rose-600 dark:text-rose-400"),
+        new("u3", "Marcus Chen", "MC", "bg-blue-600", "text-blue-600 dark:text-blue-400", IsAdmin: true),
+        new("u4", "Aisha Patel", "AP", "bg-violet-600", "text-violet-600 dark:text-violet-400"),
+        new("u5", "Tom Brennan", "TB", "bg-emerald-600", "text-emerald-600 dark:text-emerald-400"),
+    ];
+
+    private static readonly Message[] _initialMessages =
+    [
+        new("1", "u3", "Hey everyone! So are we still on for the Mt. Tamalpais hike this Saturday?", "6:30 PM"),
+        new("2", "u2", "Absolutely! I've been looking forward to it all week. What time are we meeting?", "6:32 PM"),
+        new("3", "u4", "I'm in. Can we do 8 AM at the Pantoll trailhead? That way we beat the afternoon heat.", "6:33 PM"),
+        new("4", "u1", "8 AM works for me. I can drive — I have room for 3 more if anyone needs a ride from the city.", "6:35 PM"),
+        new("5", "u5", "I'd love a ride! Coming from Mission district. I'll bring snacks and extra water for everyone.", "6:37 PM"),
+        new("6", "u2", "I'll ride with you too if that's okay. I'll bring the first aid kit and sunscreen.", "6:38 PM"),
+        new("7", "u3", "Perfect. I'll drive separately since I'm coming from Marin. Trail is about 7 miles round trip, moderate difficulty. Should take 3-4 hours with breaks.", "6:40 PM"),
+        new("8", "u4", "Sounds great. Weather forecast says 68 degrees and sunny. Bring layers though — it can be foggy at the top.", "6:42 PM"),
+        new("9", "u1", "Great, so pickup at 7:15 from Mission. See everyone Saturday morning!", "6:44 PM"),
+    ];
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+
+    private void HandleCopyLink()
+    {
+        _copied = true;
+    }
+}

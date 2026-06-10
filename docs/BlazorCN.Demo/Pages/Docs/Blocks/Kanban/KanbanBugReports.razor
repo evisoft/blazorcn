@@ -1,0 +1,260 @@
+@* ============================================================
+   Block: kanban-bug-reports
+   Title: KanbanBugReports
+   Description: React kanban bug report board for Next.js with expandable inline cards showing steps to reproduce, severity indicators, assignees, and AI fix suggestions using shadcn/ui and Tailwind CSS
+   Source: original/blocks/kanban/kanban-bug-reports.tsx
+   ============================================================ *@
+
+@inject IJSRuntime JS
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">Bug Reports</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_bugs.Length bugs
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_bugs.Count(b => b.Severity == "critical")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_bugs.Count(b => b.Severity == "major")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @_bugs.Count(b => b.Severity == "minor")
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-3 divide-x">
+            @foreach (var col in _columnConfig)
+            {
+                var colId = col.Id;
+                var columnBugs = _bugs.Where(b => b.Status == colId).ToArray();
+                <div>
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                        <span class="text-muted-foreground">
+                            <LucideIconCn Name="@col.IconName" Size="14" Class="size-3.5" />
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@col.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@columnBugs.Length</span>
+                    </div>
+
+                    <div>
+                        @for (int i = 0; i < columnBugs.Length; i++)
+                        {
+                            var bug = columnBugs[i];
+                            var isLast = i == columnBugs.Length - 1;
+                            var isExpanded = _expanded == bug.Id;
+                            var bugId = bug.Id;
+                            <div class="@(isLast ? "" : "border-b")">
+                                <button
+                                    type="button"
+                                    @onclick="@(() => ToggleExpanded(bugId))"
+                                    class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", _severityDot.TryGetValue(bug.Severity, out var dot) ? dot : "")"></span>
+                                    <div class="min-w-0 flex-1">
+                                        <span class="block truncate font-medium text-sm">@bug.Title</span>
+                                        <span class="font-mono text-muted-foreground text-xs">@bug.BugId</span>
+                                    </div>
+                                    <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                                </button>
+
+                                @if (isExpanded)
+                                {
+                                    <div class="px-4 pb-4">
+                                        @* Assignee *@
+                                        <div class="mb-3 flex items-center gap-2">
+                                            <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                                                @bug.AssigneeInitials
+                                            </span>
+                                            <span class="text-xs">@bug.Assignee</span>
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs">
+                                                @bug.Severity
+                                            </BadgeCn>
+                                        </div>
+
+                                        @* Steps to reproduce *@
+                                        <div class="mb-3">
+                                            <span class="mb-1.5 block font-medium text-muted-foreground text-xs">
+                                                Steps to reproduce
+                                            </span>
+                                            <ol class="space-y-1 pl-4 text-sm leading-relaxed">
+                                                @foreach (var step in bug.StepsToReproduce)
+                                                {
+                                                    <li class="list-decimal text-muted-foreground">@step</li>
+                                                }
+                                            </ol>
+                                        </div>
+
+                                        @* Expected vs Actual *@
+                                        <div class="mb-3 grid grid-cols-1 gap-2">
+                                            <div>
+                                                <span class="mb-1 block font-medium text-muted-foreground text-xs">
+                                                    Expected
+                                                </span>
+                                                <p class="text-muted-foreground text-sm leading-relaxed">@bug.Expected</p>
+                                            </div>
+                                            <div>
+                                                <span class="mb-1 block font-medium text-muted-foreground text-xs">
+                                                    Actual
+                                                </span>
+                                                <p class="text-muted-foreground text-sm leading-relaxed">@bug.Actual</p>
+                                            </div>
+                                        </div>
+
+                                        @* Fix suggestion *@
+                                        <div class="rounded-md bg-muted/50 p-3">
+                                            <div class="mb-1.5 flex items-center justify-between">
+                                                <span class="font-medium text-muted-foreground text-xs">
+                                                    Suggested fix
+                                                </span>
+                                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs" OnClick="@((MouseEventArgs e) => CopyFix(bug.Id, bug.FixSuggestion))">
+                                                    @if (_copied == bug.Id)
+                                                    {
+                                                        <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                                        <span>Copied</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                                        <span>Copy</span>
+                                                    }
+                                                </ButtonCn>
+                                            </div>
+                                            <p class="text-sm leading-relaxed">@bug.FixSuggestion</p>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @_bugs.Count(b => b.Severity == "critical") critical unresolved
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Triaged 2 min ago</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expanded = null;
+    private string? _copied = null;
+
+    private record BugReport(
+        string Id,
+        string BugId,
+        string Title,
+        string Status,
+        string Severity,
+        string Assignee,
+        string AssigneeInitials,
+        string[] StepsToReproduce,
+        string Expected,
+        string Actual,
+        string FixSuggestion
+    );
+
+    private record ColumnConfig(string Id, string Title, string IconName);
+
+    private static readonly Dictionary<string, string> _severityDot = new()
+    {
+        ["critical"] = "bg-red-500",
+        ["major"] = "bg-amber-500",
+        ["minor"] = "bg-blue-500",
+    };
+
+    private static readonly ColumnConfig[] _columnConfig =
+    [
+        new("new", "New", "bug"),
+        new("triaging", "Triaging", "search"),
+        new("fixing", "Fixing", "wrench"),
+    ];
+
+    private static readonly BugReport[] _bugs =
+    [
+        new("b1", "BUG-101", "File upload fails silently above 10MB", "new", "critical",
+            "Marcus Rivera", "MR",
+            ["Navigate to Settings > Import", "Click Upload File and select a file larger than 10MB", "Click Submit and observe no progress indicator or error"],
+            "Upload should show progress bar and succeed, or display a clear size limit error with the maximum allowed file size.",
+            "The upload button resets to its initial state with no feedback. The file is not uploaded and no error message is shown. Console shows a 413 Payload Too Large response.",
+            "Add client-side file size validation before upload. Show a toast error when the file exceeds the limit. Increase the server maxBodySize to 50MB or implement chunked uploads for large files."),
+        new("b2", "BUG-107", "Search results include deleted records", "new", "major",
+            "Priya Patel", "PP",
+            ["Create a new record and note its title", "Delete the record from the list view", "Search for the record title in the global search bar"],
+            "Deleted records should not appear in search results after soft-deletion.",
+            "The deleted record appears in search results with a working link that leads to a 404 page. The Elasticsearch index is not updated on deletion.",
+            "Add a post-delete hook that removes the document from the Elasticsearch index. Alternatively, filter results where deleted_at is not null in the search query DSL."),
+        new("b3", "BUG-112", "Date picker shows wrong month on timezone boundary", "new", "minor",
+            "Unassigned", "??",
+            ["Set system timezone to UTC-12 (Baker Island)", "Open any date picker field", "Observe the initially displayed month"],
+            "Date picker should show the current month in the user's local timezone.",
+            "The picker shows the previous month because the UTC date is used directly without timezone offset. Users in negative UTC offsets see stale months near month boundaries.",
+            "Use date-fns-tz or Temporal API to resolve the local date before initializing the calendar view. Pass the timezone-aware date to the month calculation."),
+        new("b4", "BUG-098", "WebSocket connection drops every 30 seconds", "triaging", "critical",
+            "James O'Brien", "JO",
+            ["Open the real-time dashboard in any browser", "Wait 30 seconds without interaction", "Observe the connection status indicator turn red"],
+            "WebSocket should maintain a persistent connection with automatic keep-alive pings every 15 seconds.",
+            "The load balancer closes idle connections after 30 seconds. The client reconnects but loses buffered events during the gap, causing data inconsistency.",
+            "Configure the ALB idle timeout to 120 seconds. Add client-side ping frames every 20 seconds to keep the connection alive. Implement a sequence number to detect and replay missed events on reconnect."),
+        new("b5", "BUG-103", "CSV export truncates fields with commas", "triaging", "major",
+            "Sarah Kim", "SK",
+            ["Create a record with a comma in the description field", "Export the table as CSV", "Open the CSV in a spreadsheet application"],
+            "Fields containing commas should be properly quoted in the CSV output according to RFC 4180.",
+            "Fields with commas are split across multiple columns. The CSV generator does not wrap fields in double quotes when they contain delimiter characters.",
+            "Wrap all string fields in double quotes during CSV serialization. Escape any existing double quotes by doubling them. Use a tested library like papaparse for generation."),
+        new("b6", "BUG-115", "Notification badge count stuck at 99+", "triaging", "minor",
+            "Liam Chen", "LC",
+            ["Accumulate more than 99 unread notifications", "Read several notifications to bring count below 99", "Check the header notification badge"],
+            "Badge should update to show the actual unread count after reading notifications.",
+            "The badge remains stuck at 99+ even after reading notifications. The count only updates on full page refresh, not on mark-as-read actions.",
+            "Invalidate the notification count cache when marking items as read. Use optimistic updates on the client and revalidate with the server count on the next poll interval."),
+        new("b7", "BUG-091", "Auth token refresh race condition", "fixing", "critical",
+            "Marcus Rivera", "MR",
+            ["Open the app in two browser tabs", "Wait for the access token to expire in both tabs", "Perform an action in both tabs simultaneously"],
+            "Both tabs should refresh the token and continue working without forcing a re-login.",
+            "The second tab's refresh request invalidates the first tab's new token. One tab gets a 401 and forces the user to log in again.",
+            "Implement a token refresh mutex using BroadcastChannel or localStorage events. Queue concurrent refresh requests and share the new token across all tabs."),
+        new("b8", "BUG-106", "Table sort breaks with null values", "fixing", "major",
+            "Priya Patel", "PP",
+            ["View a table where some rows have null values in a sortable column", "Click the column header to sort ascending", "Click again to sort descending"],
+            "Null values should sort to the bottom regardless of sort direction, with non-null values sorted correctly.",
+            "Sorting throws a TypeError: Cannot read properties of null. The entire table becomes unresponsive until the page is refreshed.",
+            "Add null checks to the comparator function. Use a three-way comparison: nulls last, then compare non-null values with localeCompare for strings or simple subtraction for numbers."),
+        new("b9", "BUG-119", "Drag handle invisible in dark mode", "fixing", "minor",
+            "James O'Brien", "JO",
+            ["Enable dark mode in system preferences or app settings", "Navigate to any reorderable list view", "Look for the drag handle icon on list items"],
+            "Drag handle should be visible with appropriate contrast in both light and dark modes.",
+            "The drag handle uses a hardcoded #374151 color that blends into the dark mode background. The handle is functionally present but visually invisible.",
+            "Replace the hardcoded color with text-muted-foreground which adapts to the color scheme. Use hover:text-foreground for an interactive state that confirms the handle is present."),
+    ];
+
+    private void ToggleExpanded(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private async Task CopyFix(string id, string text)
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        _copied = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = null;
+        StateHasChanged();
+    }
+}

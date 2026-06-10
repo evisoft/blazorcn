@@ -1,0 +1,177 @@
+@* ============================================================
+   Block: music-soundboard
+   Title: MusicSoundboard
+   Description: An interactive soundboard block for React and Next.js with a 4x4 trigger pad grid, per-pad volume controls, color-coded categories, labels, and stop all button built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-soundboard.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="music-2" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Soundboard</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @if (_activeCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 animate-pulse rounded-full bg-emerald-500"></span>
+                        @_activeCount active
+                    </span>
+                }
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs"
+                          OnClick="HandleStopAll"
+                          Disabled="@(_activeCount == 0)">
+                    <LucideIconCn Name="square" Size="12" Class="size-3" />
+                    Stop All
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Category legend *@
+        <div class="flex items-center gap-4 border-b px-4 py-2.5">
+            @foreach (var cat in _categories)
+            {
+                var c = cat;
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", c.Dot)"></span>
+                    @c.Label
+                </span>
+            }
+        </div>
+
+        @* Pad grid *@
+        <div class="border-b px-4 py-4">
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                @foreach (var pd in _pads)
+                {
+                    var pad = pd;
+                    var config = GetCategoryConfig(pad.Category);
+                    var isActive = _activePads.Contains(pad.Id);
+                    var isSelected = _selectedPad == pad.Id;
+                    <button type="button"
+                            @onclick="@(() => HandlePadTrigger(pad.Id))"
+                            class="@Cn.Merge("relative flex flex-col items-center justify-center gap-1 rounded-md px-2 py-4 transition-colors", isActive ? config.ActiveBg : config.Bg, isSelected ? "ring-1 ring-foreground/20" : "")"
+                            aria-label="@($"{pad.Label} - {config.Label}")">
+                        @if (isActive)
+                        {
+                            <span class="absolute right-2 top-2 size-1.5 animate-pulse rounded-full bg-emerald-500"></span>
+                        }
+                        <span class="font-medium text-xs">@pad.Label</span>
+                        <span class="text-muted-foreground text-xs">@config.Label</span>
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Volume control for selected pad *@
+        <div class="px-4 py-3">
+            @if (_selectedPad != null)
+            {
+                var selectedLabel = GetPadLabel(_selectedPad);
+                var selectedVolume = GetVolume(_selectedPad);
+                <div class="flex items-center gap-3">
+                    <LucideIconCn Name="volume-2" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                    <span class="w-24 shrink-0 truncate text-xs">@selectedLabel</span>
+                    <SliderCn Value="@((double)selectedVolume)"
+                              ValueChanged="@((double v) => { SetVolume(_selectedPad!, (int)v); })"
+                              Min="0"
+                              Max="100"
+                              Step="1"
+                              Class="flex-1" />
+                    <span class="w-8 text-right font-mono text-muted-foreground text-xs">
+                        @(selectedVolume)%
+                    </span>
+                </div>
+            }
+            else
+            {
+                <p class="text-center text-muted-foreground text-xs">
+                    Tap a pad to play &middot; Select to adjust volume
+                </p>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record SoundPad(string Id, string Label, string Category);
+
+    private record CategoryConfig(string Bg, string ActiveBg, string Dot, string Label);
+
+    private static readonly SoundPad[] _pads =
+    [
+        new("p-1",  "Applause",       "effects"),
+        new("p-2",  "Air Horn",       "effects"),
+        new("p-3",  "Drum Roll",      "music"),
+        new("p-4",  "Cymbal",         "music"),
+        new("p-5",  "Bass Drop",      "music"),
+        new("p-6",  "Record Scratch", "music"),
+        new("p-7",  "Rain",           "ambient"),
+        new("p-8",  "Thunder",        "ambient"),
+        new("p-9",  "Crowd Cheer",    "effects"),
+        new("p-10", "Boo",            "voice"),
+        new("p-11", "Laugh Track",    "voice"),
+        new("p-12", "Rimshot",        "effects"),
+        new("p-13", "Ocean Waves",    "ambient"),
+        new("p-14", "Wind",           "ambient"),
+        new("p-15", "Whistle",        "voice"),
+        new("p-16", "Countdown",      "voice"),
+    ];
+
+    private static readonly CategoryConfig[] _categories =
+    [
+        new("bg-amber-500/10 hover:bg-amber-500/20",   "bg-amber-500/30",   "bg-amber-500",   "Effects"),
+        new("bg-blue-500/10 hover:bg-blue-500/20",     "bg-blue-500/30",    "bg-blue-500",    "Music"),
+        new("bg-emerald-500/10 hover:bg-emerald-500/20","bg-emerald-500/30", "bg-emerald-500", "Ambient"),
+        new("bg-purple-500/10 hover:bg-purple-500/20", "bg-purple-500/30",  "bg-purple-500",  "Voice"),
+    ];
+
+    private static readonly Dictionary<string, CategoryConfig> _categoryMap = new()
+    {
+        ["effects"] = new("bg-amber-500/10 hover:bg-amber-500/20",    "bg-amber-500/30",   "bg-amber-500",   "Effects"),
+        ["music"]   = new("bg-blue-500/10 hover:bg-blue-500/20",      "bg-blue-500/30",    "bg-blue-500",    "Music"),
+        ["ambient"] = new("bg-emerald-500/10 hover:bg-emerald-500/20","bg-emerald-500/30", "bg-emerald-500", "Ambient"),
+        ["voice"]   = new("bg-purple-500/10 hover:bg-purple-500/20",  "bg-purple-500/30",  "bg-purple-500",  "Voice"),
+    };
+
+    private HashSet<string> _activePads = [];
+    private Dictionary<string, int> _volumes = new(
+        System.Linq.Enumerable.Select(_pads, p => new System.Collections.Generic.KeyValuePair<string, int>(p.Id, 75))
+    );
+    private string? _selectedPad = null;
+
+    private int _activeCount => _activePads.Count;
+
+    private CategoryConfig GetCategoryConfig(string category) =>
+        _categoryMap.TryGetValue(category, out var cfg) ? cfg : _categories[0];
+
+    private string GetPadLabel(string padId) =>
+        System.Array.Find(_pads, p => p.Id == padId)?.Label ?? padId;
+
+    private int GetVolume(string padId) =>
+        _volumes.TryGetValue(padId, out var v) ? v : 75;
+
+    private void HandlePadTrigger(string padId)
+    {
+        if (_activePads.Contains(padId))
+            _activePads.Remove(padId);
+        else
+            _activePads.Add(padId);
+        _selectedPad = padId;
+    }
+
+    private void HandleStopAll()
+    {
+        _activePads.Clear();
+    }
+
+    private void SetVolume(string padId, int value)
+    {
+        _volumes[padId] = value;
+    }
+}

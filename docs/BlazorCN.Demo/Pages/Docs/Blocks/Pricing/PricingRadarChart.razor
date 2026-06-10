@@ -1,0 +1,275 @@
+@* ============================================================
+   Block: pricing-radar-chart
+   Title: PricingRadarChart
+   Description: A radar chart pricing section for React and Next.js with three plan cards each featuring a hexagonal spider chart that animates stroke and fill on mount showing six capability dimensions plus NumberFlow animated price and ShadcnioButton CTA built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/pricing/pricing-radar-chart.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    @* Header *@
+    <div class="text-center">
+        <p class="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            Plan capability profiles
+        </p>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+            See each plan&apos;s shape at a glance
+        </h2>
+        <p class="mx-auto mt-3 max-w-xl text-base leading-relaxed text-muted-foreground">
+            Every plan scores across six capability axes. Compare the shape of each radar to pick the
+            tier that matches how you actually work.
+        </p>
+    </div>
+
+    @* Plan cards *@
+    <div class="mx-auto mt-10 grid max-w-lg gap-4 md:max-w-none md:grid-cols-3">
+        @foreach (var plan in _plans)
+        {
+            var polygonPoints = ScoresToPoints(plan.Scores);
+            <article class="@Cn.Merge("flex h-full flex-col overflow-hidden rounded-2xl bg-muted", plan.IsPopular ? "ring-2 ring-foreground/10" : "")">
+                <div class="flex flex-1 flex-col px-7 pb-7 pt-6">
+                    @* Reserved badge slot *@
+                    <div class="mb-5 flex h-6 items-center">
+                        @if (plan.IsPopular)
+                        {
+                            <span class="inline-flex items-center rounded-full bg-red-500 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">
+                                Best Value
+                            </span>
+                        }
+                    </div>
+
+                    @* Plan title *@
+                    <h3 class="text-lg font-bold tracking-tight">@plan.Name</h3>
+                    <p class="mt-1.5 min-h-[2.75rem] text-sm leading-relaxed text-muted-foreground">
+                        @plan.Tagline
+                    </p>
+
+                    @* Radar chart *@
+                    <div class="mt-5 flex justify-center rounded-xl border border-foreground/10 bg-background/40 p-3">
+                        <svg viewBox="@($"{-_viewboxPadX} {-_viewboxPadY} {_chartSize + _viewboxPadX * 2} {_chartSize + _viewboxPadY * 2}")"
+                             class="h-auto w-full max-w-[240px]"
+                             role="img"
+                             aria-label="@BuildAriaLabel(plan)">
+                            @* Hex rings *@
+                            @for (int ringIdx = 0; ringIdx < _hexRings.Length; ringIdx++)
+                            {
+                                var ringPoints = _hexRings[ringIdx];
+                                var dashArray = ringIdx == _hexRings.Length - 1 ? "" : "2 3";
+                                @if (dashArray == "")
+                                {
+                                    <polygon points="@ringPoints"
+                                             class="fill-none stroke-foreground/10"
+                                             stroke-width="1" />
+                                }
+                                else
+                                {
+                                    <polygon points="@ringPoints"
+                                             class="fill-none stroke-foreground/10"
+                                             stroke-width="1"
+                                             stroke-dasharray="@dashArray" />
+                                }
+                            }
+
+                            @* Axis lines *@
+                            @for (int idx = 0; idx < _dimensions.Length; idx++)
+                            {
+                                var pt = AxisPoint(idx, _radius);
+                                <line x1="@_center" y1="@_center"
+                                      x2="@pt.X.ToString("F1")" y2="@pt.Y.ToString("F1")"
+                                      class="stroke-foreground/10"
+                                      stroke-width="1" />
+                            }
+
+                            @* Plan polygon *@
+                            <polygon points="@polygonPoints"
+                                     class="@Cn.Merge("fill-foreground/20 stroke-foreground", plan.IsPopular ? "fill-foreground/30" : "")"
+                                     stroke-width="2"
+                                     stroke-linejoin="round"
+                                     style="@($"transform-origin: {_center}px {_center}px")" />
+
+                            @* Outer hex outline *@
+                            <polygon points="@_outerHexPoints"
+                                     class="fill-none stroke-foreground/20"
+                                     stroke-width="1.5" />
+
+                            @* Vertex dots *@
+                            @for (int idx = 0; idx < _dimensions.Length; idx++)
+                            {
+                                var dimKey = _dimensions[idx].Key;
+                                var score = plan.Scores.TryGetValue(dimKey, out var s) ? s : 0;
+                                var normalized = score / 10.0;
+                                var pt = AxisPoint(idx, _radius * normalized);
+                                <circle cx="@pt.X.ToString("F1")" cy="@pt.Y.ToString("F1")"
+                                        r="3"
+                                        class="fill-foreground" />
+                            }
+
+                            @* Dimension labels *@
+                            @for (int idx = 0; idx < _dimensions.Length; idx++)
+                            {
+                                var dim = _dimensions[idx];
+                                var pt = AxisPoint(idx, _labelRadius);
+                                var anchor = "middle";
+                                if (pt.X < _center - 4) anchor = "end";
+                                else if (pt.X > _center + 4) anchor = "start";
+                                @((MarkupString)$"<text x=\"{pt.X:F1}\" y=\"{pt.Y:F1}\" text-anchor=\"{anchor}\" dominant-baseline=\"middle\" class=\"fill-muted-foreground text-[11px] font-semibold uppercase tracking-wider\">{dim.Label}</text>")
+                            }
+                        </svg>
+                    </div>
+
+                    @* Price *@
+                    <div class="mt-5 flex h-12 items-baseline gap-1 sm:h-14">
+                        <span class="text-4xl font-bold tracking-tight tabular-nums">$@plan.MonthlyPrice</span>
+                        <span class="text-sm text-muted-foreground">/mo</span>
+                    </div>
+                    <p class="text-xs text-muted-foreground">Billed monthly, cancel anytime</p>
+
+                    @* CTA *@
+                    <ButtonCn Size="ButtonSize.Sm" Class="mt-5 w-full">@plan.Cta</ButtonCn>
+
+                    @* Features *@
+                    <ul class="mt-6 flex-1 space-y-2.5">
+                        @foreach (var feature in plan.Features)
+                        {
+                            <li class="flex items-start gap-2.5">
+                                <LucideIconCn Name="check" Size="16" Class="mt-0.5 size-4 shrink-0 stroke-[3] text-emerald-600 dark:text-emerald-500" />
+                                <span class="text-sm font-medium text-foreground">@feature</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </article>
+        }
+    </div>
+
+    @* Trust text *@
+    <p class="mt-8 text-center text-xs text-muted-foreground">
+        All plans include a 14-day free trial. No credit card required. Cancel anytime.
+    </p>
+</section>
+
+@code {
+    // ── Geometry constants ──────────────────────────────────────────────
+    private const double _chartSize   = 240;
+    private const double _center      = _chartSize / 2;   // 120
+    private const double _radius      = 78;
+    private const double _labelRadius = 98;
+    private const double _viewboxPadX = 34;
+    private const double _viewboxPadY = 14;
+
+    private record Dimension(string Key, string Label);
+
+    private static readonly Dimension[] _dimensions =
+    [
+        new("storage",      "Storage"),
+        new("support",      "Support"),
+        new("integrations", "APIs"),
+        new("security",     "Security"),
+        new("scale",        "Scale"),
+        new("speed",        "Speed"),
+    ];
+
+    // ── Pre-computed geometry ───────────────────────────────────────────
+    private static (double X, double Y) AxisPoint(int index, double r)
+    {
+        var angle = (index / (double)_dimensions.Length) * Math.PI * 2 - Math.PI / 2;
+        return (_center + r * Math.Cos(angle), _center + r * Math.Sin(angle));
+    }
+
+    private static string PointsToString(double r)
+    {
+        var pts = new System.Text.StringBuilder();
+        for (int i = 0; i < _dimensions.Length; i++)
+        {
+            var p = AxisPoint(i, r);
+            if (i > 0) pts.Append(' ');
+            pts.Append($"{p.X:F1},{p.Y:F1}");
+        }
+        return pts.ToString();
+    }
+
+    private static readonly string _outerHexPoints = PointsToString(_radius);
+
+    private static readonly string[] _hexRings =
+    [
+        PointsToString(_radius * 0.25),
+        PointsToString(_radius * 0.50),
+        PointsToString(_radius * 0.75),
+        PointsToString(_radius * 1.00),
+    ];
+
+    private static string ScoresToPoints(Dictionary<string, int> scores)
+    {
+        var pts = new System.Text.StringBuilder();
+        for (int i = 0; i < _dimensions.Length; i++)
+        {
+            var dim = _dimensions[i];
+            var score = scores.TryGetValue(dim.Key, out var s) ? s : 0;
+            var normalized = score / 10.0;
+            var p = AxisPoint(i, _radius * normalized);
+            if (i > 0) pts.Append(' ');
+            pts.Append($"{p.X:F1},{p.Y:F1}");
+        }
+        return pts.ToString();
+    }
+
+    private static string BuildAriaLabel(Plan plan)
+    {
+        var parts = new System.Text.StringBuilder();
+        parts.Append(plan.Name);
+        parts.Append(" plan capability profile: ");
+        for (int i = 0; i < _dimensions.Length; i++)
+        {
+            var dim = _dimensions[i];
+            var score = plan.Scores.TryGetValue(dim.Key, out var s) ? s : 0;
+            if (i > 0) parts.Append(", ");
+            parts.Append($"{dim.Label} {score} out of 10");
+        }
+        return parts.ToString();
+    }
+
+    // ── Plan data ───────────────────────────────────────────────────────
+    private record Plan(
+        string Id,
+        string Name,
+        string Tagline,
+        int MonthlyPrice,
+        Dictionary<string, int> Scores,
+        string[] Features,
+        string Cta,
+        bool IsPopular
+    );
+
+    private static readonly Plan[] _plans =
+    [
+        new(
+            "starter",
+            "Starter",
+            "For solo builders validating an idea.",
+            19,
+            new Dictionary<string, int> { ["storage"] = 3, ["support"] = 2, ["integrations"] = 3, ["security"] = 4, ["scale"] = 2, ["speed"] = 5 },
+            ["25 GB storage with daily backups", "Community Discord support", "10 integrations included", "SSL and basic auth"],
+            "Start free trial",
+            false
+        ),
+        new(
+            "growth",
+            "Growth",
+            "For scaling teams shipping production.",
+            79,
+            new Dictionary<string, int> { ["storage"] = 7, ["support"] = 7, ["integrations"] = 8, ["security"] = 7, ["scale"] = 7, ["speed"] = 8 },
+            ["500 GB storage with global CDN", "Priority email support, 4h SLA", "Unlimited integrations", "SSO, audit logs, role-based access", "99.95% uptime SLA"],
+            "Start free trial",
+            true
+        ),
+        new(
+            "enterprise",
+            "Enterprise",
+            "For mission-critical platforms at scale.",
+            399,
+            new Dictionary<string, int> { ["storage"] = 10, ["support"] = 10, ["integrations"] = 9, ["security"] = 10, ["scale"] = 10, ["speed"] = 10 },
+            ["Unlimited storage, multi-region", "Dedicated success manager", "Custom integrations and webhooks", "SAML SSO, SOC2, HIPAA, DPA", "99.99% uptime SLA with credits", "Data residency (US, EU, APAC)"],
+            "Contact sales",
+            false
+        ),
+    ];
+}

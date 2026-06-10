@@ -1,0 +1,194 @@
+@* ============================================================
+   Block: chat-disappearing-messages
+   Title: ChatDisappearingMessages
+   Description: React chat block with self-destructing messages for Next.js featuring expiration timers, disappearing mode toggle, visual countdown indicators, and fading opacity using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-disappearing-messages.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-7">
+                <AvatarFallbackCn Class="text-xs">NT</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Nina Torres</span>
+                <span class="ml-2 text-muted-foreground text-xs">Confidential</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="text-muted-foreground text-xs">Disappearing</span>
+                <SwitchCn Checked="@_disappearingEnabled"
+                          CheckedChanged="@((bool v) => _disappearingEnabled = v)"
+                          Class="scale-75" />
+            </div>
+        </div>
+
+        @* Disappearing mode banner *@
+        @if (_disappearingEnabled)
+        {
+            <div class="border-b">
+                <div class="flex items-center gap-2 bg-muted/30 px-4 py-2">
+                    <LucideIconCn Name="timer" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="text-muted-foreground text-xs">
+                        Messages disappear after 24 hours
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* Messages *@
+        <div class="flex-1 space-y-1 overflow-y-auto px-4 py-3">
+            @foreach (var msg in _initialMessages)
+            {
+                var opacityClass = msg.Disappearing && msg.Urgency != null ? _opacityMap[msg.Urgency] : "";
+                var rowClass = Cn.Merge(
+                    "flex gap-2.5",
+                    msg.Role == "user" ? "flex-row-reverse" : "flex-row",
+                    opacityClass
+                );
+                var bubbleColClass = Cn.Merge(
+                    "max-w-[75%]",
+                    msg.Role == "user" ? "items-end" : "items-start",
+                    "flex flex-col"
+                );
+                var bubbleClass = Cn.Merge(
+                    "rounded-lg px-3 py-2 text-sm",
+                    msg.Role == "user" ? "bg-primary text-primary-foreground" : "bg-muted/50"
+                );
+                <div class="@rowClass">
+                    <AvatarCn Class="mt-0.5 size-6 shrink-0">
+                        <AvatarFallbackCn Class="text-[10px]">@msg.Initials</AvatarFallbackCn>
+                    </AvatarCn>
+                    <div class="@bubbleColClass">
+                        <div class="mb-0.5 flex items-center gap-2">
+                            <span class="font-medium text-xs">@msg.Sender</span>
+                            <span class="text-muted-foreground text-[10px]">@msg.Time</span>
+                        </div>
+                        <div class="@bubbleClass">
+                            @msg.Content
+                        </div>
+                        @if (msg.Disappearing && msg.ExpiresIn != null && msg.Urgency != null)
+                        {
+                            var timerColorClass = msg.Urgency == "high"
+                                ? "text-red-500"
+                                : msg.Urgency == "medium"
+                                    ? "text-amber-500"
+                                    : "text-muted-foreground";
+                            <div class="mt-1 flex items-center gap-1.5">
+                                @{
+                                    var progressMap = new Dictionary<string, double> { ["low"] = 0.85, ["medium"] = 0.45, ["high"] = 0.12 };
+                                    var colorMap = new Dictionary<string, string>
+                                    {
+                                        ["low"] = "stroke-muted-foreground/30",
+                                        ["medium"] = "stroke-amber-500/50",
+                                        ["high"] = "stroke-red-500/60"
+                                    };
+                                    var progress = progressMap[msg.Urgency];
+                                    var circumference = 2 * Math.PI * 5;
+                                    var offset = circumference * (1 - progress);
+                                    var arcStrokeClass = colorMap[msg.Urgency];
+                                }
+                                <svg class="size-3.5 -rotate-90 shrink-0" viewBox="0 0 14 14">
+                                    <title>Expiration progress</title>
+                                    <circle cx="7" cy="7" r="5" fill="none" stroke-width="2" class="stroke-muted/50" />
+                                    <circle cx="7" cy="7" r="5" fill="none" stroke-width="2"
+                                            stroke-dasharray="@circumference"
+                                            stroke-dashoffset="@offset"
+                                            stroke-linecap="round"
+                                            class="@arcStrokeClass" />
+                                </svg>
+                                <LucideIconCn Name="timer" Size="12" Class="@Cn.Merge("size-3 shrink-0", timerColorClass)" />
+                                <span class="@Cn.Merge("text-[10px]", timerColorClass)">
+                                    Expires in @msg.ExpiresIn
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" class="relative">
+                @if (_disappearingEnabled)
+                {
+                    <div class="mb-2 flex items-center gap-1.5">
+                        <LucideIconCn Name="timer" Size="12" Class="size-3 text-muted-foreground" />
+                        <span class="text-muted-foreground text-[10px]">
+                            This message will disappear after 24h
+                        </span>
+                    </div>
+                }
+                <TextareaCn @bind-Value="_input"
+                            Placeholder="Type a message..."
+                            Rows="1"
+                            Class="min-h-0 max-h-32 resize-none border-0 bg-transparent pr-10 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0" />
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="absolute top-1/2 right-1 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(
+        string Id,
+        string Role,
+        string Sender,
+        string Initials,
+        string Content,
+        string Time,
+        bool Disappearing = false,
+        string? ExpiresIn = null,
+        string? Urgency = null
+    );
+
+    private bool _disappearingEnabled = true;
+    private string _input = "";
+
+    private static readonly Dictionary<string, string> _opacityMap = new()
+    {
+        ["low"] = "opacity-100",
+        ["medium"] = "opacity-80",
+        ["high"] = "opacity-60"
+    };
+
+    private static readonly ChatMessage[] _initialMessages =
+    [
+        new("m1", "other", "Nina Torres", "NT",
+            "Switching to disappearing messages for this conversation. We need to discuss the acquisition terms.",
+            "4:02 PM"),
+        new("m2", "other", "Nina Torres", "NT",
+            "The board approved the offer at $42M. We have until Friday to send the LOI.",
+            "4:03 PM", Disappearing: true, ExpiresIn: "23h 12m", Urgency: "low"),
+        new("m3", "user", "You", "YO",
+            "Understood. Legal reviewed the terms and flagged two clauses in section 4.2 regarding IP assignment.",
+            "4:05 PM", Disappearing: true, ExpiresIn: "23h 10m", Urgency: "low"),
+        new("m4", "other", "Nina Torres", "NT",
+            "Can you send me the specific language they want changed? I will loop in outside counsel.",
+            "4:07 PM", Disappearing: true, ExpiresIn: "18h 45m", Urgency: "low"),
+        new("m5", "user", "You", "YO",
+            "They want 'perpetual, irrevocable' changed to 'term-limited' for the source code license. Also the non-compete radius needs to shrink from 50mi to 25mi.",
+            "4:10 PM", Disappearing: true, ExpiresIn: "4h 30m", Urgency: "medium"),
+        new("m6", "other", "Nina Torres", "NT",
+            "Noted. The non-compete change should be fine. The license terms might need a call with their CTO. Scheduling for tomorrow morning.",
+            "4:14 PM", Disappearing: true, ExpiresIn: "1h 15m", Urgency: "medium"),
+        new("m7", "user", "You", "YO",
+            "Good. Here is the temporary access code for the data room: ACQR-7741-BXKP. Expires in 30 minutes.",
+            "4:18 PM", Disappearing: true, ExpiresIn: "22m", Urgency: "high"),
+    ];
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

@@ -1,0 +1,244 @@
+@* ============================================================
+   Block: chat-voice-input
+   Title: ChatVoiceInput
+   Description: React chat interface with voice recording input for Next.js featuring mic toggle, pulsing recording indicator, duration timer, cancel and send controls using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-voice-input.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8">
+                <AvatarFallbackCn Class="text-xs">MP</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Maya Patel</span>
+                <p class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    Online
+                </p>
+            </div>
+        </div>
+
+        @* Messages — flat layout with sender grouping *@
+        <div class="flex-1 overflow-y-auto py-2">
+            @for (int i = 0; i < _messages.Count; i++)
+            {
+                var msg = _messages[i];
+                var prevMsg = i > 0 ? _messages[i - 1] : null;
+                var isFirstInGroup = prevMsg == null || prevMsg.SenderId != msg.SenderId;
+
+                @if (isFirstInGroup)
+                {
+                    <div class="flex gap-2 px-2 hover:bg-accent">
+                        <div class="flex w-10 shrink-0 justify-center pt-1">
+                            <AvatarCn Class="size-8 rounded-full">
+                                <AvatarFallbackCn Class="text-xs">@msg.SenderInitials</AvatarFallbackCn>
+                            </AvatarCn>
+                        </div>
+                        <div class="flex flex-1 flex-col">
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="font-medium">@msg.SenderName</span>
+                                <span class="text-xs text-muted-foreground">@msg.Timestamp</span>
+                            </div>
+                            <div class="text-sm">
+                                @if (msg.Type == "voice")
+                                {
+                                    @RenderVoiceContent(msg.Duration ?? "0:00")
+                                }
+                                else
+                                {
+                                    @msg.Content
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="group flex gap-2 px-2 hover:bg-accent">
+                        <div class="flex w-10 shrink-0 justify-center pt-1">
+                            <span class="invisible text-right text-[10px] text-muted-foreground group-hover:visible">
+                                @msg.Timestamp
+                            </span>
+                        </div>
+                        <div class="flex flex-1 flex-col">
+                            <div class="text-sm">
+                                @if (msg.Type == "voice")
+                                {
+                                    @RenderVoiceContent(msg.Duration ?? "0:00")
+                                }
+                                else
+                                {
+                                    @msg.Content
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Toolbar — sticky bottom, bordered rounded container *@
+        <div class="sticky bottom-0 bg-card p-2 pt-0">
+            @if (_isRecording)
+            {
+                <div class="flex items-center gap-3 rounded-md border px-3 py-2">
+                    <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon"
+                              Class="size-8 text-muted-foreground"
+                              OnClick="HandleCancelRecording">
+                        <LucideIconCn Name="x" Size="16" Class="size-4" />
+                    </ButtonCn>
+                    <div class="flex flex-1 items-center gap-2">
+                        <span class="size-2 rounded-full bg-red-500"></span>
+                        <span class="font-medium text-red-600 text-sm dark:text-red-400">
+                            Recording...
+                        </span>
+                        <span class="font-mono text-muted-foreground text-sm tabular-nums">
+                            @FormatDuration(_recordingSeconds)
+                        </span>
+                    </div>
+                    <ButtonCn type="button" Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                              Class="h-8 gap-1.5 text-xs"
+                              OnClick="HandleSendVoice">
+                        <LucideIconCn Name="check" Size="12" Class="size-3" />
+                        Send
+                    </ButtonCn>
+                </div>
+            }
+            else
+            {
+                <form @onsubmit="HandleSubmit" @onsubmit:preventDefault
+                      class="flex flex-wrap items-start gap-x-2 rounded-md border px-3 py-2">
+                    <div class="order-2 grid min-w-0 flex-1">
+                        <textarea @bind="_input" @bind:event="oninput"
+                                  placeholder="Type a message..."
+                                  class="h-fit min-h-10 resize-none border-none bg-transparent px-1 text-sm shadow-none outline-none placeholder:text-muted-foreground"
+                                  rows="1"></textarea>
+                    </div>
+                    <div class="order-3 flex h-10 items-center gap-1.5">
+                        @if (!string.IsNullOrWhiteSpace(_input))
+                        {
+                            <button type="submit"
+                                    class="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-all">
+                                <LucideIconCn Name="arrow-up" Size="14" Class="size-3.5" />
+                            </button>
+                        }
+                        else
+                        {
+                            <ButtonCn type="button" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                                      Class="size-8 text-muted-foreground"
+                                      OnClick="StartRecording">
+                                <LucideIconCn Name="mic" Size="16" Class="size-4" />
+                            </ButtonCn>
+                        }
+                    </div>
+                </form>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string SenderId, string SenderName, string SenderInitials, string Content, string Timestamp, string Type, string? Duration = null);
+
+    private static readonly int[] _waveformHeights = [3, 5, 8, 12, 6, 10, 14, 8, 11, 5, 9, 13, 7, 4, 10, 6];
+
+    private List<ChatMessage> _messages =
+    [
+        new("m1", "maya", "Maya Patel", "MP", "Hey, can you walk me through the deployment steps?", "3:10 PM", "text"),
+        new("m2", "me", "You", "YO", "Sure, it's easier to explain by voice. Give me a sec.", "3:11 PM", "text"),
+        new("m3", "me", "You", "YO", "Voice message", "3:12 PM", "voice", "0:34"),
+        new("m4", "maya", "Maya Patel", "MP", "That was super clear. So I just run the migration first and then deploy?", "3:14 PM", "text"),
+        new("m5", "me", "You", "YO", "Exactly. Migration, seed if needed, then deploy. The CI handles the rest.", "3:15 PM", "text"),
+        new("m6", "maya", "Maya Patel", "MP", "Voice message", "3:16 PM", "voice", "0:12"),
+    ];
+
+    private string _input = "";
+    private bool _isRecording = false;
+    private int _recordingSeconds = 0;
+    private System.Threading.Timer? _timer;
+
+    private RenderFragment RenderVoiceContent(string duration) => __builder =>
+    {
+        <div class="flex items-center gap-2">
+            <button type="button"
+                    class="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted">
+                <LucideIconCn Name="play" Size="12" Class="size-3" />
+            </button>
+            <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-px">
+                    @foreach (var h in _waveformHeights)
+                    {
+                        <div class="w-[2px] rounded-full bg-muted-foreground/30"
+                             style="@($"height:{h}px")"></div>
+                    }
+                </div>
+                <span class="text-[10px] text-muted-foreground">@duration</span>
+            </div>
+        </div>
+    };
+
+    private string FormatDuration(int seconds)
+    {
+        var m = seconds / 60;
+        var s = seconds % 60;
+        return $"{m}:{s:D2}";
+    }
+
+    private void StartRecording()
+    {
+        _isRecording = true;
+        _recordingSeconds = 0;
+        _timer?.Dispose();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            _recordingSeconds++;
+            InvokeAsync(StateHasChanged);
+        }, null, 1000, 1000);
+    }
+
+    private void HandleCancelRecording()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        _isRecording = false;
+        _recordingSeconds = 0;
+    }
+
+    private void HandleSendVoice()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        var dur = FormatDuration(_recordingSeconds);
+        _isRecording = false;
+        _recordingSeconds = 0;
+        _messages.Add(new ChatMessage(
+            $"m{_messages.Count + 1}",
+            "me", "You", "YO",
+            "Voice message",
+            "Now",
+            "voice",
+            dur
+        ));
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _messages.Add(new ChatMessage(
+            $"m{_messages.Count + 1}",
+            "me", "You", "YO",
+            _input,
+            "Now",
+            "text"
+        ));
+        _input = "";
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

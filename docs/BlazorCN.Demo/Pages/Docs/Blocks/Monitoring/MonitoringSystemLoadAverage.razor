@@ -1,0 +1,123 @@
+@* ============================================================
+   Block: monitoring-system-load-average
+   Title: MonitoringSystemLoadAverage
+   Description: A high-fidelity infrastructure monitoring block for system load averages (1m, 5m, 15m), tracking process queue depth and CPU pressure.
+   Source: original/blocks/monitoring/monitoring-system-load-average.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <div class="flex items-center justify-between border-b px-6 py-4 bg-zinc-500/[0.03]">
+            <div class="flex items-center gap-3">
+                <div class="flex size-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 border shadow-inner">
+                    <LucideIconCn Name="cpu" Size="20" Class="size-5 text-zinc-600 dark:text-zinc-400" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold tracking-tight">System Load Average</h3>
+                    <p class="mt-0.5 text-muted-foreground text-[11px] font-semibold opacity-70">
+                        8-Core Linux Node · kernel 6.1.0
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <div class="size-1.5 rounded-full bg-emerald-500"></div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                    Stable
+                </span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 border-b">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                var isLast = s.Label == _stats[_stats.Length - 1].Label;
+                var cellClass = isLast ? "p-6" : "p-6 md:border-r border-b md:border-b-0";
+                <div class="@cellClass">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-black text-muted-foreground uppercase tracking-widest">@s.Label</span>
+                        <LucideIconCn Name="@s.IconName" Size="16" Class="size-4 text-muted-foreground/30" />
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-3xl font-black tabular-nums tracking-tighter">@s.Value.ToString("F2")</span>
+                        <span class="text-muted-foreground text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+
+                    <div class="h-10 w-full mt-6">
+                        @{
+                            var chartData = _loadData;
+                            var count = chartData.Length;
+                            var chartW = 200;
+                            var chartH = 40;
+                            var maxVal = chartData.Max(d => s.DataKey == "v1" ? d.V1 : s.DataKey == "v5" ? d.V5 : d.V15);
+                            if (maxVal < 0.01) { maxVal = 1.0; }
+                            double PtX(int i) => count <= 1 ? 0 : (double)chartW / (count - 1) * i;
+                            double PtY(int i)
+                            {
+                                var val = s.DataKey == "v1" ? chartData[i].V1 : s.DataKey == "v5" ? chartData[i].V5 : chartData[i].V15;
+                                return chartH - val / maxVal * chartH;
+                            }
+                            var linePoints = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{PtX(i):F1},{PtY(i):F1}"));
+                            var fillPoints = $"0,{chartH} " + linePoints + $" {chartW},{chartH}";
+                            var strokeColor = s.Status == "warning" ? "#f59e0b" : "#71717a";
+                            var fillColor = s.Status == "warning" ? "#f59e0b" : "#71717a";
+                            var gradId = $"loadGrad-{s.DataKey}";
+                            var gradFill = $"url(#{gradId})";
+                        }
+                        <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="@gradId" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stop-color="@fillColor" stop-opacity="0.08" />
+                                    <stop offset="95%" stop-color="@fillColor" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="@fillPoints" fill="@gradFill" />
+                            <polyline points="@linePoints" fill="none" stroke="@strokeColor" stroke-width="2" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="px-6 py-4 bg-muted/20 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2">
+                    <span class="opacity-50">Context Switches:</span>
+                    <span class="text-foreground">12.4k/s</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="opacity-50">Interrupts:</span>
+                    <span class="text-foreground">842/s</span>
+                </div>
+            </div>
+            <button type="button" class="text-primary hover:tracking-widest transition-all">
+                Kernel Stats →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record LoadPoint(double V1, double V5, double V15);
+    private record StatItem(string Label, double Value, string Unit, string IconName, string Status, string DataKey);
+
+    private static readonly LoadPoint[] _loadData =
+    [
+        new(1.2, 1.1, 0.9),
+        new(1.5, 1.2, 1.0),
+        new(2.1, 1.5, 1.1),
+        new(4.8, 2.4, 1.4),
+        new(4.2, 3.1, 1.8),
+        new(3.5, 3.2, 2.1),
+        new(2.8, 3.0, 2.3),
+        new(2.2, 2.6, 2.4),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("1 min Load", 2.24, "avg", "zap", "healthy", "v1"),
+        new("5 min Load", 2.68, "avg", "activity", "warning", "v5"),
+        new("15 min Load", 2.42, "avg", "layers", "healthy", "v15"),
+    ];
+}

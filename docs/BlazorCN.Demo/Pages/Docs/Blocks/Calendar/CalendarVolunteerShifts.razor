@@ -1,0 +1,246 @@
+@* ============================================================
+   Block: calendar-volunteer-shifts
+   Title: CalendarVolunteerShifts
+   Description: A volunteer shift scheduler calendar block for Next.js with shift signup, role assignment, coverage tracking, and availability management using shadcn/ui and Tailwind CSS
+   Source: original/blocks/calendar/calendar-volunteer-shifts.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="hand-heart" Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Volunteer Shifts</span>
+                    <p class="text-muted-foreground text-xs">
+                        @TotalSigned/@TotalNeeded spots filled &middot; @UrgentCount need help
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            @for (int i = 0; i < _shifts.Count; i++)
+            {
+                var shift = _shifts[i];
+                var isExpanded = _expanded == shift.Id;
+                var config = _statusConfig[shift.Status];
+                var hasSlots = shift.Signed < shift.Needed;
+                var isLast = i == _shifts.Count - 1;
+                var barColor = shift.Signed >= shift.Needed ? "bg-emerald-500" : "bg-amber-500";
+                var barWidthPct = Math.Min((double)shift.Signed / shift.Needed * 100, 100);
+                var shiftId = shift.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => _expanded = (_expanded == shiftId ? "" : shiftId))"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@($"size-2 shrink-0 rounded-full {config.Dot}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@shift.Event</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">@config.Label</BadgeCn>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                <span>@shift.Date</span>
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                    @shift.Time
+                                </span>
+                            </div>
+                        </div>
+                        <span class="flex items-center gap-1 shrink-0 text-muted-foreground text-xs tabular-nums">
+                            <LucideIconCn Name="users" Size="12" Class="size-3" />
+                            @shift.Signed/@shift.Needed
+                        </span>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@($"size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200{(isExpanded ? " rotate-90" : "")}")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t px-4 pb-3 pt-2">
+                            <p class="mb-2 text-muted-foreground text-sm leading-relaxed">
+                                @shift.Description
+                            </p>
+                            <span class="mb-2 flex items-center gap-1.5 text-muted-foreground text-xs">
+                                <LucideIconCn Name="map-pin" Size="12" Class="size-3" />
+                                @shift.Location
+                            </span>
+
+                            @* Coverage bar *@
+                            <div class="my-2">
+                                <div class="h-1.5 rounded-full bg-muted">
+                                    <div class="@($"h-1.5 rounded-full transition-all {barColor}")" style="@($"width:{barWidthPct:F0}%")"></div>
+                                </div>
+                            </div>
+
+                            @* Volunteer list *@
+                            <div class="mb-2 space-y-1">
+                                @foreach (var vol in shift.Volunteers)
+                                {
+                                    var rConfig = _roleConfig[vol.Role];
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <span class="@($"size-1.5 rounded-full {rConfig.Dot}")"></span>
+                                        <span class="font-medium">@vol.Name</span>
+                                        <span class="text-muted-foreground">@rConfig.Label</span>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (hasSlots)
+                            {
+                                var spotsLeft = shift.Needed - shift.Signed;
+                                <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs" OnClick="@(() => SignUp(shiftId))">
+                                    Sign Up (@spotsLeft spots left)
+                                </ButtonCn>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="flex items-center gap-4 border-t bg-muted/20 px-4 py-2">
+            @foreach (var kvp in _statusConfig)
+            {
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@($"size-1.5 rounded-full {kvp.Value.Dot}")"></span>
+                    @kvp.Value.Label
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatusEntry(string Dot, string Label);
+    private record RoleEntry(string Dot, string Label);
+    private record Volunteer(string Name, string Role);
+
+    private sealed class VolunteerShift
+    {
+        public string Id { get; init; } = "";
+        public string Event { get; init; } = "";
+        public string Date { get; init; } = "";
+        public string Time { get; init; } = "";
+        public string Location { get; init; } = "";
+        public string Status { get; set; } = "";
+        public int Needed { get; init; }
+        public int Signed { get; set; }
+        public List<Volunteer> Volunteers { get; init; } = [];
+        public string Description { get; init; } = "";
+    }
+
+    private static readonly Dictionary<string, StatusEntry> _statusConfig = new()
+    {
+        ["full"]              = new("bg-emerald-500", "Full"),
+        ["covered"]           = new("bg-blue-500",    "Covered"),
+        ["needs-volunteers"]  = new("bg-amber-500",   "Needs Help"),
+        ["urgent"]            = new("bg-red-500",     "Urgent"),
+    };
+
+    private static readonly Dictionary<string, RoleEntry> _roleConfig = new()
+    {
+        ["greeter"]     = new("bg-blue-500",   "Greeter"),
+        ["kitchen"]     = new("bg-amber-500",  "Kitchen"),
+        ["setup"]       = new("bg-violet-500", "Setup/Cleanup"),
+        ["driver"]      = new("bg-emerald-500","Driver"),
+        ["coordinator"] = new("bg-red-500",    "Coordinator"),
+    };
+
+    private string _expanded = "1";
+
+    private List<VolunteerShift> _shifts =
+    [
+        new()
+        {
+            Id = "1", Event = "Community Food Bank", Date = "Saturday, Mar 28",
+            Time = "8:00 AM - 12:00 PM", Location = "Hope Community Center",
+            Status = "needs-volunteers", Needed = 8, Signed = 5,
+            Volunteers =
+            [
+                new("Sarah Chen",   "coordinator"),
+                new("Marcus Kim",   "kitchen"),
+                new("Elena Petrov", "kitchen"),
+                new("James Wright", "greeter"),
+                new("Olga Santos",  "setup"),
+            ],
+            Description = "Weekly food bank distribution. Sort donations, pack bags, and serve community members.",
+        },
+        new()
+        {
+            Id = "2", Event = "Park Cleanup Drive", Date = "Saturday, Mar 28",
+            Time = "1:00 PM - 4:00 PM", Location = "Riverside Park",
+            Status = "urgent", Needed = 12, Signed = 4,
+            Volunteers =
+            [
+                new("Alex Rivera", "coordinator"),
+                new("Lisa Wang",   "setup"),
+                new("Chris Park",  "setup"),
+                new("Nina Ortiz",  "driver"),
+            ],
+            Description = "Spring cleanup event. Trash pickup, trail maintenance, and garden bed prep. Gloves and bags provided.",
+        },
+        new()
+        {
+            Id = "3", Event = "Youth Tutoring Session", Date = "Sunday, Mar 29",
+            Time = "10:00 AM - 1:00 PM", Location = "Public Library, Room B",
+            Status = "full", Needed = 6, Signed = 6,
+            Volunteers =
+            [
+                new("Sarah Chen",   "coordinator"),
+                new("David Kim",    "greeter"),
+                new("Maria Torres", "greeter"),
+                new("James Wright", "setup"),
+                new("Elena Petrov", "greeter"),
+                new("Robert Kim",   "setup"),
+            ],
+            Description = "Math and reading tutoring for grades 3-6. One-on-one or small group sessions.",
+        },
+        new()
+        {
+            Id = "4", Event = "Meal Delivery Route", Date = "Monday, Mar 30",
+            Time = "11:00 AM - 2:00 PM", Location = "Central Kitchen → Route A",
+            Status = "needs-volunteers", Needed = 4, Signed = 2,
+            Volunteers =
+            [
+                new("Nina Ortiz",  "driver"),
+                new("Chris Park",  "driver"),
+            ],
+            Description = "Deliver prepared meals to homebound seniors. 15 stops on Route A. Use personal vehicle.",
+        },
+        new()
+        {
+            Id = "5", Event = "Fundraiser Gala Setup", Date = "Friday, Apr 3",
+            Time = "2:00 PM - 6:00 PM", Location = "Grand Ballroom, City Hotel",
+            Status = "covered", Needed = 10, Signed = 10,
+            Volunteers =
+            [
+                new("Sarah Chen",   "coordinator"),
+                new("Marcus Kim",   "setup"),
+                new("Alex Rivera",  "setup"),
+                new("Lisa Wang",    "greeter"),
+                new("Olga Santos",  "setup"),
+                new("David Kim",    "setup"),
+                new("Maria Torres", "greeter"),
+                new("James Wright", "greeter"),
+                new("Robert Kim",   "setup"),
+                new("Nina Ortiz",   "driver"),
+            ],
+            Description = "Set up tables, decorations, and AV equipment for annual fundraiser gala. Formal attire required.",
+        },
+    ];
+
+    private int TotalNeeded => _shifts.Sum(s => s.Needed);
+    private int TotalSigned => _shifts.Sum(s => s.Signed);
+    private int UrgentCount => _shifts.Count(s => s.Status == "urgent" || s.Status == "needs-volunteers");
+
+    private void SignUp(string shiftId)
+    {
+        var shift = _shifts.FirstOrDefault(s => s.Id == shiftId);
+        if (shift is null) return;
+        shift.Signed += 1;
+        shift.Volunteers.Add(new Volunteer("You", "setup"));
+        if (shift.Signed >= shift.Needed)
+            shift.Status = "full";
+    }
+}

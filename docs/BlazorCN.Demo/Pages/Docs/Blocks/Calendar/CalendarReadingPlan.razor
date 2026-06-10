@@ -1,0 +1,236 @@
+@* ============================================================
+   Block: calendar-reading-plan
+   Title: CalendarReadingPlan
+   Description: A reading plan and book tracker calendar block for Next.js with reading goals, page progress, daily reading streaks, and book list management using shadcn/ui and Tailwind CSS
+   Source: original/blocks/calendar/calendar-reading-plan.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideBookOpenCn Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Reading Plan</span>
+                    <p class="text-muted-foreground text-xs">
+                        @(_books.Count(b => b.Status == "reading")) active ·
+                        @(_books.Count(b => b.Status == "upcoming")) queued
+                    </p>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="font-medium text-sm tabular-nums">@_totalPagesRead</span>
+                <span class="text-muted-foreground text-xs"> / @_weeklyTarget pages</span>
+                <p class="text-muted-foreground text-xs">this week</p>
+            </div>
+        </div>
+
+        @* Weekly reading chart *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2 flex items-center justify-between">
+                <span class="text-muted-foreground text-xs">Daily pages</span>
+                <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                    <LucideTargetCn Class="size-3" />
+                    @(_streak)-day streak
+                </span>
+            </div>
+            <div class="flex items-end gap-2">
+                @foreach (var day in _weekLog)
+                {
+                    var height = day.Pages > 0 ? Math.Max((double)day.Pages / _maxPages * 40, 4) : 4;
+                    var metTarget = day.Pages >= day.Target;
+                    var barClass = metTarget
+                        ? "bg-emerald-500/60"
+                        : day.Pages > 0
+                            ? "bg-blue-500/40"
+                            : "bg-muted";
+                    <div class="flex flex-1 flex-col items-center gap-1">
+                        <div class="@($"w-full rounded-sm transition-all {barClass}")"
+                             style="@($"height:{height:F0}px")" />
+                        <span class="text-muted-foreground text-[10px]">@day.Day</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Book list *@
+        <div>
+            @for (int bi = 0; bi < _books.Length; bi++)
+            {
+                var book = _books[bi];
+                var isExpanded = _expanded == book.Id;
+                var config = _statusConfig[book.Status];
+                var pct = book.TotalPages > 0
+                    ? (int)Math.Round((double)book.CurrentPage / book.TotalPages * 100)
+                    : 0;
+                var isLast = bi == _books.Length - 1;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => _expanded = (_expanded == book.Id ? "" : book.Id))"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        @if (book.Status == "completed")
+                        {
+                            <LucideCheckCircle2Cn Class="size-4 shrink-0 text-emerald-500" />
+                        }
+                        else
+                        {
+                            <span class="@($"size-2 shrink-0 rounded-full {config.Dot}")" />
+                        }
+                        <div class="min-w-0 flex-1">
+                            <span class="truncate font-medium text-sm">@book.Title</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">@book.Author</p>
+                        </div>
+                        @if (book.Status == "reading")
+                        {
+                            <span class="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">@pct%</span>
+                        }
+                        <LucideChevronRightCn Class="@($"size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200 {(isExpanded ? "rotate-90" : "")}")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t px-4 pb-3 pt-2">
+                            @if (book.Status == "reading")
+                            {
+                                <div class="mb-2">
+                                    <div class="mb-1 flex justify-between text-xs">
+                                        <span class="text-muted-foreground">Progress</span>
+                                        <span class="tabular-nums">@book.CurrentPage / @book.TotalPages pages</span>
+                                    </div>
+                                    <div class="h-1.5 rounded-full bg-muted">
+                                        <div class="h-1.5 rounded-full bg-blue-500 transition-all"
+                                             style="@($"width:{pct}%")" />
+                                    </div>
+                                </div>
+                            }
+                            <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">@book.Genre</BadgeCn>
+                                <span class="tabular-nums">@book.DailyTarget pages/day target</span>
+                                @if (!string.IsNullOrEmpty(book.StartDate))
+                                {
+                                    <span>Started @book.StartDate</span>
+                                }
+                            </div>
+                            <p class="mt-2 text-muted-foreground text-xs italic">@book.Notes</p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Legend *@
+        <div class="flex items-center gap-4 border-t bg-muted/20 px-4 py-2">
+            @foreach (var status in _statusLegend)
+            {
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@($"size-1.5 rounded-full {status.Dot}")" />
+                    @status.Label
+                </span>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string _expanded = "1";
+
+    private class StatusInfo
+    {
+        public string Dot { get; init; } = "";
+        public string Label { get; init; } = "";
+    }
+
+    private static readonly Dictionary<string, StatusInfo> _statusConfig = new()
+    {
+        ["reading"]   = new() { Dot = "bg-blue-500",    Label = "Reading"   },
+        ["completed"] = new() { Dot = "bg-emerald-500", Label = "Completed" },
+        ["upcoming"]  = new() { Dot = "bg-zinc-400",    Label = "Up Next"   },
+    };
+
+    private static readonly StatusInfo[] _statusLegend =
+    [
+        new() { Dot = "bg-blue-500",    Label = "Reading"   },
+        new() { Dot = "bg-emerald-500", Label = "Completed" },
+        new() { Dot = "bg-zinc-400",    Label = "Up Next"   },
+    ];
+
+    private class WeekDay
+    {
+        public string Day { get; init; } = "";
+        public int Pages { get; init; }
+        public int Target { get; init; }
+    }
+
+    private static readonly WeekDay[] _weekLog =
+    [
+        new() { Day = "Mon", Pages = 32, Target = 30 },
+        new() { Day = "Tue", Pages = 45, Target = 30 },
+        new() { Day = "Wed", Pages = 28, Target = 30 },
+        new() { Day = "Thu", Pages = 35, Target = 30 },
+        new() { Day = "Fri", Pages = 50, Target = 30 },
+        new() { Day = "Sat", Pages = 62, Target = 30 },
+        new() { Day = "Sun", Pages = 0,  Target = 30 },
+    ];
+
+    private class Book
+    {
+        public string Id { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string Author { get; init; } = "";
+        public int TotalPages { get; init; }
+        public int CurrentPage { get; init; }
+        public string Status { get; init; } = "";
+        public int DailyTarget { get; init; }
+        public string Genre { get; init; } = "";
+        public string StartDate { get; init; } = "";
+        public string Notes { get; init; } = "";
+    }
+
+    private static readonly Book[] _books =
+    [
+        new()
+        {
+            Id = "1", Title = "Designing Data-Intensive Applications", Author = "Martin Kleppmann",
+            TotalPages = 616, CurrentPage = 342, Status = "reading", DailyTarget = 20,
+            Genre = "Technical", StartDate = "Feb 10, 2026",
+            Notes = "Currently on Chapter 9: Consistency and Consensus. Dense but excellent.",
+        },
+        new()
+        {
+            Id = "2", Title = "The Pragmatic Programmer", Author = "David Thomas & Andrew Hunt",
+            TotalPages = 352, CurrentPage = 198, Status = "reading", DailyTarget = 15,
+            Genre = "Technical", StartDate = "Mar 1, 2026",
+            Notes = "Re-reading the 20th anniversary edition. Taking notes on each tip.",
+        },
+        new()
+        {
+            Id = "3", Title = "Sapiens: A Brief History of Humankind", Author = "Yuval Noah Harari",
+            TotalPages = 464, CurrentPage = 464, Status = "completed", DailyTarget = 25,
+            Genre = "Non-Fiction", StartDate = "Jan 15, 2026",
+            Notes = "Finished Feb 8. Fascinating take on cognitive and agricultural revolutions.",
+        },
+        new()
+        {
+            Id = "4", Title = "Staff Engineer", Author = "Will Larson",
+            TotalPages = 310, CurrentPage = 0, Status = "upcoming", DailyTarget = 20,
+            Genre = "Technical", StartDate = "",
+            Notes = "Recommended by manager. Focus on technical leadership patterns.",
+        },
+        new()
+        {
+            Id = "5", Title = "Project Hail Mary", Author = "Andy Weir",
+            TotalPages = 496, CurrentPage = 0, Status = "upcoming", DailyTarget = 30,
+            Genre = "Fiction", StartDate = "",
+            Notes = "Light read for evening wind-down. Heard great things.",
+        },
+    ];
+
+    private int _totalPagesRead => _weekLog.Sum(d => d.Pages);
+    private int _weeklyTarget => _weekLog.Sum(d => d.Target);
+    private double _maxPages => Math.Max(_weekLog.Max(d => d.Pages), 1);
+    private int _streak => _weekLog.Count(d => d.Pages >= d.Target);
+}

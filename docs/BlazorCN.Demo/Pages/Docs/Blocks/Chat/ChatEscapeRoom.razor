@@ -1,0 +1,316 @@
+@* ============================================================
+   Block: chat-escape-room
+   Title: ChatEscapeRoom
+   Description: Interactive escape room puzzle interface built with React, Next.js, shadcn/ui, and Tailwind CSS. Features clue revelation, hint system, countdown timer, and success tracking.
+   Source: original/blocks/chat/chat-escape-room.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="lock" Size="16" Class="size-4 text-muted-foreground" />
+                    <h2 class="text-sm font-medium">Mystery Library Escape</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <LucideIconCn Name="key" Size="14" Class="size-3.5 text-muted-foreground" />
+                        <span class="text-xs text-muted-foreground">@_cluesFound/3 clues</span>
+                    </div>
+                    <div class="@Cn.Merge("flex items-center gap-1.5", _timeRemaining < 300 ? "text-red-500" : "")">
+                        <LucideIconCn Name="clock" Size="14" Class="size-3.5" />
+                        <span class="font-mono text-xs">@FormatTime(_timeRemaining)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Game Status *@
+        @if (_gameWon || _gameLost)
+        {
+            <div class="@Cn.Merge("border-b px-4 py-3", _gameWon ? "bg-emerald-500/10" : "bg-red-500/10")">
+                <div class="flex items-center gap-2">
+                    @if (_gameWon)
+                    {
+                        <LucideIconCn Name="check-circle-2" Size="16" Class="size-4 text-emerald-500" />
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="x-circle" Size="16" Class="size-4 text-red-500" />
+                    }
+                    <span class="text-sm font-medium">@(_gameWon ? "Puzzle Solved!" : "Game Over")</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto text-xs">@_hintsUsed hints used</BadgeCn>
+                </div>
+            </div>
+        }
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="space-y-4">
+                @foreach (var message in _messages)
+                {
+                    @if (message.Type == "user")
+                    {
+                        <div class="flex justify-end">
+                            <div class="flex max-w-[85%] items-start gap-2">
+                                <div class="rounded-lg bg-primary px-3 py-2 text-primary-foreground">
+                                    <p class="text-sm">@message.Content</p>
+                                    <span class="mt-1 block text-xs opacity-70">@message.Timestamp</span>
+                                </div>
+                                <div class="size-8 shrink-0 rounded-full overflow-hidden">
+                                    <div class="flex size-full items-center justify-center bg-primary text-xs text-primary-foreground">
+                                        U
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex items-start gap-2">
+                            <div class="size-8 shrink-0 rounded-full overflow-hidden">
+                                <div class="flex size-full items-center justify-center bg-muted text-xs">
+                                    @if (message.Type == "clue")
+                                    {
+                                        <LucideIconCn Name="key" Size="16" Class="size-4" />
+                                    }
+                                    else if (message.Type == "hint")
+                                    {
+                                        <LucideIconCn Name="lightbulb" Size="16" Class="size-4" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="lock" Size="16" Class="size-4" />
+                                    }
+                                </div>
+                            </div>
+                            <div class="max-w-[85%]">
+                                <div class="@Cn.Merge("rounded-lg px-3 py-2", message.Type == "clue" ? "bg-amber-500/10" : message.Type == "hint" ? "bg-blue-500/10" : "bg-muted")">
+                                    <p class="text-sm">@message.Content</p>
+                                    <span class="mt-1 block text-xs text-muted-foreground">@message.Timestamp</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            @if (_gameStarted && !_gameWon && !_gameLost)
+            {
+                <div class="mb-2">
+                    <ButtonCn Variant="ButtonVariant.Outline"
+                              Size="ButtonSize.Sm"
+                              Class="gap-2"
+                              Disabled="@(_hintCooldown > 0 || _hintsUsed >= 3)"
+                              OnClick="RequestHint">
+                        <LucideIconCn Name="lightbulb" Size="14" Class="size-3.5" />
+                        @if (_hintCooldown > 0)
+                        {
+                            @($"Hint available in {_hintCooldown}s")
+                        }
+                        else if (_hintsUsed >= 3)
+                        {
+                            @("No hints left")
+                        }
+                        else
+                        {
+                            @("Request Hint")
+                        }
+                    </ButtonCn>
+                </div>
+            }
+            <form class="flex gap-2" @onsubmit="HandleSubmit" @onsubmit:preventDefault="true">
+                <InputCn @bind-Value="_input"
+                         Placeholder="@(!_gameStarted ? "Type 'start' to begin..." : "Type your command...")"
+                         Disabled="@(_gameWon || _gameLost)"
+                         Class="flex-1" />
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Icon"
+                          Disabled="@(string.IsNullOrWhiteSpace(_input) || _gameWon || _gameLost)">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EscapeMessage(string Id, string Type, string Content, string Timestamp);
+
+    private static readonly string[] _clues =
+    [
+        "The ancient tome on the third shelf whispers secrets of the past.",
+        "Behind the painting of the raven lies a hidden compartment.",
+        "The clock's hands point to more than just time—they point to truth.",
+    ];
+
+    private static readonly string[] _hints =
+    [
+        "Look at the objects mentioned in the description. Try examining them.",
+        "The clock is more important than it seems. What time is special?",
+        "Midnight—the witching hour. Try that as your answer.",
+    ];
+
+    private List<EscapeMessage> _messages = new()
+    {
+        new("1", "system",
+            "Welcome to the Mystery Library. You have 30 minutes to find the hidden key and escape. Type 'start' to begin.",
+            "10:00 AM"),
+    };
+
+    private string _input = "";
+    private bool _gameStarted = false;
+    private int _timeRemaining = 1800;
+    private int _hintsUsed = 0;
+    private int _cluesFound = 0;
+    private bool _gameWon = false;
+    private bool _gameLost = false;
+    private int _hintCooldown = 0;
+
+    private System.Threading.Timer? _gameTimer;
+    private System.Threading.Timer? _cooldownTimer;
+
+    private string FormatTime(int seconds)
+    {
+        var mins = seconds / 60;
+        var secs = seconds % 60;
+        return $"{mins}:{secs:D2}";
+    }
+
+    private void AddMessage(string type, string content)
+    {
+        var now = DateTime.Now;
+        var timestamp = now.ToString("hh:mm tt");
+        _messages = new List<EscapeMessage>(_messages)
+        {
+            new(now.Ticks.ToString(), type, content, timestamp)
+        };
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+
+        var userInput = _input.Trim();
+        AddMessage("user", userInput);
+        var lower = userInput.ToLowerInvariant();
+
+        if (!_gameStarted && lower == "start")
+        {
+            _gameStarted = true;
+            StartGameTimer();
+            AddMessage("system", "The game begins. Search the room carefully for clues. Type 'examine [object]' to investigate.");
+        }
+        else if (_gameStarted && !_gameWon && !_gameLost)
+        {
+            HandleGameInput(lower);
+        }
+
+        _input = "";
+    }
+
+    private void HandleGameInput(string userInput)
+    {
+        if (userInput.Contains("examine") && userInput.Contains("shelf"))
+        {
+            if (_cluesFound < 1)
+            {
+                _cluesFound = 1;
+                AddMessage("clue", _clues[0]);
+            }
+            else
+            {
+                AddMessage("system", "You've already examined this.");
+            }
+        }
+        else if (userInput.Contains("examine") && userInput.Contains("painting"))
+        {
+            if (_cluesFound < 2)
+            {
+                _cluesFound = 2;
+                AddMessage("clue", _clues[1]);
+            }
+            else
+            {
+                AddMessage("system", "You've already examined this.");
+            }
+        }
+        else if (userInput.Contains("examine") && userInput.Contains("clock"))
+        {
+            if (_cluesFound < 3)
+            {
+                _cluesFound = 3;
+                AddMessage("clue", _clues[2]);
+            }
+            else
+            {
+                AddMessage("system", "You've already examined this.");
+            }
+        }
+        else if (userInput.Contains("midnight") || userInput.Contains("12") || userInput == "12:00")
+        {
+            _gameWon = true;
+            _gameTimer?.Dispose();
+            AddMessage("system", "Correct! The clock chimes midnight and reveals the hidden key. You've escaped!");
+        }
+        else
+        {
+            AddMessage("system", "Nothing happens. Keep searching.");
+        }
+    }
+
+    private void StartGameTimer()
+    {
+        _gameTimer = new System.Threading.Timer(_ =>
+        {
+            if (!_gameStarted || _gameWon || _gameLost || _timeRemaining <= 0) return;
+            _timeRemaining--;
+            if (_timeRemaining <= 0)
+            {
+                _gameLost = true;
+                _gameTimer?.Dispose();
+                AddMessage("system", "Time's up! The door remains locked. Better luck next time.");
+            }
+            else
+            {
+                InvokeAsync(StateHasChanged);
+            }
+        }, null, 1000, 1000);
+    }
+
+    private void RequestHint()
+    {
+        if (_hintCooldown > 0 || _hintsUsed >= _hints.Length) return;
+
+        AddMessage("hint", _hints[_hintsUsed]);
+        _hintsUsed++;
+        _hintCooldown = 30;
+
+        _cooldownTimer?.Dispose();
+        _cooldownTimer = new System.Threading.Timer(_ =>
+        {
+            if (_hintCooldown > 0)
+            {
+                _hintCooldown--;
+                InvokeAsync(StateHasChanged);
+            }
+            if (_hintCooldown <= 0)
+            {
+                _cooldownTimer?.Dispose();
+            }
+        }, null, 1000, 1000);
+    }
+
+    public void Dispose()
+    {
+        _gameTimer?.Dispose();
+        _cooldownTimer?.Dispose();
+    }
+}

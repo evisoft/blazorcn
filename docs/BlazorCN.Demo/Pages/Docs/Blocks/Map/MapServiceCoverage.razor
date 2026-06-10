@@ -1,0 +1,347 @@
+@* ============================================================
+   Block: map-service-coverage
+   Title: MapServiceCoverage
+   Description: Interactive service coverage area map with coverage zone circles, service tier colors, gap indicators, and coverage detail panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-service-coverage.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+  <div class="overflow-hidden rounded-lg border bg-card">
+
+    @* Header *@
+    <div class="flex items-center justify-between border-b px-4 py-3">
+      <div class="flex items-center gap-2">
+        <LucideIconCn Name="wifi" Size="16" Class="size-4 text-muted-foreground" />
+        <span class="text-sm font-medium">Service coverage</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <LucideIconCn Name="users" Size="12" Class="size-3" />
+          @(((_totalSubscribers / 1000.0)).ToString("0"))k subscribers
+        </span>
+        <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <LucideIconCn Name="alert-circle" Size="12" Class="size-3" />
+          @_gaps.Length gaps
+        </span>
+      </div>
+    </div>
+
+    @* Map + sidebar *@
+    <div class="flex">
+
+      @* Sidebar *@
+      <div class="w-64 shrink-0 border-r">
+        <div class="border-b px-3 py-2">
+          <span class="text-xs font-medium text-muted-foreground">Coverage zones</span>
+        </div>
+        <div class="divide-y">
+          @foreach (var zone in _zones)
+          {
+            var zoneItem = zone;
+            <div>
+              <button
+                type="button"
+                @onclick="@(() => ToggleZone(zoneItem.Id))"
+                class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedZone == zoneItem.Id ? "bg-muted/50" : "")">
+                <span class="@Cn.Merge("size-2 shrink-0 rounded-full", TierDot(zoneItem.Tier))" />
+                <div class="min-w-0 flex-1">
+                  <span class="text-sm font-medium">@zoneItem.Name</span>
+                  <div class="mt-0.5 flex items-center gap-1.5">
+                    <span class="text-[10px] text-muted-foreground">
+                      @((zoneItem.Subscribers / 1000.0).ToString("0.0"))k subs
+                    </span>
+                    <span class="text-[10px] text-muted-foreground">·</span>
+                    <span class="text-[10px] text-muted-foreground">
+                      @zoneItem.Towers towers
+                    </span>
+                  </div>
+                </div>
+                <LucideIconCn Name="chevron-right" Size="16"
+                  Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", _expandedZone == zoneItem.Id ? "rotate-90" : "")" />
+              </button>
+              @if (_expandedZone == zoneItem.Id)
+              {
+                <div class="bg-muted/30 px-3 py-2.5 pl-8">
+                  <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-muted-foreground">Tier</span>
+                      <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                        @TierLabel(zoneItem.Tier)
+                      </BadgeCn>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-muted-foreground">Signal</span>
+                      <span class="font-mono text-xs font-medium">@zoneItem.SignalStrength</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-muted-foreground">Utilization</span>
+                      <div class="flex items-center gap-1.5">
+                        <div class="h-1 w-12 rounded-full bg-muted">
+                          <div
+                            class="@Cn.Merge("h-1 rounded-full", zoneItem.Utilization > 80 ? "bg-red-500" : zoneItem.Utilization > 60 ? "bg-amber-500" : "bg-emerald-500")"
+                            style="@($"width:{zoneItem.Utilization}%")" />
+                        </div>
+                        <span class="tabular-nums font-medium">@zoneItem.Utilization%</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-muted-foreground">Capacity</span>
+                      <span class="tabular-nums font-medium">@zoneItem.Capacity Mbps</span>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        @* Gaps section *@
+        <div class="border-t px-3 py-2">
+          <span class="text-xs font-medium text-muted-foreground">Coverage gaps</span>
+        </div>
+        <div class="divide-y">
+          @foreach (var gap in _gaps)
+          {
+            var gapItem = gap;
+            <button
+              type="button"
+              @onclick="@(() => HandleGapClick(gapItem))"
+              class="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+              <LucideIconCn Name="alert-circle" Size="14" Class="size-3.5 shrink-0 text-red-500" />
+              <div class="min-w-0 flex-1">
+                <span class="text-xs font-medium">@gapItem.Name</span>
+                <p class="mt-0.5 text-[10px] text-muted-foreground">
+                  @gapItem.AffectedUsers.ToString("N0") affected users
+                </p>
+              </div>
+            </button>
+          }
+        </div>
+      </div>
+
+      @* Map placeholder *@
+      <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+        @* SVG map visualization *@
+        <svg class="h-full w-full" viewBox="0 0 600 500" xmlns="http://www.w3.org/2000/svg">
+          @* Background grid *@
+          <defs>
+            <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+              <path d="M 30 0 L 0 0 0 30" fill="none" stroke="currentColor" stroke-width="0.3" opacity="0.2" />
+            </pattern>
+          </defs>
+          <rect width="600" height="500" fill="url(#grid)" />
+
+          @* Coverage zone circles *@
+          @foreach (var zone in _zones)
+          {
+            var cx = LngToX(zone.Center[0]);
+            var cy = LatToY(zone.Center[1]);
+            var r = zone.RadiusKm * 38.0;
+            var color = TierColor(zone.Tier);
+            <circle cx="@cx" cy="@cy" r="@r" fill="@color" fill-opacity="0.15" stroke="@color" stroke-width="2" stroke-opacity="0.5" />
+          }
+
+          @* Zone center markers *@
+          @foreach (var zone in _zones)
+          {
+            var zoneId = zone.Id;
+            var cx = LngToX(zone.Center[0]);
+            var cy = LatToY(zone.Center[1]);
+            var color = TierColor(zone.Tier);
+            <g @onclick="@(() => SelectZone(zoneId))" style="cursor:pointer">
+              <circle cx="@cx" cy="@cy" r="10" fill="@color" stroke="white" stroke-width="2" />
+              <circle cx="@cx" cy="@cy" r="4" fill="white" opacity="0.9" />
+            </g>
+          }
+
+          @* Gap markers *@
+          @foreach (var gapItem in _gaps)
+          {
+            var gx = LngToX(gapItem.Longitude);
+            var gy = LatToY(gapItem.Latitude);
+            var thisGap = gapItem;
+            <g @onclick="@(() => HandleGapClick(thisGap))" style="cursor:pointer">
+              <circle cx="@gx" cy="@gy" r="10" fill="#ef4444" stroke="white" stroke-width="2" />
+              <line x1="@gx" y1="@((gy - 5).ToString())" x2="@gx" y2="@((gy + 1).ToString())" stroke="white" stroke-width="2" stroke-linecap="round" />
+              <circle cx="@gx" cy="@((gy + 4).ToString())" r="1" fill="white" />
+            </g>
+          }
+
+          @* Selected zone highlight *@
+          @if (_selectedZone != null)
+          {
+            var sel = System.Array.Find(_zones, z => z.Id == _selectedZone);
+            if (sel != null)
+            {
+              var cx = LngToX(sel.Center[0]);
+              var cy = LatToY(sel.Center[1]);
+              var r = sel.RadiusKm * 38.0 + 6;
+              var color = TierColor(sel.Tier);
+              <circle cx="@cx" cy="@cy" r="@r" fill="none" stroke="@color" stroke-width="2" stroke-dasharray="6 3" stroke-opacity="0.8" />
+            }
+          }
+        </svg>
+
+        @* Gap popup overlay *@
+        @if (_popupGap != null)
+        {
+          var px = LngToX(_popupGap.Longitude);
+          var py = LatToY(_popupGap.Latitude);
+          var leftPct = (px / 600.0 * 100.0).ToString("0.0");
+          var topPct = (py / 500.0 * 100.0).ToString("0.0");
+          <div class="absolute z-10 w-52 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+               style="@($"left:{leftPct}%;top:{topPct}%;transform:translate(-50%,-110%)")">
+            <div class="mb-2 flex items-center gap-2">
+              <LucideIconCn Name="alert-circle" Size="14" Class="size-3.5 text-red-500" />
+              <p class="text-sm font-medium">@_popupGap.Name</p>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-muted-foreground">Affected users</span>
+                <span class="tabular-nums font-medium">@_popupGap.AffectedUsers.ToString("N0")</span>
+              </div>
+            </div>
+            <div class="mt-2 rounded-md bg-muted/50 p-2">
+              <p class="text-xs font-medium text-muted-foreground">Recommendation</p>
+              <p class="mt-0.5 text-xs">@_popupGap.Recommendation</p>
+            </div>
+            <button type="button" @onclick="@(() => _popupGap = null)"
+                    class="absolute right-2 top-2 text-muted-foreground hover:text-foreground">
+              <LucideIconCn Name="x" Size="12" Class="size-3" />
+            </button>
+          </div>
+        }
+
+        @* Map attribution *@
+        <div class="absolute bottom-2 right-2 flex gap-1">
+          <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm hover:bg-muted">
+            <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+          </button>
+          <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm hover:bg-muted">
+            <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    @* Footer *@
+    <div class="flex items-center gap-4 border-t px-4 py-2.5">
+      <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span class="size-1.5 rounded-full bg-violet-500" />
+        Premium (@(_zones.Count(z => z.Tier == "premium")))
+      </span>
+      <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span class="size-1.5 rounded-full bg-blue-500" />
+        Standard (@(_zones.Count(z => z.Tier == "standard")))
+      </span>
+      <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span class="size-1.5 rounded-full bg-emerald-500" />
+        Basic (@(_zones.Count(z => z.Tier == "basic")))
+      </span>
+      <span class="ml-auto text-xs text-muted-foreground">
+        @(_zones.Sum(z => z.Towers)) towers across @_zones.Length zones
+      </span>
+    </div>
+
+  </div>
+</section>
+
+@code {
+  private string? _selectedZone = "cz1";
+  private string? _expandedZone = null;
+  private CoverageGap? _popupGap = null;
+
+  private record CoverageZone(
+    string Id,
+    string Name,
+    string Tier,
+    double[] Center,
+    double RadiusKm,
+    int Subscribers,
+    string SignalStrength,
+    int Capacity,
+    int Utilization,
+    int Towers
+  );
+
+  private record CoverageGap(
+    string Id,
+    string Name,
+    int AffectedUsers,
+    double Longitude,
+    double Latitude,
+    string Recommendation
+  );
+
+  private static readonly CoverageZone[] _zones = [
+    new("cz1", "Downtown Core",     "premium",  [-122.4194, 37.7749], 2.0, 45200, "-65 dBm", 95, 78, 12),
+    new("cz2", "Financial District","premium",  [-122.3994, 37.7919], 1.5, 38400, "-70 dBm", 90, 85,  8),
+    new("cz3", "Mission District",  "standard", [-122.4194, 37.7599], 1.8, 28900, "-78 dBm", 80, 62,  6),
+    new("cz4", "Sunset District",   "standard", [-122.4854, 37.7559], 2.5, 31200, "-82 dBm", 75, 55,  5),
+    new("cz5", "Bayview",           "basic",    [-122.3894, 37.7349], 1.6, 14800, "-88 dBm", 60, 42,  3),
+    new("cz6", "Outer Richmond",    "basic",    [-122.4954, 37.7799], 2.2, 12500, "-90 dBm", 55, 38,  2),
+  ];
+
+  private static readonly CoverageGap[] _gaps = [
+    new("g1", "Twin Peaks Dead Zone",   3200, -122.4477, 37.7544, "Add small cell on Twin Peaks Blvd"),
+    new("g2", "Ocean Beach Corridor",   1800, -122.5104, 37.7604, "Deploy macro tower near Great Highway"),
+  ];
+
+  private int _totalSubscribers => _zones.Sum(z => z.Subscribers);
+
+  private void ToggleZone(string id)
+  {
+    _selectedZone = id;
+    _expandedZone = _expandedZone == id ? null : id;
+  }
+
+  private void SelectZone(string id)
+  {
+    _selectedZone = id;
+    _expandedZone = id;
+  }
+
+  private void HandleGapClick(CoverageGap gap)
+  {
+    _popupGap = _popupGap?.Id == gap.Id ? null : gap;
+  }
+
+  private static string TierColor(string tier) => tier switch
+  {
+    "premium"  => "#8b5cf6",
+    "standard" => "#3b82f6",
+    _          => "#22c55e",
+  };
+
+  private static string TierDot(string tier) => tier switch
+  {
+    "premium"  => "bg-violet-500",
+    "standard" => "bg-blue-500",
+    _          => "bg-emerald-500",
+  };
+
+  private static string TierLabel(string tier) => tier switch
+  {
+    "premium"  => "Premium",
+    "standard" => "Standard",
+    _          => "Basic",
+  };
+
+  // Map projection helpers: map lng/lat to SVG coords
+  // Viewport: lng [-122.54, -122.36], lat [37.72, 37.80]
+  private static double LngToX(double lng)
+  {
+    const double minLng = -122.54;
+    const double maxLng = -122.36;
+    return (lng - minLng) / (maxLng - minLng) * 600.0;
+  }
+
+  private static double LatToY(double lat)
+  {
+    const double minLat = 37.72;
+    const double maxLat = 37.80;
+    // Flip: higher lat = lower Y
+    return (1.0 - (lat - minLat) / (maxLat - minLat)) * 500.0;
+  }
+}

@@ -1,0 +1,235 @@
+@* ============================================================
+   Block: stepper-dependency-chain
+   Title: StepperDependencyChain
+   Description: A dependency graph stepper with parallel tracks, connecting arrows, blocked and active states, and selection details built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-dependency-chain.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Build pipeline</span>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    <span class="tabular-nums">@_doneCount</span>
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    <span class="tabular-nums">@_activeCount</span>
+                </span>
+                @if (_blockedCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-amber-500"></span>
+                        <span class="tabular-nums">@_blockedCount</span>
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Dependency graph *@
+        <div class="border-b px-4 py-6">
+            <div class="flex items-start justify-between gap-2">
+                @foreach (var col in _columns)
+                {
+                    var colIndex = col;
+                    var colNodes = GetNodesInColumn(col);
+                    <div class="flex flex-1 items-start gap-2">
+                        @* Nodes in this column *@
+                        <div class="flex flex-1 flex-col gap-3">
+                            @foreach (var node in colNodes)
+                            {
+                                var nodeItem = node;
+                                var config = GetStatusConfig(nodeItem.Status);
+                                var isSelected = _selectedNode == nodeItem.Id;
+                                var ringClass = isSelected
+                                    ? ("ring-2 ring-offset-1 ring-offset-card " + (
+                                        nodeItem.Status == NodeStatus.Done ? "ring-emerald-500/50" :
+                                        nodeItem.Status == NodeStatus.Active ? "ring-blue-500/50" :
+                                        nodeItem.Status == NodeStatus.Blocked ? "ring-amber-500/50" :
+                                        "ring-muted-foreground/20"))
+                                    : "hover:bg-muted/50";
+                                <button
+                                    type="button"
+                                    @onclick="@(() => _selectedNode = nodeItem.Id)"
+                                    class="@Cn.Merge("rounded-lg border p-3 text-left transition-all duration-200", config.Bg, config.Border, ringClass)">
+                                    <div class="mb-1.5 flex items-center gap-2">
+                                        <div class="@Cn.Merge("flex size-5 shrink-0 items-center justify-center rounded-full", nodeItem.Status == NodeStatus.Done ? "bg-emerald-500 text-white" : nodeItem.Status == NodeStatus.Active ? "bg-blue-500 text-white" : nodeItem.Status == NodeStatus.Blocked ? "border border-amber-500/60 text-amber-500" : "border border-muted-foreground/25 text-muted-foreground")">
+                                            @if (nodeItem.Status == NodeStatus.Done)
+                                            {
+                                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                            }
+                                            else if (nodeItem.Status == NodeStatus.Active)
+                                            {
+                                                <span class="size-1.5 animate-pulse rounded-full bg-white"></span>
+                                            }
+                                            else
+                                            {
+                                                <LucideIconCn Name="circle" Size="10" Class="size-2.5" />
+                                            }
+                                        </div>
+                                        <span class="font-medium text-xs">@nodeItem.Label</span>
+                                    </div>
+                                    <p class="pl-7 text-muted-foreground text-xs leading-relaxed">
+                                        @nodeItem.Description
+                                    </p>
+                                    @if (nodeItem.Duration != null)
+                                    {
+                                        <span class="@Cn.Merge("mt-1.5 inline-block pl-7 font-mono text-[10px] tabular-nums", config.Text)">
+                                            @nodeItem.Duration
+                                        </span>
+                                    }
+                                </button>
+                            }
+                        </div>
+
+                        @* Arrow connector *@
+                        @if (colIndex < _columns.Length - 1)
+                        {
+                            <div class="flex shrink-0 flex-col items-center justify-center self-center pt-1">
+                                <LucideIconCn Name="chevron-right" Size="16" Class="size-4 text-muted-foreground/30" />
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Selected node detail *@
+        @{
+            var selected = _nodes.FirstOrDefault(n => n.Id == _selectedNode);
+        }
+        @if (selected != null)
+        {
+            var selConfig = GetStatusConfig(selected.Status);
+            <div class="px-4 py-4">
+                <div class="mb-3 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="@Cn.Merge("size-2 rounded-full", selConfig.Dot)"></span>
+                        <span class="font-medium text-sm">@selected.Label</span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("font-normal text-xs", selConfig.Text)">
+                            @selConfig.Label
+                        </BadgeCn>
+                    </div>
+                    @if (selected.Duration != null)
+                    {
+                        <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                            @selected.Duration
+                        </span>
+                    }
+                </div>
+
+                <div class="rounded-md bg-muted/50 p-3">
+                    <p class="text-sm leading-relaxed">@selected.Detail</p>
+                </div>
+
+                @* Dependencies list *@
+                @if (selected.DependsOn.Length > 0)
+                {
+                    <div class="mt-3">
+                        <span class="font-medium text-muted-foreground text-xs">Depends on</span>
+                        <div class="mt-1.5 flex flex-wrap gap-1.5">
+                            @foreach (var depId in selected.DependsOn)
+                            {
+                                var depIdCaptured = depId;
+                                var dep = _nodes.FirstOrDefault(n => n.Id == depIdCaptured);
+                                @if (dep != null)
+                                {
+                                    var depCfg = GetStatusConfig(dep.Status);
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => _selectedNode = depIdCaptured)"
+                                        class="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 transition-colors hover:bg-muted">
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", depCfg.Dot)"></span>
+                                        <span class="text-xs">@dep.Label</span>
+                                    </button>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+
+                @* Dependents (who depends on this) *@
+                @{
+                    var dependents = _nodes.Where(n => n.DependsOn.Contains(selected.Id)).ToArray();
+                }
+                @if (dependents.Length > 0)
+                {
+                    <div class="mt-3">
+                        <span class="font-medium text-muted-foreground text-xs">Required by</span>
+                        <div class="mt-1.5 flex flex-wrap gap-1.5">
+                            @foreach (var dep in dependents)
+                            {
+                                var depCaptured = dep;
+                                var depCfg = GetStatusConfig(depCaptured.Status);
+                                <button
+                                    type="button"
+                                    @onclick="@(() => _selectedNode = depCaptured.Id)"
+                                    class="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 transition-colors hover:bg-muted">
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", depCfg.Dot)"></span>
+                                    <span class="text-xs">@depCaptured.Label</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private enum NodeStatus { Done, Active, Blocked, Pending }
+
+    private record PipelineNode(
+        string Id,
+        string Label,
+        string Description,
+        NodeStatus Status,
+        string[] DependsOn,
+        int Column,
+        int Row,
+        string Detail,
+        string? Duration = null
+    );
+
+    private record StatusCfg(string Bg, string Border, string Text, string Label, string Dot);
+
+    private static readonly PipelineNode[] _nodes =
+    [
+        new("init", "Init", "Initialize project scaffold", NodeStatus.Done, [], 0, 0,
+            "Project scaffold created. Package.json initialized, Git repository set up, and base directory structure generated.",
+            "4s"),
+        new("frontend", "Frontend setup", "Install UI dependencies and build", NodeStatus.Active, ["init"], 1, 0,
+            "Installing React, Next.js, and Tailwind CSS. Running TypeScript compilation and bundling static assets for production.",
+            "~45s"),
+        new("backend", "Backend setup", "Configure API and database", NodeStatus.Active, ["init"], 1, 1,
+            "Setting up Express server, running Prisma migrations, and seeding the database with initial data. Configuring Redis for session caching.",
+            "~30s"),
+        new("integration", "Integration", "Connect frontend to backend APIs", NodeStatus.Blocked, ["frontend", "backend"], 2, 0,
+            "Waiting on Frontend setup and Backend setup to complete. Will run API integration tests and verify end-to-end data flow between services."),
+        new("deploy", "Deploy", "Ship to production environment", NodeStatus.Pending, ["integration"], 3, 0,
+            "Will deploy to 3 production regions via Vercel. Includes CDN cache invalidation, DNS propagation checks, and post-deploy smoke tests."),
+    ];
+
+    private static readonly int[] _columns = [0, 1, 2, 3];
+
+    private string _selectedNode = "integration";
+
+    private int _doneCount => _nodes.Count(n => n.Status == NodeStatus.Done);
+    private int _activeCount => _nodes.Count(n => n.Status == NodeStatus.Active);
+    private int _blockedCount => _nodes.Count(n => n.Status == NodeStatus.Blocked);
+
+    private static PipelineNode[] GetNodesInColumn(int col) =>
+        _nodes.Where(n => n.Column == col).OrderBy(n => n.Row).ToArray();
+
+    private static StatusCfg GetStatusConfig(NodeStatus status) => status switch
+    {
+        NodeStatus.Done => new("bg-emerald-500/10", "border-emerald-500/40", "text-emerald-600 dark:text-emerald-400", "Complete", "bg-emerald-500"),
+        NodeStatus.Active => new("bg-blue-500/10", "border-blue-500/40", "text-blue-600 dark:text-blue-400", "Running", "bg-blue-500"),
+        NodeStatus.Blocked => new("bg-amber-500/5", "border-amber-500/40 border-dashed", "text-amber-600 dark:text-amber-400", "Blocked", "bg-amber-500"),
+        _ => new("bg-muted/30", "border-muted-foreground/20", "text-muted-foreground", "Pending", "bg-muted-foreground/40"),
+    };
+}

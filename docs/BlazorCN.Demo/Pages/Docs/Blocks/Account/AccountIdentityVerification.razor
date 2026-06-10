@@ -1,0 +1,368 @@
+@* ============================================================
+   Block: account-identity-verification
+   Title: AccountIdentityVerification
+   Description: A stepper-based identity verification flow for React and Next.js with multi-step KYC progression, verification level badges, contextual step UI, and document upload built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-identity-verification.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with level badge *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideShieldCn Size="16" Class="text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Identity Verification</h2>
+                        <p class="text-xs text-muted-foreground">
+                            Complete steps to increase your verification level
+                        </p>
+                    </div>
+                </div>
+                <BadgeCn Class="@($"border-0 {_level.BgColor} {_level.Color} text-[10px]")">
+                    @_level.Name
+                </BadgeCn>
+            </div>
+            @* Progress bar *@
+            <div class="mt-3 flex items-center gap-3">
+                <div class="h-1 flex-1 rounded-full bg-muted">
+                    <div class="h-full rounded-full bg-emerald-500 transition-all duration-500 ease-out" style="@($"width:{_progressPercent}%")"></div>
+                </div>
+                <span class="text-xs tabular-nums text-muted-foreground">
+                    @_completedCount/@_totalSteps
+                </span>
+            </div>
+        </div>
+
+        @* Stepper *@
+        <div class="px-4 py-4">
+            <div class="relative">
+                @foreach (var (step, idx) in _steps.Select((s, i) => (s, i)))
+                {
+                    var isLast = idx == _steps.Count - 1;
+                    var isCurrent = step.Status == "current";
+                    var isCompleted = step.Status == "completed";
+                    var isFailed = step.Status == "failed";
+                    var isPending = step.Status == "pending";
+                    var iconContainerClass = isCompleted
+                        ? "border-emerald-500 bg-emerald-500 text-white"
+                        : isCurrent
+                            ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                            : isFailed
+                                ? "border-red-500 bg-red-500/10 text-red-600"
+                                : "border-muted-foreground/20 bg-muted/50 text-muted-foreground/40";
+
+                    <div class="relative flex gap-3">
+                        @* Connector line + icon *@
+                        <div class="flex flex-col items-center">
+                            <div class="@($"relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border {iconContainerClass}")">
+                                @if (isCompleted)
+                                {
+                                    <LucideCheckCn Size="14" Class="h-3.5 w-3.5" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="@step.IconName" Size="14" Class="h-3.5 w-3.5" />
+                                }
+                            </div>
+                            @if (!isLast)
+                            {
+                                <div class="@($"w-px flex-1 {(isCompleted ? "bg-emerald-500" : "bg-muted-foreground/15")}")" style="@(isCurrent ? "" : "min-height:16px")"></div>
+                            }
+                        </div>
+
+                        @* Step content *@
+                        <div class="@($"flex-1 {(!isLast ? "pb-4" : "pb-0")}")">
+                            <div class="flex items-center gap-2">
+                                <span class="@($"text-sm font-medium{(isPending ? " text-muted-foreground/50" : "")}")">
+                                    @step.Label
+                                </span>
+                                @if (isCompleted && step.CompletedAt != null)
+                                {
+                                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                        @step.CompletedAt
+                                    </span>
+                                }
+                                @if (isFailed && step.FailureReason != null)
+                                {
+                                    <span class="text-[10px] text-red-600">Failed</span>
+                                }
+                            </div>
+                            <p class="@($"text-xs {(isPending ? "text-muted-foreground/40" : "text-muted-foreground")}")">
+                                @step.Description
+                            </p>
+
+                            @* Active step contextual UI *@
+                            @if (isCurrent)
+                            {
+                                <div class="mt-3 overflow-hidden">
+                                    @if (step.Id == "phone")
+                                    {
+                                        <div class="space-y-2 rounded-md bg-muted/50 p-3">
+                                            <span class="text-xs font-medium text-muted-foreground">
+                                                Phone number
+                                            </span>
+                                            <InputCn @bind-Value="_phoneInput" Placeholder="+1 (555) 000-0000" Class="h-8 font-mono text-xs" />
+                                            <p class="text-[10px] text-muted-foreground">
+                                                We will send a 6-digit verification code via SMS
+                                            </p>
+                                            <ButtonCn Size="ButtonSize.Sm" Class="mt-1 h-7 text-xs" @onclick="@(() => HandleSubmitStep())" Disabled="@_isSubmitting">
+                                                @if (_isSubmitting)
+                                                {
+                                                    <LucideLoader2Cn Size="12" Class="mr-1.5 h-3 w-3 animate-spin" />
+                                                    <span>Sending code...</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Send verification code</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                    }
+
+                                    @if (step.Id == "id-document")
+                                    {
+                                        <div class="space-y-2 rounded-md bg-muted/50 p-3">
+                                            @if (_uploadedFile != null)
+                                            {
+                                                <div class="flex items-center justify-between rounded-md border bg-card px-3 py-2">
+                                                    <div class="flex items-center gap-2">
+                                                        <LucideFileTextCn Size="14" Class="h-3.5 w-3.5 text-muted-foreground" />
+                                                        <div>
+                                                            <span class="text-xs font-medium">@_uploadedFile</span>
+                                                            <p class="text-[10px] text-muted-foreground">2.4 MB</p>
+                                                        </div>
+                                                    </div>
+                                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-6 px-2 text-[10px]" @onclick="@(() => _uploadedFile = null)">
+                                                        Remove
+                                                    </ButtonCn>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="flex cursor-pointer flex-col items-center rounded-md border-2 border-dashed border-muted-foreground/20 p-4 transition-colors hover:border-muted-foreground/40" @onclick="HandleFileSelect" role="button" tabindex="0">
+                                                    <LucideUploadCn Size="20" Class="h-5 w-5 text-muted-foreground/40" />
+                                                    <span class="mt-1.5 text-xs font-medium">
+                                                        Upload document
+                                                    </span>
+                                                    <span class="text-[10px] text-muted-foreground">
+                                                        JPEG, PNG, or PDF up to 10 MB
+                                                    </span>
+                                                </div>
+                                            }
+                                            <div class="flex gap-1.5 pt-1">
+                                                @foreach (var docType in new[] { "Passport", "Driver's License", "National ID" })
+                                                {
+                                                    <span class="rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                                        @docType
+                                                    </span>
+                                                }
+                                            </div>
+                                            <ButtonCn Size="ButtonSize.Sm" Class="mt-1 h-7 text-xs" @onclick="@(() => HandleSubmitStep())" Disabled="@(_isSubmitting || _uploadedFile == null)">
+                                                @if (_isSubmitting)
+                                                {
+                                                    <LucideLoader2Cn Size="12" Class="mr-1.5 h-3 w-3 animate-spin" />
+                                                    <span>Verifying...</span>
+                                                }
+                                                else
+                                                {
+                                                    <LucideChevronRightCn Size="12" Class="mr-1 h-3 w-3" />
+                                                    <span>Submit document</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                    }
+
+                                    @if (step.Id == "selfie")
+                                    {
+                                        <div class="space-y-2 rounded-md bg-muted/50 p-3">
+                                            <div class="flex flex-col items-center rounded-md border-2 border-dashed border-muted-foreground/20 p-4">
+                                                <LucideCameraCn Size="20" Class="h-5 w-5 text-muted-foreground/40" />
+                                                <span class="mt-1.5 text-xs font-medium">
+                                                    Take a live selfie
+                                                </span>
+                                                <span class="text-[10px] text-muted-foreground">
+                                                    Position your face in the frame and hold still
+                                                </span>
+                                            </div>
+                                            <div class="rounded-md bg-blue-500/5 px-3 py-2">
+                                                <p class="text-[10px] text-blue-700 dark:text-blue-400">
+                                                    Ensure good lighting and remove glasses or hats. Your selfie will
+                                                    be compared against the photo on your ID document.
+                                                </p>
+                                            </div>
+                                            <ButtonCn Size="ButtonSize.Sm" Class="mt-1 h-7 text-xs" @onclick="@(() => HandleSubmitStep())" Disabled="@_isSubmitting">
+                                                @if (_isSubmitting)
+                                                {
+                                                    <LucideLoader2Cn Size="12" Class="mr-1.5 h-3 w-3 animate-spin" />
+                                                    <span>Processing...</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Open camera</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                    }
+
+                                    @if (step.Id == "address")
+                                    {
+                                        <div class="space-y-2 rounded-md bg-muted/50 p-3">
+                                            <div class="flex cursor-pointer flex-col items-center rounded-md border-2 border-dashed border-muted-foreground/20 p-4 transition-colors hover:border-muted-foreground/40" @onclick="HandleFileSelect" role="button" tabindex="0">
+                                                <LucideUploadCn Size="20" Class="h-5 w-5 text-muted-foreground/40" />
+                                                <span class="mt-1.5 text-xs font-medium">
+                                                    Upload proof of address
+                                                </span>
+                                                <span class="text-[10px] text-muted-foreground">
+                                                    Utility bill, bank statement, or government letter
+                                                </span>
+                                            </div>
+                                            <p class="text-[10px] text-muted-foreground">
+                                                Document must show your full name, address, and be dated within the
+                                                last 90 days
+                                            </p>
+                                            <ButtonCn Size="ButtonSize.Sm" Class="mt-1 h-7 text-xs" @onclick="@(() => HandleSubmitStep())" Disabled="@_isSubmitting">
+                                                @if (_isSubmitting)
+                                                {
+                                                    <LucideLoader2Cn Size="12" Class="mr-1.5 h-3 w-3 animate-spin" />
+                                                    <span>Verifying...</span>
+                                                }
+                                                else
+                                                {
+                                                    <LucideChevronRightCn Size="12" Class="mr-1 h-3 w-3" />
+                                                    <span>Submit proof</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                    }
+
+                                    @if (step.Id == "email")
+                                    {
+                                        <div class="space-y-2 rounded-md bg-muted/50 p-3">
+                                            <span class="text-xs font-medium text-muted-foreground">
+                                                Verification email sent to
+                                            </span>
+                                            <p class="font-mono text-xs">sarah.chen@example.com</p>
+                                            <ButtonCn Size="ButtonSize.Sm" Class="mt-1 h-7 text-xs" @onclick="@(() => HandleSubmitStep())" Disabled="@_isSubmitting">
+                                                @if (_isSubmitting)
+                                                {
+                                                    <LucideLoader2Cn Size="12" Class="mr-1.5 h-3 w-3 animate-spin" />
+                                                    <span>Verifying...</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Resend email</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @* Failed step retry *@
+                            @if (isFailed && step.FailureReason != null)
+                            {
+                                <div class="mt-2 rounded-md bg-red-500/5 px-3 py-2">
+                                    <p class="text-[10px] text-red-600 dark:text-red-400">
+                                        @step.FailureReason
+                                    </p>
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="mt-2 h-6 text-[10px]" @onclick="@(() => RetryStep(step.Id))">
+                                        Retry verification
+                                    </ButtonCn>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer: security note *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-start gap-2">
+                <LucideShieldCn Size="14" Class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <div>
+                    <span class="text-xs font-medium">End-to-end encrypted</span>
+                    <p class="text-[10px] text-muted-foreground">
+                        Documents are encrypted at rest, processed in isolated environments, and
+                        automatically deleted after verification completes.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record VerificationStep(string Id, string Label, string Description, string IconName, string Status, string? CompletedAt, string? FailureReason);
+    private record VerificationLevelData(string Name, int MinSteps, string Color, string BgColor);
+
+    private static readonly VerificationLevelData[] _verificationLevels =
+    [
+        new("Unverified", 0, "text-muted-foreground", "bg-muted"),
+        new("Basic", 1, "text-blue-700 dark:text-blue-400", "bg-blue-500/10"),
+        new("Standard", 3, "text-amber-700 dark:text-amber-400", "bg-amber-500/10"),
+        new("Enhanced", 5, "text-emerald-700 dark:text-emerald-400", "bg-emerald-500/10"),
+    ];
+
+    private List<VerificationStep> _steps =
+    [
+        new("email", "Email Verified", "Confirm your email address via one-time code", "mail", "completed", "Mar 2, 2026", null),
+        new("phone", "Phone Verified", "Verify your phone number via SMS code", "phone", "completed", "Mar 2, 2026", null),
+        new("id-document", "ID Document", "Upload a government-issued photo ID (passport, driver's license, or national ID)", "file-text", "current", null, null),
+        new("selfie", "Selfie Match", "Take a live selfie to match against your ID document photo", "camera", "pending", null, null),
+        new("address", "Address Proof", "Upload a utility bill or bank statement from the last 3 months", "map-pin", "pending", null, null),
+    ];
+
+    private bool _isSubmitting;
+    private string _phoneInput = "+1 (555) 234-5678";
+    private string? _uploadedFile;
+
+    private int _completedCount => _steps.Count(s => s.Status == "completed");
+    private int _totalSteps => _steps.Count;
+    private int _progressPercent => _totalSteps > 0 ? (int)Math.Round((double)_completedCount / _totalSteps * 100) : 0;
+    private VerificationLevelData _level => GetVerificationLevel(_completedCount);
+
+    private static VerificationLevelData GetVerificationLevel(int completedCount)
+    {
+        var level = _verificationLevels[0];
+        foreach (var vl in _verificationLevels)
+        {
+            if (completedCount >= vl.MinSteps)
+                level = vl;
+        }
+        return level;
+    }
+
+    private async Task HandleSubmitStep()
+    {
+        var currentStep = _steps.FirstOrDefault(s => s.Status == "current");
+        if (currentStep == null) return;
+        var currentIdx = _steps.FindIndex(s => s.Status == "current");
+        _isSubmitting = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _steps = _steps.Select((s, idx) =>
+        {
+            if (s.Id == currentStep.Id)
+                return s with { Status = "completed", CompletedAt = "Apr 5, 2026" };
+            if (idx == currentIdx + 1 && s.Status == "pending")
+                return s with { Status = "current" };
+            return s;
+        }).ToList();
+        _isSubmitting = false;
+        _uploadedFile = null;
+    }
+
+    private void HandleFileSelect()
+    {
+        _uploadedFile = "passport_scan.jpg";
+    }
+
+    private void RetryStep(string stepId)
+    {
+        _steps = _steps.Select(s => s.Id == stepId
+            ? s with { Status = "current", FailureReason = null }
+            : s).ToList();
+    }
+}

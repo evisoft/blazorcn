@@ -1,0 +1,215 @@
+@* ============================================================
+   Block: reviews-kanban-board
+   Title: ReviewsKanbanBoard
+   Description: A multi-column kanban board for React and Next.js with drag-style review moderation across New, In Review, Approved, and Published stages with reviewer avatars, star ratings, priority flags, and status transitions built with shadcn/ui Button, Badge, and Avatar components, motion/react layout animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-kanban-board.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-medium">Review Moderation Pipeline</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    @_reviews.Count total
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-4">
+                @foreach (var col in _columns)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {col.DotColor}")"></span>
+                        @col.Label
+                        <span class="tabular-nums">@(_reviews.Count(r => r.Status == col.Status))</span>
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Kanban columns *@
+        <div class="grid grid-cols-4">
+            @for (int ci = 0; ci < _columns.Length; ci++)
+            {
+                var col = _columns[ci];
+                var isLast = ci == _columns.Length - 1;
+                var colReviews = _reviews.Where(r => r.Status == col.Status).ToList();
+                var actions = _nextActions[col.Status];
+
+                <div class="@Cn.Merge("flex min-h-[480px] flex-col", !isLast ? "border-r" : "")">
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
+                        <LucideIconCn Name="@col.IconName" Size="14" Class="size-3.5 text-muted-foreground" />
+                        <span class="text-xs font-medium">@col.Label</span>
+                        <span class="ml-auto text-xs tabular-nums text-muted-foreground/60">@colReviews.Count</span>
+                    </div>
+
+                    @* Cards *@
+                    <div class="flex-1 space-y-2 p-2">
+                        @foreach (var review in colReviews)
+                        {
+                            var reviewId = review.Id;
+                            <div class="@Cn.Merge("rounded-md border border-l-2 bg-card p-3 transition-colors hover:bg-muted/30", _priorityStyles[review.Priority])">
+                                @* Card header: avatar + author *@
+                                <div class="flex items-center gap-2">
+                                    <AvatarCn Class="size-5">
+                                        <AvatarFallbackCn Class="text-[9px]">@review.Author.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <span class="truncate text-xs font-medium">@review.Author.Name</span>
+                                    @if (review.Author.IsVerified)
+                                    {
+                                        <LucideIconCn Name="shield-check" Size="12" Class="size-3 shrink-0 text-blue-500" />
+                                    }
+                                    @if (review.Priority == "urgent")
+                                    {
+                                        <LucideIconCn Name="flag" Size="12" Class="size-3 shrink-0 text-red-500" />
+                                    }
+                                </div>
+
+                                @* Stars *@
+                                <div class="mt-1.5 flex items-center gap-0.5">
+                                    @for (int si = 0; si < 5; si++)
+                                    {
+                                        var starIdx = si;
+                                        <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", starIdx < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/25")" />
+                                    }
+                                </div>
+
+                                @* Title + snippet *@
+                                <p class="mt-1.5 text-xs font-medium leading-snug line-clamp-2">@review.Title</p>
+                                <p class="mt-1 text-[11px] leading-relaxed text-muted-foreground line-clamp-2">@review.Snippet</p>
+
+                                @* Meta row *@
+                                <div class="mt-2 flex items-center gap-2">
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">@review.Product</BadgeCn>
+                                    @if (review.HasMedia)
+                                    {
+                                        <span class="text-[10px] text-muted-foreground">+ media</span>
+                                    }
+                                </div>
+                                <div class="mt-1.5 flex items-center justify-between">
+                                    <span class="text-[10px] text-muted-foreground">@review.SubmittedAt</span>
+                                    <span class="text-[10px] tabular-nums text-muted-foreground">@(review.WordCount)w</span>
+                                </div>
+
+                                @* Actions *@
+                                <div class="mt-2 flex items-center gap-1">
+                                    @foreach (var action in actions)
+                                    {
+                                        var act = action;
+                                        var rid = reviewId;
+                                        var isDestructive = act.Label == "Reject" || act.Label == "Unpublish";
+                                        var isPositive = act.Label == "Approve" || act.Label == "Publish";
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="@Cn.Merge("h-6 gap-1 px-1.5 text-[11px]", isDestructive ? "text-red-600 hover:text-red-600 dark:text-red-400" : isPositive ? "text-emerald-600 hover:text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")"
+                                                  @onclick="@(() => MoveReview(rid, act.Target))">
+                                            <LucideIconCn Name="@act.IconName" Size="12" Class="size-3" />
+                                            @act.Label
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @if (colReviews.Count == 0)
+                        {
+                            <div class="flex items-center justify-center py-12 text-xs text-muted-foreground/50">
+                                No reviews in this stage
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class ReviewAuthor
+    {
+        public string Name { get; set; } = "";
+        public string Initials { get; set; } = "";
+        public bool IsVerified { get; set; }
+    }
+
+    private class Review
+    {
+        public string Id { get; set; } = "";
+        public ReviewAuthor Author { get; set; } = new();
+        public int Rating { get; set; }
+        public string Title { get; set; } = "";
+        public string Snippet { get; set; } = "";
+        public string Product { get; set; } = "";
+        public string Priority { get; set; } = "normal";
+        public string Status { get; set; } = "new";
+        public string SubmittedAt { get; set; } = "";
+        public int WordCount { get; set; }
+        public bool HasMedia { get; set; }
+    }
+
+    private class KanbanColumn
+    {
+        public string Status { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string DotColor { get; set; } = "";
+        public string IconName { get; set; } = "";
+    }
+
+    private class NextAction
+    {
+        public string Label { get; set; } = "";
+        public string IconName { get; set; } = "";
+        public string Target { get; set; } = "";
+    }
+
+    private static readonly KanbanColumn[] _columns =
+    [
+        new() { Status = "new", Label = "New", DotColor = "bg-blue-500", IconName = "globe" },
+        new() { Status = "in_review", Label = "In Review", DotColor = "bg-amber-500", IconName = "shield-check" },
+        new() { Status = "approved", Label = "Approved", DotColor = "bg-emerald-500", IconName = "check" },
+        new() { Status = "published", Label = "Published", DotColor = "bg-foreground", IconName = "send" },
+    ];
+
+    private static readonly Dictionary<string, List<NextAction>> _nextActions = new()
+    {
+        ["new"] = [new() { Label = "Start Review", IconName = "chevron-right", Target = "in_review" }],
+        ["in_review"] =
+        [
+            new() { Label = "Approve", IconName = "check", Target = "approved" },
+            new() { Label = "Reject", IconName = "x", Target = "new" },
+        ],
+        ["approved"] =
+        [
+            new() { Label = "Publish", IconName = "send", Target = "published" },
+            new() { Label = "Return", IconName = "rotate-ccw", Target = "in_review" },
+        ],
+        ["published"] = [new() { Label = "Unpublish", IconName = "rotate-ccw", Target = "approved" }],
+    };
+
+    private static readonly Dictionary<string, string> _priorityStyles = new()
+    {
+        ["urgent"] = "border-l-red-500",
+        ["normal"] = "border-l-transparent",
+        ["low"] = "border-l-blue-500/40",
+    };
+
+    private List<Review> _reviews =
+    [
+        new() { Id = "rev-001", Author = new() { Name = "Sarah Chen", Initials = "SC", IsVerified = true }, Rating = 5, Title = "Outstanding developer experience", Snippet = "The API design is incredibly intuitive. Had our integration running in production within two hours of starting.", Product = "API Gateway Pro", Priority = "normal", Status = "new", SubmittedAt = "42 min ago", WordCount = 187, HasMedia = true },
+        new() { Id = "rev-002", Author = new() { Name = "Marcus Webb", Initials = "MW", IsVerified = false }, Rating = 2, Title = "Billing discrepancy on enterprise plan", Snippet = "Charged for 15 seats when we only have 12 active users. Third month in a row with this issue. Support ticket still pending.", Product = "Billing Dashboard", Priority = "urgent", Status = "new", SubmittedAt = "1.5 hours ago", WordCount = 312, HasMedia = false },
+        new() { Id = "rev-003", Author = new() { Name = "Elena Petrov", Initials = "EP", IsVerified = true }, Rating = 4, Title = "Great analytics, minor export bug", Snippet = "Dashboard analytics are comprehensive. Found a CSV export issue where date columns lose timezone info. Otherwise excellent.", Product = "Analytics Suite", Priority = "normal", Status = "new", SubmittedAt = "3 hours ago", WordCount = 156, HasMedia = false },
+        new() { Id = "rev-004", Author = new() { Name = "James Liu", Initials = "JL", IsVerified = true }, Rating = 5, Title = "Migration tool saved us weeks", Snippet = "Migrated 2.4M records from our legacy system without a single data integrity issue. The dry-run feature gave us confidence.", Product = "Data Migration Kit", Priority = "normal", Status = "in_review", SubmittedAt = "6 hours ago", WordCount = 243, HasMedia = true },
+        new() { Id = "rev-005", Author = new() { Name = "Amara Okafor", Initials = "AO", IsVerified = false }, Rating = 1, Title = "Contains competitor promotional links", Snippet = "Review body contains affiliate links to competing products and appears to be a planted negative review from a competitor.", Product = "API Gateway Pro", Priority = "urgent", Status = "in_review", SubmittedAt = "8 hours ago", WordCount = 89, HasMedia = false },
+        new() { Id = "rev-006", Author = new() { Name = "Priya Sharma", Initials = "PS", IsVerified = true }, Rating = 5, Title = "Best CI/CD integration available", Snippet = "Deployment pipelines run 3x faster since switching. The GitHub Actions integration is seamless.", Product = "Deploy Engine", Priority = "normal", Status = "approved", SubmittedAt = "1 day ago", WordCount = 198, HasMedia = true },
+        new() { Id = "rev-007", Author = new() { Name = "Ryan Burke", Initials = "RB", IsVerified = true }, Rating = 4, Title = "Solid monitoring with room to grow", Snippet = "Alert routing is sophisticated. Would love deeper integration with PagerDuty and custom webhook payloads.", Product = "Monitor Pro", Priority = "low", Status = "approved", SubmittedAt = "1 day ago", WordCount = 174, HasMedia = false },
+        new() { Id = "rev-008", Author = new() { Name = "Lena Kowalski", Initials = "LK", IsVerified = true }, Rating = 5, Title = "Transformed our onboarding flow", Snippet = "User activation rate jumped 34% after implementing the guided tour components. Clear ROI within the first sprint.", Product = "Onboarding Kit", Priority = "normal", Status = "published", SubmittedAt = "3 days ago", WordCount = 221, HasMedia = false },
+        new() { Id = "rev-009", Author = new() { Name = "David Park", Initials = "DP", IsVerified = true }, Rating = 4, Title = "Reliable uptime, great docs", Snippet = "99.98% uptime over 6 months. Documentation is thorough with practical examples for every endpoint.", Product = "API Gateway Pro", Priority = "normal", Status = "published", SubmittedAt = "5 days ago", WordCount = 167, HasMedia = false },
+    ];
+
+    private void MoveReview(string id, string newStatus)
+    {
+        var review = _reviews.FirstOrDefault(r => r.Id == id);
+        if (review != null)
+            review.Status = newStatus;
+    }
+}

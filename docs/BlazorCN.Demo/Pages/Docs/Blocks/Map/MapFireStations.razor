@@ -1,0 +1,335 @@
+@* ============================================================
+   Block: map-fire-stations
+   Title: MapFireStations
+   Description: Fire station coverage map with station markers, response radius circles, crew availability badges, and station detail cards in a sidebar panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-fire-stations.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="flame" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Fire Stations</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="users" Size="12" Class="size-3" />
+                    @_totalCrew crew on duty
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="siren" Size="12" Class="size-3" />
+                    @_totalCalls active calls
+                </span>
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">
+                        @_stations.Length stations
+                    </span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var st in _stations)
+                    {
+                        var station = st;
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectStation(station))"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedId == station.Id ? "bg-muted/50" : "")">
+                            <span class="@Cn.Merge("size-2 shrink-0 rounded-full", GetStatusDot(station.Status))"></span>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@station.Name</span>
+                                <p class="mt-0.5 truncate text-xs text-muted-foreground">
+                                    @station.Designation
+                                </p>
+                                <div class="mt-0.5 flex items-center gap-2">
+                                    <span class="text-[10px] text-muted-foreground">
+                                        @station.CrewCount/@station.MaxCrew crew
+                                    </span>
+                                    <span class="text-[10px] text-muted-foreground">
+                                        @station.ResponseTime avg
+                                    </span>
+                                </div>
+                            </div>
+                            @if (station.ActiveCalls > 0)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal text-amber-600 dark:text-amber-400">
+                                    @station.ActiveCalls call@(station.ActiveCalls > 1 ? "s" : "")
+                                </BadgeCn>
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map area — Map/MapMarker/MarkerContent/MarkerTooltip/MapPopup/MapRoute/MapControls are custom
+               registry components with no BlazorCN equivalent; rendered as a styled static map placeholder
+               showing station markers with coverage radius indicators and popup detail for the selected station. *@
+            <div class="relative h-[500px] flex-1">
+                @* Map background grid *@
+                <div class="absolute inset-0 overflow-hidden bg-muted/30">
+                    <div class="absolute inset-0 overflow-hidden opacity-20">
+                        <div class="grid h-full grid-cols-8 grid-rows-8">
+                            @for (int gi = 0; gi < 64; gi++)
+                            {
+                                <div class="border border-border/50"></div>
+                            }
+                        </div>
+                    </div>
+                    @* Road-like lines *@
+                    <div class="absolute inset-0 opacity-30">
+                        <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                        <div class="absolute left-0 right-0 top-[52%] h-px bg-border"></div>
+                        <div class="absolute left-0 right-0 top-[72%] h-px bg-border"></div>
+                        <div class="absolute bottom-0 left-[22%] top-0 w-px bg-border"></div>
+                        <div class="absolute bottom-0 left-[48%] top-0 w-px bg-border"></div>
+                        <div class="absolute bottom-0 left-[70%] top-0 w-px bg-border"></div>
+                    </div>
+                </div>
+
+                @* Map label *@
+                <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Chicago, IL
+                </div>
+
+                @* Map zoom controls (bottom-right) *@
+                <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+
+                @* Coverage radius circles (SVG) *@
+                <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                    @foreach (var st in _stations)
+                    {
+                        var pos = GetMarkerPosition(st);
+                        var r = GetRadiusPercent(st.RadiusKm);
+                        @((MarkupString)$"<ellipse cx=\"{pos.Left:F1}%\" cy=\"{pos.Top:F1}%\" rx=\"{r.X:F1}%\" ry=\"{r.Y:F1}%\" fill=\"{GetStatusColor(st.Status)}\" fill-opacity=\"0.10\" stroke=\"{GetStatusColor(st.Status)}\" stroke-width=\"1.5\" stroke-opacity=\"0.4\" />")
+                    }
+                </svg>
+
+                @* Station markers *@
+                @foreach (var st in _stations)
+                {
+                    var station = st;
+                    var pos = GetMarkerPosition(station);
+                    <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectStation(station))"
+                            class="group relative flex flex-col items-center">
+                            @* Marker pin *@
+                            <div class="flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md" style="@($"background-color:{GetStatusColor(station.Status)}")">
+                                <LucideIconCn Name="flame" Size="14" Class="size-3.5 text-white" />
+                            </div>
+                            @* Tooltip on hover *@
+                            <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[160px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium">@station.Name</span>
+                                    <span class="text-muted-foreground">@GetStatusLabel(station.Status)</span>
+                                </div>
+                            </div>
+                        </button>
+
+                        @* Popup (shown when selected) *@
+                        @if (_popupId == station.Id)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <div class="mb-1 flex items-center justify-between">
+                                    <span class="text-sm font-medium">@station.Name</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                        @GetStatusLabel(station.Status)
+                                    </BadgeCn>
+                                </div>
+                                <p class="mb-2 text-xs text-muted-foreground">@station.Shift</p>
+                                <div class="mb-2 space-y-1">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Crew</span>
+                                        <span class="tabular-nums font-medium">@station.CrewCount/@station.MaxCrew</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Response time</span>
+                                        <span class="tabular-nums font-medium">@station.ResponseTime</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Coverage</span>
+                                        <span class="tabular-nums font-medium">@station.RadiusKm km</span>
+                                    </div>
+                                </div>
+                                <div class="border-t pt-2">
+                                    <span class="mb-1 block text-xs font-medium text-muted-foreground">Apparatus</span>
+                                    <div class="space-y-1">
+                                        @foreach (var ap in station.Apparatus)
+                                        {
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span>
+                                                    @ap.Type <span class="font-mono text-muted-foreground">@ap.Unit</span>
+                                                </span>
+                                                <span class="@Cn.Merge("size-1.5 rounded-full", GetApparatusStatusDot(ap.Status))"></span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                @* Close button *@
+                                <button type="button" @onclick="@(() => _popupId = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_stations.Count(s => s.Status == "available") available
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @_stations.Count(s => s.Status == "on-call") on call
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @_stations.Count(s => s.Status == "limited") limited
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">Chicago Fire Department</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ApparatusItem(string Type, string Unit, string Status);
+
+    private record FireStation(
+        string Id,
+        string Name,
+        string Designation,
+        string Status,
+        int CrewCount,
+        int MaxCrew,
+        string ResponseTime,
+        int ActiveCalls,
+        double RadiusKm,
+        double Longitude,
+        double Latitude,
+        ApparatusItem[] Apparatus,
+        string Shift
+    );
+
+    private record MarkerPos(double Left, double Top);
+    private record RadiusSize(double X, double Y);
+
+    private static readonly FireStation[] _stations =
+    [
+        new("fs1", "Central Station", "Engine 1 / Ladder 1", "available", 14, 16, "3.2 min", 0, 2.5, -87.6298, 41.8781,
+            [
+                new("Engine", "E-1", "in-service"),
+                new("Ladder", "L-1", "in-service"),
+                new("Ambulance", "A-1", "in-service"),
+            ], "A Shift - Capt. Rodriguez"),
+        new("fs2", "Northside Station", "Engine 7 / Squad 2", "on-call", 10, 12, "4.1 min", 2, 2.0, -87.6553, 41.9103,
+            [
+                new("Engine", "E-7", "on-call"),
+                new("Squad", "S-2", "on-call"),
+                new("Ambulance", "A-7", "in-service"),
+            ], "A Shift - Capt. Walsh"),
+        new("fs3", "Lakeview Station", "Engine 12 / Truck 5", "available", 12, 14, "3.8 min", 0, 2.2, -87.6388, 41.9445,
+            [
+                new("Engine", "E-12", "in-service"),
+                new("Truck", "T-5", "in-service"),
+                new("Ambulance", "A-12", "maintenance"),
+            ], "A Shift - Lt. Kim"),
+        new("fs4", "Westside Station", "Engine 22 / Hazmat 1", "limited", 6, 14, "5.3 min", 0, 1.8, -87.6905, 41.875,
+            [
+                new("Engine", "E-22", "in-service"),
+                new("Hazmat", "H-1", "maintenance"),
+                new("Ambulance", "A-22", "in-service"),
+            ], "A Shift - Capt. Okafor"),
+        new("fs5", "South Loop Station", "Engine 15 / Ladder 9", "available", 15, 16, "3.0 min", 1, 2.4, -87.6245, 41.8565,
+            [
+                new("Engine", "E-15", "in-service"),
+                new("Ladder", "L-9", "on-call"),
+                new("Ambulance", "A-15", "in-service"),
+                new("Battalion Chief", "BC-3", "in-service"),
+            ], "A Shift - Capt. Jameson"),
+    ];
+
+    private string? _selectedId = null;
+    private string? _popupId = null;
+
+    private int _totalCrew => _stations.Sum(s => s.CrewCount);
+    private int _totalCalls => _stations.Sum(s => s.ActiveCalls);
+
+    private void SelectStation(FireStation station)
+    {
+        _selectedId = station.Id;
+        _popupId = _popupId == station.Id ? null : station.Id;
+    }
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "available" => "bg-emerald-500",
+        "on-call"   => "bg-amber-500",
+        "limited"   => "bg-red-500",
+        _           => "bg-zinc-400",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "available" => "Available",
+        "on-call"   => "On Call",
+        "limited"   => "Limited",
+        _           => status,
+    };
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "available" => "#22c55e",
+        "on-call"   => "#f59e0b",
+        "limited"   => "#ef4444",
+        _           => "#71717a",
+    };
+
+    private static string GetApparatusStatusDot(string status) => status switch
+    {
+        "in-service"  => "bg-emerald-500",
+        "on-call"     => "bg-amber-500",
+        "maintenance" => "bg-red-500",
+        _             => "bg-zinc-400",
+    };
+
+    // Map bounding box: lon [-87.70, -87.615], lat [41.845, 41.960]
+    private static MarkerPos GetMarkerPosition(FireStation s)
+    {
+        var lonMin = -87.700;
+        var lonMax = -87.615;
+        var latMin = 41.845;
+        var latMax = 41.960;
+        var left = (s.Longitude - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - s.Latitude) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+
+    // Convert radiusKm to approximate % of map area for the SVG ellipse
+    private static RadiusSize GetRadiusPercent(double radiusKm)
+    {
+        // map width ~ 9.35 km, height ~ 12.8 km at this bbox
+        var mapWidthKm  = 7.85;
+        var mapHeightKm = 10.27;
+        var rx = radiusKm / mapWidthKm  * 80.0;
+        var ry = radiusKm / mapHeightKm * 80.0;
+        return new RadiusSize(rx, ry);
+    }
+}

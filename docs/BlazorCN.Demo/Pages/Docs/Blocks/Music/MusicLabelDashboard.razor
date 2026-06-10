@@ -1,0 +1,218 @@
+@* ============================================================
+   Block: music-label-dashboard
+   Title: MusicLabelDashboard
+   Description: A record label management dashboard block for React and Next.js with signed artists list, catalog size, monthly revenue chart, top performer, and upcoming releases built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-label-dashboard.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="disc" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Label Dashboard</span>
+            </div>
+            <p class="mt-1 text-muted-foreground text-sm">
+                Pulse Records — Artist roster, catalog, and revenue overview.
+            </p>
+        </div>
+
+        @* Stats row *@
+        <div class="grid grid-cols-3 border-b">
+            <div class="border-r px-4 py-3">
+                <p class="font-medium text-muted-foreground text-xs">Signed Artists</p>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">@_totalArtists</p>
+            </div>
+            <div class="border-r px-4 py-3">
+                <p class="font-medium text-muted-foreground text-xs">Catalog Size</p>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">@_totalCatalog.ToString("N0")</p>
+            </div>
+            <div class="px-4 py-3">
+                <p class="font-medium text-muted-foreground text-xs">Monthly Revenue</p>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">$@_monthlyRevenue.ToString("N0")</p>
+            </div>
+        </div>
+
+        @* Two-column layout *@
+        <div class="grid md:grid-cols-2">
+
+            @* Left: Artists list *@
+            <div class="border-b border-r md:border-b-0">
+                <div class="flex items-center gap-2 border-b px-4 py-2.5">
+                    <LucideIconCn Name="users" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-muted-foreground text-xs">Signed Artists</span>
+                </div>
+                @for (int i = 0; i < _artists.Length; i++)
+                {
+                    var artist = _artists[i];
+                    var isLast = i == _artists.Length - 1;
+                    <div class="@Cn.Merge("flex items-center justify-between px-4 py-2.5 transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                        <div class="flex items-center gap-2.5">
+                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", StatusColor(artist.Status))"></span>
+                            <div>
+                                <p class="font-medium text-sm">@artist.Name</p>
+                                <p class="text-muted-foreground text-xs">@artist.Tracks tracks</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono text-muted-foreground text-xs tabular-nums">@FormatStreams(artist.Streams)</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@StatusLabel(artist.Status)</BadgeCn>
+                        </div>
+                    </div>
+                }
+
+                @* Top Performer *@
+                <div class="border-t bg-muted/30 px-4 py-2.5">
+                    <div class="flex items-center gap-1.5">
+                        <LucideIconCn Name="star" Size="12" Class="size-3 text-amber-500" />
+                        <span class="font-medium text-muted-foreground text-xs">Top Performer</span>
+                    </div>
+                    <p class="mt-0.5 text-sm">
+                        <span class="font-medium">Kael Voss</span>
+                        <span class="text-muted-foreground"> — 2.8M streams this month</span>
+                    </p>
+                </div>
+            </div>
+
+            @* Right: Revenue chart + Upcoming releases *@
+            <div>
+                <div class="flex items-center gap-2 border-b px-4 py-2.5">
+                    <LucideIconCn Name="trending-up" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-muted-foreground text-xs">Monthly Revenue</span>
+                </div>
+
+                @* Bar chart rendered as inline SVG *@
+                <div class="border-b px-4 py-3">
+                    <div class="h-[180px] w-full">
+                        @{
+                            var chartW = 320;
+                            var chartH = 160;
+                            var barW = 32;
+                            var gap = 20;
+                            var maxRev = _revenueData.Max(r => r.Revenue);
+                            var totalBarWidth = _revenueData.Length * barW + (_revenueData.Length - 1) * gap;
+                            var startX = (chartW - totalBarWidth) / 2;
+                            var padTop = 10;
+                            var padBottom = 24;
+                            var availH = chartH - padTop - padBottom;
+                        }
+                        <svg viewBox="0 0 @chartW @chartH" class="w-full h-full overflow-visible" aria-label="Monthly revenue bar chart">
+                            @* Grid lines *@
+                            @for (int gi = 0; gi <= 4; gi++)
+                            {
+                                var gy = padTop + (availH / 4) * gi;
+                                var yVal = (int)(maxRev * (4 - gi) / 4 / 1000);
+                                @((MarkupString)$"<line x1=\"{startX}\" y1=\"{gy}\" x2=\"{startX + totalBarWidth}\" y2=\"{gy}\" stroke=\"currentColor\" stroke-opacity=\"0.1\" stroke-width=\"1\"/>")
+                                @((MarkupString)$"<text x=\"{startX - 4}\" y=\"{gy + 4}\" text-anchor=\"end\" font-size=\"9\" fill=\"currentColor\" fill-opacity=\"0.5\">${yVal}k</text>")
+                            }
+                            @* Bars + X-axis labels *@
+                            @for (int bi = 0; bi < _revenueData.Length; bi++)
+                            {
+                                var rd = _revenueData[bi];
+                                var barH = (int)(availH * rd.Revenue / maxRev);
+                                var bx = startX + bi * (barW + gap);
+                                var by = padTop + availH - barH;
+                                var labelY = chartH - 4;
+                                @((MarkupString)$"<rect x=\"{bx}\" y=\"{by}\" width=\"{barW}\" height=\"{barH}\" rx=\"4\" ry=\"4\" fill=\"var(--chart-1, hsl(var(--primary)))\"/>")
+                                @((MarkupString)$"<text x=\"{bx + barW / 2}\" y=\"{labelY}\" text-anchor=\"middle\" font-size=\"10\" fill=\"currentColor\" fill-opacity=\"0.6\">{rd.Month}</text>")
+                            }
+                        </svg>
+                    </div>
+                </div>
+
+                @* Upcoming releases *@
+                <div class="flex items-center gap-2 border-b px-4 py-2.5">
+                    <LucideIconCn Name="calendar" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-muted-foreground text-xs">Upcoming Releases</span>
+                </div>
+                @for (int i = 0; i < _upcomingReleases.Length; i++)
+                {
+                    var release = _upcomingReleases[i];
+                    var isLast = i == _upcomingReleases.Length - 1;
+                    <div class="@Cn.Merge("flex items-center justify-between px-4 py-2.5", isLast ? "" : "border-b")">
+                        <div class="flex items-center gap-2.5">
+                            <LucideIconCn Name="music" Size="14" Class="size-3.5 text-muted-foreground" />
+                            <div>
+                                <p class="font-medium text-sm">@release.Title</p>
+                                <p class="text-muted-foreground text-xs">@release.Artist</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@release.Type</BadgeCn>
+                            <span class="text-muted-foreground text-xs">@release.Date</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Pulse Records — 18 artists &middot; 1,284 tracks &middot; Est. 2019
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record ArtistData(string Id, string Name, int Streams, int Tracks, string Status);
+    private record RevenuePoint(string Month, int Revenue);
+    private record ReleaseData(string Id, string Title, string Artist, string Type, string Date);
+
+    private const int _totalCatalog = 1284;
+    private const int _totalArtists = 18;
+    private const int _monthlyRevenue = 47820;
+
+    private static readonly ArtistData[] _artists =
+    [
+        new("1", "Kael Voss",    2840000, 42, "active"),
+        new("2", "Luna Rae",     1920000, 28, "active"),
+        new("3", "The Drift",    1450000, 35, "active"),
+        new("4", "Nox Meridian",  890000, 19, "upcoming"),
+        new("5", "Echo Park",     720000, 24, "on-hiatus"),
+    ];
+
+    private static readonly RevenuePoint[] _revenueData =
+    [
+        new("Jul", 31200),
+        new("Aug", 34800),
+        new("Sep", 29400),
+        new("Oct", 38100),
+        new("Nov", 42600),
+        new("Dec", 47820),
+    ];
+
+    private static readonly ReleaseData[] _upcomingReleases =
+    [
+        new("1", "Afterglow",     "Kael Voss",    "Album",  "Apr 12, 2026"),
+        new("2", "Midnight Swim", "Luna Rae",     "EP",     "Apr 25, 2026"),
+        new("3", "Hollow Ground", "Nox Meridian", "Single", "May 3, 2026"),
+    ];
+
+    private static string StatusColor(string status) => status switch
+    {
+        "active"    => "bg-emerald-500",
+        "upcoming"  => "bg-blue-500",
+        "on-hiatus" => "bg-amber-500",
+        _           => "bg-muted-foreground",
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "active"    => "Active",
+        "upcoming"  => "Upcoming",
+        "on-hiatus" => "Hiatus",
+        _           => status,
+    };
+
+    private static string FormatStreams(int n)
+    {
+        if (n >= 1_000_000) return $"{(n / 1_000_000.0):F1}M";
+        if (n >= 1_000)     return $"{(n / 1_000.0):F0}K";
+        return n.ToString();
+    }
+}

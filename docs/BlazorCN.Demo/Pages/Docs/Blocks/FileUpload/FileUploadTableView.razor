@@ -1,0 +1,243 @@
+@* ============================================================
+   Block: file-upload-table-view
+   Title: FileUploadTableView
+   Description: A React file manager table view block with sortable columns for name, type, size, modified date, and owner, checkbox row selection, bulk actions toolbar, and pagination using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-table-view.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Files</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">@_files.Length items</p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                Upload
+            </ButtonCn>
+        </div>
+
+        @* Bulk actions toolbar *@
+        @if (_selected.Count > 0)
+        {
+            <div class="flex items-center gap-2 border-b bg-muted/50 px-4 py-2">
+                <span class="font-medium text-xs">@_selected.Count selected</span>
+                <div class="ml-auto flex items-center gap-1">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs">
+                        <LucideIconCn Name="download" Size="12" Class="size-3" />
+                        Download
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs">
+                        <LucideIconCn Name="move" Size="12" Class="size-3" />
+                        Move
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                        <LucideIconCn Name="trash-2" Size="12" Class="size-3" />
+                        Delete
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-2 text-xs" OnClick="ClearSelection">
+                        Clear
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Table *@
+        <TableCn>
+            <TableHeaderCn>
+                <TableRowCn>
+                    <TableHeadCn Class="w-10 px-4">
+                        <CheckboxCn
+                            Checked="@(_paged.Length > 0 && _selected.Count == _paged.Length)"
+                            CheckedChanged="@ToggleAll"
+                            aria-label="Select all" />
+                    </TableHeadCn>
+                    @foreach (var col in _columns)
+                    {
+                        var colItem = col;
+                        var headClass = Cn.Merge("h-9 cursor-pointer select-none px-4 text-xs", colItem.ClassName);
+                        <TableHeadCn Class="@headClass" @onclick="@(() => ToggleSort(colItem.Key))">
+                            @colItem.Label
+                            @SortArrow(colItem.Key)
+                        </TableHeadCn>
+                    }
+                </TableRowCn>
+            </TableHeaderCn>
+            <TableBodyCn>
+                @foreach (var fileItem in _paged)
+                {
+                    var file = fileItem;
+                    var dataState = _selected.Contains(file.Id) ? "selected" : null;
+                    var ariaLabelRow = $"Select {file.Name}";
+                    <TableRowCn Class="transition-colors hover:bg-muted/50" data-state="@dataState">
+                        <TableCellCn Class="w-10 px-4">
+                            <CheckboxCn
+                                Checked="@_selected.Contains(file.Id)"
+                                CheckedChanged="@(() => ToggleSelect(file.Id))"
+                                aria-label="@ariaLabelRow" />
+                        </TableCellCn>
+                        <TableCellCn Class="px-4">
+                            <div class="flex items-center gap-2">
+                                @TypeIcon(file.Type)
+                                <span class="truncate font-medium text-sm">@file.Name</span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn Class="hidden px-4 text-muted-foreground text-xs sm:table-cell">
+                            @TypeLabel(file.Type)
+                        </TableCellCn>
+                        <TableCellCn Class="hidden px-4 text-muted-foreground text-xs tabular-nums sm:table-cell">
+                            @file.Size
+                        </TableCellCn>
+                        <TableCellCn Class="hidden px-4 text-muted-foreground text-xs md:table-cell">
+                            @file.Modified
+                        </TableCellCn>
+                        <TableCellCn Class="hidden px-4 text-muted-foreground text-xs lg:table-cell">
+                            @file.Owner
+                        </TableCellCn>
+                    </TableRowCn>
+                }
+            </TableBodyCn>
+        </TableCn>
+
+        @* Pagination *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @(_page * PageSize + 1)–@(Math.Min((_page + 1) * PageSize, _files.Length)) of @_files.Length
+            </span>
+            <div class="flex items-center gap-1">
+                <ButtonCn
+                    Variant="ButtonVariant.Ghost"
+                    Size="ButtonSize.Sm"
+                    Class="size-7 p-0"
+                    OnClick="@(() => SetPage(_page - 1))"
+                    Disabled="@(_page == 0)">
+                    <LucideIconCn Name="chevron-left" Size="16" Class="size-4" />
+                </ButtonCn>
+                <ButtonCn
+                    Variant="ButtonVariant.Ghost"
+                    Size="ButtonSize.Sm"
+                    Class="size-7 p-0"
+                    OnClick="@(() => SetPage(_page + 1))"
+                    Disabled="@(_page >= _totalPages - 1)">
+                    <LucideIconCn Name="chevron-right" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private const int PageSize = 8;
+
+    private record FileEntry(string Id, string Name, string Type, string Size, long SizeBytes, string Modified, string Owner);
+
+    private static readonly FileEntry[] _files =
+    [
+        new("f1",  "Q4 Financial Report.pdf",  "pdf",         "2.4 MB",  2516582,   "Mar 22, 2026", "Alice Chen"),
+        new("f2",  "Brand Assets",             "folder",      "148 MB",  155189248, "Mar 21, 2026", "Design Team"),
+        new("f3",  "Product Screenshot.png",   "image",       "4.1 MB",  4298137,   "Mar 20, 2026", "Bob Martinez"),
+        new("f4",  "Revenue Forecast.xlsx",    "spreadsheet", "890 KB",  911360,    "Mar 19, 2026", "Carol Wu"),
+        new("f5",  "API Documentation.pdf",    "pdf",         "1.8 MB",  1887436,   "Mar 18, 2026", "David Kim"),
+        new("f6",  "Team Headshots",           "folder",      "67 MB",   70254592,  "Mar 17, 2026", "HR Team"),
+        new("f7",  "Meeting Notes.docx",       "document",    "245 KB",  250880,    "Mar 16, 2026", "Eve Johnson"),
+        new("f8",  "Dashboard Mockup.png",     "image",       "3.6 MB",  3774873,   "Mar 15, 2026", "Frank Liu"),
+        new("f9",  "User Research Data.xlsx",  "spreadsheet", "1.2 MB",  1258291,   "Mar 14, 2026", "Grace Park"),
+        new("f10", "Release Notes.pdf",        "pdf",         "520 KB",  532480,    "Mar 13, 2026", "Henry Adams"),
+        new("f11", "Onboarding Guide.docx",    "document",    "380 KB",  389120,    "Mar 12, 2026", "Alice Chen"),
+        new("f12", "Exported Logs",            "folder",      "24 MB",   25165824,  "Mar 11, 2026", "DevOps Team"),
+    ];
+
+    private record ColumnDef(string Key, string Label, string ClassName = "");
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("name",      "Name"),
+        new("type",      "Type",     "hidden sm:table-cell"),
+        new("sizeBytes", "Size",     "hidden sm:table-cell"),
+        new("modified",  "Modified", "hidden md:table-cell"),
+        new("owner",     "Owner",    "hidden lg:table-cell"),
+    ];
+
+    private HashSet<string> _selected = [];
+    private string _sortKey = "name";
+    private string _sortDir = "asc";
+    private int _page = 0;
+
+    private string SortValue(FileEntry f) => _sortKey switch
+    {
+        "sizeBytes" => f.SizeBytes.ToString("D20"),
+        "type"      => f.Type,
+        "modified"  => f.Modified,
+        "owner"     => f.Owner,
+        _           => f.Name,
+    };
+
+    private FileEntry[] GetSorted()
+    {
+        var arr = _files.OrderBy(f => SortValue(f), StringComparer.OrdinalIgnoreCase).ToArray();
+        return _sortDir == "desc" ? arr.Reverse().ToArray() : arr;
+    }
+
+    private FileEntry[] _paged => GetSorted().Skip(_page * PageSize).Take(PageSize).ToArray();
+    private int _totalPages => (int)Math.Ceiling(_files.Length / (double)PageSize);
+
+    private void ToggleSort(string key)
+    {
+        if (_sortKey == key)
+            _sortDir = _sortDir == "asc" ? "desc" : "asc";
+        else
+        {
+            _sortKey = key;
+            _sortDir = "asc";
+        }
+        _page = 0;
+    }
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Add(id))
+            _selected.Remove(id);
+    }
+
+    private void ToggleAll()
+    {
+        var paged = _paged;
+        if (_selected.Count == paged.Length)
+            _selected.Clear();
+        else
+            _selected = [.. paged.Select(f => f.Id)];
+    }
+
+    private void ClearSelection() => _selected.Clear();
+
+    private void SetPage(int p)
+    {
+        _page = Math.Clamp(p, 0, _totalPages - 1);
+    }
+
+    private RenderFragment SortArrow(string col) => _sortKey != col
+        ? (RenderFragment)(_ => { })
+        : _sortDir == "asc"
+            ? @<LucideIconCn Name="arrow-up" Size="12" Class="ml-1 inline size-3" />
+            : @<LucideIconCn Name="arrow-down" Size="12" Class="ml-1 inline size-3" />;
+
+    private RenderFragment TypeIcon(string type) => type switch
+    {
+        "folder"      => @<LucideIconCn Name="folder"           Size="16" Class="size-4 text-muted-foreground" />,
+        "pdf"         => @<LucideIconCn Name="file-text"        Size="16" Class="size-4 text-muted-foreground" />,
+        "image"       => @<LucideIconCn Name="image"            Size="16" Class="size-4 text-muted-foreground" />,
+        "spreadsheet" => @<LucideIconCn Name="file-spreadsheet" Size="16" Class="size-4 text-muted-foreground" />,
+        _             => @<LucideIconCn Name="file"             Size="16" Class="size-4 text-muted-foreground" />,
+    };
+
+    private static string TypeLabel(string type) => type switch
+    {
+        "folder"      => "Folder",
+        "pdf"         => "PDF",
+        "image"       => "Image",
+        "spreadsheet" => "Spreadsheet",
+        "document"    => "Document",
+        _             => "File",
+    };
+}

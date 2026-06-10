@@ -1,0 +1,216 @@
+@* ============================================================
+   Block: music-audio-bookmarks
+   Title: MusicAudioBookmarks
+   Description: An audio bookmark manager block for React and Next.js with timestamped bookmarks, bookmark labels, jump-to-position controls, add bookmark at current position, and per-bookmark notes built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-audio-bookmarks.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bookmark" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Audio Bookmarks</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs">
+                    @_bookmarks.Count marks
+                </BadgeCn>
+            </div>
+            <p class="mt-1 text-muted-foreground text-sm">Midnight Sessions — Final Mix.wav</p>
+        </div>
+
+        @* Playback bar *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <ButtonCn Variant="ButtonVariant.Outline"
+                          Size="ButtonSize.Sm"
+                          Class="size-7 p-0"
+                          OnClick="@(() => _isPlaying = !_isPlaying)">
+                    @if (_isPlaying)
+                    {
+                        <LucideIconCn Name="pause" Size="12" Class="size-3" />
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="play" Size="12" Class="size-3" />
+                    }
+                </ButtonCn>
+                <span class="w-10 font-mono text-xs tabular-nums">@FormatTime(_currentTime)</span>
+                <div class="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div class="absolute inset-y-0 left-0 rounded-full bg-foreground"
+                         style="@($"width:{ProgressPercent}%")"></div>
+                    @foreach (var bm in _bookmarks)
+                    {
+                        var bookmark = bm;
+                        <button type="button"
+                                class="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-500 transition-transform hover:scale-150"
+                                style="@($"left:{(bookmark.Timestamp * 100 / TrackDuration)}%")"
+                                @onclick="@(() => JumpTo(bookmark.Timestamp))"
+                                aria-label="@($"Jump to {bookmark.Title}")"></button>
+                    }
+                </div>
+                <span class="w-10 text-right font-mono text-muted-foreground text-xs tabular-nums">
+                    @FormatTime(TrackDuration)
+                </span>
+            </div>
+        </div>
+
+        @* Add bookmark controls *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <div class="flex items-center gap-1 overflow-x-auto">
+                @foreach (var lbl in _labels)
+                {
+                    var label = lbl;
+                    <ButtonCn Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Sm"
+                              Class="@Cn.Merge("h-6 gap-1.5 px-2 text-xs", _newLabel == label ? "bg-muted shadow-sm" : "text-muted-foreground")"
+                              OnClick="@(() => _newLabel = label)">
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", LabelColor(label))"></span>
+                        @label
+                    </ButtonCn>
+                }
+            </div>
+            <ButtonCn Size="ButtonSize.Sm"
+                      Class="ml-auto h-7 gap-1.5 shrink-0 text-xs"
+                      OnClick="AddBookmark">
+                <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                Add at @FormatTime(_currentTime)
+            </ButtonCn>
+        </div>
+
+        @* Bookmark list *@
+        <div>
+            @for (int i = 0; i < _bookmarks.Count; i++)
+            {
+                var bm = _bookmarks[i];
+                var isLast = i == _bookmarks.Count - 1;
+                var isExpanded = _expanded == bm.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => _expanded = (isExpanded ? null : bm.Id))"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", LabelColor(bm.Label))"></span>
+                        <span class="w-12 shrink-0 font-mono text-muted-foreground text-xs tabular-nums">
+                            @FormatTime(bm.Timestamp)
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@bm.Title</span>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-normal text-xs">
+                            @bm.Label
+                        </BadgeCn>
+                        <LucideIconCn Name="chevron-right"
+                                      Size="16"
+                                      Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-3 pl-9">
+                                @if (!string.IsNullOrEmpty(bm.Notes))
+                                {
+                                    <div class="mb-3 rounded-md bg-muted/50 p-3">
+                                        <span class="mb-1 block font-medium text-muted-foreground text-xs">Notes</span>
+                                        <p class="text-sm leading-relaxed">@bm.Notes</p>
+                                    </div>
+                                }
+                                <div class="flex items-center gap-2">
+                                    <div @onclick:stopPropagation>
+                                        <ButtonCn Variant="ButtonVariant.Outline"
+                                                  Size="ButtonSize.Sm"
+                                                  Class="h-6 gap-1.5 px-2 text-xs"
+                                                  OnClick="@(() => JumpTo(bm.Timestamp))">
+                                            <LucideIconCn Name="skip-forward" Size="12" Class="size-3" />
+                                            Jump to @FormatTime(bm.Timestamp)
+                                        </ButtonCn>
+                                    </div>
+                                    <div @onclick:stopPropagation>
+                                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                                  Size="ButtonSize.Sm"
+                                                  Class="h-6 gap-1 px-2 text-xs text-red-500 hover:text-red-600"
+                                                  OnClick="@(() => RemoveBookmark(bm.Id))">
+                                            <LucideIconCn Name="trash-2" Size="12" Class="size-3" />
+                                            Remove
+                                        </ButtonCn>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Click any bookmark to view notes · Click the timeline markers to jump
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Bookmark(string Id, int Timestamp, string Label, string Title, string Notes);
+
+    private const int TrackDuration = 210;
+
+    private static readonly string[] _labels = ["Intro", "Verse", "Chorus", "Bridge", "Outro", "Note"];
+
+    private List<Bookmark> _bookmarks =
+    [
+        new("bm-1",   0, "Intro",  "Track opening",      "Ambient pad with reverb tail, 4 bars before drums enter"),
+        new("bm-2",  32, "Verse",  "First verse",         "Vocals come in, keep bass low to leave room for voice"),
+        new("bm-3",  64, "Chorus", "Main chorus",         "Full arrangement, push the snare level up 2dB here"),
+        new("bm-4",  96, "Bridge", "Breakdown section",   "Strip back to keys and vocal only, add delay throw on last word"),
+        new("bm-5", 142, "Chorus", "Final chorus",        "Double the vocal harmonies, ride the master fader up slightly"),
+        new("bm-6", 178, "Outro",  "Fade out",            "Gradual fade over 8 bars, let the reverb tail ring out naturally"),
+    ];
+
+    private string? _expanded = "bm-3";
+    private int _currentTime = 64;
+    private bool _isPlaying = false;
+    private string _newLabel = "Note";
+
+    private int ProgressPercent => (int)Math.Round((double)_currentTime / TrackDuration * 100);
+
+    private static string FormatTime(int seconds)
+    {
+        var m = seconds / 60;
+        var s = seconds % 60;
+        return $"{m}:{s:D2}";
+    }
+
+    private static string LabelColor(string label) => label switch
+    {
+        "Intro"  => "bg-blue-500",
+        "Verse"  => "bg-emerald-500",
+        "Chorus" => "bg-amber-500",
+        "Bridge" => "bg-purple-500",
+        "Outro"  => "bg-red-500",
+        _        => "bg-muted-foreground",
+    };
+
+    private void AddBookmark()
+    {
+        var id = $"bm-{_bookmarks.Count + 1}-{_currentTime}";
+        var newBookmark = new Bookmark(id, _currentTime, _newLabel, $"Bookmark at {FormatTime(_currentTime)}", "");
+        _bookmarks = [.. _bookmarks, newBookmark];
+        _bookmarks = [.. _bookmarks.OrderBy(b => b.Timestamp)];
+        _expanded = id;
+    }
+
+    private void RemoveBookmark(string id)
+    {
+        _bookmarks = _bookmarks.Where(b => b.Id != id).ToList();
+        if (_expanded == id) _expanded = null;
+    }
+
+    private void JumpTo(int timestamp)
+    {
+        _currentTime = timestamp;
+    }
+}

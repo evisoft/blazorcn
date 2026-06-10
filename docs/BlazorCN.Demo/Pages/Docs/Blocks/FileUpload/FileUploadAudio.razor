@@ -1,0 +1,239 @@
+@* ============================================================
+   Block: file-upload-audio
+   Title: FileUploadAudio
+   Description: An audio file upload component with waveform visualization, duration, format and bitrate display, simulated play preview, and metadata panel built with React, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-audio.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Upload audio</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    MP3, WAV, FLAC up to 250 MB per file
+                </p>
+            </div>
+            <span class="text-muted-foreground text-xs">
+                @_files.Count file@(_files.Count != 1 ? "s" : "")
+            </span>
+        </div>
+
+        @* Drop zone *@
+        <div class="border-b px-4 py-4">
+            <div
+                @ondragover:preventDefault
+                @ondragover="@(() => _isDragOver = true)"
+                @ondragleave="@(() => _isDragOver = false)"
+                @ondrop:preventDefault
+                @ondrop="@(() => _isDragOver = false)"
+                class="@Cn.Merge("flex flex-col items-center justify-center gap-2 rounded-md border border-dashed px-4 py-8 transition-colors", _isDragOver ? "border-foreground/30 bg-muted/50" : "border-muted-foreground/25")">
+                <LucideIconCn Name="upload-cloud" Size="20" Class="size-5 text-muted-foreground/60" />
+                <div class="text-center">
+                    <p class="font-medium text-sm">Drop audio files here</p>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        or click to browse from your device
+                    </p>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-1 h-7 text-xs">
+                    Choose files
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* File list *@
+        <div>
+            @for (int i = 0; i < _files.Count; i++)
+            {
+                var file = _files[i];
+                var isLast = i == _files.Count - 1;
+                var isPlaying = _playing == file.Id;
+                var isExpanded = _expanded == file.Id;
+                const int maxHeight = 28;
+
+                <div class="@Cn.Merge("", isLast ? "" : "border-b")">
+                    @* File row *@
+                    <div class="flex items-center gap-3 px-4 py-3">
+                        @* Play button *@
+                        @{
+                            var fileId = file.Id;
+                        }
+                        <ButtonCn
+                            Variant="ButtonVariant.Ghost"
+                            Size="ButtonSize.Sm"
+                            Class="size-8 shrink-0 rounded-full p-0"
+                            OnClick="@(() => TogglePlay(fileId))">
+                            @if (isPlaying)
+                            {
+                                <LucideIconCn Name="pause" Size="14" Class="size-3.5" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="play" Size="14" Class="size-3.5" />
+                            }
+                        </ButtonCn>
+
+                        @* Waveform + info *@
+                        <div
+                            class="min-w-0 flex-1 cursor-pointer"
+                            role="button"
+                            tabindex="0"
+                            @onclick="@(() => ToggleExpanded(fileId))"
+                            @onkeydown="@((KeyboardEventArgs e) => HandleWaveformKeyDown(e, fileId))">
+                            @* Waveform bars *@
+                            <div class="mb-1.5 flex items-end gap-px">
+                                @for (int bi = 0; bi < file.Waveform.Length; bi++)
+                                {
+                                    var h = file.Waveform[bi];
+                                    var barIndex = bi;
+                                    var barHeight = (int)((h / (double)maxHeight) * 24 + 2);
+                                    var barPlaying = isPlaying && barIndex < (int)(file.Waveform.Length * 0.4);
+                                    <div
+                                        class="@Cn.Merge("w-1 rounded-full transition-colors", barPlaying ? "bg-foreground" : "bg-muted-foreground/30")"
+                                        style="@($"height:{barHeight}px")">
+                                    </div>
+                                }
+                            </div>
+
+                            @* File name + meta *@
+                            <div class="flex items-center gap-2">
+                                <span class="truncate font-medium text-sm">@file.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-mono text-[10px]">
+                                    @file.Format
+                                </BadgeCn>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                <span>@file.Duration</span>
+                                <span>·</span>
+                                <span>@file.Size</span>
+                                <span>·</span>
+                                <span>@file.Bitrate</span>
+                            </div>
+                        </div>
+
+                        @* Remove *@
+                        <ButtonCn
+                            Variant="ButtonVariant.Ghost"
+                            Size="ButtonSize.Sm"
+                            Class="size-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                            OnClick="@(() => RemoveFile(fileId))">
+                            <LucideIconCn Name="trash" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                    </div>
+
+                    @* Expanded metadata *@
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-14">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <p class="mb-2 font-medium text-muted-foreground text-xs">Metadata</p>
+                                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground text-xs">Format</span>
+                                        <span class="font-mono text-xs">@file.Format</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground text-xs">Duration</span>
+                                        <span class="font-mono text-xs">@file.Duration</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground text-xs">Bitrate</span>
+                                        <span class="font-mono text-xs">@file.Bitrate</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground text-xs">Sample rate</span>
+                                        <span class="font-mono text-xs">@file.SampleRate</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground text-xs">Channels</span>
+                                        <span class="font-mono text-xs">@file.Channels</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground text-xs">File size</span>
+                                        <span class="font-mono text-xs">@file.Size</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_files.Count == 0)
+            {
+                <div class="flex flex-col items-center justify-center px-4 py-8 text-center">
+                    <LucideIconCn Name="music" Size="20" Class="size-5 text-muted-foreground/40" />
+                    <p class="mt-2 text-muted-foreground text-xs">No audio files uploaded yet</p>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        @if (_files.Count > 0)
+        {
+            <div class="flex items-center justify-between border-t px-4 py-3">
+                <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="mic" Size="12" Class="size-3" />
+                    <span>Supported: MP3, WAV, FLAC, OGG, AAC</span>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Upload all
+                </ButtonCn>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record AudioFile(
+        string Id,
+        string Name,
+        string Size,
+        string Format,
+        string Duration,
+        string Bitrate,
+        string SampleRate,
+        string Channels,
+        int[] Waveform);
+
+    private static readonly AudioFile[] _seed =
+    [
+        new("1", "podcast-episode-42-final.mp3", "34.2 MB", "MP3", "24:18", "192 kbps", "44.1 kHz", "Stereo",
+            [3, 5, 8, 12, 15, 18, 14, 10, 16, 20, 22, 18, 14, 19, 24, 20, 16, 12, 18, 22, 26, 24, 20, 15, 10, 14, 18, 22, 17, 12, 8, 5]),
+        new("2", "ambient-background-loop.wav",  "128.7 MB", "WAV", "3:45", "1,411 kbps", "48 kHz", "Stereo",
+            [6, 8, 7, 9, 8, 10, 9, 11, 10, 12, 11, 10, 9, 11, 12, 10, 9, 8, 10, 11, 9, 8, 7, 9, 10, 8, 7, 6, 8, 9, 7, 6]),
+        new("3", "vocal-recording-take-3.flac",  "67.4 MB",  "FLAC", "5:02", "876 kbps", "96 kHz", "Mono",
+            [2, 4, 8, 14, 20, 26, 22, 16, 10, 6, 4, 8, 16, 24, 28, 24, 18, 12, 6, 4, 8, 14, 22, 26, 22, 16, 10, 6, 4, 3, 2, 2]),
+    ];
+
+    private List<AudioFile> _files = [.. _seed];
+    private string? _playing = null;
+    private string? _expanded = "1";
+    private bool _isDragOver = false;
+
+    private void RemoveFile(string id)
+    {
+        _files = _files.Where(f => f.Id != id).ToList();
+        if (_playing == id) _playing = null;
+        if (_expanded == id) _expanded = null;
+    }
+
+    private void TogglePlay(string id)
+    {
+        _playing = _playing == id ? null : id;
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private void HandleWaveformKeyDown(KeyboardEventArgs e, string id)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            ToggleExpanded(id);
+        }
+    }
+}

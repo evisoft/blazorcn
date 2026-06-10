@@ -1,0 +1,284 @@
+@* ============================================================
+   Block: map-economic-indicators
+   Title: MapEconomicIndicators
+   Description: React economic indicator dashboard map block for Next.js with GDP markers, unemployment rates, trade flow arrows, and country detail overlays using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-economic-indicators.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="globe" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Economic Indicators</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button
+                    type="button"
+                    class="@(_showTrade ? "rounded-md px-2 py-1 text-xs transition-colors bg-muted font-medium" : "rounded-md px-2 py-1 text-xs transition-colors text-muted-foreground hover:bg-muted/50")"
+                    @onclick="@(() => _showTrade = !_showTrade)"
+                >
+                    Trade flows
+                </button>
+                @foreach (var h in new[] { "strong", "moderate", "weak" })
+                {
+                    var health = h;
+                    var cfg = _healthConfig[health];
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                        @_countries.Count(c => c.Health == health)
+                    </span>
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Map placeholder (Map/MapMarker/MapRoute components are not available in BlazorCN; rendered as a styled placeholder with country markers) *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Trade flow lines (SVG overlay) *@
+                    @if (_showTrade)
+                    {
+                        <svg class="absolute inset-0 h-full w-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            @foreach (var flow in _tradeFlows)
+                            {
+                                var pts = flow.Coordinates.Select(coord => GetMarkerPosition(coord[0], coord[1])).ToArray();
+                                var stroke = flow.Growing ? "#22c55e" : "#ef4444";
+                                if (pts.Length >= 2)
+                                {
+                                    var d = $"M {pts[0].X:F1} {pts[0].Y:F1}";
+                                    for (var idx = 1; idx < pts.Length; idx++)
+                                    {
+                                        d += $" L {pts[idx].X:F1} {pts[idx].Y:F1}";
+                                    }
+                                    @((MarkupString)$"<path d=\"{d}\" stroke=\"{stroke}\" stroke-width=\"0.5\" stroke-opacity=\"0.5\" fill=\"none\" {(flow.Growing ? "" : "stroke-dasharray=\"1 1\"")} />")
+                                }
+                            }
+                        </svg>
+                    }
+
+                    @* Country markers *@
+                    @foreach (var country in _countries)
+                    {
+                        var c = country;
+                        var isSelected = _selectedId == c.Id;
+                        var cfg = _healthConfig[c.Health];
+                        var pos = GetMarkerPosition(c.Longitude, c.Latitude);
+                        <button
+                            type="button"
+                            class="@Cn.Merge("absolute flex flex-col items-center gap-0.5 transition-all -translate-x-1/2 -translate-y-1/2", isSelected ? "scale-110" : "")"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")"
+                            @onclick="@(() => _selectedId = isSelected ? null : c.Id)"
+                            title="@c.Name — GDP @c.Gdp"
+                        >
+                            <div
+                                class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background shadow-lg", isSelected ? "size-9" : "size-7")"
+                                style="@($"background-color:{cfg.Color}")"
+                            >
+                                <span class="font-semibold text-white text-[10px]">@c.Code</span>
+                            </div>
+                        </button>
+                    }
+                </div>
+                <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded absolute bottom-2 right-2">
+                    Map view — World
+                </div>
+            </div>
+
+            @* Detail Panel *@
+            <div class="w-64 shrink-0 border-l">
+                @if (_selected != null)
+                {
+                    var sel = _selected;
+                    var selCfg = _healthConfig[sel.Health];
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium text-sm">@sel.Name</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-1 px-1.5 font-normal text-[10px]">
+                                <span class="@($"size-1.5 rounded-full {selCfg.Dot}")"></span>
+                                @selCfg.Label
+                            </BadgeCn>
+                        </div>
+                        <div class="mt-2 flex items-baseline gap-1">
+                            <span class="font-semibold text-2xl tabular-nums">@sel.Gdp</span>
+                            <span class="text-muted-foreground text-xs">GDP</span>
+                        </div>
+                    </div>
+
+                    @* Key stats *@
+                    <div class="grid grid-cols-2 border-b">
+                        <div class="border-r px-4 py-2.5">
+                            <span class="block text-muted-foreground text-xs">Growth</span>
+                            <span class="@($"font-semibold text-sm tabular-nums {(sel.GdpGrowth >= 2 ? "text-emerald-600 dark:text-emerald-400" : sel.GdpGrowth >= 1 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400")}")">
+                                @(sel.GdpGrowth > 0 ? "+" : "")@(sel.GdpGrowth)%
+                            </span>
+                        </div>
+                        <div class="px-4 py-2.5">
+                            <span class="block text-muted-foreground text-xs">Unemployment</span>
+                            <span class="font-semibold text-sm tabular-nums">@(sel.Unemployment)%</span>
+                        </div>
+                        <div class="border-t border-r px-4 py-2.5">
+                            <span class="block text-muted-foreground text-xs">Inflation</span>
+                            <span class="font-semibold text-sm tabular-nums">@(sel.Inflation)%</span>
+                        </div>
+                        <div class="border-t px-4 py-2.5">
+                            <span class="block text-muted-foreground text-xs">Trade</span>
+                            <span class="font-semibold text-sm tabular-nums">@sel.TradeBalance</span>
+                        </div>
+                    </div>
+
+                    @* Detailed metrics *@
+                    <div class="max-h-[240px] overflow-y-auto">
+                        @foreach (var (metric, idx) in sel.Metrics.Select((m, i) => (m, i)))
+                        {
+                            var isLast = idx == sel.Metrics.Length - 1;
+                            var isPositive = metric.Label == "Unemployment" ? metric.Change < 0 : metric.Change > 0;
+                            <div class="@Cn.Merge("flex items-center justify-between px-4 py-2.5", isLast ? "" : "border-b")">
+                                <div class="flex items-center gap-2">
+                                    <LucideIconCn Name="trending-up" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs">@metric.Label</span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium text-xs tabular-nums">@metric.Value</span>
+                                    <span class="@($"flex items-center text-[10px] tabular-nums {(isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}")">
+                                        @if (isPositive)
+                                        {
+                                            <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="arrow-down-right" Size="12" Class="size-3" />
+                                        }
+                                        @(Math.Abs(metric.Change).ToString("F1"))
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="flex h-full items-center justify-center p-4">
+                        <span class="text-center text-muted-foreground text-xs">
+                            Select a country to view indicators
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EconomicMetric(string Label, string Value, double Change);
+
+    private record Country(
+        string Id,
+        string Name,
+        string Code,
+        double Longitude,
+        double Latitude,
+        string Gdp,
+        double GdpGrowth,
+        double Unemployment,
+        double Inflation,
+        int DebtToGdp,
+        string TradeBalance,
+        string Health,
+        EconomicMetric[] Metrics
+    );
+
+    private record TradeFlow(
+        string Id,
+        string From,
+        string To,
+        string Volume,
+        bool Growing,
+        double[][] Coordinates
+    );
+
+    private record HealthConfig(string Label, string Dot, string Color);
+
+    private static readonly Country[] _countries =
+    [
+        new("us", "United States", "US", -98.5795, 39.8283, "$28.78T", 2.4, 3.8, 2.9, 123, "-$773B", "strong",
+        [
+            new("GDP Growth", "2.4%", 0.3),
+            new("Unemployment", "3.8%", -0.2),
+            new("Inflation", "2.9%", -0.4),
+            new("Debt/GDP", "123%", 2.1),
+        ]),
+        new("de", "Germany", "DE", 10.4515, 51.1657, "$4.46T", 0.3, 5.7, 2.2, 64, "+$218B", "moderate",
+        [
+            new("GDP Growth", "0.3%", -0.8),
+            new("Unemployment", "5.7%", 0.4),
+            new("Inflation", "2.2%", -1.6),
+            new("Debt/GDP", "64%", -1.2),
+        ]),
+        new("cn", "China", "CN", 104.1954, 35.8617, "$19.37T", 4.8, 5.1, 0.3, 83, "+$823B", "moderate",
+        [
+            new("GDP Growth", "4.8%", -0.4),
+            new("Unemployment", "5.1%", 0.1),
+            new("Inflation", "0.3%", -0.4),
+            new("Debt/GDP", "83%", 5.2),
+        ]),
+        new("jp", "Japan", "JP", 138.2529, 36.2048, "$4.23T", 1.1, 2.5, 3.2, 255, "-$62B", "moderate",
+        [
+            new("GDP Growth", "1.1%", 0.2),
+            new("Unemployment", "2.5%", -0.1),
+            new("Inflation", "3.2%", 0.8),
+            new("Debt/GDP", "255%", 3.0),
+        ]),
+        new("br", "Brazil", "BR", -51.9253, -14.235, "$2.17T", 2.9, 7.8, 4.5, 74, "+$61B", "moderate",
+        [
+            new("GDP Growth", "2.9%", 0.6),
+            new("Unemployment", "7.8%", -0.9),
+            new("Inflation", "4.5%", 0.2),
+            new("Debt/GDP", "74%", -1.8),
+        ]),
+        new("gb", "United Kingdom", "GB", -3.436, 55.3781, "$3.34T", 0.6, 4.2, 3.4, 101, "-$198B", "weak",
+        [
+            new("GDP Growth", "0.6%", -0.1),
+            new("Unemployment", "4.2%", 0.3),
+            new("Inflation", "3.4%", -0.9),
+            new("Debt/GDP", "101%", 1.4),
+        ]),
+    ];
+
+    private static readonly TradeFlow[] _tradeFlows =
+    [
+        new("us-cn", "US", "CN", "$582B", false, [[-98.58, 39.83], [-170.0, 45.0], [104.2, 35.86]]),
+        new("de-cn", "DE", "CN", "$324B", true,  [[10.45, 51.17], [55.0, 48.0],   [104.2, 35.86]]),
+        new("us-de", "US", "DE", "$246B", true,  [[-98.58, 39.83], [-40.0, 50.0], [10.45, 51.17]]),
+        new("jp-us", "JP", "US", "$198B", false, [[138.25, 36.2],  [180.0, 42.0], [-98.58, 39.83]]),
+    ];
+
+    private static readonly Dictionary<string, HealthConfig> _healthConfig = new()
+    {
+        ["strong"]   = new("Strong",   "bg-emerald-500", "#22c55e"),
+        ["moderate"] = new("Moderate", "bg-amber-500",   "#eab308"),
+        ["weak"]     = new("Weak",     "bg-red-500",     "#ef4444"),
+    };
+
+    private string? _selectedId = "us";
+    private bool _showTrade = true;
+
+    private Country? _selected => _countries.FirstOrDefault(c => c.Id == _selectedId);
+
+    // Map longitude/latitude to CSS percentage positions.
+    // Viewport: lon [-180, 180], lat [-60, 80]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -180.0, lonMax = 180.0;
+        const double latMin = -60.0,  latMax = 80.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 2, 98);
+        y = Math.Clamp(y, 2, 98);
+        return (x, y);
+    }
+}

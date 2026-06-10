@@ -1,0 +1,276 @@
+@* ============================================================
+   Block: map-parking-finder
+   Title: MapParkingFinder
+   Description: React parking availability map block for Next.js with lot markers, pricing info, availability indicators, real-time space counts, and sortable lot list using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-parking-finder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="car" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Parking Near You</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    Union Square
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-muted-foreground tabular-nums">@_totalAvailable spaces</span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground tabular-nums">@_lots.Length lots</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row">
+            @* Lot list *@
+            <div class="w-full border-b md:w-72 md:shrink-0 md:border-b-0 md:border-r">
+                @* Sort control *@
+                <div class="flex items-center justify-between border-b px-3 py-2">
+                    <span class="text-xs text-muted-foreground">Sort by @_sortBy</span>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs" OnClick="ToggleSort">
+                        <LucideIconCn Name="arrow-up-down" Size="12" Class="size-3" />
+                        @(_sortBy == "distance" ? "Price" : "Distance")
+                    </ButtonCn>
+                </div>
+
+                <div class="max-h-[300px] overflow-y-auto md:max-h-[418px]">
+                    @foreach (var lot in SortedLots)
+                    {
+                        var lotItem = lot;
+                        var isSelected = _selected == lotItem.Id;
+                        var availColor = GetAvailabilityColor(lotItem.Available, lotItem.TotalSpaces);
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(lotItem.Id))"
+                            class="@Cn.Merge("flex w-full items-start gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/50", isSelected ? "bg-muted/50" : "")">
+                            <span class="@Cn.Merge("mt-1.5 size-2 shrink-0 rounded-full", availColor)"></span>
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-medium">@lotItem.Name</p>
+                                <p class="text-xs text-muted-foreground">@lotItem.Address</p>
+                                <div class="mt-1 flex items-center gap-2">
+                                    <span class="text-xs text-muted-foreground tabular-nums">@lotItem.Distance</span>
+                                    <span class="text-xs text-muted-foreground">·</span>
+                                    <span class="text-xs font-medium tabular-nums">$@lotItem.HourlyRate/hr</span>
+                                    <span class="text-xs text-muted-foreground">·</span>
+                                    <span class="@Cn.Merge("text-xs tabular-nums", lotItem.Available == 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                                        @(lotItem.Available == 0 ? "Full" : $"{lotItem.Available} open")
+                                    </span>
+                                </div>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map — Map/MapMarker/MarkerContent/MarkerTooltip/MarkerPopup/MapControls are custom registry
+               components with no BlazorCN equivalent; rendered as a styled static map placeholder
+               showing all markers and popup detail for the selected lot. *@
+            <div class="relative h-[350px] flex-1 md:h-[460px] bg-muted/30">
+                @* Map background grid lines *@
+                <div class="absolute inset-0 overflow-hidden opacity-20">
+                    <div class="grid h-full grid-cols-8 grid-rows-8">
+                        @for (int gi = 0; gi < 64; gi++)
+                        {
+                            <div class="border border-border/50"></div>
+                        }
+                    </div>
+                </div>
+
+                @* Road-like lines *@
+                <div class="absolute inset-0 opacity-30">
+                    <div class="absolute left-0 right-0 top-[28%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[52%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[72%] h-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[22%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[48%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[70%] top-0 w-px bg-border"></div>
+                </div>
+
+                @* Map label *@
+                <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    San Francisco — Union Square
+                </div>
+
+                @* Map zoom controls (bottom-right) *@
+                <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+
+                @* Lot markers plotted by relative position *@
+                @foreach (var lot in _lots)
+                {
+                    var lotItem = lot;
+                    var pos = GetMarkerPosition(lotItem);
+                    var isSelected = _selected == lotItem.Id;
+                    var availColor = GetAvailabilityColor(lotItem.Available, lotItem.TotalSpaces);
+                    <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(lotItem.Id))"
+                            class="group relative flex flex-col items-center">
+                            @* MarkerContent *@
+                            <div class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-white shadow-md transition-all", availColor, isSelected ? "size-5" : "size-3.5")">
+                                @if (isSelected)
+                                {
+                                    <LucideIconCn Name="car" Size="12" Class="size-3 text-white" />
+                                }
+                            </div>
+                            @* MarkerTooltip (hover) *@
+                            <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[120px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                                <div class="text-center">
+                                    <p class="font-medium">@lotItem.Name</p>
+                                    <p class="text-[10px] opacity-70 tabular-nums">
+                                        $@lotItem.HourlyRate/hr · @(lotItem.Available == 0 ? "Full" : $"{lotItem.Available} spots")
+                                    </p>
+                                </div>
+                            </div>
+                        </button>
+
+                        @* MarkerPopup (shown when selected) *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 w-52 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <p class="text-sm font-medium">@lotItem.Name</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@lotItem.Address</p>
+                                <div class="mt-2 space-y-1.5">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Rate</span>
+                                        <span class="text-xs font-medium tabular-nums">$@lotItem.HourlyRate/hr · $@lotItem.DailyMax max</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Available</span>
+                                        <span class="text-xs font-medium tabular-nums">@lotItem.Available / @lotItem.TotalSpaces</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Hours</span>
+                                        <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            @lotItem.Hours
+                                        </span>
+                                    </div>
+                                </div>
+                                @if (lotItem.Features.Length > 0)
+                                {
+                                    <div class="mt-2 flex flex-wrap gap-1">
+                                        @foreach (var feat in lotItem.Features)
+                                        {
+                                            var featureItem = feat;
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                                @featureItem
+                                            </BadgeCn>
+                                        }
+                                    </div>
+                                }
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-3 h-7 w-full gap-1.5 text-xs">
+                                    <LucideIconCn Name="navigation" Size="12" Class="size-3" />
+                                    Navigate
+                                </ButtonCn>
+                                @* Close button *@
+                                <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-3 border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    Available
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    Limited
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    Full
+                </span>
+            </div>
+            <span class="ml-auto text-xs text-muted-foreground">Prices updated 5 min ago</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ParkingLot(
+        string Id,
+        string Name,
+        string Address,
+        string Type,
+        int HourlyRate,
+        int DailyMax,
+        int TotalSpaces,
+        int Available,
+        string Distance,
+        double DistanceValue,
+        string Hours,
+        string[] Features,
+        double Lng,
+        double Lat
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly ParkingLot[] _lots =
+    [
+        new("lot1", "Union Square Garage",     "333 Post St",      "garage",  8, 45,  440,  127, "0.1 mi", 0.1, "24/7",          ["EV charging", "Covered"],                -122.408,  37.7877),
+        new("lot2", "Sutter-Stockton Garage",  "444 Stockton St",  "garage",  7, 40, 1800,  342, "0.2 mi", 0.2, "6 AM - 12 AM",  ["Covered", "Valet"],                     -122.4068, 37.7895),
+        new("lot3", "Fifth & Mission Garage",  "833 Mission St",   "garage",  6, 36, 2600,   18, "0.4 mi", 0.4, "24/7",          ["EV charging", "Covered", "Accessible"], -122.404,  37.7825),
+        new("lot4", "Moscone Center Lot",      "255 3rd St",       "surface", 5, 30,  200,    0, "0.5 mi", 0.5, "7 AM - 11 PM",  ["Accessible"],                           -122.4015, 37.7847),
+        new("lot5", "Yerba Buena Lot",         "50 3rd St",        "surface", 4, 25,  150,   62, "0.3 mi", 0.3, "6 AM - 10 PM",  ["Accessible"],                           -122.4025, 37.786),
+        new("lot6", "Ellis-O'Farrell Garage",  "123 O'Farrell St", "garage",  9, 50,  950,    8, "0.2 mi", 0.2, "24/7",          ["Covered", "EV charging", "Valet"],      -122.409,  37.7867),
+    ];
+
+    private string _sortBy = "distance";
+    private string? _selected = "lot1";
+
+    private int _totalAvailable => _lots.Sum(l => l.Available);
+
+    private ParkingLot[] SortedLots => _sortBy == "distance"
+        ? [.. _lots.OrderBy(l => l.DistanceValue)]
+        : [.. _lots.OrderBy(l => l.HourlyRate)];
+
+    private void ToggleSort()
+    {
+        _sortBy = _sortBy == "distance" ? "price" : "distance";
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static string GetAvailabilityColor(int available, int total)
+    {
+        if (available == 0) return "bg-red-500";
+        var ratio = (double)available / total;
+        if (ratio > 0.5) return "bg-emerald-500";
+        if (ratio > 0.2) return "bg-amber-500";
+        return "bg-red-500";
+    }
+
+    // Map bounding box: lon [-122.411, -122.400], lat [37.781, 37.791]
+    private static MarkerPos GetMarkerPosition(ParkingLot lot)
+    {
+        var lonMin = -122.4110;
+        var lonMax = -122.4000;
+        var latMin = 37.7810;
+        var latMax = 37.7910;
+        var left = (lot.Lng - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top = (latMax - lot.Lat) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

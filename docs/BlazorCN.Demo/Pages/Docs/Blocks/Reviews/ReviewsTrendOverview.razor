@@ -1,0 +1,397 @@
+@* ============================================================
+   Block: reviews-trend-overview
+   Title: ReviewsTrendOverview
+   Description: A review analytics trend dashboard for React and Next.js with period comparison metrics, SVG sparkline charts, rating distribution bars, and category breakdowns built with shadcn/ui and Tailwind CSS.
+   Source: original/blocks/reviews/reviews-trend-overview.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="flex size-7 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="bar-chart-3" Size="14" Class="size-3.5 text-muted-foreground" />
+                </div>
+                <div>
+                    <span class="text-sm font-medium">Review Trends</span>
+                    <p class="text-xs text-muted-foreground">
+                        @_labels.Current vs @_labels.Previous
+                    </p>
+                </div>
+            </div>
+            <TabsCn Value="@_period" ValueChanged="@((string v) => SetPeriod(v))">
+                <TabsListCn Class="h-7">
+                    <TabsTriggerCn Value="month" Class="h-5 px-2 text-[10px]">Month</TabsTriggerCn>
+                    <TabsTriggerCn Value="quarter" Class="h-5 px-2 text-[10px]">Quarter</TabsTriggerCn>
+                    <TabsTriggerCn Value="year" Class="h-5 px-2 text-[10px]">Year</TabsTriggerCn>
+                </TabsListCn>
+            </TabsCn>
+        </div>
+
+        @* Metrics grid *@
+        <div class="grid grid-cols-2 gap-px border-b bg-border sm:grid-cols-4">
+            @foreach (var metric in _metrics)
+            {
+                var delta = ComputeDelta(metric.Current, metric.Previous, metric.Format);
+                var dirIsPositive = metric.Positive == "up" ? delta.IsPositive : !delta.IsPositive;
+                <div class="bg-card px-4 py-3">
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs text-muted-foreground">@metric.Label</p>
+                        @RenderSparkline(metric.Sparkline, 64, 24)
+                    </div>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums">
+                        @FormatMetricValue(metric.Current, metric.Format)
+                    </p>
+                    <div class="mt-1 flex items-center gap-1">
+                        @if (!delta.IsNeutral)
+                        {
+                            if (delta.IsPositive)
+                            {
+                                <LucideIconCn Name="arrow-up-right" Size="12" Class="@Cn.Merge("size-3", dirIsPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="arrow-down-right" Size="12" Class="@Cn.Merge("size-3", dirIsPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")" />
+                            }
+                        }
+                        @if (!delta.IsNeutral)
+                        {
+                            <span class="@Cn.Merge("text-xs tabular-nums", dirIsPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                @delta.Value
+                            </span>
+                        }
+                        <span class="text-xs text-muted-foreground">
+                            vs @FormatMetricValue(metric.Previous, metric.Format)
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Two-column body: weekly volume + rating distribution *@
+        <div class="grid grid-cols-1 divide-y border-b sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+
+            @* Weekly volume bars *@
+            <div class="px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium">Weekly Volume</span>
+                    <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                        Last 8 weeks
+                    </span>
+                </div>
+                <div class="mt-3 flex items-end gap-1">
+                    @for (var wi = 0; wi < _weeklyVolume.Count; wi++)
+                    {
+                        var wk = _weeklyVolume[wi];
+                        var heightPct = (wk.Reviews / (double)_maxWeeklyReviews) * 100.0;
+                        var isCurrentMonth = wi >= 4;
+                        <TooltipProviderCn>
+                            <TooltipCn>
+                                <TooltipTriggerCn>
+                                    <div class="flex flex-1 origin-bottom flex-col items-center gap-1">
+                                        <span class="text-[10px] tabular-nums text-muted-foreground">@wk.Reviews</span>
+                                        <div class="@Cn.Merge("w-full rounded-sm", isCurrentMonth ? "bg-foreground" : "bg-muted-foreground/20")"
+                                             style="@($"height:{Math.Max(heightPct * 0.6, 4):F0}px")">
+                                        </div>
+                                        <span class="text-[9px] text-muted-foreground">@(wk.Week.Length >= 2 ? wk.Week.Substring(wk.Week.Length - 2) : wk.Week)</span>
+                                    </div>
+                                </TooltipTriggerCn>
+                                <TooltipContentCn>
+                                    <div class="space-y-0.5 text-xs">
+                                        <p class="font-medium">Week of @wk.Week</p>
+                                        <p>@wk.Reviews reviews</p>
+                                        <p>Avg: @wk.AvgRating.ToString("F1") stars</p>
+                                        <p>@wk.Sentiment% positive</p>
+                                    </div>
+                                </TooltipContentCn>
+                            </TooltipCn>
+                        </TooltipProviderCn>
+                    }
+                </div>
+                <div class="mt-2 flex items-center justify-center gap-3">
+                    <span class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span class="size-1.5 rounded-full bg-foreground"></span>
+                        This month
+                    </span>
+                    <span class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span class="size-1.5 rounded-full bg-muted-foreground/20"></span>
+                        Last month
+                    </span>
+                </div>
+            </div>
+
+            @* Rating distribution comparison *@
+            <div class="px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium">Rating Distribution</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px] font-normal">vs prior period</BadgeCn>
+                </div>
+                <div class="mt-3 space-y-2.5">
+                    @foreach (var row in _ratingDistribution)
+                    {
+                        var rRow = row;
+                        var shift = rRow.Current - rRow.Previous;
+                        <div class="flex items-center gap-2">
+                            <div class="flex w-8 items-center gap-0.5">
+                                <span class="text-xs tabular-nums">@rRow.Stars</span>
+                                <span class="text-xs text-amber-500">&#9733;</span>
+                            </div>
+                            <div class="relative flex-1">
+                                <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                                    <div class="h-full rounded-full bg-foreground"
+                                         style="@($"width:{rRow.Current}%")">
+                                    </div>
+                                </div>
+                                <div class="mt-0.5 h-1 overflow-hidden rounded-full bg-muted">
+                                    <div class="h-full rounded-full bg-muted-foreground/25"
+                                         style="@($"width:{rRow.Previous}%")">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex w-14 items-center justify-end gap-1">
+                                <span class="text-xs tabular-nums">@rRow.Current%</span>
+                                <span class="@Cn.Merge("text-[10px] tabular-nums", shift > 0 ? "text-emerald-600 dark:text-emerald-400" : shift < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                                    @(shift > 0 ? "+" : "")@shift
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Category trends *@
+        <div class="px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium">Category Trends</span>
+                <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                    @(_categoryTrends.Count(c => c.CurrentRating > c.PreviousRating)) of @_categoryTrends.Length improving
+                </span>
+            </div>
+            <div class="mt-3 space-y-0">
+                @for (var catIdx = 0; catIdx < _categoryTrends.Length; catIdx++)
+                {
+                    var category = _categoryTrends[catIdx];
+                    var catDelta = category.CurrentRating - category.PreviousRating;
+                    var isPositive = catDelta > 0;
+                    var isNeutral = Math.Abs(catDelta) < 0.01;
+                    var isLast = catIdx == _categoryTrends.Length - 1;
+                    var barColor = category.CurrentRating >= 4.5
+                        ? "bg-emerald-500"
+                        : category.CurrentRating >= 3.5
+                            ? "bg-blue-500"
+                            : "bg-amber-500";
+
+                    <div class="@Cn.Merge("flex items-center gap-3 py-2.5", !isLast ? "border-b" : "")">
+                        @* Rating indicator bar *@
+                        <div class="relative h-8 w-1 overflow-hidden rounded-full bg-muted">
+                            <div class="@Cn.Merge("absolute bottom-0 w-full rounded-full", barColor)"
+                                 style="@($"height:{(category.CurrentRating / 5.0) * 100:F0}%")">
+                            </div>
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@category.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1 text-[10px] font-normal">@category.TopKeyword</BadgeCn>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                @category.ReviewCount reviews this period
+                            </p>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium tabular-nums">@category.CurrentRating.ToString("F1")</span>
+                            @if (isNeutral)
+                            {
+                                <LucideIconCn Name="minus" Size="12" Class="size-3 text-muted-foreground" />
+                            }
+                            else if (isPositive)
+                            {
+                                <div class="flex items-center gap-0.5">
+                                    <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                                    <span class="text-xs tabular-nums text-emerald-600 dark:text-emerald-400">+@catDelta.ToString("F1")</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="flex items-center gap-0.5">
+                                    <LucideIconCn Name="arrow-down-right" Size="12" Class="size-3 text-red-600 dark:text-red-400" />
+                                    <span class="text-xs tabular-nums text-red-600 dark:text-red-400">@catDelta.ToString("F1")</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record SparklinePoint(string Day, double Value);
+    private record TrendMetric(string Id, string Label, double Current, double Previous, string Format, string Positive, SparklinePoint[] Sparkline);
+    private record WeeklyVolume(string Week, int Reviews, double AvgRating, int Sentiment);
+    private record CategoryTrend(string Name, double CurrentRating, double PreviousRating, int ReviewCount, string TopKeyword);
+    private record RatingShift(int Stars, int Current, int Previous);
+    private record PeriodLabel(string Current, string Previous);
+
+    private static readonly Dictionary<string, PeriodLabel> _periodLabels = new()
+    {
+        ["month"]   = new("Mar 2026", "Feb 2026"),
+        ["quarter"] = new("Q1 2026", "Q4 2025"),
+        ["year"]    = new("2026 YTD", "2025 YTD"),
+    };
+
+    private static readonly Dictionary<string, TrendMetric[]> _metricsData = new()
+    {
+        ["month"] = [
+            new("total", "Total Reviews", 482, 431, "number", "up", [
+                new("W1", 98), new("W2", 112), new("W3", 135), new("W4", 137),
+            ]),
+            new("rating", "Avg Rating", 4.3, 4.1, "rating", "up", [
+                new("W1", 4.1), new("W2", 4.2), new("W3", 4.4), new("W4", 4.3),
+            ]),
+            new("response", "Response Rate", 94, 88, "percent", "up", [
+                new("W1", 89), new("W2", 91), new("W3", 96), new("W4", 94),
+            ]),
+            new("positive", "Positive Sentiment", 87, 82, "percent", "up", [
+                new("W1", 83), new("W2", 85), new("W3", 89), new("W4", 87),
+            ]),
+        ],
+        ["quarter"] = [
+            new("total", "Total Reviews", 1386, 1210, "number", "up", [
+                new("Jan", 412), new("Feb", 431), new("Mar", 482), new("", 0),
+            ]),
+            new("rating", "Avg Rating", 4.2, 4.0, "rating", "up", [
+                new("Jan", 4.0), new("Feb", 4.1), new("Mar", 4.3), new("", 0),
+            ]),
+            new("response", "Response Rate", 91, 85, "percent", "up", [
+                new("Jan", 86), new("Feb", 88), new("Mar", 94), new("", 0),
+            ]),
+            new("positive", "Positive Sentiment", 85, 80, "percent", "up", [
+                new("Jan", 81), new("Feb", 82), new("Mar", 87), new("", 0),
+            ]),
+        ],
+        ["year"] = [
+            new("total", "Total Reviews", 1386, 4820, "number", "up", [
+                new("Q1", 1386), new("Q2", 0), new("Q3", 0), new("Q4", 0),
+            ]),
+            new("rating", "Avg Rating", 4.2, 4.0, "rating", "up", [
+                new("Q1", 4.2), new("Q2", 0), new("Q3", 0), new("Q4", 0),
+            ]),
+            new("response", "Response Rate", 91, 82, "percent", "up", [
+                new("Q1", 91), new("Q2", 0), new("Q3", 0), new("Q4", 0),
+            ]),
+            new("positive", "Positive Sentiment", 85, 78, "percent", "up", [
+                new("Q1", 85), new("Q2", 0), new("Q3", 0), new("Q4", 0),
+            ]),
+        ],
+    };
+
+    private static readonly List<WeeklyVolume> _weeklyVolume =
+    [
+        new("Feb 3",  96,  4.0, 79),
+        new("Feb 10", 108, 4.1, 81),
+        new("Feb 17", 112, 4.1, 83),
+        new("Feb 24", 115, 4.2, 82),
+        new("Mar 3",  98,  4.1, 83),
+        new("Mar 10", 112, 4.2, 85),
+        new("Mar 17", 135, 4.4, 89),
+        new("Mar 24", 137, 4.3, 87),
+    ];
+
+    private static readonly int _maxWeeklyReviews = _weeklyVolume.Max(w => w.Reviews);
+
+    private static readonly CategoryTrend[] _categoryTrends =
+    [
+        new("Customer Service", 4.6, 4.1, 127, "responsive"),
+        new("Product Quality",  4.4, 4.3, 198, "reliable"),
+        new("Shipping Speed",   3.8, 4.2,  89, "delayed"),
+        new("Value for Money",  4.1, 4.0, 156, "fair pricing"),
+        new("Ease of Use",      4.5, 4.4, 143, "intuitive"),
+    ];
+
+    private static readonly RatingShift[] _ratingDistribution =
+    [
+        new(5, 52, 45),
+        new(4, 28, 30),
+        new(3, 12, 14),
+        new(2,  5,  7),
+        new(1,  3,  4),
+    ];
+
+    private string _period = "month";
+    private TrendMetric[] _metrics => _metricsData[_period];
+    private PeriodLabel _labels => _periodLabels[_period];
+
+    private void SetPeriod(string v) => _period = v;
+
+    private static string FormatMetricValue(double value, string format)
+    {
+        if (format == "rating")   return value.ToString("F1");
+        if (format == "percent")  return $"{(int)value}%";
+        return ((int)value).ToString("N0");
+    }
+
+    private record DeltaResult(string Value, bool IsPositive, bool IsNeutral);
+
+    private static DeltaResult ComputeDelta(double current, double previous, string format)
+    {
+        var diff = current - previous;
+        var isNeutral = Math.Abs(diff) < 0.001;
+        var sign = diff > 0 ? "+" : "";
+        if (format == "percent")
+            return new($"{sign}{(int)diff}pp", diff > 0, isNeutral);
+        if (format == "rating")
+            return new($"{sign}{diff:F1}", diff > 0, isNeutral);
+        var pct = previous > 0 ? ((diff / previous) * 100).ToString("F1") : "0";
+        return new($"{sign}{pct}%", diff > 0, isNeutral);
+    }
+
+    private static RenderFragment RenderSparkline(SparklinePoint[] points, int width, int height)
+    {
+        var validPoints = points.Where(p => p.Value > 0).ToArray();
+        if (validPoints.Length < 2)
+            return _ => { };
+
+        var values = validPoints.Select(p => p.Value).ToArray();
+        var min = values.Min();
+        var max = values.Max();
+        var range = max - min == 0 ? 1.0 : max - min;
+
+        var pathPoints = string.Join(" ", validPoints.Select((p, i) =>
+        {
+            var x = (i / (double)(validPoints.Length - 1)) * width;
+            var y = height - ((p.Value - min) / range) * height;
+            return $"{x:F1},{y:F1}";
+        }));
+
+        var isUpward = validPoints[^1].Value > validPoints[0].Value;
+        var colorClass = isUpward ? "text-emerald-500" : "text-red-500";
+
+        return builder =>
+        {
+            builder.OpenElement(0, "svg");
+            builder.AddAttribute(1, "aria-hidden", "true");
+            builder.AddAttribute(2, "width", width);
+            builder.AddAttribute(3, "height", height);
+            builder.AddAttribute(4, "class", "overflow-visible");
+            builder.OpenElement(5, "polyline");
+            builder.AddAttribute(6, "fill", "none");
+            builder.AddAttribute(7, "stroke", "currentColor");
+            builder.AddAttribute(8, "stroke-width", "1.5");
+            builder.AddAttribute(9, "stroke-linecap", "round");
+            builder.AddAttribute(10, "stroke-linejoin", "round");
+            builder.AddAttribute(11, "points", pathPoints);
+            builder.AddAttribute(12, "class", colorClass);
+            builder.CloseElement();
+            builder.CloseElement();
+        };
+    }
+}

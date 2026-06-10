@@ -1,0 +1,188 @@
+@* ============================================================
+   Block: todo-list-table-view
+   Title: TodoListTableView
+   Description: A spreadsheet-style todo list block for React and Next.js with sortable columns, assignee avatars, and status indicators built with shadcn/ui Table and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-table-view.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Tasks</span>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_tasks.Count(t => t.Completed) of @_tasks.Count done
+            </span>
+        </div>
+
+        @* Table *@
+        <div>
+            <TableCn>
+                <TableHeaderCn>
+                    <TableRowCn>
+                        <TableHeadCn Class="w-10 px-4" />
+                        <TableHeadCn>
+                            <button type="button" @onclick="@(() => HandleSort("task"))" class="flex items-center gap-1 text-xs">
+                                Task <LucideIconCn Name="@SortIconName("task")" Size="12" Class="@SortIconClass("task")" />
+                            </button>
+                        </TableHeadCn>
+                        <TableHeadCn>
+                            <button type="button" @onclick="@(() => HandleSort("priority"))" class="flex items-center gap-1 text-xs">
+                                Priority <LucideIconCn Name="@SortIconName("priority")" Size="12" Class="@SortIconClass("priority")" />
+                            </button>
+                        </TableHeadCn>
+                        <TableHeadCn>
+                            <button type="button" @onclick="@(() => HandleSort("dueDate"))" class="flex items-center gap-1 text-xs">
+                                Due <LucideIconCn Name="@SortIconName("dueDate")" Size="12" Class="@SortIconClass("dueDate")" />
+                            </button>
+                        </TableHeadCn>
+                        <TableHeadCn>
+                            <button type="button" @onclick="@(() => HandleSort("assignee"))" class="flex items-center gap-1 text-xs">
+                                Assignee <LucideIconCn Name="@SortIconName("assignee")" Size="12" Class="@SortIconClass("assignee")" />
+                            </button>
+                        </TableHeadCn>
+                        <TableHeadCn>
+                            <button type="button" @onclick="@(() => HandleSort("status"))" class="flex items-center gap-1 text-xs">
+                                Status <LucideIconCn Name="@SortIconName("status")" Size="12" Class="@SortIconClass("status")" />
+                            </button>
+                        </TableHeadCn>
+                    </TableRowCn>
+                </TableHeaderCn>
+                <TableBodyCn>
+                    @foreach (var tsk in SortedTasks)
+                    {
+                        var task = tsk;
+                        <TableRowCn Class="border-b transition-colors hover:bg-muted/50">
+                            <TableCellCn Class="px-4">
+                                <CheckboxCn Id="@($"table-{task.Id}")"
+                                            Checked="@task.Completed"
+                                            CheckedChanged="@((bool _) => ToggleTask(task.Id))" />
+                            </TableCellCn>
+                            <TableCellCn>
+                                <span class="@Cn.Merge("text-sm", task.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                                    @task.Text
+                                </span>
+                            </TableCellCn>
+                            <TableCellCn>
+                                <span class="flex items-center gap-1.5 text-xs">
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", PriorityDotClass(task.Priority))"></span>
+                                    @task.Priority
+                                </span>
+                            </TableCellCn>
+                            <TableCellCn>
+                                <span class="text-muted-foreground text-xs">@task.DueDate</span>
+                            </TableCellCn>
+                            <TableCellCn>
+                                <span class="flex size-6 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                                    @task.Assignee
+                                </span>
+                            </TableCellCn>
+                            <TableCellCn>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                    @GetStatusLabel(task.Status)
+                                </BadgeCn>
+                            </TableCellCn>
+                        </TableRowCn>
+                    }
+                </TableBodyCn>
+            </TableCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TaskItem(string Id, string Text, string Priority, string Status, string DueDate, string Assignee, bool Completed);
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Implement OAuth2 flow",    "high",   "in-progress", "Apr 5", "AK", false),
+        new("2", "Design email templates",   "medium", "todo",        "Apr 6", "JM", false),
+        new("3", "Write E2E test suite",     "high",   "done",        "Apr 3", "RB", true),
+        new("4", "Set up monitoring alerts", "medium", "in-progress", "Apr 7", "AK", false),
+        new("5", "Migrate to new CDN",       "low",    "todo",        "Apr 9", "LS", false),
+        new("6", "Update pricing page",      "high",   "todo",        "Apr 4", "JM", false),
+        new("7", "Fix WebSocket reconnect",  "medium", "done",        "Apr 2", "RB", true),
+        new("8", "Add CSV export feature",   "low",    "in-progress", "Apr 8", "LS", false),
+    ];
+
+    private string? _sortColumn = null;
+    private string _sortDirection = "asc";
+
+    private IEnumerable<TaskItem> SortedTasks
+    {
+        get
+        {
+            if (_sortColumn == null) return _tasks;
+            bool asc = _sortDirection == "asc";
+            IEnumerable<TaskItem> result = _sortColumn switch
+            {
+                "task"     => asc ? _tasks.OrderBy(t => t.Text)                      : _tasks.OrderByDescending(t => t.Text),
+                "priority" => asc ? _tasks.OrderBy(t => PriorityOrder(t.Priority))   : _tasks.OrderByDescending(t => PriorityOrder(t.Priority)),
+                "dueDate"  => asc ? _tasks.OrderBy(t => t.DueDate)                   : _tasks.OrderByDescending(t => t.DueDate),
+                "assignee" => asc ? _tasks.OrderBy(t => t.Assignee)                  : _tasks.OrderByDescending(t => t.Assignee),
+                "status"   => asc ? _tasks.OrderBy(t => StatusOrder(t.Status))       : _tasks.OrderByDescending(t => StatusOrder(t.Status)),
+                _          => _tasks,
+            };
+            return result;
+        }
+    }
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+        {
+            var t = _tasks[idx];
+            _tasks[idx] = t with { Completed = !t.Completed, Status = t.Completed ? "todo" : "done" };
+        }
+    }
+
+    private void HandleSort(string column)
+    {
+        if (_sortColumn == column)
+            _sortDirection = _sortDirection == "asc" ? "desc" : "asc";
+        else
+        {
+            _sortColumn = column;
+            _sortDirection = "asc";
+        }
+    }
+
+    private string SortIconName(string col) =>
+        _sortColumn != col ? "arrow-up-down" : (_sortDirection == "asc" ? "arrow-up" : "arrow-down");
+
+    private string SortIconClass(string col) =>
+        _sortColumn != col ? "size-3 text-muted-foreground/40" : "size-3";
+
+    private static string PriorityDotClass(string priority) => priority switch
+    {
+        "high"   => "bg-red-500",
+        "medium" => "bg-amber-500",
+        "low"    => "bg-blue-500",
+        _        => ""
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "todo"        => "To Do",
+        "in-progress" => "In Progress",
+        "done"        => "Done",
+        _             => status
+    };
+
+    private static int PriorityOrder(string priority) => priority switch
+    {
+        "high"   => 0,
+        "medium" => 1,
+        "low"    => 2,
+        _        => 99
+    };
+
+    private static int StatusOrder(string status) => status switch
+    {
+        "todo"        => 0,
+        "in-progress" => 1,
+        "done"        => 2,
+        _             => 99
+    };
+}

@@ -1,0 +1,208 @@
+@* ============================================================
+   Block: crud-checklist-builder
+   Title: CrudChecklistBuilder
+   Description: Checklist template builder with drag-to-reorder items, sections, and completion tracking
+   Source: original/blocks/crud/crud-checklist-builder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            @{
+                var completedCount = _items.Count(i => i.Completed);
+                var totalCount = _items.Count;
+                var progressPct = totalCount > 0 ? (completedCount * 100.0 / totalCount) : 0.0;
+                var progressRounded = totalCount > 0 ? (int)Math.Round(progressPct) : 0;
+            }
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Release Checklist</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @completedCount of @totalCount completed
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+                        <div class="h-full rounded-full bg-emerald-500 transition-all"
+                             style="@($"width:{progressPct:F1}%")">
+                        </div>
+                    </div>
+                    <span class="text-xs font-medium tabular-nums">@progressRounded%</span>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            @foreach (var sec in _sections)
+            {
+                var sectionName = sec;
+                var sectionItems = _items.Where(i => i.Section == sectionName).ToList();
+                var sectionCompleted = sectionItems.Count(i => i.Completed);
+                <div>
+                    <div class="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium">@sectionName</span>
+                            <span class="text-xs text-muted-foreground">
+                                (@sectionCompleted/@sectionItems.Count)
+                            </span>
+                        </div>
+                        <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                  Class="h-6 gap-1 px-1.5 text-xs"
+                                  @onclick="@(() => ToggleAddingSection(sectionName))">
+                            <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                        </ButtonCn>
+                    </div>
+                    @foreach (var it in sectionItems)
+                    {
+                        var item = it;
+                        <div class="flex items-center gap-3 border-b px-4 py-2.5 transition-colors hover:bg-muted/50">
+                            <LucideIconCn Name="grip-vertical" Size="14" Class="size-3.5 shrink-0 cursor-grab text-muted-foreground/40" />
+                            <span class="flex flex-1 cursor-pointer items-center gap-3">
+                                <CheckboxCn Checked="@item.Completed" CheckedChanged="@(_ => ToggleItem(item.Id))" />
+                                @if (_editingId == item.Id)
+                                {
+                                    <div class="flex flex-1 items-center gap-2">
+                                        <InputCn Class="h-7 text-xs" Value="@_editText"
+                                                 ValueChanged="@((string v) => _editText = v)"
+                                                 @onkeydown="@((KeyboardEventArgs e) => { if (e.Key == "Enter") HandleEdit(item.Id); })" />
+                                        <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                                                  Class="size-6" @onclick="@(() => HandleEdit(item.Id))">
+                                            <LucideIconCn Name="check" Size="14" Class="size-3.5" />
+                                        </ButtonCn>
+                                        <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                                                  Class="size-6" @onclick="@(() => _editingId = null)">
+                                            <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                                        </ButtonCn>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="@Cn.Merge("flex-1 text-sm", item.Completed ? "text-muted-foreground line-through" : "")">
+                                        @item.Text
+                                    </span>
+                                }
+                            </span>
+                            @if (_editingId != item.Id)
+                            {
+                                <div class="flex gap-1">
+                                    <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                                              Class="size-6"
+                                              @onclick="@(() => StartEdit(item.Id, item.Text))">
+                                        <span class="text-[10px]">Edit</span>
+                                    </ButtonCn>
+                                    <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                                              Class="size-6 text-destructive"
+                                              @onclick="@(() => HandleDelete(item.Id))">
+                                        <LucideIconCn Name="trash" Size="12" Class="size-3" />
+                                    </ButtonCn>
+                                </div>
+                            }
+                        </div>
+                    }
+                    @if (_addingToSection == sectionName)
+                    {
+                        var addSection = sectionName;
+                        <div class="flex items-center gap-2 border-b bg-muted/20 px-4 py-2">
+                            <InputCn Placeholder="New item..." Class="h-7 flex-1 text-xs"
+                                     Value="@_newItemText"
+                                     ValueChanged="@((string v) => _newItemText = v)"
+                                     @onkeydown="@((KeyboardEventArgs e) => { if (e.Key == "Enter") HandleAddItem(addSection); })" />
+                            <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs"
+                                      @onclick="@(() => HandleAddItem(addSection))">
+                                Add
+                            </ButtonCn>
+                            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                      Class="h-7 text-xs"
+                                      @onclick="@(() => _addingToSection = null)">
+                                Cancel
+                            </ButtonCn>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class ChecklistItem
+    {
+        public int Id { get; set; }
+        public string Text { get; set; } = "";
+        public bool Completed { get; set; }
+        public string Section { get; set; } = "";
+    }
+
+    private readonly List<ChecklistItem> _items =
+    [
+        new() { Id = 1,  Text = "Create project repository",          Completed = true,  Section = "Setup" },
+        new() { Id = 2,  Text = "Configure CI/CD pipeline",           Completed = true,  Section = "Setup" },
+        new() { Id = 3,  Text = "Set up staging environment",         Completed = false, Section = "Setup" },
+        new() { Id = 4,  Text = "Write unit tests for core modules",  Completed = false, Section = "Testing" },
+        new() { Id = 5,  Text = "Run integration test suite",         Completed = false, Section = "Testing" },
+        new() { Id = 6,  Text = "Perform load testing",               Completed = false, Section = "Testing" },
+        new() { Id = 7,  Text = "Security audit review",              Completed = false, Section = "Testing" },
+        new() { Id = 8,  Text = "Update API documentation",           Completed = true,  Section = "Documentation" },
+        new() { Id = 9,  Text = "Write migration guide",              Completed = false, Section = "Documentation" },
+        new() { Id = 10, Text = "Update changelog",                   Completed = false, Section = "Documentation" },
+        new() { Id = 11, Text = "Tag release version",                Completed = false, Section = "Release" },
+        new() { Id = 12, Text = "Deploy to production",               Completed = false, Section = "Release" },
+        new() { Id = 13, Text = "Monitor error rates",                Completed = false, Section = "Release" },
+        new() { Id = 14, Text = "Send launch announcement",           Completed = false, Section = "Release" },
+    ];
+
+    // Ordered list of unique section names preserving insertion order
+    private List<string> _sections => _items.Select(i => i.Section).Distinct().ToList();
+
+    private string? _addingToSection = null;
+    private string _newItemText = "";
+    private int? _editingId = null;
+    private string _editText = "";
+    private int _nextId => _items.Count > 0 ? _items.Max(i => i.Id) + 1 : 1;
+
+    private void ToggleItem(int id)
+    {
+        var item = _items.FirstOrDefault(i => i.Id == id);
+        if (item is not null) item.Completed = !item.Completed;
+    }
+
+    private void ToggleAddingSection(string sec)
+    {
+        _addingToSection = _addingToSection == sec ? null : sec;
+        _newItemText = "";
+    }
+
+    private void HandleAddItem(string sec)
+    {
+        if (string.IsNullOrWhiteSpace(_newItemText)) return;
+        _items.Add(new ChecklistItem
+        {
+            Id = _nextId,
+            Text = _newItemText.Trim(),
+            Completed = false,
+            Section = sec,
+        });
+        _newItemText = "";
+        _addingToSection = null;
+    }
+
+    private void HandleDelete(int id)
+    {
+        var item = _items.FirstOrDefault(i => i.Id == id);
+        if (item is not null) _items.Remove(item);
+    }
+
+    private void StartEdit(int id, string text)
+    {
+        _editingId = id;
+        _editText = text;
+    }
+
+    private void HandleEdit(int id)
+    {
+        if (string.IsNullOrWhiteSpace(_editText)) return;
+        var item = _items.FirstOrDefault(i => i.Id == id);
+        if (item is not null) item.Text = _editText.Trim();
+        _editingId = null;
+    }
+}

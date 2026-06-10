@@ -1,0 +1,296 @@
+@* ============================================================
+   Block: account-feature-requests
+   Title: AccountFeatureRequests
+   Description: A feature request voting list for React and Next.js with upvote buttons, status badges, category tags, sort controls, expandable descriptions, and a submit request form built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-feature-requests.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Feature Requests</h2>
+                    <p class="text-xs text-muted-foreground">
+                        @_requests.Count requests · @TotalVotes total votes
+                    </p>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" @onclick="@(() => _showForm = !_showForm)">
+                    @if (_showForm)
+                    {
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        <span>Cancel</span>
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                        <span>New request</span>
+                    }
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Submit form *@
+        @if (_showForm)
+        {
+            <div class="overflow-hidden">
+                <div class="space-y-2.5 border-b bg-muted/30 px-4 py-3">
+                    <InputCn Placeholder="Feature title — be specific" Class="h-8 text-sm" @bind-Value="_newTitle" />
+                    <TextareaCn Placeholder="Describe the problem this would solve and how you'd expect it to work..." Class="min-h-[72px] resize-none text-sm" @bind-Value="_newDescription" />
+                    <div class="flex justify-end">
+                        <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" Disabled="@(string.IsNullOrWhiteSpace(_newTitle) || _isSubmitting)" @onclick="HandleSubmit">
+                            @if (_isSubmitting)
+                            {
+                                <LucideIconCn Name="loader-2" Size="12" Class="size-3 animate-spin" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="send" Size="12" Class="size-3" />
+                            }
+                            Submit request
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Sort controls *@
+        <div class="flex items-center gap-1 border-b px-4 py-2">
+            <LucideIconCn Name="filter" Size="12" Class="size-3 text-muted-foreground/60" />
+            <span class="mr-1 text-[10px] text-muted-foreground">Sort:</span>
+            @foreach (var mode in new[] { "votes", "newest", "status" })
+            {
+                var modeLabel = mode == "votes" ? "Most Voted" : mode == "newest" ? "Newest" : "By Status";
+                var modeClass = Cn.Merge("rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    _sortBy == mode ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50");
+                <button type="button" @onclick="@(() => _sortBy = mode)" class="@modeClass">
+                    @modeLabel
+                </button>
+            }
+        </div>
+
+        @* Request list *@
+        <div class="divide-y">
+            @foreach (var req in SortedRequests)
+            {
+                var isExpanded = _expandedId == req.Id;
+                var statusDot = GetStatusDot(req.Status);
+                var statusBg = GetStatusBg(req.Status);
+                var statusLabel = GetStatusLabel(req.Status);
+                var categoryLabel = GetCategoryLabel(req.Category);
+                var rowClass = req.IsOwn ? "bg-blue-500/[0.03]" : "";
+                var voteClass = Cn.Merge(
+                    "flex h-12 w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border text-xs tabular-nums transition-colors",
+                    req.Voted
+                        ? "border-blue-500/30 bg-blue-500/10 text-blue-600"
+                        : "bg-muted/30 text-muted-foreground hover:border-blue-500/20 hover:bg-blue-500/5");
+                var chevronClass = Cn.Merge("size-3 transition-transform duration-200", isExpanded ? "rotate-180" : "");
+
+                <div class="@rowClass">
+                    <div class="flex gap-3 px-4 py-3">
+
+                        @* Vote button *@
+                        <button type="button" @onclick="@(() => HandleVote(req.Id))" class="@voteClass">
+                            <LucideIconCn Name="arrow-up" Size="12" Class="size-3" />
+                            <span class="font-medium">@req.Votes</span>
+                        </button>
+
+                        @* Content *@
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-sm font-medium leading-tight">@req.Title</span>
+                                        @if (req.IsOwn)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 shrink-0 px-1.5 text-[10px]">Yours</BadgeCn>
+                                        }
+                                    </div>
+
+                                    @* Status + category + meta *@
+                                    <div class="mt-1 flex items-center gap-2 flex-wrap">
+                                        <span class="@($"inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium {statusBg}")">
+                                            <span class="@($"size-1 rounded-full {statusDot}")"></span>
+                                            @statusLabel
+                                        </span>
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 px-1.5 text-[10px] font-normal">@categoryLabel</BadgeCn>
+                                        <span class="text-[10px] text-muted-foreground">@req.SubmittedDate</span>
+                                        @if (req.AuthorName != "You")
+                                        {
+                                            <span class="text-[10px] text-muted-foreground">by @req.AuthorName</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            @* Expandable toggle *@
+                            <button type="button" @onclick="@(() => _expandedId = isExpanded ? null : req.Id)"
+                                class="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground/70 transition-colors hover:text-muted-foreground">
+                                <LucideIconCn Name="chevron-down" Size="12" Class="@chevronClass" />
+                                @(isExpanded ? "Hide details" : "Show details")
+                            </button>
+
+                            @if (isExpanded)
+                            {
+                                <p class="mt-1.5 text-xs text-muted-foreground leading-relaxed">@req.Description</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t bg-muted/30 px-4 py-2.5">
+            <div class="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span class="flex items-center gap-1.5">
+                    <LucideIconCn Name="sparkles" Size="12" Class="size-3" />
+                    @OwnRequestCount of your requests
+                </span>
+                <span>@_requests.Count(r => r.Status == "shipped") shipped this quarter</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record FeatureRequest(
+        string Id,
+        string Title,
+        string Description,
+        int Votes,
+        bool Voted,
+        string Status,
+        string Category,
+        string SubmittedDate,
+        bool IsOwn,
+        string AuthorName
+    );
+
+    private string _sortBy = "votes";
+    private string? _expandedId = null;
+    private bool _showForm = false;
+    private string _newTitle = "";
+    private string _newDescription = "";
+    private bool _isSubmitting = false;
+
+    private List<FeatureRequest> _requests = new(InitialRequests);
+
+    private static readonly FeatureRequest[] InitialRequests =
+    [
+        new("fr-1",
+            "GraphQL subscriptions for real-time dashboard updates",
+            "Currently the dashboard polls every 30 seconds which creates unnecessary load and delays. WebSocket-based GraphQL subscriptions would push updates instantly, reduce API calls by ~80%, and enable real-time collaboration features like live cursors and presence indicators.",
+            128, true, "in-progress", "api", "Feb 12, 2026", true, "You"),
+        new("fr-2",
+            "Custom keyboard shortcuts for workspace actions",
+            "Power users want configurable keyboard shortcuts for common actions like creating new items (Ctrl+N), switching workspaces (Ctrl+1-9), and toggling the command palette. Should support conflict detection and a visual shortcut editor similar to VS Code's keybindings UI.",
+            94, false, "planned", "dx", "Feb 28, 2026", false, "Sarah Chen"),
+        new("fr-3",
+            "Lazy-load heavy components in analytics views",
+            "The analytics page loads all chart libraries upfront (~340KB gzipped) even when users only view the summary tab. Code-splitting heavy chart components and loading them on tab switch would cut initial bundle size by 40% and improve FCP by ~1.2 seconds on mobile.",
+            73, false, "under-review", "performance", "Mar 15, 2026", false, "Marcus Webb"),
+        new("fr-4",
+            "Native Slack and Microsoft Teams integration",
+            "Bi-directional sync between our notification system and team messaging platforms. Push alerts to Slack channels based on configurable rules, and allow users to take actions (approve, comment, assign) directly from Slack messages without switching context.",
+            67, true, "planned", "integrations", "Jan 19, 2026", true, "You"),
+        new("fr-5",
+            "Row-level security policies for shared workspaces",
+            "Enterprise teams need granular access control beyond workspace-level permissions. Row-level security would let admins define policies like 'sales reps can only see their own deals' using attribute-based rules, similar to Supabase RLS or PostgreSQL policies.",
+            52, false, "under-review", "security", "Mar 22, 2026", false, "Priya Patel"),
+        new("fr-6",
+            "Resizable sidebar with persistent user preference",
+            "Allow users to drag-resize the navigation sidebar and persist their preferred width. Currently the sidebar has a fixed width that wastes space on ultrawide monitors and crowds content on smaller laptop screens. Save preference to localStorage with cloud sync.",
+            41, false, "shipped", "ui", "Dec 8, 2025", false, "Alex Kim"),
+        new("fr-7",
+            "CLI tool for managing environment variables",
+            "A dedicated CLI command like `app env pull` and `app env push` to sync environment variables between local development and the dashboard. Should support .env file parsing, encryption at rest, and team-scoped variable namespaces.",
+            38, false, "in-progress", "dx", "Mar 5, 2026", false, "Jordan Liu"),
+    ];
+
+    private int TotalVotes => _requests.Sum(r => r.Votes);
+    private int OwnRequestCount => _requests.Count(r => r.IsOwn);
+
+    private IEnumerable<FeatureRequest> SortedRequests => _sortBy switch
+    {
+        "votes" => _requests.OrderByDescending(r => r.Votes),
+        "status" => _requests.OrderBy(r => StatusOrder(r.Status)),
+        _ => _requests.AsEnumerable(),
+    };
+
+    private static int StatusOrder(string status) => status switch
+    {
+        "under-review" => 0,
+        "planned" => 1,
+        "in-progress" => 2,
+        "shipped" => 3,
+        _ => 99,
+    };
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "under-review" => "bg-blue-500",
+        "planned" => "bg-amber-500",
+        "in-progress" => "bg-violet-500",
+        "shipped" => "bg-emerald-500",
+        _ => "bg-muted-foreground",
+    };
+
+    private static string GetStatusBg(string status) => status switch
+    {
+        "under-review" => "bg-blue-500/10",
+        "planned" => "bg-amber-500/10",
+        "in-progress" => "bg-violet-500/10",
+        "shipped" => "bg-emerald-500/10",
+        _ => "",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "under-review" => "Under Review",
+        "planned" => "Planned",
+        "in-progress" => "In Progress",
+        "shipped" => "Shipped",
+        _ => status,
+    };
+
+    private static string GetCategoryLabel(string category) => category switch
+    {
+        "ui" => "UI/UX",
+        "api" => "API",
+        "performance" => "Performance",
+        "integrations" => "Integrations",
+        "security" => "Security",
+        "dx" => "Dev Experience",
+        _ => category,
+    };
+
+    private void HandleVote(string id)
+    {
+        var idx = _requests.FindIndex(r => r.Id == id);
+        if (idx < 0) return;
+        var r = _requests[idx];
+        _requests[idx] = r with { Voted = !r.Voted, Votes = r.Voted ? r.Votes - 1 : r.Votes + 1 };
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_newTitle)) return;
+        _isSubmitting = true;
+        await Task.Delay(1000);
+        var newReq = new FeatureRequest(
+            $"fr-new-{_requests.Count + 1}",
+            _newTitle.Trim(),
+            string.IsNullOrWhiteSpace(_newDescription) ? "No description provided." : _newDescription.Trim(),
+            1, true, "under-review", "ui", "Apr 5, 2026", true, "You"
+        );
+        _requests.Insert(0, newReq);
+        _newTitle = "";
+        _newDescription = "";
+        _showForm = false;
+        _isSubmitting = false;
+    }
+}

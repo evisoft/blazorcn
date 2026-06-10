@@ -1,0 +1,239 @@
+@* ============================================================
+   Block: map-community-events
+   Title: MapCommunityEvents
+   Description: Interactive community event map with event type markers, date badges, capacity counts, RSVP indicators, and event detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-community-events.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="calendar" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Community Events</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length events</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => SetFilter(null))"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    All
+                </button>
+                @foreach (var t in _types)
+                {
+                    var typ = t;
+                    var cfg = GetTypeConfig(typ);
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleFilter(typ))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == typ ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                        @cfg.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            <div>
+                <span class="text-xs text-muted-foreground">This week</span>
+                <p class="text-2xl font-semibold tabular-nums">@_totalEvents</p>
+            </div>
+            <div>
+                <span class="text-xs text-muted-foreground">Free events</span>
+                <p class="text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">@_freeEvents</p>
+            </div>
+            <div>
+                <span class="text-xs text-muted-foreground">Attendees</span>
+                <p class="text-2xl font-semibold tabular-nums">@_totalAttendees.ToString("N0")</p>
+            </div>
+        </div>
+
+        @* Map placeholder *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                @* Event markers *@
+                @foreach (var ev in _filtered)
+                {
+                    var evItem = ev;
+                    var typeCfg = GetTypeConfig(evItem.Type);
+                    var pos = GetMarkerPosition(evItem.Longitude, evItem.Latitude);
+                    var isSelected = _selected == evItem.Id;
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X}%;top:{pos.Y}%")"
+                    >
+                        <button
+                            type="button"
+                            class="@Cn.Merge($"flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md transition-transform hover:scale-110 {typeCfg.Color}", isSelected ? "ring-2 ring-offset-1 ring-foreground" : "")"
+                            @onclick="@(() => ToggleSelected(evItem.Id))"
+                            title="@evItem.Name"
+                        >
+                            <LucideIconCn Name="@typeCfg.Icon" Size="14" Class="size-3.5 text-white" />
+                        </button>
+                        @* Popup *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 z-10 mt-1.5 w-64 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg text-popover-foreground">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@evItem.Name</p>
+                                        <p class="text-xs text-muted-foreground">@typeCfg.Label · @evItem.Organizer</p>
+                                    </div>
+                                    @if (evItem.IsFree)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="border-emerald-500/20 bg-emerald-500/10 text-xs font-normal text-emerald-600 dark:text-emerald-400">Free</BadgeCn>
+                                    }
+                                    else
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">Paid</BadgeCn>
+                                    }
+                                </div>
+                                <p class="mb-2 text-xs text-muted-foreground leading-relaxed">@evItem.Description</p>
+                                <div class="space-y-1.5 border-t pt-2">
+                                    <div class="flex items-center gap-1.5">
+                                        <LucideIconCn Name="map-pin" Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                        <span class="text-xs text-muted-foreground">@evItem.Venue · @evItem.Address.Split(',')[0]</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <LucideIconCn Name="calendar" Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                        <span class="text-xs text-muted-foreground">@evItem.Date · @evItem.Time</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <LucideIconCn Name="users" Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                        <span class="@($"text-xs font-medium tabular-nums {GetCapacityColor(evItem.Attendees, evItem.Capacity)}")">@evItem.Attendees/@evItem.Capacity</span>
+                                        <span class="text-xs text-muted-foreground">attending</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 border-t pt-2">
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 w-full text-xs">RSVP</ButtonCn>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded absolute bottom-2 left-2">
+                Map view — Chicago, IL
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var t in _types)
+            {
+                var typ = t;
+                var cfg = GetTypeConfig(typ);
+                var count = Array.FindAll(_events, ev => ev.Type == typ).Length;
+                if (count > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                        @cfg.Label (@count)
+                    </span>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CommunityEvent(
+        string Id,
+        string Name,
+        string Type,
+        string Venue,
+        string Address,
+        string Date,
+        string Time,
+        string Description,
+        string Organizer,
+        int Capacity,
+        int Attendees,
+        bool IsFree,
+        double Longitude,
+        double Latitude
+    );
+
+    private record TypeConfig(string Color, string Label, string Icon);
+
+    private static readonly string[] _types = ["music", "market", "workshop", "sports", "meetup"];
+
+    private static TypeConfig GetTypeConfig(string type) => type switch
+    {
+        "music"    => new("bg-purple-500",  "Music",    "music"),
+        "market"   => new("bg-emerald-500", "Market",   "shopping-bag"),
+        "workshop" => new("bg-blue-500",    "Workshop", "wrench"),
+        "sports"   => new("bg-amber-500",   "Sports",   "trophy"),
+        "meetup"   => new("bg-rose-500",    "Meetup",   "users"),
+        _          => new("bg-muted",       type,       "circle"),
+    };
+
+    private static string GetCapacityColor(int attendees, int capacity)
+    {
+        var pct = (double)attendees / capacity;
+        if (pct >= 0.9) return "text-red-600 dark:text-red-400";
+        if (pct >= 0.6) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+
+    private static readonly CommunityEvent[] _events =
+    [
+        new("e1", "Jazz in the Park",              "music",    "Millennium Park",       "201 E Randolph St, Chicago",           "Apr 5",  "6:00 PM - 9:00 PM",   "Live jazz quartet performing under the Pritzker Pavilion with food trucks and local vendors.",                                           "Chicago Arts Council",       500, 342, true,  -87.6226, 41.8826),
+        new("e2", "Logan Square Farmers Market",   "market",   "Logan Square",          "3107 W Logan Blvd, Chicago",           "Apr 6",  "8:00 AM - 1:00 PM",   "Weekly farmers market with 40+ vendors selling organic produce, artisan bread, honey, and handmade crafts.",                            "Logan Square Chamber",       300, 280, true,  -87.7092, 41.9292),
+        new("e3", "React Workshop: Advanced Patterns","workshop","1871 Innovation Hub",  "222 W Merchandise Mart Plaza, Chicago","Apr 8",  "10:00 AM - 4:00 PM",  "Hands-on workshop covering compound components, render props, custom hooks, and performance optimization in React.",                     "ChicagoJS",                   50,  38, false, -87.6354, 41.8884),
+        new("e4", "Pickup Basketball Tournament",  "sports",   "Humboldt Park Courts",  "1400 N Sacramento Ave, Chicago",       "Apr 7",  "9:00 AM - 3:00 PM",   "Open 3-on-3 basketball tournament. Register a team or join as a free agent. Prizes for top 3 teams.",                                  "Humboldt Park Athletics",    120,  96, true,  -87.7017, 41.9025),
+        new("e5", "Startup Founders Meetup",       "meetup",   "WeWork Fulton Market",  "220 N Green St, Chicago",              "Apr 9",  "6:30 PM - 8:30 PM",   "Monthly networking event for startup founders, investors, and tech professionals. Lightning talks and open bar.",                        "Chicago Startup Network",     80,  62, false, -87.6489, 41.8864),
+        new("e6", "Vinyl Record Fair",             "market",   "Empty Bottle",          "1035 N Western Ave, Chicago",          "Apr 6",  "11:00 AM - 5:00 PM",  "Browse thousands of vinyl records from 20+ dealers. Rare finds, new releases, and turntable gear.",                                       "Chicago Vinyl Collective",   200, 145, true,  -87.6875, 41.9008),
+        new("e7", "Morning Yoga in Grant Park",    "sports",   "Grant Park",            "337 E Randolph St, Chicago",           "Apr 5",  "7:00 AM - 8:00 AM",   "Free outdoor yoga session for all levels. Bring your own mat. Guided by certified instructors.",                                          "Lakeshore Wellness",         100,  74, true,  -87.6189, 41.8847),
+        new("e8", "Acoustic Open Mic Night",       "music",    "Schubas Tavern",        "3159 N Southport Ave, Chicago",        "Apr 10", "8:00 PM - 11:00 PM",  "Bring your guitar or voice and share your music. Sign up starts at 7:30 PM. All genres welcome.",                                        "Schubas Tavern",              75,  48, true,  -87.6631, 41.9399),
+    ];
+
+    private string? _filter   = null;
+    private string? _selected = null;
+
+    private CommunityEvent[] _filtered => _filter == null
+        ? _events
+        : Array.FindAll(_events, ev => ev.Type == _filter);
+
+    private int    _totalEvents    => _events.Length;
+    private int    _freeEvents     => Array.FindAll(_events, ev => ev.IsFree).Length;
+    private int    _totalAttendees => Array.FindAll(_events, _ => true).Sum(ev => ev.Attendees);
+
+    private void SetFilter(string? type)
+    {
+        _filter = type;
+        _selected = null;
+    }
+
+    private void ToggleFilter(string type)
+    {
+        _filter = _filter == type ? null : type;
+        _selected = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-87.73, -87.60], lat [41.87, 41.95]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -87.73, lonMax = -87.60;
+        const double latMin = 41.87,  latMax = 41.95;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 90);
+        y = Math.Clamp(y, 5, 90);
+        return (x, y);
+    }
+}

@@ -1,0 +1,277 @@
+@* ============================================================
+   Block: map-forest-coverage
+   Title: MapForestCoverage
+   Description: Interactive forest coverage change map with deforestation zone boundaries, reforestation markers, carbon sequestration data, and environmental impact overlays built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-forest-coverage.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="tree-pine" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Forest coverage</span>
+                <span class="text-xs text-muted-foreground">
+                    @_zones.Length zones · @_projects.Length projects
+                </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                @foreach (var v in _views)
+                {
+                    var view = v;
+                    <button
+                        type="button"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs capitalize transition-colors", _view == view ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                        @onclick="@(() => _view = view)"
+                    >
+                        @if (view == "deforestation")
+                        {
+                            <LucideIconCn Name="trending-down" Size="12" Class="size-3" />
+                        }
+                        @if (view == "reforestation")
+                        {
+                            <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                        }
+                        @view
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map area — Map/MapMarker/MapPopup/MapRoute/MarkerContent/MarkerTooltip are not available in BlazorCN; rendered as a styled placeholder *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Zone boundary outlines (deforestation) *@
+                @if (_view == "all" || _view == "deforestation")
+                {
+                    @foreach (var z in _zones)
+                    {
+                        var zone = z;
+                        var pos = GetPosition(zone.CenterLng, zone.CenterLat);
+                        var borderColor = zone.Severity == "critical" ? "#ef4444" : "#f59e0b";
+                        <div
+                            class="absolute rounded border-2 opacity-40 pointer-events-none"
+                            style="@($"left:{pos.X - 3.5}%;top:{pos.Y - 3.5}%;width:7%;height:7%;border-color:{borderColor}")"
+                        ></div>
+                    }
+                }
+
+                @* Zone markers (deforestation) *@
+                @if (_view == "all" || _view == "deforestation")
+                {
+                    @foreach (var z in _zones)
+                    {
+                        var zone = z;
+                        var pos = GetPosition(zone.CenterLng, zone.CenterLat);
+                        var bgColor = zone.Severity == "critical" ? "#ef4444" : "#f59e0b";
+                        <button
+                            type="button"
+                            class="absolute flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%;background-color:{bgColor}")"
+                            @onclick="@(() => ToggleZone(zone.Id))"
+                            title="@zone.Name"
+                        >
+                            <LucideIconCn Name="trending-down" Size="12" Class="size-3 text-white" />
+                        </button>
+                    }
+                }
+
+                @* Project markers (reforestation) *@
+                @if (_view == "all" || _view == "reforestation")
+                {
+                    @foreach (var p in _projects)
+                    {
+                        var proj = p;
+                        var pos = GetPosition(proj.Lng, proj.Lat);
+                        <button
+                            type="button"
+                            class="absolute flex size-6 items-center justify-center rounded-full border-2 border-white bg-emerald-500 shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%")"
+                            @onclick="@(() => ToggleProject(proj.Id))"
+                            title="@proj.Name"
+                        >
+                            <LucideIconCn Name="sprout" Size="12" Class="size-3 text-white" />
+                        </button>
+                    }
+                }
+
+                @* Active zone popup *@
+                @if (_activeZone != null)
+                {
+                    var az = _activeZone;
+                    var pos = GetPosition(az.CenterLng, az.CenterLat);
+                    <div
+                        class="absolute z-20 w-52 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+                        style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - 16px))")"
+                    >
+                        <div class="mb-2 flex items-start justify-between">
+                            <p class="text-sm font-medium">@az.Name</p>
+                            <div class="flex items-center gap-1">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal capitalize">@az.Severity</BadgeCn>
+                                <button type="button" class="ml-1 text-muted-foreground hover:text-foreground text-xs" @onclick="@(() => _selZone = null)">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-muted-foreground">Area</span>
+                                <span class="font-medium tabular-nums">@az.AreaHa.ToString("N0") ha</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-muted-foreground">Loss</span>
+                                <span class="font-medium tabular-nums text-red-600 dark:text-red-400">@az.LossPercent%</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-muted-foreground">CO2</span>
+                                <span class="font-medium tabular-nums">@az.CarbonLost.ToString("N0") tCO2</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* Active project popup *@
+                @if (_activeProject != null)
+                {
+                    var ap = _activeProject;
+                    var pos = GetPosition(ap.Lng, ap.Lat);
+                    var progressPct = ap.Target > 0 ? (int)Math.Round((double)ap.Planted / ap.Target * 100) : 0;
+                    var dotClass = ap.Status == "completed" ? "bg-blue-500" : "bg-emerald-500";
+                    <div
+                        class="absolute z-20 w-52 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+                        style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - 16px))")"
+                    >
+                        <div class="mb-2 flex items-start justify-between">
+                            <p class="text-sm font-medium">@ap.Name</p>
+                            <div class="flex items-center gap-1">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", dotClass)"></span>
+                                <button type="button" class="ml-1 text-muted-foreground hover:text-foreground text-xs" @onclick="@(() => _selProject = null)">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-2 space-y-1">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-muted-foreground">Trees</span>
+                                <span class="font-medium tabular-nums">@ap.Planted.ToString("N0") / @ap.Target.ToString("N0")</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-muted-foreground">CO2 offset</span>
+                                <span class="font-medium tabular-nums">@ap.CarbonOffset.ToString("N0") tCO2</span>
+                            </div>
+                        </div>
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                                class="h-full rounded-full bg-emerald-500"
+                                style="@($"width:{progressPct}%")"
+                            ></div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                Map view — Amazon Basin
+            </div>
+        </div>
+
+        @* Footer legend *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @_countCritical critical
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @_countModerate moderate
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_projects.Length reforestation
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                Net: @_netCo2.ToString("N0") tCO2
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Zone(
+        string Id,
+        string Name,
+        string Severity,
+        int AreaHa,
+        double LossPercent,
+        int CarbonLost,
+        double CenterLng,
+        double CenterLat
+    );
+
+    private record Project(
+        string Id,
+        string Name,
+        int Planted,
+        int Target,
+        int CarbonOffset,
+        double Lng,
+        double Lat,
+        string Status
+    );
+
+    private static readonly Zone[] _zones =
+    [
+        new("z1", "Serra do Divisor",     "critical", 12400, 23.5, 1860, -73.65, -7.45),
+        new("z2", "Rio Branco Basin",     "critical",  8700, 18.2, 1305, -67.85, -9.95),
+        new("z3", "Mato Grosso Frontier", "moderate",  5200,  9.8,  624, -55.5,  -12.6),
+    ];
+
+    private static readonly Project[] _projects =
+    [
+        new("r1", "Amazon Reforestation Initiative", 245000, 500000, 3675, -60.5, -3.1,  "active"),
+        new("r2", "Cerrado Restoration Project",     180000, 180000, 2700, -48.5, -15.8, "completed"),
+    ];
+
+    private static readonly string[] _views = ["all", "deforestation", "reforestation"];
+
+    private string _view = "all";
+    private string? _selZone = null;
+    private string? _selProject = null;
+
+    private Zone?    _activeZone    => _selZone    != null ? Array.Find(_zones,    z => z.Id == _selZone)    : null;
+    private Project? _activeProject => _selProject != null ? Array.Find(_projects, p => p.Id == _selProject) : null;
+
+    private int _countCritical => _zones.Count(z => z.Severity == "critical");
+    private int _countModerate => _zones.Count(z => z.Severity == "moderate");
+
+    private int _netCo2 =>
+        _projects.Sum(p => p.CarbonOffset) - _zones.Sum(z => z.CarbonLost);
+
+    // Map lon/lat to % positions within the placeholder.
+    // Viewport: lon [-80, -44], lat [-20, 5]  (Amazon Basin)
+    private static (double X, double Y) GetPosition(double lng, double lat)
+    {
+        const double lonMin = -80.0, lonMax = -44.0;
+        const double latMin = -20.0, latMax = 5.0;
+        var x = (lng - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (lat - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private void ToggleZone(string id)
+    {
+        _selZone    = _selZone == id ? null : id;
+        _selProject = null;
+    }
+
+    private void ToggleProject(string id)
+    {
+        _selProject = _selProject == id ? null : id;
+        _selZone    = null;
+    }
+}

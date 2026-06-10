@@ -1,0 +1,304 @@
+@* ============================================================
+   Block: map-festival-map
+   Title: MapFestivalMap
+   Description: Interactive music festival grounds map block for Next.js with stage markers, food vendor locations, restroom markers, first aid points, and schedule overlay using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-festival-map.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="mic" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Festival Grounds</span>
+                <span class="text-muted-foreground text-xs">Solstice Music Festival</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => SetFilter(null))"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    All
+                </button>
+                @foreach (var t in _amenityTypes)
+                {
+                    var atype = t;
+                    var cfg = GetTypeConfig(atype);
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleFilter(atype))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == atype ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                        @cfg.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + Schedule Panel *@
+        <div class="flex">
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-green-50 to-emerald-100 dark:from-slate-800 dark:to-slate-900"></div>
+                    @* Markers *@
+                    @foreach (var m in _filtered)
+                    {
+                        var marker = m;
+                        var mcfg = GetTypeConfig(marker.Type);
+                        var pos = GetMarkerPosition(marker.Longitude, marker.Latitude);
+                        var isSelected = _selectedId == marker.Id;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%")"
+                        >
+                            <button
+                                type="button"
+                                @onclick="@(() => ToggleSelected(marker.Id))"
+                                class="@Cn.Merge("flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md transition-transform hover:scale-110", isSelected ? "ring-2 ring-offset-1 ring-foreground" : "")"
+                                style="@($"background-color:{mcfg.Color}")"
+                                title="@marker.Name"
+                            >
+                                <LucideIconCn Name="@mcfg.IconName" Size="12" Class="size-3 text-white" />
+                            </button>
+                            @if (isSelected)
+                            {
+                                <div class="absolute left-1/2 z-10 mt-1.5 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg text-popover-foreground">
+                                    <div class="mb-2 flex items-start justify-between">
+                                        <div>
+                                            <p class="font-medium text-sm">@marker.Name</p>
+                                            <p class="text-muted-foreground text-xs">@mcfg.Label</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                            <span class="@($"mr-1 size-1.5 rounded-full {mcfg.Dot}")"></span>
+                                            @marker.Type
+                                        </BadgeCn>
+                                    </div>
+                                    <p class="mb-2 text-muted-foreground text-xs leading-relaxed">
+                                        @marker.Description
+                                    </p>
+                                    @if (marker.Details != null && marker.Details.Length > 0)
+                                    {
+                                        <div class="flex flex-wrap gap-1 border-t pt-2">
+                                            @foreach (var d in marker.Details)
+                                            {
+                                                <BadgeCn Variant="BadgeVariant.Outline" Class="font-normal text-xs">@d</BadgeCn>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="pointer-events-none absolute bottom-2 left-2 z-10 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                    Map view — Festival Grounds
+                </div>
+            </div>
+
+            @* Schedule Panel *@
+            <div class="w-64 shrink-0 border-l">
+                <div class="border-b px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <LucideIconCn Name="music" Size="16" Class="size-4 text-muted-foreground" />
+                        <span class="font-medium text-sm">Stage Schedule</span>
+                    </div>
+                    <p class="mt-1 text-muted-foreground text-xs">Now playing &amp; up next</p>
+                </div>
+                <div class="max-h-[430px] overflow-y-auto">
+                    @foreach (var s in _stages)
+                    {
+                        var stage = s;
+                        var stageIndex = Array.IndexOf(_stages, stage);
+                        var schedule = Array.Find(_schedules, sc => sc.StageId == stage.Id);
+                        var isExpanded = _expandedStage == stage.Id;
+                        var isLast = stageIndex == _stages.Length - 1;
+                        if (schedule != null)
+                        {
+                            <div class="@(isLast ? "" : "border-b")">
+                                <button
+                                    type="button"
+                                    @onclick="@(() => ToggleExpanded(stage.Id))"
+                                    class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
+                                >
+                                    <span class="size-1.5 shrink-0 rounded-full bg-violet-500"></span>
+                                    <div class="min-w-0 flex-1">
+                                        <span class="font-medium text-xs">@stage.Name</span>
+                                        <p class="truncate text-muted-foreground text-[10px]">
+                                            Now: @schedule.Now.Artist
+                                        </p>
+                                    </div>
+                                    <LucideIconCn
+                                        Name="chevron-right"
+                                        Size="14"
+                                        Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")"
+                                    />
+                                </button>
+                                @if (isExpanded)
+                                {
+                                    <div class="px-4 pb-3 pl-8">
+                                        @* Now playing *@
+                                        <div class="mb-2 rounded-md bg-muted/50 p-2.5">
+                                            <span class="mb-1 block font-medium text-muted-foreground text-[10px] uppercase tracking-wide">
+                                                Now playing
+                                            </span>
+                                            <p class="font-medium text-sm">@schedule.Now.Artist</p>
+                                            <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                                <span>@schedule.Now.Time</span>
+                                                <span>·</span>
+                                                <span>@schedule.Now.Genre</span>
+                                            </div>
+                                        </div>
+                                        @* Upcoming *@
+                                        <span class="mb-1.5 block font-medium text-muted-foreground text-xs">
+                                            Up next
+                                        </span>
+                                        @foreach (var entry in schedule.Upcoming)
+                                        {
+                                            <div class="mb-1.5 flex items-center gap-2">
+                                                <span class="w-14 shrink-0 font-mono text-muted-foreground text-[10px]">
+                                                    @entry.Time
+                                                </span>
+                                                <div class="min-w-0 flex-1">
+                                                    <span class="text-xs">@entry.Artist</span>
+                                                    <span class="ml-1 text-muted-foreground text-[10px]">
+                                                        @entry.Genre
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var t in _amenityTypes)
+            {
+                var atype = t;
+                var cfg = GetTypeConfig(atype);
+                var count = Array.FindAll(_markers, m => m.Type == atype).Length;
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                    @cfg.Label (@count)
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record FestivalMarker(
+        string Id,
+        string Name,
+        string Type,
+        string Description,
+        double Longitude,
+        double Latitude,
+        string[]? Details = null
+    );
+
+    private record ScheduleEntry(string Time, string Artist, string Genre);
+
+    private record StageSchedule(string StageId, ScheduleEntry Now, ScheduleEntry[] Upcoming);
+
+    private record TypeConfig(string Label, string Dot, string Color, string IconName);
+
+    private static TypeConfig GetTypeConfig(string type) => type switch
+    {
+        "stage"     => new("Stages",    "bg-violet-500", "#8b5cf6", "music"),
+        "food"      => new("Food",      "bg-amber-500",  "#f59e0b", "utensils"),
+        "restroom"  => new("Restrooms", "bg-blue-500",   "#3b82f6", "shower-head"),
+        "first-aid" => new("First Aid", "bg-red-500",    "#ef4444", "heart-pulse"),
+        _           => new(type,        "bg-muted",      "#888",    "map-pin"),
+    };
+
+    private static readonly string[] _amenityTypes = ["stage", "food", "restroom", "first-aid"];
+
+    private static readonly FestivalMarker[] _markers =
+    [
+        new("s1", "Main Stage",      "stage",     "Capacity 15,000. Headliner performances and closing ceremonies",           -118.2587, 34.0425, ["Full PA system", "Video walls", "VIP viewing area"]),
+        new("s2", "Sunset Stage",    "stage",     "Capacity 5,000. Electronic and DJ sets with full light production",        -118.2542, 34.0445, ["LED canopy", "Immersive sound", "Dance floor"]),
+        new("s3", "Acoustic Garden", "stage",     "Capacity 1,200. Intimate acoustic sets and singer-songwriter showcases",   -118.2608, 34.0460, ["Shaded seating", "Acoustic-only", "Meet & greet area"]),
+        new("s4", "Discovery Tent",  "stage",     "Capacity 2,500. Emerging artists and surprise guest performances",         -118.2565, 34.0470, ["Covered venue", "Standing room", "Merch booth"]),
+        new("f1", "Taco Libre",      "food",      "Authentic street tacos, burritos, and aguas frescas",                      -118.2570, 34.0435, ["Birria tacos $8", "Burrito bowl $12", "Horchata $5"]),
+        new("f2", "Noodle House",    "food",      "Hand-pulled noodles, ramen, and dumplings",                                -118.2600, 34.0440, ["Tonkotsu ramen $14", "Dan dan noodles $11", "Pork gyoza $7"]),
+        new("f3", "BBQ Pit",         "food",      "Slow-smoked brisket, pulled pork, and craft sides",                        -118.2555, 34.0455, ["Brisket plate $16", "Pulled pork $12", "Mac & cheese $6"]),
+        new("f4", "Green Bites",     "food",      "Plant-based burgers, salads, and fresh smoothies",                         -118.2615, 34.0450, ["Beyond burger $13", "Acai bowl $10", "Green smoothie $7"]),
+        new("r1", "Restrooms North", "restroom",  "24 units with handwash stations. Cleaned every 30 minutes",               -118.2550, 34.0465),
+        new("r2", "Restrooms South", "restroom",  "18 units near main entrance. Accessible facilities available",             -118.2590, 34.0418),
+        new("r3", "Restrooms East",  "restroom",  "12 units near food court. Family restroom available",                      -118.2530, 34.0440),
+        new("a1", "Medical Tent A",  "first-aid", "Primary medical station with EMTs and basic triage capability",            -118.2575, 34.0415),
+        new("a2", "Medical Tent B",  "first-aid", "Secondary station near main stage with defibrillator and cooling area",   -118.2548, 34.0430),
+    ];
+
+    private static readonly StageSchedule[] _schedules =
+    [
+        new("s1",
+            new("8:00 PM",  "Aurora Waves",    "Indie Rock"),
+            [new("9:30 PM",  "Midnight Echo",   "Alternative"), new("11:00 PM", "The Velvet Suns", "Rock")]),
+        new("s2",
+            new("8:00 PM",  "DJ Lumina",        "House"),
+            [new("9:30 PM",  "Bass Architect",  "Techno"),       new("11:00 PM", "Neon Circuit",    "Synthwave")]),
+        new("s3",
+            new("7:30 PM",  "Clara Moonlight",  "Folk"),
+            [new("9:00 PM",  "River Stone",     "Acoustic"),     new("10:15 PM", "Willow James",    "Singer-Songwriter")]),
+        new("s4",
+            new("7:45 PM",  "Cosmic Drift",     "Psych Rock"),
+            [new("9:15 PM",  "Jade Circuit",    "Electronic"),   new("10:45 PM", "Special Guest",   "TBA")]),
+    ];
+
+    private FestivalMarker[] _stages => Array.FindAll(_markers, m => m.Type == "stage");
+
+    private string? _filter       = null;
+    private string? _selectedId   = null;
+    private string? _expandedStage = "s1";
+
+    private FestivalMarker[] _filtered => _filter == null
+        ? _markers
+        : Array.FindAll(_markers, m => m.Type == _filter);
+
+    private void SetFilter(string? type)
+    {
+        _filter     = type;
+        _selectedId = null;
+    }
+
+    private void ToggleFilter(string type)
+    {
+        _filter     = _filter == type ? null : type;
+        _selectedId = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+    }
+
+    private void ToggleExpanded(string stageId)
+    {
+        _expandedStage = _expandedStage == stageId ? null : stageId;
+    }
+
+    // Map lon/lat to CSS % positions.
+    // Viewport: lon [-118.265, -118.250], lat [34.040, 34.049]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -118.265, lonMax = -118.250;
+        const double latMin = 34.040,   latMax = 34.049;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 90);
+        y = Math.Clamp(y, 5, 90);
+        return (x, y);
+    }
+}

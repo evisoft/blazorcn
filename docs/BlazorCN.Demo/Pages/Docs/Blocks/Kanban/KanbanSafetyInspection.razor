@@ -1,0 +1,232 @@
+@* ============================================================
+   Block: kanban-safety-inspection
+   Title: KanbanSafetyInspection
+   Description: A safety inspection kanban board for React and Next.js with bulk selection via shadcn/ui Checkbox, zone labels, risk level indicators, and floating action bar built with Tailwind CSS
+   Source: original/blocks/kanban/kanban-safety-inspection.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="relative overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="hard-hat" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Safety Inspection</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_items.Count points
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                @if (_highRiskOpen > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        <span class="text-red-600 dark:text-red-400">@_highRiskOpen high risk</span>
+                    </span>
+                }
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @(_items.Count(i => i.Column == "issues-found")) issues
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-3 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var columnItems = _items.Where(i => i.Column == column.Id).ToList();
+                var columnIds = columnItems.Select(i => i.Id).ToList();
+                var allSelected = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+                var someSelected = columnIds.Any(id => _selected.Contains(id));
+                var isIndeterminate = !allSelected && someSelected;
+
+                <div>
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                        <span class="flex items-center" role="button" tabindex="0"
+                              @onclick="@(() => ToggleColumnAll(column.Id))">
+                            <button type="button"
+                                    role="checkbox"
+                                    aria-checked="@(allSelected ? "true" : isIndeterminate ? "mixed" : "false")"
+                                    data-slot="checkbox"
+                                    data-state="@(allSelected ? "checked" : "unchecked")"
+                                    class="cn-checkbox peer shrink-0 outline-none">
+                                @if (isIndeterminate)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                }
+                                else if (allSelected)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M20 6 9 17l-5-5" /></svg>
+                                }
+                            </button>
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@columnItems.Count</span>
+                    </div>
+
+                    @* Items *@
+                    <div>
+                        @foreach (var itm in columnItems)
+                        {
+                            var isLast = itm == columnItems[columnItems.Count - 1];
+                            var isChecked = _selected.Contains(itm.Id);
+                            var capturedItem = itm;
+                            <div class="@Cn.Merge("flex items-start gap-2.5 px-4 py-2.5 transition-colors hover:bg-muted/50", !isLast ? "border-b" : "", isChecked ? "bg-muted/30" : "")">
+                                <span class="mt-0.5 flex shrink-0 items-center">
+                                    <CheckboxCn Checked="@isChecked"
+                                                CheckedChanged="@((bool _) => ToggleSelect(capturedItem.Id))" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", RiskDot(capturedItem.RiskLevel))"></span>
+                                        <span class="@Cn.Merge("truncate font-medium text-sm", column.Id == "cleared" ? "text-muted-foreground line-through" : "")">
+                                            @capturedItem.Title
+                                        </span>
+                                    </div>
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <span class="truncate text-muted-foreground text-xs">
+                                            @capturedItem.Zone
+                                        </span>
+                                    </div>
+                                </div>
+                                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground">
+                                    @capturedItem.Inspector
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @(_items.Count(i => i.Column == "cleared")) of @_items.Count cleared
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Inspection started 2h ago</span>
+        </div>
+
+        @* Floating Action Bar *@
+        @if (_selected.Count > 0)
+        {
+            <div class="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-lg border bg-card px-4 py-2.5 shadow-lg">
+                <span class="font-medium text-sm">@_selected.Count selected</span>
+                <div class="flex items-center gap-2">
+                    <SelectCn Value="@_moveTarget" ValueChanged="@((string? val) => MoveSelected(val ?? ""))">
+                        <SelectTriggerCn Class="h-7 w-[130px] text-xs">
+                            <SelectValueCn Placeholder="Move to..." />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var col in _columns)
+                            {
+                                var c = col;
+                                <SelectItemCn Value="@c.Id" Class="text-xs">@c.Title</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="ArchiveSelected">
+                        <LucideIconCn Name="archive" Size="12" Class="size-3" />
+                        Archive
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="DeselectAll">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        Deselect
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private sealed class InspectionItem
+    {
+        public string Id { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string Zone { get; init; } = "";
+        public string RiskLevel { get; init; } = "";
+        public string Inspector { get; init; } = "";
+        public string Column { get; set; } = "";
+    }
+
+    private sealed record ColumnDef(string Id, string Title);
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("to-inspect",    "To Inspect"),
+        new("issues-found",  "Issues Found"),
+        new("cleared",       "Cleared"),
+    ];
+
+    private List<InspectionItem> _items =
+    [
+        new() { Id = "si1",  Title = "Fire exit signage visibility",         Zone = "Building A — Floor 3",      RiskLevel = "high",   Inspector = "TM", Column = "to-inspect"   },
+        new() { Id = "si2",  Title = "Electrical panel clearance",           Zone = "Warehouse — Bay 7",         RiskLevel = "high",   Inspector = "DP", Column = "to-inspect"   },
+        new() { Id = "si3",  Title = "Handrail integrity on stairwell B",    Zone = "Building A — Floor 2",      RiskLevel = "medium", Inspector = "TM", Column = "to-inspect"   },
+        new() { Id = "si4",  Title = "Chemical storage labeling",            Zone = "Lab — Room 104",            RiskLevel = "high",   Inspector = "KR", Column = "to-inspect"   },
+        new() { Id = "si5",  Title = "Emergency shower functionality",       Zone = "Lab — Room 108",            RiskLevel = "medium", Inspector = "DP", Column = "to-inspect"   },
+        new() { Id = "si6",  Title = "Forklift path obstruction check",      Zone = "Warehouse — Aisle C",       RiskLevel = "medium", Inspector = "TM", Column = "issues-found" },
+        new() { Id = "si7",  Title = "Smoke detector battery replacement",   Zone = "Building B — Floor 1",      RiskLevel = "high",   Inspector = "KR", Column = "issues-found" },
+        new() { Id = "si8",  Title = "Floor marking wear assessment",        Zone = "Warehouse — Loading Dock",  RiskLevel = "low",    Inspector = "DP", Column = "issues-found" },
+        new() { Id = "si9",  Title = "PPE station inventory count",          Zone = "Building A — Entrance",     RiskLevel = "medium", Inspector = "TM", Column = "issues-found" },
+        new() { Id = "si10", Title = "Ventilation system airflow test",      Zone = "Lab — Room 104",            RiskLevel = "medium", Inspector = "KR", Column = "cleared"      },
+        new() { Id = "si11", Title = "Sprinkler head obstruction check",     Zone = "Warehouse — Bay 2",         RiskLevel = "high",   Inspector = "DP", Column = "cleared"      },
+        new() { Id = "si12", Title = "First aid kit expiry review",          Zone = "Building B — Floor 2",      RiskLevel = "low",    Inspector = "TM", Column = "cleared"      },
+        new() { Id = "si13", Title = "Eye wash station pressure test",       Zone = "Lab — Room 108",            RiskLevel = "medium", Inspector = "KR", Column = "cleared"      },
+        new() { Id = "si14", Title = "Emergency lighting backup test",       Zone = "Building A — Floor 1",      RiskLevel = "low",    Inspector = "DP", Column = "cleared"      },
+    ];
+
+    private HashSet<string> _selected = [];
+    private string _moveTarget = "";
+
+    private int _highRiskOpen => _items.Count(i => i.RiskLevel == "high" && i.Column != "cleared");
+
+    private static string RiskDot(string riskLevel) => riskLevel switch
+    {
+        "high"   => "bg-red-500",
+        "medium" => "bg-amber-500",
+        "low"    => "bg-blue-500",
+        _        => "",
+    };
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Remove(id))
+            _selected.Add(id);
+    }
+
+    private void ToggleColumnAll(string columnId)
+    {
+        var columnIds = _items.Where(i => i.Column == columnId).Select(i => i.Id).ToList();
+        var allSel = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+        foreach (var id in columnIds)
+        {
+            if (allSel) _selected.Remove(id);
+            else _selected.Add(id);
+        }
+    }
+
+    private void MoveSelected(string targetColumn)
+    {
+        if (string.IsNullOrEmpty(targetColumn)) return;
+        foreach (var i in _items.Where(i => _selected.Contains(i.Id)))
+            i.Column = targetColumn;
+        _selected.Clear();
+        _moveTarget = "";
+    }
+
+    private void ArchiveSelected(MouseEventArgs e)
+    {
+        _items = _items.Where(i => !_selected.Contains(i.Id)).ToList();
+        _selected.Clear();
+    }
+
+    private void DeselectAll(MouseEventArgs e)
+    {
+        _selected.Clear();
+    }
+}

@@ -1,0 +1,293 @@
+@* ============================================================
+   Block: map-atm-finder
+   Title: MapAtmFinder
+   Description: Interactive ATM location finder map with bank markers, fee indicators, accessibility badges, cash availability status, and ATM detail tooltips built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-atm-finder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header toolbar *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="landmark" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">ATM finder</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length locations</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                @foreach (var f in _filterOptions)
+                {
+                    var fVal = f;
+                    <button
+                        type="button"
+                        @onclick="@(() => SetFilter(fVal))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == fVal ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        @if (fVal == "fee-free")
+                        {
+                            <LucideIconCn Name="circle-dollar-sign" Size="12" Class="size-3" />
+                        }
+                        @if (fVal == "accessible")
+                        {
+                            <LucideIconCn Name="accessibility" Size="12" Class="size-3" />
+                        }
+                        @if (fVal == "deposit")
+                        {
+                            <LucideIconCn Name="banknote" Size="12" Class="size-3" />
+                        }
+                        @(fVal == "fee-free" ? "Fee-free" : fVal == "accessible" ? "Accessible" : fVal == "deposit" ? "Deposit" : "All")
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map area — Map/MapMarker/MarkerContent/MarkerTooltip/MarkerPopup are custom registry
+           components with no BlazorCN equivalent; rendered as a styled static map placeholder
+           showing all markers and popup detail for the selected ATM. *@
+        <div class="relative h-[500px] bg-muted/30">
+            @* Map background grid lines to suggest a map *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                New York City — Midtown Manhattan
+            </div>
+
+            @* Map zoom controls (bottom-right) *@
+            <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="locate" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* ATM markers plotted by relative position *@
+            @foreach (var atm in _filtered)
+            {
+                var atmItem = atm;
+                var pos = GetMarkerPosition(atmItem);
+                <div class="absolute" style="@($"left:{pos.Left}%; top:{pos.Top}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSelected(atmItem.Id))"
+                        class="group relative flex flex-col items-center">
+                        @* Marker pin *@
+                        <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md", atmItem.Status == "offline" ? "bg-zinc-400" : GetBankColor(atmItem.Bank))">
+                            <LucideIconCn Name="building" Size="14" Class="size-3.5 text-white" />
+                        </div>
+                        @if (atmItem.Fee == 0 && atmItem.Status != "offline")
+                        {
+                            <span class="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-emerald-500 shadow-sm">
+                                <LucideIconCn Name="circle-dollar-sign" Size="8" Class="size-2 text-white" />
+                            </span>
+                        }
+                        @* Tooltip (shown on hover via group-hover) *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[120px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            <div class="flex flex-col gap-0.5">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium">@atmItem.Bank</span>
+                                    @if (atmItem.Fee == 0)
+                                    {
+                                        <span class="text-emerald-400">Fee-free</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-amber-400">$@atmItem.Fee fee</span>
+                                    }
+                                </div>
+                                <span class="text-muted-foreground">@GetStatusLabel(atmItem.Status)</span>
+                            </div>
+                        </div>
+                    </button>
+
+                    @* Popup (shown when selected) *@
+                    @if (_selected == atmItem.Id)
+                    {
+                        <div class="absolute bottom-full left-1/2 mb-2 w-52 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                            <div class="mb-2 flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm font-medium">@atmItem.Bank</p>
+                                    <div class="mt-0.5 flex items-center gap-1.5">
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", GetStatusDot(atmItem.Status))"></span>
+                                        <span class="text-xs text-muted-foreground">@GetStatusLabel(atmItem.Status)</span>
+                                    </div>
+                                </div>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("text-[10px] font-normal", atmItem.Fee == 0 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")">
+                                    @(atmItem.Fee == 0 ? "Fee-free" : $"${atmItem.Fee} fee")
+                                </BadgeCn>
+                            </div>
+                            <div class="mb-2 space-y-1">
+                                <div class="flex items-start gap-1.5">
+                                    <LucideIconCn Name="map-pin" Size="12" Class="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+                                    <span class="text-xs text-muted-foreground">@atmItem.Address</span>
+                                </div>
+                                <div class="text-xs text-muted-foreground">Hours: @atmItem.Hours</div>
+                            </div>
+                            <div class="mb-2 flex flex-wrap gap-1">
+                                @if (atmItem.IsAccessible)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1 text-[10px] font-normal">
+                                        <LucideIconCn Name="accessibility" Size="10" Class="size-2.5" />
+                                        Accessible
+                                    </BadgeCn>
+                                }
+                                @if (atmItem.HasDeposit)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1 text-[10px] font-normal">
+                                        <LucideIconCn Name="banknote" Size="10" Class="size-2.5" />
+                                        Deposit
+                                    </BadgeCn>
+                                }
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2">
+                                <span class="text-[10px] font-medium text-muted-foreground">Networks</span>
+                                <div class="mt-1 flex flex-wrap gap-1">
+                                    @foreach (var network in atmItem.Networks)
+                                    {
+                                        var net = network;
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1 text-[10px] font-normal">
+                                            <LucideIconCn Name="credit-card" Size="10" Class="size-2.5" />
+                                            @net
+                                        </BadgeCn>
+                                    }
+                                </div>
+                            </div>
+                            @* Close button *@
+                            <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer status bar *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_atms.Count(a => a.Status == "online") online
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @_atms.Count(a => a.Status == "low-cash") low cash
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @_atms.Count(a => a.Status == "offline") offline
+            </span>
+            <span class="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="circle-dollar-sign" Size="12" Class="size-3" />
+                @_atms.Count(a => a.Fee == 0) fee-free
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Atm(
+        string Id,
+        string Bank,
+        string Address,
+        string Status,
+        double Fee,
+        double Longitude,
+        double Latitude,
+        bool IsAccessible,
+        bool HasDeposit,
+        string[] Networks,
+        string Hours
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly Atm[] _atms =
+    [
+        new("a1", "Chase", "270 Park Ave, New York, NY 10017", "online", 0, -73.9752, 40.7557, true, true, ["Visa", "Mastercard", "Allpoint"], "24/7"),
+        new("a2", "Bank of America", "1185 6th Ave, New York, NY 10036", "online", 0, -73.9808, 40.7584, true, true, ["Visa", "Mastercard"], "24/7"),
+        new("a3", "Citibank", "399 Park Ave, New York, NY 10022", "low-cash", 0, -73.9717, 40.7578, true, true, ["Visa", "Mastercard", "Cirrus"], "24/7"),
+        new("a4", "Wells Fargo", "150 E 42nd St, New York, NY 10017", "online", 3.0, -73.9777, 40.7521, false, false, ["Visa", "Mastercard"], "6 AM - 12 AM"),
+        new("a5", "TD Bank", "590 Madison Ave, New York, NY 10022", "offline", 0, -73.9716, 40.7623, true, true, ["Visa", "Mastercard", "Allpoint"], "24/7"),
+    ];
+
+    private static readonly string[] _filterOptions = ["all", "fee-free", "accessible", "deposit"];
+
+    private string _filter = "all";
+    private string? _selected = null;
+
+    private Atm[] _filtered => _filter switch
+    {
+        "fee-free" => _atms.Where(a => a.Fee == 0).ToArray(),
+        "accessible" => _atms.Where(a => a.IsAccessible).ToArray(),
+        "deposit" => _atms.Where(a => a.HasDeposit).ToArray(),
+        _ => _atms,
+    };
+
+    private void SetFilter(string f)
+    {
+        _filter = f;
+        _selected = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    // Map bounding box: lon [-73.982, -73.970], lat [40.750, 40.765]
+    private static MarkerPos GetMarkerPosition(Atm atm)
+    {
+        var lonMin = -73.9820;
+        var lonMax = -73.9700;
+        var latMin = 40.7490;
+        var latMax = 40.7640;
+        var left = (atm.Longitude - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top = (latMax - atm.Latitude) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+
+    private static string GetBankColor(string bank) => bank switch
+    {
+        "Chase" => "bg-blue-600",
+        "Bank of America" => "bg-red-600",
+        "Citibank" => "bg-sky-500",
+        "Wells Fargo" => "bg-red-500",
+        "TD Bank" => "bg-emerald-600",
+        _ => "bg-zinc-600",
+    };
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "online" => "bg-emerald-500",
+        "low-cash" => "bg-amber-500",
+        _ => "bg-red-500",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "online" => "Online",
+        "low-cash" => "Low cash",
+        _ => "Offline",
+    };
+}

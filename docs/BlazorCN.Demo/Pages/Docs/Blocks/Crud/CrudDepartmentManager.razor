@@ -1,0 +1,168 @@
+@* ============================================================
+   Block: crud-department-manager
+   Title: CrudDepartmentManager
+   Description: Department hierarchy editor with team counts, manager assignment, and organizational structure management
+   Source: original/blocks/crud/crud-department-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Departments</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @(_depts.Count(d => d.ParentId == null)) departments · @_totalHeadcount total headcount
+                    </p>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs"
+                          @onclick="@(() => _showAdd = !_showAdd)">
+                    <LucidePlusCn Size="14" Class="size-3.5" />
+                    Add Department
+                </ButtonCn>
+            </div>
+        </div>
+
+        @if (_showAdd)
+        {
+            <div class="border-b bg-muted/30 px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <InputCn Placeholder="Department name" Class="h-8 flex-1 text-xs"
+                             @bind-Value="_newDeptName" />
+                    <InputCn Placeholder="Manager" Class="h-8 w-40 text-xs"
+                             @bind-Value="_newDeptManager" />
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-8 text-xs" @onclick="HandleAdd">
+                        Add
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-8 text-xs"
+                              @onclick="@(() => _showAdd = false)">
+                        Cancel
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        <div>
+            @foreach (var dept in _depts.Where(d => d.ParentId == null).ToList())
+            {
+                @RenderDept(dept, 0)
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Department(int Id, string Name, string Manager, int Headcount, string Budget, int? ParentId, string Status);
+
+    private List<Department> _depts =
+    [
+        new(1,  "Engineering",  "Sarah Chen",    45, "$2.4M", null, "active"),
+        new(2,  "Frontend",     "Mike Johnson",  15, "$780K",    1, "active"),
+        new(3,  "Backend",      "Emma Davis",    18, "$960K",    1, "active"),
+        new(4,  "DevOps",       "David Lee",      8, "$420K",    1, "active"),
+        new(5,  "QA",           "Alex Morgan",    4, "$240K",    1, "active"),
+        new(6,  "Product",      "Lisa Wang",     12, "$1.1M", null, "active"),
+        new(7,  "Design",       "Tom Brown",      8, "$680K", null, "active"),
+        new(8,  "Marketing",    "Rachel Green",  15, "$1.8M", null, "active"),
+        new(9,  "Content",      "James Wilson",   6, "$420K",    8, "active"),
+        new(10, "Growth",       "Maria Garcia",   5, "$380K",    8, "active"),
+        new(11, "Sales",        "Chris Taylor",  20, "$2.1M", null, "active"),
+        new(12, "Data Science", "TBD",            0, "$500K",    1, "planned"),
+    ];
+
+    private readonly HashSet<int> _expanded = [1, 8];
+    private bool _showAdd;
+    private string _newDeptName = "";
+    private string _newDeptManager = "";
+
+    private int _totalHeadcount => _depts.Where(d => d.ParentId == null).Sum(d => d.Headcount);
+
+    private void ToggleExpand(int id)
+    {
+        if (!_expanded.Remove(id)) _expanded.Add(id);
+    }
+
+    private void HandleAdd()
+    {
+        if (string.IsNullOrWhiteSpace(_newDeptName)) return;
+        var newId = _depts.Count > 0 ? _depts.Max(d => d.Id) + 1 : 1;
+        _depts.Add(new Department(newId, _newDeptName, string.IsNullOrWhiteSpace(_newDeptManager) ? "TBD" : _newDeptManager, 0, "$0", null, "planned"));
+        _newDeptName = "";
+        _newDeptManager = "";
+        _showAdd = false;
+    }
+
+    private void HandleDelete(int id)
+    {
+        _depts = _depts.Where(d => d.Id != id && d.ParentId != id).ToList();
+    }
+
+    private RenderFragment RenderDept(Department dept, int level) => __builder =>
+    {
+        var children = _depts.Where(d => d.ParentId == dept.Id).ToList();
+        var hasChildren = children.Count > 0;
+        var isExpanded = _expanded.Contains(dept.Id);
+        var deptId = dept.Id;
+
+        <div>
+            <div class="flex items-center gap-2 border-b px-4 py-2.5 transition-colors hover:bg-muted/50"
+                 style="@($"padding-left: {16 + level * 24}px")">
+                @if (hasChildren)
+                {
+                    <button type="button" class="flex size-5 items-center justify-center rounded hover:bg-muted"
+                            @onclick="@(() => ToggleExpand(deptId))">
+                        <LucideChevronRightCn Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                }
+                else
+                {
+                    <span class="size-5"></span>
+                }
+                <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/50">
+                    <LucideUsersCn Size="14" Class="size-3.5 text-muted-foreground" />
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium">@dept.Name</span>
+                        @if (dept.Status == "planned")
+                        {
+                            <BadgeCn Variant="BadgeVariant.Outline" Class="px-1.5 py-0 text-[10px]">
+                                Planned
+                            </BadgeCn>
+                        }
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>@dept.Manager</span>
+                        <span>·</span>
+                        <span>@dept.Headcount people</span>
+                        <span>·</span>
+                        <span>@dept.Budget</span>
+                    </div>
+                </div>
+                <DropdownMenuCn>
+                    <DropdownMenuTriggerCn>
+                        <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                            <LucideMoreHorizontalCn Size="16" Class="size-4" />
+                        </ButtonCn>
+                    </DropdownMenuTriggerCn>
+                    <DropdownMenuContentCn Align="FloatingAlign.End">
+                        <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                        <DropdownMenuItemCn>Add Sub-department</DropdownMenuItemCn>
+                        <DropdownMenuItemCn>View Members</DropdownMenuItemCn>
+                        <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(deptId))">
+                            <LucideTrash2Cn Size="16" Class="mr-2 size-4" />
+                            Delete
+                        </DropdownMenuItemCn>
+                    </DropdownMenuContentCn>
+                </DropdownMenuCn>
+            </div>
+            @if (isExpanded)
+            {
+                foreach (var child in children)
+                {
+                    @RenderDept(child, level + 1)
+                }
+            }
+        </div>
+    };
+}

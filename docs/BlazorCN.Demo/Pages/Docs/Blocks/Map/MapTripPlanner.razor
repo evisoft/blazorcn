@@ -1,0 +1,258 @@
+@* ============================================================
+   Block: map-trip-planner
+   Title: MapTripPlanner
+   Description: React trip itinerary planner map block for Next.js with numbered stop markers, route connections between stops, a day-by-day sidebar, and duration estimates using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-trip-planner.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="navigation" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Trip Planner</span>
+                <span class="text-xs text-muted-foreground">Paris, France</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                @_days.Length days - @_days.Sum(d => d.Stops.Length) stops
+            </BadgeCn>
+        </div>
+
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                @* Day tabs *@
+                <div class="flex border-b">
+                    @foreach (var day in _days)
+                    {
+                        var d = day;
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectDay(d.Id))"
+                            class="@Cn.Merge("flex-1 border-b-2 px-3 py-2 text-center text-xs font-medium transition-colors", _activeDay == d.Id ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")">
+                            @d.Label
+                        </button>
+                    }
+                </div>
+
+                @* Travel summary *@
+                <div class="flex items-center gap-2 border-b px-3 py-2">
+                    <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground" />
+                    <span class="text-xs text-muted-foreground">
+                        Total travel: @CurrentDay.TravelTime
+                    </span>
+                    <span class="text-xs text-muted-foreground">-</span>
+                    <span class="text-xs text-muted-foreground">@CurrentDay.Stops.Length stops</span>
+                </div>
+
+                @* Stops list *@
+                <div class="max-h-[400px] overflow-y-auto">
+                    @for (int i = 0; i < CurrentDay.Stops.Length; i++)
+                    {
+                        var stop = CurrentDay.Stops[i];
+                        var index = i;
+                        var stopId = stop.Id;
+                        var routeColor = CurrentDay.RouteColor;
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleStop(stopId))"
+                            class="@Cn.Merge("flex w-full items-start gap-3 border-b px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedStop == stop.Id ? "bg-muted/50" : "")">
+                            <div
+                                class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full font-semibold text-[10px] text-white"
+                                style="@($"background-color:{routeColor}")">
+                                @(index + 1)
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@stop.Name</span>
+                                <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                                    @stop.Note
+                                </p>
+                                <div class="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                    @stop.Duration
+                                </div>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Route lines (SVG overlay) *@
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                        @* Dimmed routes for non-active days *@
+                        @foreach (var day in _days)
+                        {
+                            var d = day;
+                            var isActive = d.Id == _activeDay;
+                            var pts = string.Join(" ", d.RouteCoordinates.Select(rc =>
+                            {
+                                var p = GetMarkerPosition(rc[0], rc[1]);
+                                return $"{p.X:F1}%,{p.Y:F1}%";
+                            }));
+                            if (isActive)
+                            {
+                                @((MarkupString)$"<polyline points=\"{pts}\" fill=\"none\" stroke=\"{d.RouteColor}\" stroke-width=\"3\" stroke-opacity=\"0.8\" />")
+                            }
+                            else
+                            {
+                                @((MarkupString)$"<polyline points=\"{pts}\" fill=\"none\" stroke=\"{d.RouteColor}\" stroke-width=\"1.5\" stroke-opacity=\"0.2\" stroke-dasharray=\"4 4\" />")
+                            }
+                        }
+                    </svg>
+
+                    @* Dimmed markers for other days *@
+                    @foreach (var day in _days)
+                    {
+                        var d = day;
+                        if (d.Id == _activeDay) continue;
+                        foreach (var stop in d.Stops)
+                        {
+                            var pos = GetMarkerPosition(stop.Lng, stop.Lat);
+                            <div
+                                class="absolute -translate-x-1/2 -translate-y-1/2"
+                                style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                                <div class="size-3 rounded-full border border-muted-foreground/30 bg-muted-foreground/20"></div>
+                            </div>
+                        }
+                    }
+
+                    @* Active day stop markers *@
+                    @for (int i = 0; i < CurrentDay.Stops.Length; i++)
+                    {
+                        var stop = CurrentDay.Stops[i];
+                        var index = i;
+                        var stopId = stop.Id;
+                        var routeColor = CurrentDay.RouteColor;
+                        var pos = GetMarkerPosition(stop.Lng, stop.Lat);
+                        var isSelected = _selectedStop == stop.Id;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                            <div class="group relative">
+                                <div
+                                    class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background font-bold text-[11px] text-white shadow-lg transition-all", isSelected ? "size-8" : "size-6")"
+                                    style="@($"background-color:{routeColor}")"
+                                    @onclick="@(() => ToggleStop(stopId))">
+                                    @(index + 1)
+                                </div>
+                                <span class="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 rounded bg-background/90 px-1 py-0.5 text-[10px]">
+                                    @stop.Name
+                                </span>
+                                @if (isSelected)
+                                {
+                                    <div class="absolute bottom-full left-1/2 z-50 mb-8 -translate-x-1/2 w-52 rounded border bg-card px-3 py-2 shadow-lg">
+                                        <div class="mb-1 flex items-center gap-2">
+                                            <div
+                                                class="flex size-5 shrink-0 items-center justify-center rounded-full font-bold text-[10px] text-white"
+                                                style="@($"background-color:{routeColor}")">
+                                                @(index + 1)
+                                            </div>
+                                            <span class="text-sm font-medium">@stop.Name</span>
+                                        </div>
+                                        <p class="mb-2 text-xs leading-relaxed text-muted-foreground">
+                                            @stop.Note
+                                        </p>
+                                        <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            Suggested time: @stop.Duration
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                    Map view — Paris, France
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Stop(string Id, string Name, string Note, string Duration, double Lng, double Lat);
+    private record Day(string Id, string Label, string TravelTime, Stop[] Stops, double[][] RouteCoordinates, string RouteColor);
+
+    private static readonly Day[] _days =
+    [
+        new("d1", "Day 1", "3h 45min",
+            [
+                new("s1", "Eiffel Tower",    "Morning visit, book skip-the-line tickets",               "2h",     2.2945, 48.8584),
+                new("s2", "Louvre Museum",   "Focus on Denon wing, Mona Lisa area",                     "3h",     2.3376, 48.8606),
+                new("s3", "Notre-Dame",      "Exterior viewing, reconstruction ongoing",                "45min",  2.349,  48.853),
+                new("s4", "Sainte-Chapelle", "Gothic stained glass, arrive before noon for best light", "1h",     2.345,  48.8554),
+            ],
+            [
+                [2.2945, 48.8584],
+                [2.31,   48.859],
+                [2.3376, 48.8606],
+                [2.343,  48.857],
+                [2.349,  48.853],
+                [2.345,  48.8554],
+            ],
+            "#3b82f6"),
+        new("d2", "Day 2", "2h 20min",
+            [
+                new("s5", "Montmartre",          "Walk up to Sacre-Coeur, explore artist square", "2h",     2.3431, 48.8867),
+                new("s6", "Galeries Lafayette",  "Rooftop view is free, art nouveau dome",        "1h 30min", 2.3323, 48.8738),
+                new("s7", "Palais Royal",        "Gardens and Buren columns photo spot",          "45min",  2.3371, 48.8637),
+            ],
+            [
+                [2.3431, 48.8867],
+                [2.34,   48.88],
+                [2.3323, 48.8738],
+                [2.3371, 48.8637],
+            ],
+            "#f97316"),
+        new("d3", "Day 3", "1h 50min",
+            [
+                new("s8",  "Musee d'Orsay",      "Impressionist collection, less crowded on Thursdays", "2h 30min", 2.3265, 48.86),
+                new("s9",  "Luxembourg Gardens", "Picnic lunch, watch locals play petanque",            "1h 30min", 2.3372, 48.8462),
+                new("s10", "Pantheon",           "Foucault pendulum, views from dome",                  "1h",       2.3462, 48.8462),
+            ],
+            [
+                [2.3265, 48.86],
+                [2.331,  48.853],
+                [2.3372, 48.8462],
+                [2.3462, 48.8462],
+            ],
+            "#8b5cf6"),
+    ];
+
+    private string _activeDay = "d1";
+    private string? _selectedStop = null;
+
+    private Day CurrentDay => Array.Find(_days, d => d.Id == _activeDay) ?? _days[0];
+
+    private void SelectDay(string dayId)
+    {
+        _activeDay = dayId;
+        _selectedStop = null;
+    }
+
+    private void ToggleStop(string stopId)
+    {
+        _selectedStop = _selectedStop == stopId ? null : stopId;
+    }
+
+    // Map lon/lat to CSS percentage positions.
+    // Viewport: lon [2.27, 2.38], lat [48.84, 48.90]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = 2.27, lonMax = 2.38;
+        const double latMin = 48.84, latMax = 48.90;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

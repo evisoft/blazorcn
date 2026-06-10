@@ -1,0 +1,163 @@
+@* ============================================================
+   Block: todo-list-tax-prep
+   Title: TodoListTaxPrep
+   Description: A tax preparation checklist todo list block for React and Next.js with document sections, collection status indicators, filing deadlines, and completion percentages built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-tax-prep.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="file-check" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Tax Preparation</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">Tax Year 2025</BadgeCn>
+            </div>
+            <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                Filing deadline: Apr 15, 2026
+            </div>
+        </div>
+
+        @* Overall Progress *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <ProgressCn Value="@OverallProgress" Class="h-1.5 flex-1" />
+            <span class="font-medium text-muted-foreground text-xs tabular-nums">@OverallProgress% complete</span>
+        </div>
+
+        @* Sections *@
+        @for (int si = 0; si < _sectionNames.Length; si++)
+        {
+            var secName = _sectionNames[si];
+            var isCollapsed = _collapsedSections.Contains(secName);
+            var sectionItems = _items.Where(i => i.Section == secName).ToList();
+            var sectionApplicable = sectionItems.Where(i => i.Status != DocStatus.NotApplicable).ToList();
+            var sectionCollected = sectionItems.Where(i => i.Status == DocStatus.Collected).ToList();
+            var sectionProgress = sectionApplicable.Count > 0
+                ? (int)Math.Round((double)sectionCollected.Count / sectionApplicable.Count * 100)
+                : 0;
+            var capturedSecName = secName;
+
+            <div>
+                <button type="button" @onclick="@(() => ToggleSection(capturedSecName))"
+                        class="flex w-full items-center gap-2 border-b bg-muted/30 px-4 py-2 text-left transition-colors hover:bg-muted/50">
+                    <LucideIconCn Name="chevron-right" Size="14"
+                        Class="@($"size-3.5 text-muted-foreground/60 transition-transform duration-200{(isCollapsed ? "" : " rotate-90")}")" />
+                    <span class="font-medium text-xs">@secName</span>
+                    <span class="text-muted-foreground text-xs tabular-nums">@sectionCollected.Count/@sectionApplicable.Count</span>
+                    <span class="ml-auto font-mono text-muted-foreground text-xs tabular-nums">@sectionProgress%</span>
+                </button>
+
+                @if (!isCollapsed)
+                {
+                    @for (int ii = 0; ii < sectionItems.Count; ii++)
+                    {
+                        var item = sectionItems[ii];
+                        var isLastInSection = ii == sectionItems.Count - 1;
+                        var isLastSection = si == _sectionNames.Length - 1;
+                        var showBorder = !(isLastInSection && isLastSection);
+                        var itemId = item.Id;
+
+                        <div class="@(Cn.Merge("flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", showBorder ? "border-b" : ""))">
+                            <CheckboxCn Checked="@(item.Status == DocStatus.Collected)" CheckedChanged="@((bool _) => ToggleStatus(itemId))" />
+                            <span class="@($"size-1.5 shrink-0 rounded-full {GetStatusDot(item.Status)}")"></span>
+                            <div class="min-w-0 flex-1">
+                                <span class="@(Cn.Merge("font-medium text-sm transition-all duration-200", item.Status == DocStatus.Collected ? "text-muted-foreground line-through" : "", item.Status == DocStatus.NotApplicable ? "text-muted-foreground" : ""))">@item.Name</span>
+                                <p class="mt-0.5 truncate text-muted-foreground text-xs">@item.Description</p>
+                            </div>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"shrink-0 font-normal text-xs {GetStatusBadge(item.Status)}")">@GetStatusLabel(item.Status)</BadgeCn>
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">@(_items.Count(i => i.Status == DocStatus.Missing)) documents still missing</span>
+            <span class="text-muted-foreground text-xs tabular-nums">@(_items.Count(i => i.Status == DocStatus.NotApplicable)) not applicable</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum DocStatus { Collected, Missing, NotApplicable }
+
+    private record TaxItem(string Id, string Name, string Description, DocStatus Status, string Section);
+
+    private static readonly string[] _sectionNames = ["Income Documents", "Deductions", "Filing"];
+
+    private static readonly TaxItem[] _initialItems =
+    [
+        new("t1",  "W-2 from employer",                   "Primary employment wages and withholding",            DocStatus.Collected,      "Income Documents"),
+        new("t2",  "1099-INT — Bank interest",            "Interest income from savings accounts",               DocStatus.Collected,      "Income Documents"),
+        new("t3",  "1099-DIV — Dividends",                "Dividend income from brokerage accounts",             DocStatus.Missing,        "Income Documents"),
+        new("t4",  "1099-NEC — Freelance income",         "Non-employee compensation",                           DocStatus.NotApplicable,  "Income Documents"),
+        new("t5",  "1099-B — Stock sales",                "Capital gains and losses from securities",            DocStatus.Missing,        "Income Documents"),
+        new("t6",  "K-1 — Partnership income",            "Pass-through income from partnerships",               DocStatus.NotApplicable,  "Income Documents"),
+        new("t7",  "Mortgage interest statement (1098)",  "Deductible mortgage interest paid",                   DocStatus.Collected,      "Deductions"),
+        new("t8",  "Property tax receipts",               "State and local property taxes paid",                 DocStatus.Collected,      "Deductions"),
+        new("t9",  "Charitable donation receipts",        "Cash and non-cash contributions",                     DocStatus.Missing,        "Deductions"),
+        new("t10", "Medical expense records",             "Out-of-pocket medical and dental costs",              DocStatus.Collected,      "Deductions"),
+        new("t11", "Student loan interest (1098-E)",      "Interest paid on qualified student loans",            DocStatus.NotApplicable,  "Deductions"),
+        new("t12", "Home office expense records",         "Square footage and related utility bills",            DocStatus.NotApplicable,  "Deductions"),
+        new("t13", "Prior year tax return",               "2024 return for AGI reference",                       DocStatus.Collected,      "Filing"),
+        new("t14", "Estimated tax payment records",       "Quarterly estimated payments made",                   DocStatus.Collected,      "Filing"),
+        new("t15", "Bank routing and account numbers",    "For direct deposit of refund",                        DocStatus.Collected,      "Filing"),
+        new("t16", "Identity verification (IP PIN)",      "IRS Identity Protection PIN if issued",               DocStatus.Missing,        "Filing"),
+        new("t17", "Review and sign Form 1040",           "Final review before e-filing",                        DocStatus.Missing,        "Filing"),
+        new("t18", "E-file submission",                   "Submit return electronically",                        DocStatus.Missing,        "Filing"),
+    ];
+
+    private List<TaxItem> _items = new List<TaxItem>(_initialItems);
+    private HashSet<string> _collapsedSections = [];
+
+    private List<TaxItem> ApplicableItems => _items.Where(i => i.Status != DocStatus.NotApplicable).ToList();
+    private List<TaxItem> CollectedItems  => _items.Where(i => i.Status == DocStatus.Collected).ToList();
+    private int OverallProgress => ApplicableItems.Count > 0
+        ? (int)Math.Round((double)CollectedItems.Count / ApplicableItems.Count * 100)
+        : 0;
+
+    private static string GetStatusDot(DocStatus s) => s switch
+    {
+        DocStatus.Collected     => "bg-emerald-500",
+        DocStatus.Missing       => "bg-red-500",
+        _                       => "bg-zinc-400",
+    };
+
+    private static string GetStatusBadge(DocStatus s) => s switch
+    {
+        DocStatus.Collected     => "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+        DocStatus.Missing       => "bg-red-500/10 text-red-700 dark:text-red-400",
+        _                       => "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400",
+    };
+
+    private static string GetStatusLabel(DocStatus s) => s switch
+    {
+        DocStatus.Collected     => "Collected",
+        DocStatus.Missing       => "Missing",
+        _                       => "Not Applicable",
+    };
+
+    private static DocStatus NextStatus(DocStatus current) => current switch
+    {
+        DocStatus.Missing       => DocStatus.Collected,
+        DocStatus.Collected     => DocStatus.NotApplicable,
+        DocStatus.NotApplicable => DocStatus.Missing,
+        _                       => current,
+    };
+
+    private void ToggleStatus(string id)
+    {
+        _items = _items.Select(i => i.Id == id ? i with { Status = NextStatus(i.Status) } : i).ToList();
+    }
+
+    private void ToggleSection(string name)
+    {
+        if (_collapsedSections.Contains(name))
+            _collapsedSections.Remove(name);
+        else
+            _collapsedSections.Add(name);
+    }
+}

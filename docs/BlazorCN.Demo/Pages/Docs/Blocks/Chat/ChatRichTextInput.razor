@@ -1,0 +1,241 @@
+@* ============================================================
+   Block: chat-rich-text-input
+   Title: ChatRichTextInput
+   Description: React chat interface with rich text formatting toolbar for Next.js featuring bold, italic, strikethrough, code, and link buttons with toggle visibility using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-rich-text-input.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8">
+                <AvatarFallbackCn Class="text-xs">AL</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Alex Liu</span>
+                <p class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    Online
+                </p>
+            </div>
+        </div>
+
+        @* Messages — flat layout with sender grouping *@
+        <div class="flex-1 overflow-y-auto py-2">
+            @for (int i = 0; i < _messages.Count; i++)
+            {
+                var msg = _messages[i];
+                var prevMsg = i > 0 ? _messages[i - 1] : null;
+                var isFirstInGroup = prevMsg == null || prevMsg.SenderId != msg.SenderId;
+
+                @if (isFirstInGroup)
+                {
+                    <div class="flex gap-2 px-2 hover:bg-accent">
+                        <div class="flex w-10 shrink-0 justify-center pt-1">
+                            <AvatarCn Class="size-8 rounded-full">
+                                <AvatarFallbackCn Class="text-xs">@msg.SenderInitials</AvatarFallbackCn>
+                            </AvatarCn>
+                        </div>
+                        <div class="flex flex-1 flex-col">
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="font-medium">@msg.SenderName</span>
+                                <span class="text-xs text-muted-foreground">@msg.Timestamp</span>
+                            </div>
+                            <div class="text-sm">
+                                @if (msg.Formatted)
+                                {
+                                    @RenderFormattedText(msg.Content)
+                                }
+                                else
+                                {
+                                    @msg.Content
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="group flex gap-2 px-2 hover:bg-accent">
+                        <div class="flex w-10 shrink-0 justify-center pt-1">
+                            <span class="invisible text-right text-[10px] text-muted-foreground group-hover:visible">
+                                @msg.Timestamp
+                            </span>
+                        </div>
+                        <div class="flex flex-1 flex-col">
+                            <div class="text-sm">
+                                @if (msg.Formatted)
+                                {
+                                    @RenderFormattedText(msg.Content)
+                                }
+                                else
+                                {
+                                    @msg.Content
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Toolbar — sticky bottom, bordered rounded container *@
+        <div class="sticky bottom-0 bg-card p-2 pt-0">
+            <form @onsubmit="HandleSubmit" class="flex flex-wrap items-start gap-x-2 rounded-md border px-3 py-2">
+                @* Formatting bar — order-0 full width row above textarea *@
+                @if (_showToolbar)
+                {
+                    <div class="order-0 w-full overflow-hidden">
+                        <div class="flex items-center gap-0.5 border-b pb-2">
+                            @foreach (var action in _formatActions)
+                            {
+                                var act = action;
+                                <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                          Class="size-7 p-0 text-muted-foreground hover:text-foreground"
+                                          OnClick="@(() => HandleFormat(act.Prefix, act.Suffix))">
+                                    <LucideIconCn Name="@act.IconName" Size="14" Class="size-3.5" />
+                                </ButtonCn>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="order-1 flex h-10 items-center gap-1.5">
+                    <ButtonCn type="button" Variant="@(_showToolbar ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                              Size="ButtonSize.Icon"
+                              Class="size-8 text-muted-foreground"
+                              OnClick="@(() => _showToolbar = !_showToolbar)">
+                        <LucideIconCn Name="type" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+                <div class="order-2 grid min-w-0 flex-1">
+                    <textarea @bind="_input" @bind:event="oninput"
+                              placeholder="Type a message..."
+                              class="h-fit min-h-10 resize-none border-none bg-transparent px-1 text-sm shadow-none outline-none placeholder:text-muted-foreground"
+                              rows="1"></textarea>
+                </div>
+                <div class="order-3 flex h-10 items-center gap-1.5">
+                    <button type="submit"
+                            disabled="@_inputEmpty"
+                            class="@_submitClass">
+                        <LucideIconCn Name="arrow-up" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string SenderId, string SenderName, string SenderInitials, string Content, string Timestamp, bool Formatted = false);
+
+    private record FormatAction(string IconName, string Label, string Prefix, string Suffix);
+
+    private static readonly FormatAction[] _formatActions =
+    [
+        new("bold", "Bold", "**", "**"),
+        new("italic", "Italic", "*", "*"),
+        new("strikethrough", "Strikethrough", "~~", "~~"),
+        new("code", "Code", "`", "`"),
+        new("link", "Link", "[", "](url)"),
+    ];
+
+    private List<ChatMessage> _messages =
+    [
+        new("m1", "alex", "Alex Liu", "AL", "Hey, did you see the latest design spec?", "10:02 AM"),
+        new("m2", "me", "You", "YO", "Yeah, I think the **header spacing** needs work. The padding is off.", "10:03 AM", true),
+        new("m3", "alex", "Alex Liu", "AL", "Agreed. Also the `font-weight` on the subtitle looks too heavy in dark mode.", "10:04 AM", true),
+        new("m4", "me", "You", "YO", "I'll push a fix. Should we use *semibold* instead of bold?", "10:05 AM", true),
+        new("m5", "alex", "Alex Liu", "AL", "Yes, and maybe ~~remove the underline~~ on hover states too.", "10:06 AM", true),
+        new("m6", "me", "You", "YO", "Good call. I'll update the PR with both changes.", "10:07 AM"),
+    ];
+
+    private string _input = "";
+    private bool _showToolbar = false;
+
+    private bool _inputEmpty => string.IsNullOrWhiteSpace(_input);
+    private string _submitClass => Cn.Merge(
+        "flex size-7 shrink-0 items-center justify-center rounded-full transition-all",
+        !string.IsNullOrWhiteSpace(_input) ? "bg-foreground text-background" : "bg-muted text-muted-foreground/40");
+
+    private void HandleFormat(string prefix, string suffix)
+    {
+        var selected = "text";
+        _input = $"{_input}{prefix}{selected}{suffix}";
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+
+        var hasFormatting = System.Text.RegularExpressions.Regex.IsMatch(
+            _input,
+            @"(\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|`[^`]+`|\[.+\]\(.+\))");
+
+        var newMsg = new ChatMessage(
+            $"m{_messages.Count + 1}",
+            "me",
+            "You",
+            "YO",
+            _input,
+            "Now",
+            hasFormatting);
+
+        _messages.Add(newMsg);
+        _input = "";
+    }
+
+    private RenderFragment RenderFormattedText(string text) => builder =>
+    {
+        var regex = new System.Text.RegularExpressions.Regex(@"(\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|`[^`]+`)");
+        int seq = 0;
+        int lastIndex = 0;
+        var matches = regex.Matches(text);
+
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            if (match.Index > lastIndex)
+            {
+                builder.AddContent(seq++, text.Substring(lastIndex, match.Index - lastIndex));
+            }
+
+            var raw = match.Value;
+            if (raw.StartsWith("**") && raw.EndsWith("**"))
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", "font-semibold");
+                builder.AddContent(seq++, raw.Substring(2, raw.Length - 4));
+                builder.CloseElement();
+            }
+            else if (raw.StartsWith("*") && raw.EndsWith("*"))
+            {
+                builder.OpenElement(seq++, "em");
+                builder.AddAttribute(seq++, "class", "italic");
+                builder.AddContent(seq++, raw.Substring(1, raw.Length - 2));
+                builder.CloseElement();
+            }
+            else if (raw.StartsWith("~~") && raw.EndsWith("~~"))
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", "line-through");
+                builder.AddContent(seq++, raw.Substring(2, raw.Length - 4));
+                builder.CloseElement();
+            }
+            else if (raw.StartsWith("`") && raw.EndsWith("`"))
+            {
+                builder.OpenElement(seq++, "code");
+                builder.AddAttribute(seq++, "class", "rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]");
+                builder.AddContent(seq++, raw.Substring(1, raw.Length - 2));
+                builder.CloseElement();
+            }
+
+            lastIndex = match.Index + raw.Length;
+        }
+
+        if (lastIndex < text.Length)
+        {
+            builder.AddContent(seq++, text.Substring(lastIndex));
+        }
+    };
+}

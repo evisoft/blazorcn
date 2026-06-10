@@ -1,0 +1,182 @@
+@* ============================================================
+   Block: checkout-wishlist-to-cart
+   Title: CheckoutWishlistToCart
+   Description: A React and Next.js wishlist to cart conversion block with multi-select checkboxes, bulk add to cart action, price change indicators, and item management using shadcn/ui Checkbox, Button, Badge, and Tailwind CSS
+   Source: original/blocks/checkout/checkout-wishlist-to-cart.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="heart" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-sm">Wishlist</span>
+                <span class="text-muted-foreground text-xs">(@_items.Count items)</span>
+            </div>
+            @if (_addedToCart.Count > 0)
+            {
+                <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="shopping-cart" Size="12" Class="size-3" />
+                    @_addedToCart.Count in cart
+                </div>
+            }
+        </div>
+
+        @* Select all + bulk action *@
+        <div class="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
+            <span class="flex cursor-pointer items-center gap-2">
+                <CheckboxCn Checked="@_allSelected" CheckedChanged="@ToggleAll" />
+                <span class="text-xs text-muted-foreground">
+                    @(_selected.Count > 0 ? $"{_selected.Count} selected" : "Select all")
+                </span>
+            </span>
+            @if (_selected.Count > 0)
+            {
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" OnClick="AddSelectedToCart">
+                    <LucideIconCn Name="shopping-cart" Size="12" Class="size-3" />
+                    Add Selected — $@_selectedTotal.ToString("F2")
+                </ButtonCn>
+            }
+        </div>
+
+        @* Wishlist items *@
+        <div>
+            @{
+                var itemList = _items.ToList();
+            }
+            @foreach (var it in itemList)
+            {
+                var item = it;
+                var isLast = itemList.IndexOf(item) == itemList.Count - 1;
+                var isInCart = _addedToCart.Contains(item.Id);
+                var priceChange = GetPriceChange(item);
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/30", isLast ? "" : "border-b", isInCart ? "opacity-60" : "")">
+                    @* Checkbox *@
+                    <CheckboxCn Checked="@(_selected.Contains(item.Id))"
+                                CheckedChanged="@(() => ToggleSelect(item.Id))"
+                                Disabled="@(!item.InStock || isInCart)" />
+
+                    @* Image *@
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted/50 font-mono text-muted-foreground text-xs">
+                        @item.Image
+                    </div>
+
+                    @* Details *@
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="truncate font-medium text-sm">@item.Name</span>
+                            @if (!item.InStock)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-normal text-[10px]">Out of stock</BadgeCn>
+                            }
+                            @if (isInCart)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-normal text-[10px]">In cart</BadgeCn>
+                            }
+                        </div>
+                        <p class="text-muted-foreground text-xs">@item.Description</p>
+                    </div>
+
+                    @* Price + change indicator *@
+                    <div class="shrink-0 text-right">
+                        <span class="font-medium text-sm tabular-nums">$@item.CurrentPrice.ToString("F2")</span>
+                        @if (priceChange != null)
+                        {
+                            <div class="@Cn.Merge("mt-0.5 flex items-center justify-end gap-0.5 text-[10px]", priceChange.Type == "drop" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                @if (priceChange.Type == "drop")
+                                {
+                                    <LucideIconCn Name="arrow-down" Size="10" Class="size-2.5" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="arrow-up" Size="10" Class="size-2.5" />
+                                }
+                                $@priceChange.Amount.ToString("F2")
+                            </div>
+                        }
+                    </div>
+
+                    @* Actions *@
+                    <div class="flex shrink-0 items-center gap-1">
+                        @if (!isInCart && item.InStock)
+                        {
+                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs" OnClick="@(() => AddSingleToCart(item.Id))">
+                                <LucideIconCn Name="shopping-cart" Size="12" Class="size-3" />
+                                Add
+                            </ButtonCn>
+                        }
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0 text-muted-foreground" OnClick="@(() => RemoveItem(item.Id))">
+                            <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record WishlistItem(string Id, string Name, string Description, string Image, double CurrentPrice, double OriginalPrice, bool InStock);
+    private record PriceChange(string Type, double Amount);
+
+    private List<WishlistItem> _items =
+    [
+        new("1", "Ultra-Wide Monitor 34\"",  "3440x1440, 144Hz, USB-C",             "UM", 449.99, 499.99, true),
+        new("2", "Standing Desk Frame",      "Electric, dual motor, 63\" width",    "SD", 379.00, 379.00, true),
+        new("3", "Webcam 4K HDR",            "Auto-focus, noise canceling mic",     "WC", 129.99, 109.99, true),
+        new("4", "Desk Lamp LED",            "5 color temps, auto-dimming, USB",    "DL",  59.99,  74.99, true),
+        new("5", "Cable Management Kit",     "Under-desk tray, clips, sleeves",     "CK",  34.99,  34.99, false),
+        new("6", "Monitor Light Bar",        "Auto-brightness, asymmetric, USB",    "ML",  54.99,  64.99, true),
+    ];
+
+    private HashSet<string> _selected = [];
+    private HashSet<string> _addedToCart = [];
+
+    private IEnumerable<WishlistItem> SelectableItems => _items.Where(i => i.InStock && !_addedToCart.Contains(i.Id));
+    private bool _allSelected => SelectableItems.Any() && _selected.Count == SelectableItems.Count();
+    private double _selectedTotal => _items.Where(i => _selected.Contains(i.Id)).Sum(i => i.CurrentPrice);
+
+    private PriceChange? GetPriceChange(WishlistItem item)
+    {
+        var diff = item.CurrentPrice - item.OriginalPrice;
+        if (diff < -0.01) return new PriceChange("drop", Math.Abs(diff));
+        if (diff > 0.01) return new PriceChange("increase", diff);
+        return null;
+    }
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Add(id))
+            _selected.Remove(id);
+    }
+
+    private void ToggleAll()
+    {
+        var selectableIds = SelectableItems.Select(i => i.Id).ToList();
+        if (_selected.Count == selectableIds.Count)
+            _selected = [];
+        else
+            _selected = [.. selectableIds];
+    }
+
+    private void AddSelectedToCart()
+    {
+        foreach (var id in _selected)
+            _addedToCart.Add(id);
+        _selected = [];
+    }
+
+    private void AddSingleToCart(string id)
+    {
+        _addedToCart.Add(id);
+        _selected.Remove(id);
+    }
+
+    private void RemoveItem(string id)
+    {
+        _items = _items.Where(i => i.Id != id).ToList();
+        _selected.Remove(id);
+        _addedToCart.Remove(id);
+    }
+}

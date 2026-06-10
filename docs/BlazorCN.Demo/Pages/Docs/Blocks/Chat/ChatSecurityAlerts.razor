@@ -1,0 +1,199 @@
+@* ============================================================
+   Block: chat-security-alerts
+   Title: ChatSecurityAlerts
+   Description: A real-time security monitoring chat built with React, Next.js, shadcn/ui, and Tailwind CSS featuring threat cards, severity classification, and actionable incident responses
+   Source: original/blocks/chat/chat-security-alerts.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="flex size-9 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="shield" Size="16" Class="size-4 text-foreground" />
+                </div>
+                <div>
+                    <h2 class="text-sm font-medium">Security Monitor</h2>
+                    <p class="text-xs text-muted-foreground">Real-time threat detection</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    <span class="text-xs text-muted-foreground">Protected</span>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon" Class="h-7 w-7">
+                    <LucideIconCn Name="activity" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 space-y-4 overflow-y-auto p-4">
+            @foreach (var message in _messages)
+            {
+                var isUser = message.Type == "user";
+                <div class="@Cn.Merge("flex", isUser ? "justify-end" : "justify-start")">
+                    <div class="@Cn.Merge("max-w-[85%] space-y-2", isUser ? "items-end" : "items-start")">
+                        <div class="@Cn.Merge("rounded-lg px-3 py-2", isUser ? "bg-foreground text-background" : "bg-muted")">
+                            <p class="text-sm">@message.Content</p>
+                        </div>
+
+                        @if (message.Alert != null)
+                        {
+                            var alert = message.Alert;
+                            var styles = GetSeverityStyles(alert.Severity);
+                            <div class="@Cn.Merge("w-full space-y-3 rounded-lg border bg-card p-3", styles.Border)">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="flex items-start gap-2">
+                                        <span class="@Cn.Merge("mt-0.5 size-2 shrink-0 rounded-full", styles.Dot)"></span>
+                                        <div class="min-w-0 flex-1">
+                                            <h3 class="text-sm font-medium">@alert.Title</h3>
+                                            <p class="mt-1 text-sm text-muted-foreground">@alert.Description</p>
+                                        </div>
+                                    </div>
+                                    <div class="@Cn.Merge("shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium capitalize", styles.Badge)">
+                                        @alert.Severity
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                                    <div class="flex items-center gap-1.5">
+                                        <LucideIconCn Name="activity" Size="12" Class="size-3" />
+                                        <span>@alert.Source</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                        <span>@alert.Timestamp</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2 border-t pt-2">
+                                    @foreach (var action in alert.Actions)
+                                    {
+                                        var act = action;
+                                        var btnVariant = act.Variant == "destructive" ? ButtonVariant.Destructive
+                                                       : act.Variant == "outline"     ? ButtonVariant.Outline
+                                                       :                                ButtonVariant.Default;
+                                        <ButtonCn Variant="@btnVariant" Size="ButtonSize.Sm" Class="h-6 flex-1 text-xs">
+                                            @if (act.Label == "Block IP")
+                                            {
+                                                <LucideIconCn Name="ban" Size="12" Class="mr-1 size-3" />
+                                            }
+                                            @if (act.Label == "Enable Rate Limiting")
+                                            {
+                                                <LucideIconCn Name="check-circle-2" Size="12" Class="mr-1 size-3" />
+                                            }
+                                            @act.Label
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <span class="text-xs text-muted-foreground">@message.Timestamp</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Input *@
+        <div class="border-t p-3">
+            <form class="flex items-center gap-2" @onsubmit="HandleSubmit" @onsubmit:preventDefault="true">
+                <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon" Class="h-8 w-8 shrink-0">
+                    <LucideIconCn Name="alert-triangle" Size="16" Class="size-4" />
+                </ButtonCn>
+                <InputCn @bind-Value="_input"
+                         Placeholder="Ask about security status..."
+                         Class="border-0 bg-transparent shadow-none focus-visible:ring-0" />
+                <ButtonCn type="submit" Size="ButtonSize.Icon" Class="h-8 w-8 shrink-0"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record AlertAction(string Label, string Variant);
+    private record AlertInfo(string Title, string Description, string Severity, string Source, string Timestamp, AlertAction[] Actions);
+    private record Message(string Id, string Type, string Content, string Timestamp, AlertInfo? Alert = null);
+    private record SeverityStyles(string Badge, string Border, string Dot);
+
+    private string _input = "";
+
+    private static readonly Message[] _messages =
+    [
+        new("1", "assistant",
+            "Security monitoring active. I'll notify you of any threats detected in your infrastructure.",
+            "11:30 AM"),
+        new("2", "assistant",
+            "Critical security alert detected:",
+            "11:45 AM",
+            new AlertInfo(
+                "Multiple Failed Login Attempts",
+                "Detected 15 failed login attempts from IP 203.0.113.45 targeting admin accounts within 2 minutes. Possible brute force attack.",
+                "critical",
+                "Authentication System",
+                "11:44 AM",
+                [
+                    new AlertAction("Block IP",   "destructive"),
+                    new AlertAction("View Logs",  "outline"),
+                ]
+            )
+        ),
+        new("3", "user", "Block that IP immediately", "11:46 AM"),
+        new("4", "assistant",
+            "IP 203.0.113.45 has been blocked at the firewall level. The threat is now contained. I'm monitoring for any related activity.",
+            "11:46 AM"),
+        new("5", "assistant",
+            "New security event detected:",
+            "11:52 AM",
+            new AlertInfo(
+                "Unusual API Rate Spike",
+                "API endpoint /api/users experiencing 400% increase in requests. Potential data scraping or DDoS attempt.",
+                "high",
+                "API Gateway",
+                "11:51 AM",
+                [
+                    new AlertAction("Enable Rate Limiting", "default"),
+                    new AlertAction("Investigate",          "outline"),
+                ]
+            )
+        ),
+    ];
+
+    private static SeverityStyles GetSeverityStyles(string severity) => severity switch
+    {
+        "critical" => new SeverityStyles(
+            "bg-red-500/10 text-red-500 border-red-500/20",
+            "border-red-500/50",
+            "bg-red-500"),
+        "high" => new SeverityStyles(
+            "bg-amber-500/10 text-amber-500 border-amber-500/20",
+            "border-amber-500/50",
+            "bg-amber-500"),
+        "medium" => new SeverityStyles(
+            "bg-blue-500/10 text-blue-500 border-blue-500/20",
+            "border-blue-500/50",
+            "bg-blue-500"),
+        "low" => new SeverityStyles(
+            "bg-muted text-muted-foreground border-border",
+            "border-border",
+            "bg-muted-foreground"),
+        _ => new SeverityStyles(
+            "bg-muted text-muted-foreground border-border",
+            "border-border",
+            "bg-muted-foreground"),
+    };
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

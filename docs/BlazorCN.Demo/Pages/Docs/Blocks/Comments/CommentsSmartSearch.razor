@@ -1,0 +1,196 @@
+@* ============================================================
+   Block: comments-smart-search
+   Title: CommentsSmartSearch
+   Description: An advanced search interface for React and Next.js with search operators, field-specific queries, and result highlighting built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-smart-search.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Smart Search</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Use operators: author:, status:, tag:, "phrase"
+            </p>
+        </div>
+
+        @* Search input *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="search" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <InputCn @bind-Value="_query" Placeholder="@("Try: author:Sarah status:approved \"dark mode\"")" Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+                @if (_hasQuery)
+                {
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 shrink-0 px-2" @onclick="@(() => _query = "")">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Search operators help (shown when no query) *@
+        @if (!_hasQuery)
+        {
+            <div class="overflow-hidden border-b bg-muted/20 p-4">
+                <span class="text-xs font-medium text-muted-foreground">Search operators:</span>
+                <div class="mt-2 grid gap-2">
+                    @foreach (var hlp in _searchHelp)
+                    {
+                        var item = hlp;
+                        <button type="button" @onclick="@(() => _query = item.Example)"
+                                class="flex items-start gap-3 rounded-md bg-background p-2 text-left transition-colors hover:bg-muted/50">
+                            <code class="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">@item.Operator</code>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs font-medium">@item.Example</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@item.Description</p>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Results count (shown when query is active) *@
+        @if (_hasQuery)
+        {
+            var results = _filteredComments;
+            <div class="border-b bg-muted/20 px-4 py-2">
+                <span class="text-xs font-medium">
+                    @results.Count @(results.Count == 1 ? "result" : "results")
+                </span>
+            </div>
+        }
+
+        @* Comment results *@
+        <div class="divide-y">
+            @foreach (var cmt in _filteredComments)
+            {
+                var comment = cmt;
+                <div class="px-4 py-3">
+                    <div class="flex items-start gap-3">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@comment.Author</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">@comment.Status</BadgeCn>
+                            </div>
+                            <p class="mt-0.5 text-sm leading-relaxed text-muted-foreground">@comment.Content</p>
+                            @if (comment.Tags.Length > 0)
+                            {
+                                <div class="mt-2 flex flex-wrap gap-1">
+                                    @foreach (var tag in comment.Tags)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">@tag</BadgeCn>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+            @if (_hasQuery && _filteredComments.Count == 0)
+            {
+                <div class="px-4 py-8 text-center">
+                    <p class="text-sm text-muted-foreground">No comments match your search</p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Try different keywords or operators
+                    </p>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5 text-xs text-muted-foreground">
+            @_comments.Length total comments available
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Comment(string Id, string Author, string Content, string Status, string[] Tags);
+
+    private record SearchHelp(string Operator, string Example, string Description);
+
+    private static readonly Comment[] _comments =
+    [
+        new("1", "Sarah Chen",   "This React component library is excellent for TypeScript projects", "approved", ["react", "typescript"]),
+        new("2", "James Wilson", "How do I integrate the authentication module?",                      "pending",  ["authentication", "help"]),
+        new("3", "Maya Patel",   "The dark mode implementation is flawless",                          "approved", ["design", "darkmode"]),
+        new("4", "Spam Bot",     "Click here for free prizes and rewards!",                           "spam",     []),
+        new("5", "Alex Morgan",  "TypeScript types are well-documented",                              "approved", ["typescript", "documentation"]),
+        new("6", "Chris Taylor", "Found a bug in the authentication flow",                            "pending",  ["bug", "authentication"]),
+    ];
+
+    private static readonly SearchHelp[] _searchHelp =
+    [
+        new("author:",   "author:Sarah",  "Find by author name"),
+        new("status:",   "status:pending","Filter by status"),
+        new("tag:",      "tag:react",     "Filter by tag"),
+        new("\"phrase\"","\"dark mode\"", "Exact phrase match"),
+    ];
+
+    private string _query = "";
+
+    private bool _hasQuery => _query.Trim().Length > 0;
+
+    private List<Comment> _filteredComments
+    {
+        get
+        {
+            if (!_hasQuery) return _comments.ToList();
+
+            var q = _query;
+            string? authorFilter = null;
+            string? statusFilter = null;
+            string? tagFilter = null;
+            string? textFilter = null;
+
+            var remaining = q;
+
+            var authorIdx = remaining.IndexOf("author:", StringComparison.OrdinalIgnoreCase);
+            if (authorIdx >= 0)
+            {
+                var start = authorIdx + "author:".Length;
+                var end = remaining.IndexOf(' ', start);
+                authorFilter = end < 0 ? remaining[start..] : remaining[start..end];
+                remaining = (remaining[..authorIdx] + (end < 0 ? "" : remaining[end..])).Trim();
+            }
+
+            var statusIdx = remaining.IndexOf("status:", StringComparison.OrdinalIgnoreCase);
+            if (statusIdx >= 0)
+            {
+                var start = statusIdx + "status:".Length;
+                var end = remaining.IndexOf(' ', start);
+                statusFilter = end < 0 ? remaining[start..] : remaining[start..end];
+                remaining = (remaining[..statusIdx] + (end < 0 ? "" : remaining[end..])).Trim();
+            }
+
+            var tagIdx = remaining.IndexOf("tag:", StringComparison.OrdinalIgnoreCase);
+            if (tagIdx >= 0)
+            {
+                var start = tagIdx + "tag:".Length;
+                var end = remaining.IndexOf(' ', start);
+                tagFilter = end < 0 ? remaining[start..] : remaining[start..end];
+                remaining = (remaining[..tagIdx] + (end < 0 ? "" : remaining[end..])).Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(remaining))
+                textFilter = remaining.Trim().ToLowerInvariant();
+
+            return _comments.Where(c =>
+            {
+                if (authorFilter != null && !c.Author.Contains(authorFilter, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                if (statusFilter != null && !c.Status.Equals(statusFilter, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                if (tagFilter != null && !c.Tags.Any(t => t.Contains(tagFilter, StringComparison.OrdinalIgnoreCase)))
+                    return false;
+                if (textFilter != null && !c.Content.Contains(textFilter, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                return true;
+            }).ToList();
+        }
+    }
+}

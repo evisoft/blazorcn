@@ -1,0 +1,250 @@
+@* ============================================================
+   Block: file-upload-archive-extract
+   Title: FileUploadArchiveExtract
+   Description: A ZIP archive upload block for React and Next.js with extraction preview showing contained files in a tree view, file count, total uncompressed size, selective file extraction with checkboxes, and extraction progress bar using shadcn/ui Button, Badge, Checkbox, Progress, and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-archive-extract.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="archive" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Archive preview</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-mono font-normal text-xs">
+                ZIP
+            </BadgeCn>
+        </div>
+
+        @* Archive info *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="min-w-0 flex-1">
+                <span class="block truncate font-medium text-sm">@_archiveName</span>
+                <span class="text-muted-foreground text-xs">
+                    @_archiveSize compressed · @_uncompressedSize uncompressed
+                </span>
+            </div>
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span>@_totalFiles files</span>
+                <span>·</span>
+                <span>@_totalFolders folders</span>
+            </div>
+        </div>
+
+        @* Extraction progress *@
+        @if (_extracting || _extracted)
+        {
+            <div class="border-b px-4 py-3">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="text-muted-foreground text-xs">
+                        @(_extracted ? "Extraction complete" : "Extracting files")
+                    </span>
+                    <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                        @(Math.Min(_extractProgress, 100))%
+                    </span>
+                </div>
+                <ProgressCn Value="@Math.Min(_extractProgress, 100)" Class="h-1" />
+            </div>
+        }
+
+        @* Select all + actions *@
+        <div class="flex items-center justify-between border-b px-4 py-2">
+            <span class="flex items-center gap-2">
+                <CheckboxCn
+                    Checked="@(_selectedCount == _totalFiles && _totalFiles > 0)"
+                    OnCheckedChange="@((bool _) => SelectAll())" />
+                <span class="text-muted-foreground text-xs">
+                    @(_selectedCount > 0 ? $"{_selectedCount} selected" : "Select all")
+                </span>
+            </span>
+            <div class="flex items-center gap-2">
+                @if (_selectedCount > 0)
+                {
+                    <ButtonCn
+                        Variant="ButtonVariant.Outline"
+                        Size="ButtonSize.Sm"
+                        Class="h-7 gap-1.5 text-xs"
+                        OnClick="HandleExtract"
+                        Disabled="@_extracting">
+                        <LucideIconCn Name="package-open" Size="12" Class="size-3" />
+                        Extract selected
+                    </ButtonCn>
+                }
+                <ButtonCn
+                    Variant="ButtonVariant.Outline"
+                    Size="ButtonSize.Sm"
+                    Class="h-7 gap-1.5 text-xs"
+                    OnClick="ExtractAll"
+                    Disabled="@_extracting">
+                    Extract all
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* File tree *@
+        <div>
+            @{
+                var visible = GetVisibleEntries();
+            }
+            @for (int i = 0; i < visible.Length; i++)
+            {
+                var entry = visible[i];
+                var isLast = i == visible.Length - 1;
+                var isCollapsed = _collapsedFolders.Contains(entry.Id);
+                <div class="@Cn.Merge("", isLast ? "" : "border-b")">
+                    @if (entry.Type == "folder")
+                    {
+                        var entryCapture = entry;
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleFolder(entryCapture.Id))"
+                            class="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/50"
+                            style="@($"padding-left:{entry.Depth * 20 + 16}px")">
+                            <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isCollapsed ? "" : "rotate-90")" />
+                            <LucideIconCn Name="folder" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                            <span class="font-medium text-xs">@entry.Name</span>
+                            <span class="text-muted-foreground text-xs">(@(entry.Children) items)</span>
+                        </button>
+                    }
+                    else
+                    {
+                        var entryCapture = entry;
+                        <span
+                            class="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 transition-colors hover:bg-muted/50"
+                            style="@($"padding-left:{entry.Depth * 20 + 16}px")">
+                            <CheckboxCn
+                                Checked="@_selected.Contains(entryCapture.Id)"
+                                OnCheckedChange="@((bool _) => ToggleSelect(entryCapture.Id))" />
+                            <LucideIconCn Name="file" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                            <span class="min-w-0 flex-1 truncate text-xs">@entry.Name</span>
+                            @if (!string.IsNullOrEmpty(entry.Format))
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-mono font-normal text-xs">
+                                    @entry.Format
+                                </BadgeCn>
+                            }
+                            <span class="shrink-0 font-mono text-muted-foreground text-xs">
+                                @entry.Size
+                            </span>
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ArchiveEntry(string Id, string Name, string Type, string Size, int Depth, string Format = "", int Children = 0);
+
+    private const string _archiveName = "project-assets-v2.3.zip";
+    private const string _archiveSize = "48.2 MB";
+    private const string _uncompressedSize = "124.6 MB";
+
+    private static readonly ArchiveEntry[] _entries =
+    [
+        new("e1",  "src",             "folder", "",        0, Children: 4),
+        new("e2",  "index.tsx",       "file",   "4.2 KB",  1, "TSX"),
+        new("e3",  "app.tsx",         "file",   "8.1 KB",  1, "TSX"),
+        new("e4",  "utils.ts",        "file",   "2.8 KB",  1, "TS"),
+        new("e5",  "styles.css",      "file",   "12.4 KB", 1, "CSS"),
+        new("e6",  "assets",          "folder", "",        0, Children: 3),
+        new("e7",  "logo.svg",        "file",   "6.8 KB",  1, "SVG"),
+        new("e8",  "hero-image.webp", "file",   "284 KB",  1, "WebP"),
+        new("e9",  "icon-sprite.svg", "file",   "18.2 KB", 1, "SVG"),
+        new("e10", "docs",            "folder", "",        0, Children: 2),
+        new("e11", "README.md",       "file",   "3.4 KB",  1, "MD"),
+        new("e12", "CHANGELOG.md",    "file",   "8.9 KB",  1, "MD"),
+        new("e13", "package.json",    "file",   "1.2 KB",  0, "JSON"),
+        new("e14", "tsconfig.json",   "file",   "680 B",   0, "JSON"),
+    ];
+
+    private static readonly int _totalFiles   = _entries.Count(e => e.Type == "file");
+    private static readonly int _totalFolders = _entries.Count(e => e.Type == "folder");
+
+    private HashSet<string> _selected          = [];
+    private HashSet<string> _collapsedFolders  = [];
+    private bool _extracting    = false;
+    private int  _extractProgress = 0;
+    private bool _extracted     = false;
+
+    private int _selectedCount => _selected.Count;
+
+    private void ToggleSelect(string id)
+    {
+        if (_selected.Contains(id))
+            _selected.Remove(id);
+        else
+            _selected.Add(id);
+    }
+
+    private void SelectAll()
+    {
+        var fileIds = _entries.Where(e => e.Type == "file").Select(e => e.Id).ToHashSet();
+        if (_selected.Count == fileIds.Count)
+            _selected = [];
+        else
+            _selected = fileIds;
+    }
+
+    private void ToggleFolder(string id)
+    {
+        if (_collapsedFolders.Contains(id))
+            _collapsedFolders.Remove(id);
+        else
+            _collapsedFolders.Add(id);
+    }
+
+    private System.Threading.Timer? _timer;
+
+    private void HandleExtract()
+    {
+        _extracting = true;
+        _extractProgress = 0;
+        _extracted = false;
+        _timer?.Dispose();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                _extractProgress += 8;
+                if (_extractProgress >= 100)
+                {
+                    _extractProgress = 100;
+                    _extracting = false;
+                    _extracted = true;
+                    _timer?.Dispose();
+                    _timer = null;
+                }
+                StateHasChanged();
+            });
+        }, null, 200, 200);
+    }
+
+    private void ExtractAll()
+    {
+        SelectAll();
+        HandleExtract();
+    }
+
+    private ArchiveEntry[] GetVisibleEntries()
+    {
+        var result = new System.Collections.Generic.List<ArchiveEntry>();
+        bool currentFolderCollapsed = false;
+        foreach (var entry in _entries)
+        {
+            if (entry.Type == "folder")
+            {
+                currentFolderCollapsed = _collapsedFolders.Contains(entry.Id);
+                result.Add(entry);
+            }
+            else
+            {
+                if (entry.Depth > 0 && currentFolderCollapsed)
+                    continue;
+                result.Add(entry);
+            }
+        }
+        return result.ToArray();
+    }
+}

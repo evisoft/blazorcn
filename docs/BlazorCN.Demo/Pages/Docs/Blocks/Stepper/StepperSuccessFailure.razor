@@ -1,0 +1,277 @@
+@* ============================================================
+   Block: stepper-success-failure
+   Title: StepperSuccessFailure
+   Description: A multi-step process stepper with terminal success or failure outcome states, retry option, and animated result display built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-success-failure.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Deploy pipeline</span>
+            <div class="flex items-center gap-2">
+                @if (IsResultStep)
+                {
+                    <div class="flex items-center gap-1">
+                        <button
+                            type="button"
+                            @onclick="@(() => { _resultState = ResultState.Success; })"
+                            class="@Cn.Merge("rounded-md px-2 py-1 text-xs transition-colors", _resultState == ResultState.Success ? "bg-emerald-500/10 font-medium text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:bg-muted/50")">
+                            Success
+                        </button>
+                        <button
+                            type="button"
+                            @onclick="@(() => { _resultState = ResultState.Failure; })"
+                            class="@Cn.Merge("rounded-md px-2 py-1 text-xs transition-colors", _resultState == ResultState.Failure ? "bg-red-500/10 font-medium text-red-600 dark:text-red-400" : "text-muted-foreground hover:bg-muted/50")">
+                            Failure
+                        </button>
+                    </div>
+                }
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    Step <span class="tabular-nums">@(_activeStep + 1)</span> of
+                    <span class="tabular-nums">@_steps.Length</span>
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Step indicators *@
+        <div class="border-b px-6 py-5">
+            <div class="flex items-center">
+                @foreach (var entry in _steps.Select((s, i) => new { Step = s, Index = i }))
+                {
+                    var idx = entry.Index;
+                    var step = entry.Step;
+                    var isCompleted = idx < _activeStep;
+                    var isActive = idx == _activeStep;
+                    var isUpcoming = idx > _activeStep;
+                    var isFailed = IsResultStep && _resultState == ResultState.Failure && idx == _steps.Length - 1;
+
+                    <div class="flex flex-1 items-center last:flex-none">
+                        <div class="flex flex-col items-center gap-1.5">
+                            <button
+                                type="button"
+                                @onclick="@(() => HandleStepClick(idx))"
+                                disabled="@isUpcoming"
+                                class="@Cn.Merge("flex size-8 shrink-0 items-center justify-center rounded-full text-xs tabular-nums transition-all duration-200", GetStepButtonClass(isFailed, isCompleted, isActive))">
+                                @if (isFailed)
+                                {
+                                    <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                                }
+                                else if (isCompleted)
+                                {
+                                    <LucideIconCn Name="check" Size="14" Class="size-3.5" />
+                                }
+                                else
+                                {
+                                    <span class="font-medium">@(idx + 1)</span>
+                                }
+                            </button>
+                            <span class="@Cn.Merge("text-center font-medium text-xs", GetStepLabelClass(isFailed, isActive))">
+                                @step.Label
+                            </span>
+                        </div>
+
+                        @if (idx < _steps.Length - 1)
+                        {
+                            <div class="mx-3 mb-5 h-px flex-1">
+                                <div class="@Cn.Merge("h-full transition-colors duration-300", GetConnectorClass(idx))"></div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Content *@
+        @if (IsResultStep)
+        {
+            <div class="border-b px-4 py-6">
+                @* Result icon *@
+                <div class="flex flex-col items-center text-center">
+                    <div class="@Cn.Merge("mb-4 flex size-14 items-center justify-center rounded-full", _resultState == ResultState.Success ? "bg-emerald-500/10" : "bg-red-500/10")">
+                        @if (_resultState == ResultState.Success)
+                        {
+                            <LucideIconCn Name="check" Size="28" Class="size-7 text-emerald-600 dark:text-emerald-400" />
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="x" Size="28" Class="size-7 text-red-600 dark:text-red-400" />
+                        }
+                    </div>
+                    <span class="@Cn.Merge("font-semibold text-base", _resultState == ResultState.Success ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                        @CurrentResult.Title
+                    </span>
+                    <p class="mt-1.5 max-w-sm text-muted-foreground text-sm">@CurrentResult.Description</p>
+                </div>
+
+                @* Result details *@
+                <div class="mt-5 space-y-2">
+                    @foreach (var detail in CurrentResult.Details)
+                    {
+                        <div class="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2.5">
+                            <span class="font-medium text-muted-foreground text-xs">@detail.Label</span>
+                            <span class="font-mono text-xs">@detail.Value</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="border-b px-4 py-4">
+                <div class="mb-3">
+                    <span class="font-medium text-sm">@_steps[_activeStep].Label</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">@_steps[_activeStep].Description</p>
+                </div>
+                <div class="space-y-2">
+                    @if (_stepDetails.TryGetValue(_activeStep, out var fields))
+                    {
+                        @foreach (var fld in fields)
+                        {
+                            <div class="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2.5">
+                                <span class="font-medium text-muted-foreground text-xs">@fld.Label</span>
+                                <span class="text-sm">@fld.Value</span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+
+        @* Navigation *@
+        <div class="flex items-center justify-between px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 gap-1.5 text-xs" OnClick="HandleBack" Disabled="@(_activeStep == 0)">
+                <LucideIconCn Name="chevron-left" Size="14" Class="size-3.5" />
+                Back
+            </ButtonCn>
+            @if (IsResultStep && _resultState == ResultState.Failure)
+            {
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-8 gap-1.5 text-xs" OnClick="HandleRetry">
+                    <LucideIconCn Name="refresh-cw" Size="14" Class="size-3.5" />
+                    Retry pipeline
+                </ButtonCn>
+            }
+            else
+            {
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 gap-1.5 text-xs" OnClick="HandleNext" Disabled="@IsResultStep">
+                    @(IsResultStep ? "Done" : "Continue")
+                    @if (!IsResultStep)
+                    {
+                        <LucideIconCn Name="chevron-right" Size="14" Class="size-3.5" />
+                    }
+                </ButtonCn>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum ResultState { Success, Failure }
+
+    private record StepItem(string Label, string Description);
+    private record StepField(string Label, string Value);
+    private record ResultConfig(string Title, string Description, StepField[] Details);
+
+    private static readonly StepItem[] _steps =
+    [
+        new("Prepare", "Validate configuration and dependencies"),
+        new("Execute", "Run the deployment pipeline"),
+        new("Verify", "Check health and run integration tests"),
+        new("Result", "Deployment outcome"),
+    ];
+
+    private static readonly Dictionary<int, StepField[]> _stepDetails = new()
+    {
+        [0] =
+        [
+            new("Config validation", "All 12 checks passed"),
+            new("Dependencies", "47 packages resolved"),
+            new("Environment", "Production (us-east-1)"),
+        ],
+        [1] =
+        [
+            new("Build", "Compiled in 34.2s"),
+            new("Assets", "18 bundles, 2.4 MB total"),
+            new("Migration", "3 database migrations applied"),
+        ],
+        [2] =
+        [
+            new("Health check", "HTTP 200 in 120ms"),
+            new("Integration tests", "24 of 24 passed"),
+            new("Canary traffic", "5% routed, 0 errors"),
+        ],
+    };
+
+    private static readonly Dictionary<ResultState, ResultConfig> _resultConfigs = new()
+    {
+        [ResultState.Success] = new(
+            "Deployment successful",
+            "All steps completed without errors. Your changes are now live in production.",
+            [
+                new("Deploy ID", "dpl_7f3a9c2e1b"),
+                new("Duration", "2m 14s"),
+                new("Region", "us-east-1 (Virginia)"),
+                new("URL", "https://app.acme.com"),
+            ]
+        ),
+        [ResultState.Failure] = new(
+            "Deployment failed",
+            "The verification step detected errors. Traffic has been rolled back to the previous stable version.",
+            [
+                new("Error code", "HEALTH_CHECK_TIMEOUT"),
+                new("Failed at", "Step 3 — Verify"),
+                new("Rollback", "Automatic, completed"),
+                new("Previous version", "dpl_5e2b8a1d09 (stable)"),
+            ]
+        ),
+    };
+
+    private int _activeStep = 3;
+    private ResultState _resultState = ResultState.Success;
+
+    private bool IsResultStep => _activeStep == _steps.Length - 1;
+    private ResultConfig CurrentResult => _resultConfigs[_resultState];
+
+    private void HandleNext()
+    {
+        if (_activeStep < _steps.Length - 1) _activeStep++;
+    }
+
+    private void HandleBack()
+    {
+        if (_activeStep > 0) _activeStep--;
+    }
+
+    private void HandleStepClick(int index)
+    {
+        if (index <= _activeStep) _activeStep = index;
+    }
+
+    private void HandleRetry()
+    {
+        _activeStep = 0;
+    }
+
+    private static string GetStepButtonClass(bool isFailed, bool isCompleted, bool isActive) =>
+        isFailed ? "bg-red-500 text-white dark:bg-red-600 cursor-pointer"
+        : isCompleted ? "bg-emerald-500 text-white dark:bg-emerald-600 cursor-pointer"
+        : isActive ? "bg-foreground text-background cursor-pointer"
+        : "border border-muted-foreground/25 text-muted-foreground cursor-default";
+
+    private static string GetStepLabelClass(bool isFailed, bool isActive) =>
+        isFailed ? "text-red-600 dark:text-red-400"
+        : isActive ? "text-foreground"
+        : "text-muted-foreground";
+
+    private string GetConnectorClass(int index)
+    {
+        if (index < _activeStep)
+        {
+            if (IsResultStep && _resultState == ResultState.Failure && index == _steps.Length - 2)
+                return "bg-red-500 dark:bg-red-600";
+            return "bg-emerald-500 dark:bg-emerald-600";
+        }
+        return "bg-muted-foreground/20";
+    }
+}

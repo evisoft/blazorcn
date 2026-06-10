@@ -1,0 +1,294 @@
+@* ============================================================
+   Block: account-reviews
+   Title: AccountReviews
+   Description: A review feed block for React and Next.js with star ratings, rating distribution chart, sort controls, expandable review text, helpful votes, and edit/delete actions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-reviews.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Rating Summary *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-start gap-6">
+                <div class="shrink-0 text-center">
+                    <p class="text-2xl font-semibold tabular-nums">@_avgRating</p>
+                    <div class="mt-0.5 flex justify-center gap-0.5">
+                        @foreach (var star in new[] { 1, 2, 3, 4, 5 })
+                        {
+                            <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("h-3 w-3", star <= (int)Math.Round(_avgRating) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")" />
+                        }
+                    </div>
+                    <p class="mt-1 text-xs text-muted-foreground">@_totalReviews reviews</p>
+                </div>
+
+                <div class="flex-1 space-y-1.5">
+                    @foreach (var star in new[] { 5, 4, 3, 2, 1 })
+                    {
+                        var count = _ratingDistribution.TryGetValue(star, out var c) ? c : 0;
+                        var pct = _maxDistribution > 0 ? (count / (double)_maxDistribution) * 100.0 : 0.0;
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 text-right text-xs tabular-nums text-muted-foreground">@star</span>
+                            <LucideIconCn Name="star" Size="12" Class="h-3 w-3 text-muted-foreground/40" />
+                            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                <div class="h-full rounded-full bg-amber-400 transition-all" style="@($"width:{pct:F1}%")"></div>
+                            </div>
+                            <span class="w-4 text-right text-xs tabular-nums text-muted-foreground">@count</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Sort + Stats Bar *@
+        <div class="flex items-center justify-between border-b px-4 py-2.5">
+            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="thumbs-up" Size="12" Class="h-3 w-3" />
+                    @_totalHelpful helpful votes
+                </span>
+            </div>
+            <SelectCn @bind-Value="_sortBy">
+                <SelectTriggerCn Class="h-7 w-[140px] text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="newest">Newest first</SelectItemCn>
+                    <SelectItemCn Value="highest">Highest rated</SelectItemCn>
+                    <SelectItemCn Value="lowest">Lowest rated</SelectItemCn>
+                    <SelectItemCn Value="most_helpful">Most helpful</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Review Feed *@
+        <div class="divide-y">
+            @foreach (var (review, index) in SortedReviews.Select((r, i) => (r, i)))
+            {
+                var isExpanded = _expandedIds.Contains(review.Id);
+                var isHelpfulByUser = _helpfulIds.Contains(review.Id);
+                var displayHelpful = review.HelpfulCount + (isHelpfulByUser ? 1 : 0);
+                var shouldTruncate = review.Body.Length > 180;
+
+                <div class="px-4 py-3.5">
+                    <div class="mb-1.5 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">@review.Product.Category</BadgeCn>
+                            <span class="text-sm font-medium">@review.Product.Name</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <ButtonCn Type="button" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="h-7 w-7"
+                                      OnClick="@(() => OpenEdit(review))">
+                                <LucideIconCn Name="pencil" Size="14" Class="h-3.5 w-3.5" />
+                            </ButtonCn>
+                            <ButtonCn Type="button" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="h-7 w-7 text-destructive hover:text-destructive"
+                                      OnClick="@(() => OpenDelete(review))">
+                                <LucideIconCn Name="trash-2" Size="14" Class="h-3.5 w-3.5" />
+                            </ButtonCn>
+                        </div>
+                    </div>
+
+                    <div class="mb-1 flex items-center gap-2">
+                        <div class="flex gap-0.5">
+                            @foreach (var star in new[] { 1, 2, 3, 4, 5 })
+                            {
+                                <LucideIconCn Name="star" Size="14" Class="@Cn.Merge("h-3.5 w-3.5", star <= review.Rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")" />
+                            }
+                        </div>
+                        <span class="text-sm font-medium">@review.Title</span>
+                    </div>
+
+                    <div class="relative">
+                        <p class="@Cn.Merge("text-sm text-muted-foreground", (!isExpanded && shouldTruncate) ? "line-clamp-2" : "")">
+                            @review.Body
+                        </p>
+                        @if (shouldTruncate)
+                        {
+                            var reviewId = review.Id;
+                            <button type="button" @onclick="@(() => ToggleExpand(reviewId))"
+                                    class="mt-0.5 flex items-center gap-0.5 text-xs font-medium text-foreground hover:underline">
+                                @(isExpanded ? "Show less" : "Read more")
+                                <LucideIconCn Name="chevron-down" Size="12" Class="@Cn.Merge("h-3 w-3 transition-transform", isExpanded ? "rotate-180" : "")" />
+                            </button>
+                        }
+                    </div>
+
+                    <div class="mt-2 flex items-center gap-3">
+                        <span class="text-xs text-muted-foreground">@review.CreatedAt</span>
+                        @if (review.EditedAt != null)
+                        {
+                            <span class="text-xs text-muted-foreground/60">Edited @review.EditedAt</span>
+                        }
+                        @if (review.IsVerifiedPurchase)
+                        {
+                            <span class="flex items-center gap-0.5 text-[10px] text-emerald-600">
+                                <LucideIconCn Name="shield-check" Size="12" Class="h-3 w-3" />
+                                Verified
+                            </span>
+                        }
+                        <div class="flex-1"></div>
+                        @{
+                            var rid = review.Id;
+                        }
+                        <button type="button" @onclick="@(() => ToggleHelpful(rid))"
+                                class="@Cn.Merge("flex items-center gap-1 rounded-md px-2 py-0.5 text-xs transition-colors", isHelpfulByUser ? "bg-blue-500/10 text-blue-600" : "text-muted-foreground hover:bg-muted")">
+                            <LucideIconCn Name="thumbs-up" Size="12" Class="h-3 w-3" />
+                            <span class="tabular-nums">@displayHelpful</span>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* Edit Review Dialog *@
+    <DialogCn @bind-Open="_editDialogOpen">
+        <DialogContentCn Class="w-full max-w-[520px]">
+            <DialogHeaderCn>
+                <DialogTitleCn>Edit Review</DialogTitleCn>
+                <DialogDescriptionCn>Update your review for @(_editingReview?.Product.Name)</DialogDescriptionCn>
+            </DialogHeaderCn>
+            <div class="space-y-4 py-2">
+                <div class="space-y-1.5">
+                    <span class="text-xs font-medium text-muted-foreground">Rating</span>
+                    <div class="flex items-center gap-2">
+                        <div class="flex gap-0.5">
+                            @foreach (var star in new[] { 1, 2, 3, 4, 5 })
+                            {
+                                var s = star;
+                                <button type="button" class="cursor-pointer"
+                                        @onclick="@(() => _editRating = s)"
+                                        @onmouseenter="@(() => _hoverRating = s)"
+                                        @onmouseleave="@(() => _hoverRating = 0)">
+                                    <LucideIconCn Name="star" Size="20" Class="@Cn.Merge("h-5 w-5", s <= (_hoverRating > 0 ? _hoverRating : _editRating) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")" />
+                                </button>
+                            }
+                        </div>
+                        <span class="text-xs text-muted-foreground">
+                            @(_editRating > 0 ? $"{_editRating} of 5 stars" : "Select rating")
+                        </span>
+                    </div>
+                </div>
+                <div class="space-y-1.5">
+                    <span class="text-xs font-medium text-muted-foreground">Title</span>
+                    <input class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                           value="@_editTitle"
+                           @oninput="@((e) => _editTitle = e.Value?.ToString() ?? "")"
+                           placeholder="Summarize your review" />
+                </div>
+                <div class="space-y-1.5">
+                    <span class="text-xs font-medium text-muted-foreground">Review</span>
+                    <TextareaCn Class="min-h-[120px]" @bind-Value="_editBody"
+                                Placeholder="Share your experience with this product" />
+                </div>
+            </div>
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" OnClick="@(() => _editDialogOpen = false)">Cancel</ButtonCn>
+                <ButtonCn OnClick="@(() => _editDialogOpen = false)">Save Changes</ButtonCn>
+            </DialogFooterCn>
+        </DialogContentCn>
+    </DialogCn>
+
+    @* Delete Confirmation *@
+    <AlertDialogCn @bind-Open="_deleteDialogOpen">
+        <AlertDialogContentCn>
+            <AlertDialogHeaderCn>
+                <AlertDialogTitleCn>Delete this review?</AlertDialogTitleCn>
+                <AlertDialogDescriptionCn>
+                    Your review for &quot;@(_deleteTarget?.Product.Name)&quot; will be permanently removed.
+                    This cannot be undone.
+                </AlertDialogDescriptionCn>
+            </AlertDialogHeaderCn>
+            <AlertDialogFooterCn>
+                <AlertDialogCancelCn>Cancel</AlertDialogCancelCn>
+                <AlertDialogActionCn Class="bg-destructive text-white hover:bg-destructive/90">Delete Review</AlertDialogActionCn>
+            </AlertDialogFooterCn>
+        </AlertDialogContentCn>
+    </AlertDialogCn>
+</section>
+
+@code {
+    private record ReviewProduct(string Name, string Category);
+
+    private class Review
+    {
+        public string Id { get; set; } = "";
+        public ReviewProduct Product { get; set; } = new("", "");
+        public int Rating { get; set; }
+        public string Title { get; set; } = "";
+        public string Body { get; set; } = "";
+        public string CreatedAt { get; set; } = "";
+        public string? EditedAt { get; set; }
+        public bool IsVerifiedPurchase { get; set; }
+        public int HelpfulCount { get; set; }
+        public string Status { get; set; } = "published";
+    }
+
+    private static readonly Dictionary<int, int> _ratingDistribution = new()
+    {
+        [5] = 2,
+        [4] = 2,
+        [3] = 1,
+        [2] = 0,
+        [1] = 0,
+    };
+
+    private static readonly Review[] _reviews =
+    [
+        new() { Id = "rev-001", Product = new("Sony WH-1000XM5", "Audio"), Rating = 5, Title = "Best noise cancellation I have experienced", Body = "After testing Bose QC Ultra and Apple AirPods Max, these are the clear winner for me. The multipoint Bluetooth connection lets me switch between my MacBook and phone seamlessly. Battery life is stellar at 30+ hours. The only minor gripe is the carrying case could be more compact, but the folding mechanism is a big improvement over the XM4. Comfort is excellent for long work sessions — I regularly wear them for 6-hour stretches with no ear fatigue.", CreatedAt = "Mar 14, 2026", EditedAt = null, IsVerifiedPurchase = true, HelpfulCount = 47, Status = "published" },
+        new() { Id = "rev-002", Product = new("Keychron Q1 Pro", "Peripherals"), Rating = 4, Title = "Solid build, gasket mount makes a difference", Body = "The gasket-mounted typing experience is noticeably softer than my previous board. PBT keycaps feel premium. Bluetooth 5.1 connection is rock solid — no dropouts during full work days. I docked one star because the stock stabilizers needed lubing out of the box, which is a 20-minute job but still annoying at this price point. QMK/VIA support is a huge plus for custom keymaps. South-facing LEDs mean no interference with Cherry-profile keycaps.", CreatedAt = "Feb 28, 2026", EditedAt = "Mar 2, 2026", IsVerifiedPurchase = true, HelpfulCount = 19, Status = "published" },
+        new() { Id = "rev-003", Product = new("LG 27UP850-W Monitor", "Displays"), Rating = 3, Title = "Good panel, underwhelming HDR implementation", Body = "The 4K IPS panel has excellent color accuracy out of the box — DeltaE under 2 without calibration. USB-C with 96W power delivery is great for laptop users. However, the HDR400 certification is essentially meaningless. Peak brightness barely hits 400 nits and there are no local dimming zones. If you do not care about HDR, this is a solid productivity monitor. The height-adjustable stand and thin bezels look great on a desk setup.", CreatedAt = "Jan 15, 2026", EditedAt = null, IsVerifiedPurchase = true, HelpfulCount = 32, Status = "published" },
+        new() { Id = "rev-004", Product = new("Anker 737 Power Bank", "Accessories"), Rating = 5, Title = "140W output is a game changer for travel", Body = "This replaced both my laptop charger and phone power bank. 140W USB-C output charges my MacBook Pro at full speed. The digital display showing wattage per port is incredibly useful. It is heavy at 630g, but carrying one device instead of two is worth the trade-off. TSA-compliant at 24,000mAh. I have taken it on three international trips and it consistently charges my laptop once and my phone three times.", CreatedAt = "Dec 20, 2025", EditedAt = null, IsVerifiedPurchase = false, HelpfulCount = 8, Status = "published" },
+        new() { Id = "rev-005", Product = new("Herman Miller Aeron", "Furniture"), Rating = 4, Title = "Worth it for the 12-year warranty alone", Body = "After three years of daily use (8-10 hours), the mesh shows zero signs of wear. PostureFit SL keeps my lower back supported without being intrusive. The forward tilt feature is underrated for focused desk work. I wish the armpads were softer — they can dig in during long typing sessions. The remastered version improved on the original in every way. Size B fits me perfectly at 5 foot 10 and 170 pounds. Buy refurbished if budget is a concern — same warranty.", CreatedAt = "Nov 5, 2025", EditedAt = "Nov 8, 2025", IsVerifiedPurchase = true, HelpfulCount = 56, Status = "published" },
+    ];
+
+    private static readonly int _totalReviews = _reviews.Length;
+    private static readonly double _avgRating = Math.Round(_reviews.Sum(r => r.Rating) / (double)_totalReviews, 1);
+    private static readonly int _totalHelpful = _reviews.Sum(r => r.HelpfulCount);
+    private static readonly int _maxDistribution = _ratingDistribution.Values.DefaultIfEmpty(1).Max();
+
+    private string _sortBy = "newest";
+    private readonly HashSet<string> _expandedIds = [];
+    private readonly HashSet<string> _helpfulIds = [];
+    private bool _editDialogOpen;
+    private bool _deleteDialogOpen;
+    private Review? _editingReview;
+    private string _editTitle = "";
+    private string _editBody = "";
+    private int _editRating;
+    private int _hoverRating;
+    private Review? _deleteTarget;
+
+    private IEnumerable<Review> SortedReviews => _sortBy switch
+    {
+        "highest" => _reviews.OrderByDescending(r => r.Rating),
+        "lowest" => _reviews.OrderBy(r => r.Rating),
+        "most_helpful" => _reviews.OrderByDescending(r => r.HelpfulCount),
+        _ => _reviews.AsEnumerable(),
+    };
+
+    private void ToggleExpand(string id)
+    {
+        if (!_expandedIds.Remove(id)) _expandedIds.Add(id);
+    }
+
+    private void ToggleHelpful(string id)
+    {
+        if (!_helpfulIds.Remove(id)) _helpfulIds.Add(id);
+    }
+
+    private void OpenEdit(Review review)
+    {
+        _editingReview = review;
+        _editTitle = review.Title;
+        _editBody = review.Body;
+        _editRating = review.Rating;
+        _hoverRating = 0;
+        _editDialogOpen = true;
+    }
+
+    private void OpenDelete(Review review)
+    {
+        _deleteTarget = review;
+        _deleteDialogOpen = true;
+    }
+}

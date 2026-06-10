@@ -1,0 +1,188 @@
+@* ============================================================
+   Block: calendar-plant-watering
+   Title: CalendarPlantWatering
+   Description: A plant watering and care schedule calendar block for Next.js with watering frequency, sunlight needs, last-watered tracking, and room grouping using shadcn/ui and Tailwind CSS
+   Source: original/blocks/calendar/calendar-plant-watering.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="droplet" Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Plant Watering</span>
+                    <p class="text-muted-foreground text-xs">
+                        @_plants.Count plants · @_rooms.Length rooms
+                    </p>
+                </div>
+            </div>
+            <div class="text-right">
+                @if (NeedsWater > 0)
+                {
+                    <span class="font-medium text-red-600 text-xs dark:text-red-400">
+                        @NeedsWater need water today
+                    </span>
+                }
+                else
+                {
+                    <span class="text-emerald-600 text-xs dark:text-emerald-400">All watered</span>
+                }
+                @if (WateredToday > 0)
+                {
+                    <p class="text-muted-foreground text-xs tabular-nums">
+                        @WateredToday done today
+                    </p>
+                }
+            </div>
+        </div>
+
+        <div>
+            @for (int rIndex = 0; rIndex < _rooms.Length; rIndex++)
+            {
+                var room = _rooms[rIndex];
+                var ri = rIndex;
+                var roomPlants = _plants.Where(p => p.Room == room).ToList();
+
+                <div>
+                    <div class="@($"bg-muted/30 px-4 py-1.5 {(ri > 0 ? "border-t" : "")}")">
+                        <span class="text-muted-foreground text-xs">@room</span>
+                    </div>
+                    @for (int pi = 0; pi < roomPlants.Count; pi++)
+                    {
+                        var plant = roomPlants[pi];
+                        var config = WaterConfig[plant.WaterNeed];
+                        var hasBorder = pi < roomPlants.Count - 1 || ri < _rooms.Length - 1;
+
+                        <div class="@(hasBorder ? "border-b" : "")">
+                            <div class="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                                <button type="button"
+                                        @onclick="@(() => ToggleWatered(plant.Id))"
+                                        class="shrink-0">
+                                    @if (plant.Watered)
+                                    {
+                                        <LucideIconCn Name="check-circle-2" Size="16" Class="size-4 text-emerald-500" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="circle" Size="16" Class="size-4 text-muted-foreground/40" />
+                                    }
+                                </button>
+                                <span class="@($"size-2 shrink-0 rounded-full {config.Dot}")" />
+                                <div class="min-w-0 flex-1">
+                                    <span class="@($"font-medium text-sm {(plant.Watered ? "text-muted-foreground line-through" : "")}")">
+                                        @plant.Name
+                                    </span>
+                                    <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                        <span class="flex items-center gap-1">
+                                            <LucideIconCn Name="droplet" Size="12" Class="size-3" />
+                                            @plant.Frequency
+                                        </span>
+                                        <span class="flex items-center gap-1">
+                                            <LucideIconCn Name="sun" Size="12" Class="size-3" />
+                                            @SunLabels[plant.SunNeed]
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="shrink-0 text-right">
+                                    <span class="@($"text-xs font-medium tabular-nums {UrgencyColor(plant.DaysUntilNext)}")">
+                                        @(plant.Watered ? "Watered" : UrgencyLabel(plant.DaysUntilNext))
+                                    </span>
+                                    <p class="text-muted-foreground text-[10px]">
+                                        Last: @plant.LastWatered
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="flex items-center gap-4 border-t bg-muted/20 px-4 py-2">
+            @foreach (var entry in WaterConfig)
+            {
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@($"size-1.5 rounded-full {entry.Value.Dot}")" />
+                    @entry.Value.Label
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum WaterNeed { Low, Moderate, High }
+    private enum SunNeed { Shade, Partial, Full }
+
+    private class WaterConfigEntry
+    {
+        public string Dot { get; init; } = "";
+        public string Label { get; init; } = "";
+    }
+
+    private class Plant
+    {
+        public string Id { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string Room { get; init; } = "";
+        public WaterNeed WaterNeed { get; init; }
+        public SunNeed SunNeed { get; init; }
+        public string Frequency { get; init; } = "";
+        public string LastWatered { get; init; } = "";
+        public int DaysUntilNext { get; init; }
+        public bool Watered { get; set; }
+    }
+
+    private static readonly Dictionary<WaterNeed, WaterConfigEntry> WaterConfig = new()
+    {
+        [WaterNeed.Low]      = new() { Dot = "bg-emerald-500", Label = "Low water" },
+        [WaterNeed.Moderate] = new() { Dot = "bg-blue-500",    Label = "Moderate" },
+        [WaterNeed.High]     = new() { Dot = "bg-violet-500",  Label = "High water" },
+    };
+
+    private static readonly Dictionary<SunNeed, string> SunLabels = new()
+    {
+        [SunNeed.Shade]   = "Low light",
+        [SunNeed.Partial] = "Partial sun",
+        [SunNeed.Full]    = "Full sun",
+    };
+
+    private List<Plant> _plants = new()
+    {
+        new() { Id = "1", Name = "Monstera Deliciosa",     Room = "Living Room", WaterNeed = WaterNeed.Moderate, SunNeed = SunNeed.Partial, Frequency = "Every 7 days",  LastWatered = "3 days ago",  DaysUntilNext = 4, Watered = false },
+        new() { Id = "2", Name = "Snake Plant",             Room = "Living Room", WaterNeed = WaterNeed.Low,      SunNeed = SunNeed.Shade,   Frequency = "Every 14 days", LastWatered = "10 days ago", DaysUntilNext = 4, Watered = false },
+        new() { Id = "3", Name = "Fiddle Leaf Fig",         Room = "Living Room", WaterNeed = WaterNeed.High,     SunNeed = SunNeed.Full,    Frequency = "Every 5 days",  LastWatered = "5 days ago",  DaysUntilNext = 0, Watered = false },
+        new() { Id = "4", Name = "Pothos",                  Room = "Kitchen",     WaterNeed = WaterNeed.Moderate, SunNeed = SunNeed.Partial, Frequency = "Every 7 days",  LastWatered = "6 days ago",  DaysUntilNext = 1, Watered = false },
+        new() { Id = "5", Name = "Herb Garden (Basil, Mint)", Room = "Kitchen",   WaterNeed = WaterNeed.High,     SunNeed = SunNeed.Full,    Frequency = "Every 2 days",  LastWatered = "2 days ago",  DaysUntilNext = 0, Watered = false },
+        new() { Id = "6", Name = "Peace Lily",              Room = "Bedroom",     WaterNeed = WaterNeed.Moderate, SunNeed = SunNeed.Shade,   Frequency = "Every 7 days",  LastWatered = "4 days ago",  DaysUntilNext = 3, Watered = false },
+        new() { Id = "7", Name = "Spider Plant",            Room = "Bedroom",     WaterNeed = WaterNeed.Low,      SunNeed = SunNeed.Partial, Frequency = "Every 10 days", LastWatered = "2 days ago",  DaysUntilNext = 8, Watered = false },
+        new() { Id = "8", Name = "Aloe Vera",               Room = "Office",      WaterNeed = WaterNeed.Low,      SunNeed = SunNeed.Full,    Frequency = "Every 14 days", LastWatered = "12 days ago", DaysUntilNext = 2, Watered = false },
+        new() { Id = "9", Name = "ZZ Plant",                Room = "Office",      WaterNeed = WaterNeed.Low,      SunNeed = SunNeed.Shade,   Frequency = "Every 14 days", LastWatered = "7 days ago",  DaysUntilNext = 7, Watered = false },
+    };
+
+    private static readonly string[] _rooms = ["Living Room", "Kitchen", "Bedroom", "Office"];
+
+    private int NeedsWater  => _plants.Count(p => p.DaysUntilNext == 0 && !p.Watered);
+    private int WateredToday => _plants.Count(p => p.Watered);
+
+    private static string UrgencyLabel(int days) => days switch
+    {
+        0 => "Water today",
+        1 => "Tomorrow",
+        _ => $"In {days} days",
+    };
+
+    private static string UrgencyColor(int days)
+    {
+        if (days == 0) return "text-red-600 dark:text-red-400";
+        if (days <= 2) return "text-amber-600 dark:text-amber-400";
+        return "text-muted-foreground";
+    }
+
+    private void ToggleWatered(string id)
+    {
+        var plant = _plants.First(p => p.Id == id);
+        plant.Watered = !plant.Watered;
+    }
+}

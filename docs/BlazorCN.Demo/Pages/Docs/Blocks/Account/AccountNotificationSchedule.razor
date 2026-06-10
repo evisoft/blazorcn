@@ -1,0 +1,305 @@
+@* ============================================================
+   Block: account-notification-schedule
+   Title: AccountNotificationSchedule
+   Description: A Slack-style notification schedule grid for React and Next.js with 7-day week view, per-day quiet hours, timezone display, DND master toggle, and quick presets built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-notification-schedule.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Notification Schedule</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Set when you want to receive notifications each day
+                    </p>
+                </div>
+                @if (_dndEnabled)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 gap-1 px-1.5 text-[10px] bg-amber-500/10 text-amber-600">
+                        <LucideMoonCn Size="10" Class="size-2.5" />
+                        DND active
+                    </BadgeCn>
+                }
+            </div>
+        </div>
+
+        @* Do Not Disturb *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <LucideBellOffCn Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <span class="text-sm font-medium">Do Not Disturb</span>
+                        <p class="text-xs text-muted-foreground">
+                            Mute all notifications regardless of schedule
+                        </p>
+                    </div>
+                </div>
+                <SwitchCn Checked="@_dndEnabled" CheckedChanged="@(v => _dndEnabled = v)" />
+            </div>
+        </div>
+
+        @* Presets *@
+        <div class="@($"border-b px-4 py-3 transition-opacity{(_dndEnabled ? " pointer-events-none opacity-40" : "")}")">
+            <span class="text-[10px] font-medium text-muted-foreground">QUICK PRESETS</span>
+            <div class="mt-2 flex flex-wrap gap-2">
+                @foreach (var preset in _presets)
+                {
+                    var isActive = _activePreset == preset.Id;
+                    <button type="button" @onclick="@(() => ApplyPreset(preset.Id))"
+                        class="@($"inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors{(isActive ? " border-foreground/20 bg-foreground/5 text-foreground" : " border-transparent bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground")}")">
+                        @if (preset.Id == "weekdays")
+                        {
+                            <LucideBriefcaseCn Size="12" Class="size-3" />
+                        }
+                        else if (preset.Id == "business")
+                        {
+                            <LucideSunCn Size="12" Class="size-3" />
+                        }
+                        else if (preset.Id == "always")
+                        {
+                            <LucideZapCn Size="12" Class="size-3" />
+                        }
+                        @preset.Label
+                        @if (isActive)
+                        {
+                            <LucideCheckCn Size="12" Class="size-3 text-emerald-500" />
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Schedule Grid *@
+        <div class="@($"transition-opacity{(_dndEnabled ? " pointer-events-none opacity-40" : "")}")">
+
+            @* Time axis header *@
+            <div class="flex items-center border-b px-4 py-1.5">
+                <div class="w-16 shrink-0"></div>
+                <div class="relative flex-1">
+                    <div class="flex justify-between">
+                        @foreach (var label in _timeLabels)
+                        {
+                            <span class="text-[9px] text-muted-foreground/60">@label</span>
+                        }
+                    </div>
+                </div>
+                <div class="w-10 shrink-0"></div>
+            </div>
+
+            @* Day rows *@
+            @foreach (var day in _schedule)
+            {
+                <div>
+                    <div class="flex items-center border-b px-4 py-2 last:border-b-0">
+
+                        @* Day label *@
+                        <button type="button" @onclick="@(() => ToggleExpandedDay(day.DayKey))"
+                            class="w-16 shrink-0 text-left">
+                            <span class="@($"text-xs font-medium{(day.Enabled ? " text-foreground" : " text-muted-foreground/50")}")">
+                                @day.DayShort
+                            </span>
+                        </button>
+
+                        @* Time bar *@
+                        <div class="relative h-6 flex-1 rounded bg-muted/30">
+                            @if (day.Enabled)
+                            {
+                                <div class="absolute inset-y-0 rounded bg-foreground/10"
+                                    style="@($"left:{BarLeft(day.StartHour):F2}%;width:{BarWidth(day.StartHour, day.EndHour):F2}%")">
+                                    <div class="flex h-full items-center justify-center">
+                                        <span class="text-[9px] font-medium text-foreground/60">
+                                            @(day.EndHour - day.StartHour)h
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                            @if (!day.Enabled)
+                            {
+                                <div class="flex h-full items-center justify-center">
+                                    <span class="text-[9px] text-muted-foreground/40">Off</span>
+                                </div>
+                            }
+                        </div>
+
+                        @* Toggle *@
+                        <div class="flex w-10 shrink-0 justify-end">
+                            <SwitchCn Checked="@day.Enabled" CheckedChanged="@(v => ToggleDay(day.DayKey))" />
+                        </div>
+                    </div>
+
+                    @* Expanded time editor *@
+                    @if (_expandedDay == day.DayKey && day.Enabled)
+                    {
+                        <div class="overflow-hidden border-b">
+                            <div class="flex items-center gap-3 bg-muted/20 px-4 py-2.5 pl-20">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] text-muted-foreground">From</span>
+                                    <SelectCn Value="@day.StartHour.ToString()" ValueChanged="@(v => SetStartHour(day.DayKey, v))">
+                                        <SelectTriggerCn Class="h-7 w-28 text-xs">
+                                            <SelectValueCn />
+                                        </SelectTriggerCn>
+                                        <SelectContentCn>
+                                            @foreach (var h in _hours.Where(x => int.Parse(x.Value) < day.EndHour))
+                                            {
+                                                <SelectItemCn Value="@h.Value">@h.Label</SelectItemCn>
+                                            }
+                                        </SelectContentCn>
+                                    </SelectCn>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] text-muted-foreground">To</span>
+                                    <SelectCn Value="@day.EndHour.ToString()" ValueChanged="@(v => SetEndHour(day.DayKey, v))">
+                                        <SelectTriggerCn Class="h-7 w-28 text-xs">
+                                            <SelectValueCn />
+                                        </SelectTriggerCn>
+                                        <SelectContentCn>
+                                            @foreach (var h in _hours.Where(x => int.Parse(x.Value) > day.StartHour))
+                                            {
+                                                <SelectItemCn Value="@h.Value">@h.Label</SelectItemCn>
+                                            }
+                                        </SelectContentCn>
+                                    </SelectCn>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <LucideCalendarCn Size="10" Class="size-2.5" />
+                    @ActiveDayCount days active
+                </div>
+                <div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <LucideBellCn Size="10" Class="size-2.5" />
+                    @(TotalActiveHours)h/week
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <LucideGlobeCn Size="10" Class="size-2.5" />
+                America/New_York (UTC-4)
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private class DayScheduleItem
+    {
+        public string DayKey { get; init; } = "";
+        public string DayLabel { get; init; } = "";
+        public string DayShort { get; init; } = "";
+        public bool Enabled { get; set; }
+        public int StartHour { get; set; }
+        public int EndHour { get; set; }
+    }
+
+    private record PresetInfo(string Id, string Label, string Description);
+
+    private static readonly string[] _timeLabels = ["12a", "4a", "8a", "12p", "4p", "8p", "12a"];
+
+    private static readonly (string Value, string Label)[] _hours =
+        Enumerable.Range(0, 25).Select(i =>
+        {
+            if (i == 24) return ("24", "12:00 AM (next day)");
+            var h = i % 12 == 0 ? 12 : i % 12;
+            var suffix = i < 12 ? "AM" : "PM";
+            return (i.ToString(), $"{h}:00 {suffix}");
+        }).ToArray();
+
+    private static readonly PresetInfo[] _presets =
+    [
+        new("weekdays", "Weekdays only", "Mon-Fri, 9 AM - 6 PM"),
+        new("business", "Business hours", "Every day, 8 AM - 5 PM"),
+        new("always", "Always on", "24/7 notifications"),
+    ];
+
+    private List<DayScheduleItem> _schedule =
+    [
+        new() { DayKey = "mon", DayLabel = "Monday",    DayShort = "Mon", Enabled = true,  StartHour = 9,  EndHour = 18 },
+        new() { DayKey = "tue", DayLabel = "Tuesday",   DayShort = "Tue", Enabled = true,  StartHour = 9,  EndHour = 18 },
+        new() { DayKey = "wed", DayLabel = "Wednesday", DayShort = "Wed", Enabled = true,  StartHour = 9,  EndHour = 18 },
+        new() { DayKey = "thu", DayLabel = "Thursday",  DayShort = "Thu", Enabled = true,  StartHour = 9,  EndHour = 18 },
+        new() { DayKey = "fri", DayLabel = "Friday",    DayShort = "Fri", Enabled = true,  StartHour = 9,  EndHour = 17 },
+        new() { DayKey = "sat", DayLabel = "Saturday",  DayShort = "Sat", Enabled = false, StartHour = 10, EndHour = 14 },
+        new() { DayKey = "sun", DayLabel = "Sunday",    DayShort = "Sun", Enabled = false, StartHour = 10, EndHour = 14 },
+    ];
+
+    private bool _dndEnabled;
+    private string? _activePreset = "weekdays";
+    private string? _expandedDay;
+
+    private int ActiveDayCount => _schedule.Count(d => d.Enabled);
+    private int TotalActiveHours => _schedule.Where(d => d.Enabled).Sum(d => d.EndHour - d.StartHour);
+
+    private static double BarLeft(int start) => (start / 24.0) * 100;
+    private static double BarWidth(int start, int end) => ((end - start) / 24.0) * 100;
+
+    private void ToggleExpandedDay(string dayKey)
+        => _expandedDay = _expandedDay == dayKey ? null : dayKey;
+
+    private void ToggleDay(string dayKey)
+    {
+        var day = _schedule.First(d => d.DayKey == dayKey);
+        day.Enabled = !day.Enabled;
+        _activePreset = null;
+    }
+
+    private void SetStartHour(string dayKey, string? value)
+    {
+        if (value is null) return;
+        var day = _schedule.First(d => d.DayKey == dayKey);
+        day.StartHour = int.Parse(value);
+        _activePreset = null;
+    }
+
+    private void SetEndHour(string dayKey, string? value)
+    {
+        if (value is null) return;
+        var day = _schedule.First(d => d.DayKey == dayKey);
+        day.EndHour = int.Parse(value);
+        _activePreset = null;
+    }
+
+    private void ApplyPreset(string presetId)
+    {
+        switch (presetId)
+        {
+            case "weekdays":
+                foreach (var d in _schedule)
+                {
+                    d.Enabled = d.DayKey is "mon" or "tue" or "wed" or "thu" or "fri";
+                    d.StartHour = 9;
+                    d.EndHour = 18;
+                }
+                break;
+            case "business":
+                foreach (var d in _schedule)
+                {
+                    d.Enabled = true;
+                    d.StartHour = 8;
+                    d.EndHour = 17;
+                }
+                break;
+            case "always":
+                foreach (var d in _schedule)
+                {
+                    d.Enabled = true;
+                    d.StartHour = 0;
+                    d.EndHour = 24;
+                }
+                break;
+        }
+        _activePreset = presetId;
+    }
+}

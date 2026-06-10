@@ -1,0 +1,199 @@
+@* ============================================================
+   Block: music-sound-mixer
+   Title: MusicSoundMixer
+   Description: A multi-channel sound mixer block for React and Next.js with vertical faders, mute and solo buttons, pan knobs, and master output meter built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-sound-mixer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="sliders-horizontal" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Sound Mixer</span>
+            </div>
+            <span class="text-muted-foreground text-xs">@_channels.Length channels</span>
+        </div>
+
+        @* Channel strips *@
+        <div class="border-b px-4 py-4">
+            <div class="grid grid-cols-6 gap-3">
+                @foreach (var ch in _channels)
+                {
+                    var channel = ch;
+                    var isActive = _hasSolo ? channel.Solo && !channel.Muted : !channel.Muted;
+                    <div class="@Cn.Merge("flex flex-col items-center gap-2 rounded-md border px-2 py-3", isActive ? "bg-card" : "bg-muted/30 opacity-50")">
+
+                        @* Channel name *@
+                        <span class="font-mono text-muted-foreground text-xs">@channel.ShortName</span>
+
+                        @* Pan knob indicator *@
+                        <div class="flex flex-col items-center gap-0.5">
+                            <div class="relative flex h-4 w-10 items-center justify-center">
+                                <div class="h-px w-full bg-muted-foreground/20"></div>
+                                <div class="absolute size-2 rounded-full bg-foreground"
+                                     style="@($"left:{50 + channel.Pan}%;transform:translateX(-50%)")"></div>
+                            </div>
+                            <span class="font-mono text-muted-foreground/60 text-[10px]">@PanLabel(channel.Pan)</span>
+                        </div>
+
+                        @* Vertical fader *@
+                        <div class="flex h-32 items-center justify-center">
+                            <SliderCn Value="@((double)channel.Level)"
+                                      ValueChanged="@((double v) => UpdateLevel(channel.Id, (int)v))"
+                                      Min="0"
+                                      Max="100"
+                                      Step="1"
+                                      Orientation="SliderOrientation.Vertical"
+                                      Class="h-full"
+                                      aria-label="@($"{channel.Name} level")" />
+                        </div>
+
+                        @* Level readout *@
+                        <span class="font-mono text-muted-foreground text-xs tabular-nums">@channel.Level</span>
+
+                        @* Mute / Solo buttons *@
+                        <div class="flex items-center gap-1">
+                            <ButtonCn Variant="@(channel.Muted ? ButtonVariant.Default : ButtonVariant.Outline)"
+                                      Size="ButtonSize.Sm"
+                                      Class="@Cn.Merge("h-6 w-6 p-0 text-[10px] font-medium", channel.Muted ? "bg-red-500 text-white hover:bg-red-600" : "")"
+                                      OnClick="@(() => ToggleMute(channel.Id))"
+                                      aria-label="@(channel.Muted ? $"Unmute {channel.Name}" : $"Mute {channel.Name}")">
+                                M
+                            </ButtonCn>
+                            <ButtonCn Variant="@(channel.Solo ? ButtonVariant.Default : ButtonVariant.Outline)"
+                                      Size="ButtonSize.Sm"
+                                      Class="@Cn.Merge("h-6 w-6 p-0 text-[10px] font-medium", channel.Solo ? "bg-amber-500 text-white hover:bg-amber-600" : "")"
+                                      OnClick="@(() => ToggleSolo(channel.Id))"
+                                      aria-label="@(channel.Solo ? $"Unsolo {channel.Name}" : $"Solo {channel.Name}")">
+                                S
+                            </ButtonCn>
+                        </div>
+
+                        @* Color indicator *@
+                        <span class="@Cn.Merge("size-1.5 rounded-full", channel.Color)"></span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Master output *@
+        <div class="px-4 py-3">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="font-medium text-muted-foreground text-xs">Master Output</span>
+                <div class="ml-auto flex items-center gap-1.5">
+                    @if (_outputLevel == 0)
+                    {
+                        <LucideIconCn Name="volume-x" Size="12" Class="size-3 text-muted-foreground" />
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="volume-2" Size="12" Class="size-3 text-muted-foreground" />
+                    }
+                    <span class="font-mono text-muted-foreground text-xs tabular-nums">@_outputLevel%</span>
+                </div>
+            </div>
+
+            @* Master fader *@
+            <SliderCn Value="@((double)_masterLevel)"
+                      ValueChanged="@((double v) => { _masterLevel = (int)v; })"
+                      Min="0"
+                      Max="100"
+                      Step="1"
+                      Class="mb-3"
+                      aria-label="Master output level" />
+
+            @* Output level meter *@
+            <div class="flex items-center gap-1">
+                @for (int i = 0; i < 20; i++)
+                {
+                    var idx = i;
+                    var threshold = (idx + 1) * 5;
+                    var isActive = _outputLevel >= threshold;
+                    var isHot = threshold > 85;
+                    var isWarm = threshold > 70;
+                    var barClass = isActive
+                        ? (isHot ? "bg-red-500" : (isWarm ? "bg-amber-500" : "bg-emerald-500"))
+                        : "bg-muted";
+                    <div class="@Cn.Merge("h-3 flex-1 rounded-sm", barClass)"></div>
+                }
+            </div>
+
+            @* Meter scale *@
+            <div class="mt-1 flex items-center justify-between">
+                <span class="font-mono text-muted-foreground/40 text-[10px]">0</span>
+                <span class="font-mono text-muted-foreground/40 text-[10px]">-20</span>
+                <span class="font-mono text-muted-foreground/40 text-[10px]">-10</span>
+                <span class="font-mono text-muted-foreground/40 text-[10px]">-3</span>
+                <span class="font-mono text-muted-foreground/40 text-[10px]">0dB</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private sealed class Channel
+    {
+        public string Id      { get; init; } = "";
+        public string Name    { get; init; } = "";
+        public string ShortName { get; init; } = "";
+        public int    Level   { get; set; }
+        public int    Pan     { get; init; }
+        public bool   Muted   { get; set; }
+        public bool   Solo    { get; set; }
+        public string Color   { get; init; } = "";
+    }
+
+    private Channel[] _channels =
+    [
+        new() { Id="ch-1", Name="Vocals", ShortName="VOX", Level=78, Pan=  0, Muted=false, Solo=false, Color="bg-blue-500"    },
+        new() { Id="ch-2", Name="Bass",   ShortName="BAS", Level=65, Pan= -5, Muted=false, Solo=false, Color="bg-amber-500"   },
+        new() { Id="ch-3", Name="Drums",  ShortName="DRM", Level=72, Pan=  0, Muted=false, Solo=false, Color="bg-red-500"     },
+        new() { Id="ch-4", Name="Guitar", ShortName="GTR", Level=55, Pan= 25, Muted=false, Solo=false, Color="bg-emerald-500" },
+        new() { Id="ch-5", Name="Keys",   ShortName="KEY", Level=45, Pan=-20, Muted=true,  Solo=false, Color="bg-purple-500"  },
+        new() { Id="ch-6", Name="Synth",  ShortName="SYN", Level=60, Pan= 15, Muted=false, Solo=false, Color="bg-pink-500"    },
+    ];
+
+    private int _masterLevel = 85;
+
+    private bool _hasSolo => Array.Exists(_channels, ch => ch.Solo);
+
+    private int _outputLevel
+    {
+        get
+        {
+            var active = Array.FindAll(_channels, ch => _hasSolo ? ch.Solo && !ch.Muted : !ch.Muted);
+            if (active.Length == 0) return 0;
+            var avg = active.Average(ch => (double)ch.Level);
+            return (int)Math.Round(avg * (_masterLevel / 100.0));
+        }
+    }
+
+    private static string PanLabel(int pan)
+    {
+        if (pan == 0) return "C";
+        if (pan < 0) return $"L{Math.Abs(pan)}";
+        return $"R{pan}";
+    }
+
+    private void UpdateLevel(string id, int level)
+    {
+        var ch = Array.Find(_channels, c => c.Id == id);
+        if (ch != null) ch.Level = level;
+    }
+
+    private void ToggleMute(string id)
+    {
+        var ch = Array.Find(_channels, c => c.Id == id);
+        if (ch != null) ch.Muted = !ch.Muted;
+    }
+
+    private void ToggleSolo(string id)
+    {
+        var ch = Array.Find(_channels, c => c.Id == id);
+        if (ch != null) ch.Solo = !ch.Solo;
+    }
+}

@@ -1,0 +1,225 @@
+@* ============================================================
+   Block: kanban-compliance-board
+   Title: KanbanComplianceBoard
+   Description: A compliance requirements kanban board for React and Next.js with bulk selection via shadcn/ui Checkbox, regulation badges, due dates, and floating action bar built with Tailwind CSS
+   Source: original/blocks/kanban/kanban-compliance-board.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="relative overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="clipboard-list" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Compliance Board</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_items.Count requirements
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var reg in _regulations)
+                {
+                    var r = reg;
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        @(_items.Count(i => i.Regulation == r)) @r
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-3 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var columnItems = _items.Where(i => i.Column == column.Id).ToList();
+                var columnIds = columnItems.Select(i => i.Id).ToList();
+                var allSelected = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+                var someSelected = columnIds.Any(id => _selected.Contains(id));
+                var isIndeterminate = !allSelected && someSelected;
+
+                <div>
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                        <span class="flex items-center" role="button" tabindex="0"
+                              @onclick="@(() => ToggleColumnAll(column.Id))">
+                            <button type="button"
+                                    role="checkbox"
+                                    aria-checked="@(allSelected ? "true" : isIndeterminate ? "mixed" : "false")"
+                                    data-slot="checkbox"
+                                    data-state="@(allSelected ? "checked" : "unchecked")"
+                                    class="cn-checkbox peer shrink-0 outline-none">
+                                @if (isIndeterminate)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                }
+                                else if (allSelected)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M20 6 9 17l-5-5" /></svg>
+                                }
+                            </button>
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@columnItems.Count</span>
+                    </div>
+
+                    @* Items *@
+                    <div>
+                        @foreach (var item in columnItems)
+                        {
+                            var isLast = item == columnItems[columnItems.Count - 1];
+                            var isChecked = _selected.Contains(item.Id);
+                            var capturedItem = item;
+                            <div class="@Cn.Merge("flex items-start gap-2.5 px-4 py-2.5 transition-colors hover:bg-muted/50", !isLast ? "border-b" : "", isChecked ? "bg-muted/30" : "")">
+                                <span class="mt-0.5 flex shrink-0 items-center">
+                                    <CheckboxCn Checked="@isChecked"
+                                                CheckedChanged="@((bool _) => ToggleSelect(capturedItem.Id))" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="@Cn.Merge("font-medium text-sm", column.Id == "compliant" ? "text-muted-foreground line-through" : "")">
+                                        @capturedItem.Title
+                                    </span>
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <BadgeCn Variant="BadgeVariant.Secondary"
+                                                 Class="@Cn.Merge("border-0 font-normal text-[10px]", RegulationColor(capturedItem.Regulation))">
+                                            @capturedItem.Regulation
+                                        </BadgeCn>
+                                        <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                            <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                                            @capturedItem.DueDate
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @(_items.Count(i => i.Column == "compliant")) of @_items.Count compliant
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Next audit in 18 days</span>
+        </div>
+
+        @* Floating Action Bar *@
+        @if (_selected.Count > 0)
+        {
+            <div class="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-lg border bg-card px-4 py-2.5 shadow-lg">
+                <span class="font-medium text-sm">@_selected.Count selected</span>
+                <div class="flex items-center gap-2">
+                    <SelectCn Value="@_moveTarget" ValueChanged="@((string? val) => MoveSelected(val ?? ""))">
+                        <SelectTriggerCn Class="h-7 w-[130px] text-xs">
+                            <SelectValueCn Placeholder="Move to..." />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var col in _columns)
+                            {
+                                var c = col;
+                                <SelectItemCn Value="@c.Id" Class="text-xs">@c.Title</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="ArchiveSelected">
+                        <LucideIconCn Name="archive" Size="12" Class="size-3" />
+                        Archive
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="DeselectAll">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        Deselect
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private sealed class ComplianceItem
+    {
+        public string Id { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string Regulation { get; init; } = "";
+        public string DueDate { get; init; } = "";
+        public string Column { get; set; } = "";
+    }
+
+    private sealed record ColumnDef(string Id, string Title);
+
+    private static readonly string[] _regulations = ["GDPR", "SOC2", "HIPAA"];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("not-started", "Not Started"),
+        new("in-progress",  "In Progress"),
+        new("compliant",   "Compliant"),
+    ];
+
+    private List<ComplianceItem> _items =
+    [
+        new() { Id = "cr1",  Title = "Data subject access request process",      Regulation = "GDPR",  DueDate = "Apr 15", Column = "not-started" },
+        new() { Id = "cr2",  Title = "Vendor risk assessment documentation",     Regulation = "SOC2",  DueDate = "Apr 22", Column = "not-started" },
+        new() { Id = "cr3",  Title = "Patient data encryption at rest",          Regulation = "HIPAA", DueDate = "Apr 10", Column = "not-started" },
+        new() { Id = "cr4",  Title = "Cookie consent mechanism update",          Regulation = "GDPR",  DueDate = "May 1",  Column = "not-started" },
+        new() { Id = "cr5",  Title = "Access control policy review",             Regulation = "SOC2",  DueDate = "Apr 30", Column = "in-progress"  },
+        new() { Id = "cr6",  Title = "Breach notification procedure test",       Regulation = "HIPAA", DueDate = "Apr 18", Column = "in-progress"  },
+        new() { Id = "cr7",  Title = "Data processing agreement templates",      Regulation = "GDPR",  DueDate = "May 5",  Column = "in-progress"  },
+        new() { Id = "cr8",  Title = "Change management process audit",          Regulation = "SOC2",  DueDate = "Apr 25", Column = "in-progress"  },
+        new() { Id = "cr9",  Title = "Business associate agreement renewal",     Regulation = "HIPAA", DueDate = "Apr 12", Column = "in-progress"  },
+        new() { Id = "cr10", Title = "Right to erasure implementation",          Regulation = "GDPR",  DueDate = "Mar 20", Column = "compliant"    },
+        new() { Id = "cr11", Title = "Incident response plan documentation",     Regulation = "SOC2",  DueDate = "Mar 15", Column = "compliant"    },
+        new() { Id = "cr12", Title = "PHI access logging and monitoring",        Regulation = "HIPAA", DueDate = "Mar 28", Column = "compliant"    },
+        new() { Id = "cr13", Title = "Employee security awareness training",     Regulation = "SOC2",  DueDate = "Mar 10", Column = "compliant"    },
+    ];
+
+    private HashSet<string> _selected = [];
+    private string _moveTarget = "";
+
+    private static string RegulationColor(string regulation) => regulation switch
+    {
+        "GDPR"  => "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        "SOC2"  => "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+        "HIPAA" => "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+        _       => "",
+    };
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Remove(id))
+            _selected.Add(id);
+    }
+
+    private void ToggleColumnAll(string columnId)
+    {
+        var columnIds = _items.Where(i => i.Column == columnId).Select(i => i.Id).ToList();
+        var allSel = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+        foreach (var id in columnIds)
+        {
+            if (allSel) _selected.Remove(id);
+            else _selected.Add(id);
+        }
+    }
+
+    private void MoveSelected(string targetColumn)
+    {
+        if (string.IsNullOrEmpty(targetColumn)) return;
+        foreach (var item in _items.Where(i => _selected.Contains(i.Id)))
+            item.Column = targetColumn;
+        _selected.Clear();
+        _moveTarget = "";
+    }
+
+    private void ArchiveSelected(MouseEventArgs e)
+    {
+        _items = _items.Where(i => !_selected.Contains(i.Id)).ToList();
+        _selected.Clear();
+    }
+
+    private void DeselectAll(MouseEventArgs e)
+    {
+        _selected.Clear();
+    }
+}

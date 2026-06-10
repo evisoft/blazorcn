@@ -1,0 +1,258 @@
+@* ============================================================
+   Block: map-solar-panel-potential
+   Title: MapSolarPanelPotential
+   Description: Interactive solar panel potential map with irradiance markers, rooftop locations, energy output estimates, savings projections, and panel configuration popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-solar-panel-potential.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="sun" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Solar Potential</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length rooftops</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    @onclick="@(() => _filter = null)"
+                >
+                    All
+                </button>
+                @foreach (var rt in _ratings)
+                {
+                    var rating = rt;
+                    <button
+                        type="button"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == rating ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                        @onclick="@(() => _filter = _filter == rating ? null : rating)"
+                    >
+                        <span class="@($"size-1.5 rounded-full {GetRatingColor(rating)}")"></span>
+                        @GetRatingLabel(rating)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            <div>
+                <span class="text-xs text-muted-foreground">Annual output</span>
+                <p class="text-2xl font-semibold tabular-nums">@FormatNumber(_totalOutput) kWh</p>
+            </div>
+            <div>
+                <span class="text-xs text-muted-foreground">Annual savings</span>
+                <p class="text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">$@FormatNumber(_totalSavings)</p>
+            </div>
+            <div>
+                <span class="text-xs text-muted-foreground">CO2 offset</span>
+                <p class="text-2xl font-semibold tabular-nums">@_totalCo2 tons</p>
+            </div>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Rooftop markers *@
+                @foreach (var rt in _filtered)
+                {
+                    var rooftop = rt;
+                    var pos = GetMarkerPosition(rooftop.Longitude, rooftop.Latitude);
+                    <button
+                        type="button"
+                        class="@Cn.Merge("absolute flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none", GetRatingColor(rooftop.Rating))"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")"
+                        @onclick="@(() => HandleMarkerClick(rooftop))"
+                        title="@($"{rooftop.Address.Split(',')[0]} — {rooftop.Irradiance} kWh/m²")"
+                    >
+                        <LucideIconCn Name="sun" Size="14" Class="size-3.5 text-white" />
+                    </button>
+                }
+
+                @* Detail popup *@
+                @if (_popupRooftop != null)
+                {
+                    var popup = _popupRooftop;
+                    var pos = GetMarkerPosition(popup.Longitude, popup.Latitude);
+                    <div
+                        class="absolute z-20 w-64 rounded-md border bg-popover p-3 shadow-md text-popover-foreground text-xs"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%;transform:translate(-50%, calc(-100% - 16px))")"
+                    >
+                        <div class="mb-2 flex items-start justify-between">
+                            <div>
+                                <p class="text-sm font-medium">@popup.Address.Split(',')[0]</p>
+                                <p class="text-xs text-muted-foreground">
+                                    @popup.BuildingType · @popup.RoofArea.ToString("N0") sq ft
+                                </p>
+                            </div>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"text-xs font-normal {GetRatingBadge(popup.Rating)}")">
+                                @GetRatingLabel(popup.Rating)
+                            </BadgeCn>
+                        </div>
+                        <div class="mb-2 grid grid-cols-2 gap-2">
+                            <div class="rounded-md bg-muted/50 p-2">
+                                <div class="flex items-center gap-1">
+                                    <LucideIconCn Name="zap" Size="12" Class="size-3 text-amber-500" />
+                                    <span class="text-[10px] text-muted-foreground">Output/yr</span>
+                                </div>
+                                <p class="text-sm font-medium tabular-nums">@FormatNumber(popup.AnnualOutput) kWh</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2">
+                                <div class="flex items-center gap-1">
+                                    <LucideIconCn Name="dollar-sign" Size="12" Class="size-3 text-emerald-500" />
+                                    <span class="text-[10px] text-muted-foreground">Savings/yr</span>
+                                </div>
+                                <p class="text-sm font-medium tabular-nums text-emerald-600 dark:text-emerald-400">$@popup.AnnualSavings.ToString("N0")</p>
+                            </div>
+                        </div>
+                        <div class="space-y-1.5 border-t pt-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">Irradiance</span>
+                                <span class="text-xs font-medium tabular-nums">@popup.Irradiance kWh/m²/day</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">System size</span>
+                                <span class="text-xs font-medium">@popup.PanelCapacity</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">Payback</span>
+                                <span class="text-xs font-medium tabular-nums">@popup.PaybackYears years</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-muted-foreground">CO2 offset</span>
+                                <span class="text-xs font-medium tabular-nums">@popup.Co2Offset tons/yr</span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                            @onclick="@(() => _popupRooftop = null)"
+                        >
+                            <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        </button>
+                    </div>
+                }
+            </div>
+            <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                Map view — Denver, CO
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var rt in _ratings)
+            {
+                var rating = rt;
+                var cnt = _rooftops.Count(r => r.Rating == rating);
+                if (cnt > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {GetRatingColor(rating)}")"></span>
+                        @GetRatingLabel(rating) (@cnt)
+                    </span>
+                }
+            }
+            <span class="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                <LucideIconCn Name="battery-charging" Size="12" Class="size-3" />
+                @_rooftops.Length assessed
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Rooftop(
+        string Id,
+        string Address,
+        string BuildingType,
+        double Irradiance,
+        string Rating,
+        int RoofArea,
+        string PanelCapacity,
+        int AnnualOutput,
+        int AnnualSavings,
+        int PaybackYears,
+        int Co2Offset,
+        double Longitude,
+        double Latitude
+    );
+
+    private static readonly Rooftop[] _rooftops =
+    [
+        new("s1", "1420 Larimer St, Denver",   "Commercial",   5.8, "excellent", 4200,  "48 kW",  72400,  8690,  6,   51,  -104.9986, 39.7478),
+        new("s2", "2000 E 16th Ave, Denver",    "Residential",  5.4, "excellent", 1800,  "12 kW",  18200,  2180,  7,   13,  -104.9685, 39.7452),
+        new("s3", "800 Auraria Pkwy, Denver",   "Institutional",5.6, "excellent", 8500,  "96 kW",  140200, 16820, 5,   99,  -105.0095, 39.7435),
+        new("s4", "3300 E 1st Ave, Denver",     "Retail",       4.6, "good",      3200,  "32 kW",  42600,  5110,  8,   30,  -104.9545, 39.7195),
+        new("s5", "1600 Broadway, Denver",      "Office",       3.8, "fair",      2400,  "20 kW",  24800,  2980,  10,  18,  -104.9872, 39.7412),
+        new("s6", "4500 W Colfax Ave, Denver",  "Warehouse",    5.2, "excellent", 12000, "140 kW", 198400, 23810, 5,   140, -105.0285, 39.7403),
+        new("s7", "2500 Lawrence St, Denver",   "Residential",  4.2, "good",      1400,  "8 kW",   11200,  1340,  9,   8,   -104.9932, 39.7565),
+        new("s8", "900 Grant St, Denver",       "Residential",  2.8, "poor",      1100,  "6 kW",   6800,   820,   14,  5,   -104.9818, 39.7325),
+    ];
+
+    private static readonly string[] _ratings = ["excellent", "good", "fair", "poor"];
+
+    private static string GetRatingColor(string rating) => rating switch
+    {
+        "excellent" => "bg-emerald-500",
+        "good"      => "bg-blue-500",
+        "fair"      => "bg-amber-500",
+        "poor"      => "bg-red-500",
+        _           => "bg-slate-400",
+    };
+
+    private static string GetRatingLabel(string rating) => rating switch
+    {
+        "excellent" => "Excellent",
+        "good"      => "Good",
+        "fair"      => "Fair",
+        "poor"      => "Poor",
+        _           => rating,
+    };
+
+    private static string GetRatingBadge(string rating) => rating switch
+    {
+        "excellent" => "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        "good"      => "border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+        "fair"      => "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+        "poor"      => "border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400",
+        _           => "",
+    };
+
+    // Map lon/lat to % positions within the Denver viewport.
+    // Viewport: lon [-105.06, -104.93], lat [39.71, 39.77]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -105.06, lonMax = -104.93;
+        const double latMin = 39.71,   latMax = 39.77;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private static string FormatNumber(int n) =>
+        n >= 1000 ? $"{(n / 1000.0):F1}K" : n.ToString();
+
+    private string? _filter = null;
+    private Rooftop? _popupRooftop = null;
+
+    private Rooftop[] _filtered => _filter != null
+        ? [.. _rooftops.Where(r => r.Rating == _filter)]
+        : _rooftops;
+
+    private int _totalOutput  => _rooftops.Sum(r => r.AnnualOutput);
+    private int _totalSavings => _rooftops.Sum(r => r.AnnualSavings);
+    private int _totalCo2     => _rooftops.Sum(r => r.Co2Offset);
+
+    private void HandleMarkerClick(Rooftop rooftop)
+    {
+        _popupRooftop = _popupRooftop?.Id == rooftop.Id ? null : rooftop;
+    }
+}

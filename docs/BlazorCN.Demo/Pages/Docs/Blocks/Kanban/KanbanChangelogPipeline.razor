@@ -1,0 +1,234 @@
+@* ============================================================
+   Block: kanban-changelog-pipeline
+   Title: KanbanChangelogPipeline
+   Description: React kanban changelog pipeline for Next.js with shadcn/ui Command palette search by feature name and version number, type badges, and four-column release workflow using Tailwind CSS
+   Source: original/blocks/kanban/kanban-changelog-pipeline.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="book-open" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Changelog</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_entries.Length entries
+                </BadgeCn>
+            </div>
+            <PopoverCn Open="@_open" OpenChanged="@HandleOpenChanged">
+                <PopoverTriggerCn Class="flex h-7 items-center gap-1.5 rounded-md border bg-muted/50 px-2.5 text-muted-foreground text-xs transition-colors hover:bg-muted">
+                    <LucideIconCn Name="search" Size="12" Class="size-3" />
+                    Search entries
+                </PopoverTriggerCn>
+                <PopoverContentCn Class="w-80 p-0" Align="FloatingAlign.End">
+                    <CommandCn Class="border-0">
+                        <CommandInputCn Placeholder="Search features, versions, types..." Value="@_search" ValueChanged="@HandleSearchChanged" />
+                        <CommandListCn>
+                            @if (!HasMatches())
+                            {
+                                <CommandEmptyCn>No matching entries.</CommandEmptyCn>
+                            }
+                            @if (_search.Trim().Length > 0 && GetMatchedIds().Count > 0)
+                            {
+                                <CommandGroupCn Heading="Entries">
+                                    @foreach (var ent in _entries)
+                                    {
+                                        var entItem = ent;
+                                        @if (GetMatchedIds().Contains(entItem.Id))
+                                        {
+                                            <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                                <span class="@Cn.Merge("size-1.5 rounded-full", TypeDotClass(entItem.Type))"></span>
+                                                <div class="min-w-0 flex-1">
+                                                    <span class="block truncate text-sm">@entItem.Title</span>
+                                                    <span class="text-muted-foreground text-xs">@entItem.Version · @TypeLabelText(entItem.Type)</span>
+                                                </div>
+                                            </CommandItemCn>
+                                        }
+                                    }
+                                </CommandGroupCn>
+                            }
+                            <CommandGroupCn Heading="Quick Actions">
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="rocket" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Mark as Released
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="tag" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Assign version
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="file-text" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Export changelog
+                                </CommandItemCn>
+                            </CommandGroupCn>
+                        </CommandListCn>
+                    </CommandCn>
+                </PopoverContentCn>
+            </PopoverCn>
+        </div>
+
+        @* Type legend *@
+        <div class="flex items-center gap-4 border-b bg-muted/30 px-4 py-2">
+            @foreach (var t in _typeLegend)
+            {
+                var typeKey = t;
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", TypeDotClass(typeKey))"></span>
+                    @TypeLabelText(typeKey)
+                </span>
+            }
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var colEntries = GetColumnEntries(column.Id);
+                <div>
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+                        <span class="text-muted-foreground">
+                            <LucideIconCn Name="@column.IconName" Size="14" Class="size-3.5" />
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@colEntries.Length</span>
+                    </div>
+                    <div class="p-2">
+                        <div class="flex flex-col gap-1.5">
+                            @foreach (var ent in colEntries)
+                            {
+                                var entry = ent;
+                                var matchedIds = GetMatchedIds();
+                                var isMatch = matchedIds.Count == 0 || matchedIds.Contains(entry.Id);
+                                var isDimmed = matchedIds.Count > 0 && !matchedIds.Contains(entry.Id);
+                                <div class="@Cn.Merge("rounded-md border bg-card p-2.5 transition-all hover:bg-muted/50", (isMatch && matchedIds.Count > 0) ? "ring-2 ring-foreground" : "", isDimmed ? "opacity-30" : "")">
+                                    <div class="mb-1 flex items-start gap-2">
+                                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", TypeDotClass(entry.Type))"></span>
+                                        <span class="min-w-0 flex-1 font-medium text-sm leading-tight">@entry.Title</span>
+                                    </div>
+                                    <p class="mb-1.5 pl-3.5 text-muted-foreground text-xs leading-relaxed">@entry.Description</p>
+                                    <div class="flex items-center gap-2 pl-3.5">
+                                        <span class="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">@entry.Version</span>
+                                        <span class="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">@TypeLabelText(entry.Type)</span>
+                                        <span class="ml-auto flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground">@entry.AuthorInitials</span>
+                                    </div>
+                                </div>
+                            }
+                            @if (colEntries.Length == 0)
+                            {
+                                <div class="py-8 text-center text-muted-foreground/60 text-xs">No entries</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @_entries.Count(e => e.Status == "released") released · @_entries.Count(e => e.Type == "breaking") breaking changes
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Updated 8 min ago</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EntryItem(string Id, string Title, string Status, string Type, string Version, string Author, string AuthorInitials, string Description);
+    private record ColumnDef(string Id, string Title, string IconName);
+
+    private bool _open = false;
+    private string _search = "";
+
+    private static readonly EntryItem[] _entries =
+    [
+        new("cl1",  "AI-powered code completion",                    "planned",   "feature",     "v3.4.0", "Maya Singh", "MS", "Inline suggestions powered by local LLM"),
+        new("cl2",  "Cursor-based pagination for all list endpoints", "planned",   "improvement", "v3.4.0", "Liam Chen",  "LC", "Replaces offset pagination for better performance"),
+        new("cl3",  "Remove legacy OAuth1 support",                  "planned",   "breaking",    "v4.0.0", "Nina Park",  "NP", "OAuth1 endpoints will return 410 Gone"),
+        new("cl4",  "Real-time collaboration cursors",               "writing",   "feature",     "v3.3.0", "Jake Dunn",  "JD", "See teammate cursors and selections live"),
+        new("cl5",  "Fix timezone handling in scheduler",            "writing",   "fix",         "v3.2.1", "Maya Singh", "MS", "Scheduled events now respect user timezone"),
+        new("cl6",  "Redesigned settings panel",                     "writing",   "improvement", "v3.3.0", "Liam Chen",  "LC", "Grouped settings with search and keyboard nav"),
+        new("cl7",  "Webhook retry with exponential backoff",        "reviewing", "feature",     "v3.2.0", "Nina Park",  "NP", "Failed webhooks retry up to 5 times"),
+        new("cl8",  "Fix memory leak in WebSocket handler",          "reviewing", "fix",         "v3.2.1", "Jake Dunn",  "JD", "Connections now properly cleaned up on disconnect"),
+        new("cl9",  "Drop Node.js 18 support",                       "reviewing", "breaking",    "v4.0.0", "Maya Singh", "MS", "Minimum runtime is now Node.js 20 LTS"),
+        new("cl10", "Team billing and invoices",                     "released",  "feature",     "v3.1.0", "Liam Chen",  "LC", "Per-seat billing with downloadable invoices"),
+        new("cl11", "Fix CSV export encoding for Unicode",           "released",  "fix",         "v3.1.1", "Nina Park",  "NP", "UTF-8 BOM added for Excel compatibility"),
+        new("cl12", "Improved dashboard load time",                  "released",  "improvement", "v3.1.0", "Jake Dunn",  "JD", "40% faster initial render with streaming SSR"),
+    ];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("planned",   "Planned",   "list"),
+        new("writing",   "Writing",   "pen-line"),
+        new("reviewing", "Reviewing", "eye"),
+        new("released",  "Released",  "rocket"),
+    ];
+
+    private static readonly string[] _typeLegend = ["feature", "fix", "improvement", "breaking"];
+
+    private EntryItem[] GetColumnEntries(string status) =>
+        _entries.Where(e => e.Status == status).ToArray();
+
+    private HashSet<string> GetMatchedIds()
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return [];
+        var query = _search.Trim().ToLower();
+        var ids = new HashSet<string>();
+        foreach (var entry in _entries)
+        {
+            if (entry.Title.ToLower().Contains(query) ||
+                entry.Version.ToLower().Contains(query) ||
+                entry.Type.ToLower().Contains(query) ||
+                entry.Author.ToLower().Contains(query))
+            {
+                ids.Add(entry.Id);
+            }
+        }
+        return ids;
+    }
+
+    private bool HasMatches()
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return GetMatchedIds().Count > 0;
+    }
+
+    private async Task HandleOpenChanged(bool value)
+    {
+        _open = value;
+        if (!value) _search = "";
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleSearchChanged(string value)
+    {
+        _search = value;
+        await Task.CompletedTask;
+    }
+
+    private void ClosePopover()
+    {
+        _open = false;
+        _search = "";
+    }
+
+    private static string TypeDotClass(string type) => type switch
+    {
+        "feature"     => "bg-blue-500",
+        "fix"         => "bg-emerald-500",
+        "breaking"    => "bg-red-500",
+        "improvement" => "bg-amber-500",
+        _             => "",
+    };
+
+    private static string TypeLabelText(string type) => type switch
+    {
+        "feature"     => "Feature",
+        "fix"         => "Fix",
+        "breaking"    => "Breaking",
+        "improvement" => "Improvement",
+        _             => type,
+    };
+}

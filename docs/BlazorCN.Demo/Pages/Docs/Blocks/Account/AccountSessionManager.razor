@@ -1,0 +1,258 @@
+@* ============================================================
+   Block: account-session-manager
+   Title: AccountSessionManager
+   Description: An active sessions list for React and Next.js with device icons, IP addresses, location data, current session badge, individual revoke with confirmation, and bulk revoke built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-session-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-medium">Active Sessions</h2>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px] tabular-nums">
+                            @_sessions.Count
+                        </BadgeCn>
+                    </div>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Devices currently signed in to your account
+                    </p>
+                </div>
+                @if (_suspiciousCount > 0)
+                {
+                    <span class="flex items-center gap-1 text-xs text-amber-600">
+                        <LucideTriangleAlertCn Class="h-3 w-3" Size="12" />
+                        @_suspiciousCount unusual
+                    </span>
+                }
+            </div>
+
+            @* Security note *@
+            <div class="mt-2 flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2">
+                <LucideShieldCn Class="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" Size="12" />
+                <p class="text-[10px] leading-relaxed text-muted-foreground">
+                    If you don&apos;t recognize a session, revoke it immediately and change your password.
+                    Sessions from new locations are flagged automatically.
+                </p>
+            </div>
+        </div>
+
+        @* Session List *@
+        @foreach (var session in _sessions)
+        {
+            var isRevoking = _revokingId == session.Id;
+            var iconClass = session.Current ? "h-4 w-4 text-emerald-600" : session.Suspicious ? "h-4 w-4 text-amber-600" : "h-4 w-4 text-muted-foreground";
+            var iconBgClass = session.Current ? "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10"
+                            : session.Suspicious ? "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-amber-500/10"
+                            : "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50";
+            var rowClass = Cn.Merge("border-b px-4 py-3 last:border-b-0", session.Current ? "bg-muted/20" : "", session.Suspicious ? "border-l-2 border-l-amber-400" : "");
+
+            <div class="@rowClass" style="@(isRevoking ? "opacity:0.4" : "")">
+                <div class="flex items-start gap-3">
+                    @* Device icon *@
+                    <div class="@iconBgClass">
+                        @if (session.DeviceType == "laptop")
+                        {
+                            <LucideLaptopCn Class="@iconClass" Size="16" />
+                        }
+                        else if (session.DeviceType == "mobile")
+                        {
+                            <LucideSmartphoneCn Class="@iconClass" Size="16" />
+                        }
+                        else if (session.DeviceType == "tablet")
+                        {
+                            <LucideTabletCn Class="@iconClass" Size="16" />
+                        }
+                        else
+                        {
+                            <LucideMonitorCn Class="@iconClass" Size="16" />
+                        }
+                    </div>
+
+                    @* Session details *@
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium">@session.Device</span>
+                            @if (session.Current)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-600">
+                                    Current session
+                                </BadgeCn>
+                            }
+                            @if (session.Suspicious && !session.Current)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 bg-amber-500/10 px-1.5 text-[10px] text-amber-600">
+                                    Unusual location
+                                </BadgeCn>
+                            }
+                        </div>
+
+                        @* Metadata grid *@
+                        <div class="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span>@session.Browser on @session.Os</span>
+                            <span class="flex items-center gap-1">
+                                <LucideGlobeCn Class="h-2.5 w-2.5" Size="10" />
+                                @session.Location, @session.Country
+                            </span>
+                            <span class="font-mono text-[11px]">@session.Ip</span>
+                            <span>@session.LastActive</span>
+                        </div>
+
+                        <p class="mt-1 text-[10px] text-muted-foreground">
+                            Started @session.StartedAt
+                        </p>
+                    </div>
+
+                    @* Revoke button *@
+                    @if (!session.Current)
+                    {
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                  Class="h-7 shrink-0 gap-1 text-xs text-destructive hover:text-destructive"
+                                  Disabled="@(isRevoking || _isRevokingAll)"
+                                  OnClick="@(() => { _sessionToRevoke = session; _showRevokeDialog = true; })">
+                            @if (isRevoking)
+                            {
+                                <LucideLoaderCircleCn Class="h-3 w-3 animate-spin" Size="12" />
+                            }
+                            else
+                            {
+                                <LucideLogOutCn Class="h-3 w-3" Size="12" />
+                            }
+                            Revoke
+                        </ButtonCn>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Empty state *@
+        @if (_otherSessionCount == 0 && _sessions.Count > 0)
+        {
+            <div class="border-t px-4 py-4 text-center">
+                <LucideShieldCn Class="mx-auto mb-1 h-4 w-4 text-emerald-500" Size="16" />
+                <p class="text-xs text-muted-foreground">Only your current session is active</p>
+            </div>
+        }
+
+        @* Bulk Revoke Footer *@
+        @if (_otherSessionCount > 0)
+        {
+            <div class="border-t px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="text-[10px] text-muted-foreground">
+                        <span class="tabular-nums">@_otherSessionCount</span> other @(_otherSessionCount == 1 ? "session" : "sessions") besides this device
+                    </div>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                              Class="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
+                              Disabled="@_isRevokingAll"
+                              OnClick="@(() => _showBulkConfirm = true)">
+                        @if (_isRevokingAll)
+                        {
+                            <LucideLoaderCircleCn Class="h-3 w-3 animate-spin" Size="12" />
+                            @("Revoking...")
+                        }
+                        else
+                        {
+                            <LucideLogOutCn Class="h-3 w-3" />
+                            @("Revoke all other sessions")
+                        }
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Single Session Revoke Confirmation *@
+    <AlertDialogCn @bind-Open="_showRevokeDialog">
+        <AlertDialogContentCn Class="sm:max-w-md">
+            <AlertDialogHeaderCn>
+                <AlertDialogTitleCn>Revoke this session?</AlertDialogTitleCn>
+                <AlertDialogDescriptionCn>
+                    @if (_sessionToRevoke != null)
+                    {
+                        @($"This will sign out {_sessionToRevoke.Device} ({_sessionToRevoke.Browser} on {_sessionToRevoke.Os}) from {_sessionToRevoke.Location}, {_sessionToRevoke.Country}. The device will need to sign in again.")
+                    }
+                    else
+                    {
+                        @("This session will be terminated immediately.")
+                    }
+                </AlertDialogDescriptionCn>
+            </AlertDialogHeaderCn>
+            <AlertDialogFooterCn>
+                <AlertDialogCancelCn>Cancel</AlertDialogCancelCn>
+                <ButtonCn Variant="ButtonVariant.Destructive" OnClick="ConfirmRevoke">
+                    Revoke Session
+                </ButtonCn>
+            </AlertDialogFooterCn>
+        </AlertDialogContentCn>
+    </AlertDialogCn>
+
+    @* Bulk Revoke Confirmation *@
+    <AlertDialogCn @bind-Open="_showBulkConfirm">
+        <AlertDialogContentCn Class="sm:max-w-md">
+            <AlertDialogHeaderCn>
+                <AlertDialogTitleCn>Revoke all other sessions?</AlertDialogTitleCn>
+                <AlertDialogDescriptionCn>
+                    This will sign out @_otherSessionCount @(_otherSessionCount == 1 ? "device" : "devices") from your account. Only your current session on this device will remain active. All other devices will need to sign in again.
+                </AlertDialogDescriptionCn>
+            </AlertDialogHeaderCn>
+            <AlertDialogFooterCn>
+                <AlertDialogCancelCn>Cancel</AlertDialogCancelCn>
+                <ButtonCn Variant="ButtonVariant.Destructive" OnClick="HandleRevokeAll">
+                    Revoke All Sessions
+                </ButtonCn>
+            </AlertDialogFooterCn>
+        </AlertDialogContentCn>
+    </AlertDialogCn>
+</section>
+
+@code {
+    private record SessionInfo(
+        string Id, string Device, string DeviceType, string Browser, string Os,
+        string Ip, string Location, string Country, string StartedAt, string LastActive,
+        bool Current, bool Suspicious);
+
+    private string? _revokingId;
+    private bool _showRevokeDialog;
+    private bool _showBulkConfirm;
+    private bool _isRevokingAll;
+    private SessionInfo? _sessionToRevoke;
+
+    private int _otherSessionCount => _sessions.Count(s => !s.Current);
+    private int _suspiciousCount => _sessions.Count(s => s.Suspicious);
+
+    private List<SessionInfo> _sessions =
+    [
+        new("sess-a1b2c3", "MacBook Pro 16\"", "laptop", "Chrome 124.0", "macOS Sequoia 15.4", "192.168.1.105", "Brooklyn, NY", "US", "Apr 5, 2026 9:15 AM", "Active now", true, false),
+        new("sess-d4e5f6", "iPhone 16 Pro", "mobile", "Safari 19.3", "iOS 19.4", "10.0.0.42", "Brooklyn, NY", "US", "Apr 4, 2026 6:30 PM", "3 hours ago", false, false),
+        new("sess-g7h8i9", "Windows Desktop", "desktop", "Firefox 135.0", "Windows 11 Pro", "203.45.67.89", "London", "UK", "Apr 2, 2026 2:10 PM", "3 days ago", false, true),
+        new("sess-j1k2l3", "iPad Air M3", "tablet", "Safari 19.3", "iPadOS 19.4", "172.16.0.15", "Brooklyn, NY", "US", "Mar 31, 2026 11:45 AM", "5 days ago", false, false),
+        new("sess-m4n5o6", "Pixel 9 Pro", "mobile", "Chrome 124.0", "Android 16", "98.76.54.32", "San Francisco, CA", "US", "Mar 28, 2026 4:22 PM", "8 days ago", false, false),
+    ];
+
+    private async Task ConfirmRevoke()
+    {
+        if (_sessionToRevoke == null) return;
+        var id = _sessionToRevoke.Id;
+        _showRevokeDialog = false;
+        _sessionToRevoke = null;
+        _revokingId = id;
+        StateHasChanged();
+        await Task.Delay(800);
+        _sessions.RemoveAll(s => s.Id == id);
+        _revokingId = null;
+    }
+
+    private async Task HandleRevokeAll()
+    {
+        _showBulkConfirm = false;
+        _isRevokingAll = true;
+        StateHasChanged();
+        await Task.Delay(1200);
+        _sessions.RemoveAll(s => !s.Current);
+        _isRevokingAll = false;
+    }
+}

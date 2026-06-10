@@ -1,0 +1,155 @@
+@* ============================================================
+   Block: monitoring-access-control-changes
+   Title: MonitoringAccessControlChanges
+   Description: Real-time monitoring for IAM and access control modifications, featuring role updates and permission change trends with shadcn/ui.
+   Source: original/blocks/monitoring/monitoring-access-control-changes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="lock" Size="16" Class="size-4 text-foreground" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">IAM Activity</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">
+                        Permission Shifts · Security Context
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="size-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+                <span class="text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Audit Required
+                </span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3">
+            @foreach (var entry in _statsWithIndex)
+            {
+                var stat = entry.Stat;
+                var i = entry.Index;
+                var isWarning = stat.Status == "warning";
+                var strokeColor = isWarning ? "#f59e0b" : "#10b981";
+                var gradientId = $"gradient-access-{i}";
+                var gradientFill = $"url(#{gradientId})";
+                var cellClass = StatCellClass(i);
+                var badgeClass = BadgeClass(isWarning);
+                var pts = BuildPolylinePoints(stat.Trend);
+                var gradientMarkup = BuildGradientMarkup(gradientId, strokeColor);
+                <div class="@cellClass">
+                    <div class="flex items-center justify-between mb-2">
+                        <LucideIconCn Name="@stat.IconName" Size="16" Class="size-4 text-muted-foreground" />
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@badgeClass">
+                            @(isWarning ? "Critical" : "Standard")
+                        </BadgeCn>
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-semibold tabular-nums tracking-tight">
+                            @stat.Value
+                        </span>
+                        <span class="text-muted-foreground text-xs font-medium">@stat.Unit</span>
+                    </div>
+                    <p class="text-xs text-muted-foreground mt-0.5">@stat.Label</p>
+
+                    <div class="h-10 w-full mt-4">
+                        <svg width="100%" height="100%" viewBox="0 0 100 40" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                @((MarkupString)gradientMarkup)
+                            </defs>
+                            <polygon points="@pts.FillPoints" fill="@gradientFill" />
+                            <polyline points="@pts.LinePoints" fill="none" stroke="@strokeColor" stroke-width="1.5" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <hr class="border-border" />
+
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between">
+            <span class="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
+                Last Change: role_admin assigned to @@dev-lead
+            </span>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                IAM Settings →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, int Value, string Unit, string IconName, string Status, int[] Trend);
+
+    private record PolylineData(string LinePoints, string FillPoints);
+
+    private record StatWithIndex(StatItem Stat, int Index);
+
+    private static readonly int[] _baseData = [4, 2, 5, 8, 3, 12, 6, 4, 2, 5];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Role Changes",  12, "cnt", "users",     "healthy", _baseData),
+        new("Admins Added",   2, "new", "user-plus",  "warning", [1, 2, 2, 2, 0, 0, 0, 1, 2, 2]),
+        new("Access Revoked", 8, "cnt", "user-minus", "healthy", [2, 1, 2, 4, 1, 6, 3, 2, 1, 2]),
+    ];
+
+    private IEnumerable<StatWithIndex> _statsWithIndex =>
+        _stats.Select((s, idx) => new StatWithIndex(s, idx));
+
+    private static string StatCellClass(int i) =>
+        i != _stats.Length - 1
+            ? "p-4 md:border-r border-b md:border-b-0"
+            : "p-4";
+
+    private static string BadgeClass(bool isWarning) =>
+        Cn.Merge(
+            "h-5 px-1.5 font-normal text-[10px]",
+            isWarning
+                ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20");
+
+    private static string BuildGradientMarkup(string id, string color)
+    {
+        var escapedId = System.Net.WebUtility.HtmlEncode(id);
+        var escapedColor = System.Net.WebUtility.HtmlEncode(color);
+        return $"<linearGradient id=\"{escapedId}\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">" +
+               $"<stop offset=\"5%\" stop-color=\"{escapedColor}\" stop-opacity=\"0.1\"/>" +
+               $"<stop offset=\"95%\" stop-color=\"{escapedColor}\" stop-opacity=\"0\"/>" +
+               "</linearGradient>";
+    }
+
+    private static PolylineData BuildPolylinePoints(int[] trend)
+    {
+        if (trend.Length == 0)
+            return new PolylineData("", "");
+
+        var maxVal = trend.Max();
+        if (maxVal == 0) maxVal = 1;
+
+        var count = trend.Length;
+        var linePoints = new System.Text.StringBuilder();
+        var fillPoints = new System.Text.StringBuilder();
+
+        for (var idx = 0; idx < count; idx++)
+        {
+            var x = (double)idx / (count - 1) * 100.0;
+            var y = 40.0 - ((double)trend[idx] / maxVal * 36.0);
+            if (idx > 0)
+            {
+                linePoints.Append(' ');
+                fillPoints.Append(' ');
+            }
+            linePoints.Append($"{x:F1},{y:F1}");
+            fillPoints.Append($"{x:F1},{y:F1}");
+        }
+
+        fillPoints.Append(" 100,40 0,40");
+
+        return new PolylineData(linePoints.ToString(), fillPoints.ToString());
+    }
+}

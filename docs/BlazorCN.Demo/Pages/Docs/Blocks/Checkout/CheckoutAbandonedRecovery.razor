@@ -1,0 +1,152 @@
+@* ============================================================
+   Block: checkout-abandoned-recovery
+   Title: CheckoutAbandonedRecovery
+   Description: A React abandoned cart recovery page for Next.js with saved cart items, discount offer, countdown timer, and complete purchase CTA using shadcn/ui Button, Badge, and Tailwind CSS
+   Source: original/blocks/checkout/checkout-abandoned-recovery.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shopping-cart" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">You left something behind</span>
+            </div>
+            <p class="mt-1 text-muted-foreground text-xs">Last visited 3 hours ago</p>
+        </div>
+
+        @* Discount banner *@
+        <div class="flex items-center gap-3 border-b bg-muted/50 px-4 py-3">
+            <LucideIconCn Name="tag" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">@_discountPercent% off your entire order</span>
+                <p class="text-muted-foreground text-xs">
+                    Exclusive discount for completing your purchase
+                </p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground" />
+                <span class="font-mono text-xs tabular-nums">
+                    @(_minutes.ToString("D2")):@(_seconds.ToString("D2"))
+                </span>
+            </div>
+        </div>
+
+        @* Cart items *@
+        <div>
+            @{
+                var visibleItems = _cartItems.Where(i => !_removed.Contains(i.Id)).ToList();
+            }
+            @foreach (var item in visibleItems)
+            {
+                var capturedItem = item;
+                var isLast = visibleItems.IndexOf(item) == visibleItems.Count - 1;
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-3", isLast ? "" : "border-b")">
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground text-xs font-medium">
+                        @item.Image
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <span class="font-medium text-sm">@item.Name</span>
+                        <p class="text-muted-foreground text-xs">
+                            @item.Variant@(item.Quantity > 1 ? $" · Qty {item.Quantity}" : "")
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <div class="text-right">
+                            <span class="text-muted-foreground text-xs line-through">
+                                $@((item.Price * item.Quantity).ToString("F2"))
+                            </span>
+                            <p class="font-medium text-sm tabular-nums">
+                                $@((item.Price * item.Quantity * (1 - _discountPercent / 100.0)).ToString("F2"))
+                            </p>
+                        </div>
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0" OnClick="@(() => RemoveItem(capturedItem.Id))">
+                            <LucideIconCn Name="x" Size="12" Class="size-3 text-muted-foreground" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Totals *@
+        <div class="border-t px-4 py-3 space-y-1.5">
+            <div class="flex justify-between text-sm">
+                <span class="text-muted-foreground">Subtotal</span>
+                <span class="tabular-nums">$@(_subtotal.ToString("F2"))</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-muted-foreground">Discount (@_discountPercent%)</span>
+                <span class="tabular-nums text-emerald-600 dark:text-emerald-400">
+                    -$@(_discount.ToString("F2"))
+                </span>
+            </div>
+            <div class="flex justify-between text-sm font-medium border-t pt-1.5">
+                <span>Total</span>
+                <span class="tabular-nums">$@(_total.ToString("F2"))</span>
+            </div>
+        </div>
+
+        @* CTA *@
+        <div class="border-t px-4 py-3">
+            <ButtonCn Class="w-full">Complete Purchase</ButtonCn>
+            <p class="mt-2 text-center text-muted-foreground text-xs">
+                Your @_discountPercent% discount is applied automatically
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CartItem(string Id, string Name, string Variant, double Price, int Quantity, string Image);
+
+    private static readonly CartItem[] _cartItems =
+    [
+        new("1", "Wireless Noise-Canceling Headphones", "Midnight Black", 249.99, 1, "WH"),
+        new("2", "Mechanical Keyboard", "Cherry MX Brown / TKL", 159.0, 1, "MK"),
+        new("3", "USB-C Charging Cable 2m", "Braided / White", 18.99, 2, "UC"),
+    ];
+
+    private const int _discountPercent = 15;
+
+    private double _subtotal = _cartItems.Sum(i => i.Price * i.Quantity);
+    private double _discount => _subtotal * (_discountPercent / 100.0);
+    private double _total => _subtotal - _discount;
+
+    private int _minutes = 23;
+    private int _seconds = 47;
+    private List<string> _removed = [];
+
+    private System.Threading.Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_seconds > 0)
+                {
+                    _seconds--;
+                }
+                else if (_minutes > 0)
+                {
+                    _minutes--;
+                    _seconds = 59;
+                }
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private void RemoveItem(string id)
+    {
+        _removed = [.. _removed, id];
+        _subtotal = _cartItems.Where(i => !_removed.Contains(i.Id)).Sum(i => i.Price * i.Quantity);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

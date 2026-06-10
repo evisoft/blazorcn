@@ -1,0 +1,258 @@
+@* ============================================================
+   Block: checkout-coupon-stacking
+   Title: CheckoutCouponStacking
+   Description: A checkout coupon stacking block for React and Next.js with multiple applied discount codes, percentage off and fixed amount coupons, free shipping coupon, add another code input, and savings summary showing total saved built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/checkout/checkout-coupon-stacking.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="tag" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Discounts &amp; Coupons</span>
+            </div>
+            <p class="mt-1 text-muted-foreground text-xs">
+                Stack multiple discount codes for maximum savings.
+            </p>
+        </div>
+
+        @* Cart items summary *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">
+                @_cartItems.Length items
+            </span>
+            <div class="mt-1.5 space-y-1">
+                @foreach (var item in _cartItems)
+                {
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">@item.Name</span>
+                        <span class="text-muted-foreground text-xs tabular-nums">$@(item.Price).00</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Applied coupons *@
+        @if (_appliedCoupons.Count > 0)
+        {
+            <div class="border-b px-4 py-3">
+                <span class="font-medium text-muted-foreground text-xs">
+                    Applied discounts (@_appliedCoupons.Count)
+                </span>
+                <div class="mt-2 space-y-1">
+                    @foreach (var it in _appliedCoupons)
+                    {
+                        var coupon = it;
+                        <div class="flex items-center gap-2.5 rounded-md bg-muted/50 px-2.5 py-2">
+                            @if (coupon.Type == "percentage")
+                            {
+                                <LucideIconCn Name="percent" Size="12" Class="size-3 text-muted-foreground" />
+                            }
+                            else if (coupon.Type == "fixed")
+                            {
+                                <LucideIconCn Name="tag" Size="12" Class="size-3 text-muted-foreground" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="truck" Size="12" Class="size-3 text-muted-foreground" />
+                            }
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono font-medium text-xs">@coupon.Code</span>
+                                    <span class="text-muted-foreground text-xs">&middot;</span>
+                                    <span class="text-muted-foreground text-xs">@coupon.Label</span>
+                                </div>
+                            </div>
+                            <span class="font-medium text-emerald-600 text-xs tabular-nums dark:text-emerald-400">
+                                @(coupon.Type == "shipping" ? $"-${_shippingCost}.00" : $"-${coupon.Savings}.00")
+                            </span>
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-5 shrink-0 px-1"
+                                      OnClick="@(() => RemoveCoupon(coupon.Code))">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </ButtonCn>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Add coupon input *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">
+                @(_appliedCoupons.Count > 0 ? "Add another code" : "Enter coupon code")
+            </span>
+            <div class="mt-2 flex items-center gap-2">
+                <InputCn type="text"
+                         Placeholder="Coupon code"
+                         @bind-Value="_code"
+                         Class="h-8 font-mono text-xs uppercase" />
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 gap-1 px-3 text-xs"
+                          OnClick="HandleApply"
+                          Disabled="@(_code.Trim().Length == 0)">
+                    <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                    Apply
+                </ButtonCn>
+            </div>
+            @if (_error != null)
+            {
+                <p class="mt-1.5 text-red-600 text-xs dark:text-red-400">@_error</p>
+            }
+        </div>
+
+        @* Savings summary *@
+        @if (_appliedCoupons.Count > 0)
+        {
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center gap-2 rounded-md bg-emerald-500/10 px-2.5 py-2">
+                    <LucideIconCn Name="check" Size="14" Class="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <div class="flex-1">
+                        <span class="font-medium text-emerald-600 text-xs dark:text-emerald-400">
+                            Total savings with @_appliedCoupons.Count coupon@(_appliedCoupons.Count > 1 ? "s" : "")
+                        </span>
+                    </div>
+                    <span class="font-semibold text-emerald-600 text-sm tabular-nums dark:text-emerald-400">
+                        -$@(_discountFromCoupons + (_hasFreeship ? _shippingCost : 0)).00
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* Price breakdown *@
+        <div class="border-b px-4 py-3">
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-muted-foreground text-xs">Subtotal</span>
+                    <span class="text-xs tabular-nums">$@_orderSubtotal.00</span>
+                </div>
+                @if (_discountFromCoupons > 0)
+                {
+                    <div class="flex items-center justify-between">
+                        <span class="text-emerald-600 text-xs dark:text-emerald-400">Discounts</span>
+                        <span class="text-emerald-600 text-xs tabular-nums dark:text-emerald-400">
+                            -$@_discountFromCoupons.00
+                        </span>
+                    </div>
+                }
+                <div class="flex items-center justify-between">
+                    <span class="text-muted-foreground text-xs">Shipping</span>
+                    @if (_hasFreeship)
+                    {
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-muted-foreground text-xs tabular-nums line-through">
+                                $@_shippingCost.00
+                            </span>
+                            <span class="text-emerald-600 text-xs dark:text-emerald-400">Free</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="text-xs tabular-nums">$@_shippingCost.00</span>
+                    }
+                </div>
+                <div class="flex items-center justify-between border-t pt-1.5">
+                    <span class="font-medium text-sm">Total</span>
+                    <span class="font-semibold text-2xl tabular-nums">$@_finalTotal.00</span>
+                </div>
+            </div>
+        </div>
+
+        @* CTA *@
+        <div class="border-b px-4 py-3">
+            <ButtonCn Size="ButtonSize.Sm" Class="h-8 w-full text-xs">
+                Checkout &middot; $@_finalTotal.00
+            </ButtonCn>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Coupons cannot be combined with other promotions unless stated
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CartItem(string Id, string Name, int Price);
+
+    private record CouponDef(string Code, string Type, int Value, string Label);
+
+    private record AppliedCoupon(string Code, string Type, int Value, string Label, int Savings);
+
+    private static readonly CartItem[] _cartItems =
+    [
+        new("1", "Ceramic Pour-Over Dripper", 42),
+        new("2", "Single Origin Coffee Beans (340g)", 24),
+        new("3", "Insulated Travel Mug", 38),
+        new("4", "Reusable Coffee Filters (3-pack)", 18),
+        new("5", "Digital Coffee Scale", 34),
+    ];
+
+    private static readonly Dictionary<string, CouponDef> _couponDatabase = new()
+    {
+        ["SAVE15"]   = new("SAVE15",   "percentage", 15, "15% off"),
+        ["FLAT10"]   = new("FLAT10",   "fixed",      10, "$10 off"),
+        ["FREESHIP"] = new("FREESHIP", "shipping",    0, "Free shipping"),
+        ["WELCOME5"] = new("WELCOME5", "fixed",       5, "$5 welcome discount"),
+        ["EXTRA20"]  = new("EXTRA20",  "percentage", 20, "20% off"),
+    };
+
+    private const int _orderSubtotal = 156;
+    private const int _shippingCost = 12;
+
+    private List<AppliedCoupon> _appliedCoupons =
+    [
+        new("SAVE15", "percentage", 15, "15% off", 23),
+    ];
+
+    private string _code = "";
+    private string? _error = null;
+
+    private bool _hasFreeship => _appliedCoupons.Any(c => c.Type == "shipping");
+    private int _effectiveShipping => _hasFreeship ? 0 : _shippingCost;
+    private int _discountFromCoupons => _appliedCoupons.Where(c => c.Type != "shipping").Sum(c => c.Savings);
+    private int _finalTotal => Math.Max(0, _orderSubtotal - _discountFromCoupons + _effectiveShipping);
+
+    private int CalculateSavings(CouponDef coupon)
+    {
+        if (coupon.Type == "percentage") return (int)Math.Round(_orderSubtotal * (coupon.Value / 100.0));
+        if (coupon.Type == "fixed")      return coupon.Value;
+        if (coupon.Type == "shipping")   return _shippingCost;
+        return 0;
+    }
+
+    private void HandleApply()
+    {
+        var upperCode = _code.Trim().ToUpperInvariant();
+
+        if (string.IsNullOrEmpty(upperCode))
+        {
+            _error = "Enter a coupon code.";
+            return;
+        }
+
+        if (_appliedCoupons.Any(c => c.Code == upperCode))
+        {
+            _error = "This code is already applied.";
+            return;
+        }
+
+        if (!_couponDatabase.TryGetValue(upperCode, out var couponDef))
+        {
+            _error = "Invalid coupon code. Please check and try again.";
+            return;
+        }
+
+        var savings = CalculateSavings(couponDef);
+        _appliedCoupons = [.._appliedCoupons, new(couponDef.Code, couponDef.Type, couponDef.Value, couponDef.Label, savings)];
+        _code = "";
+        _error = null;
+    }
+
+    private void RemoveCoupon(string couponCode)
+    {
+        _appliedCoupons = _appliedCoupons.Where(c => c.Code != couponCode).ToList();
+    }
+}

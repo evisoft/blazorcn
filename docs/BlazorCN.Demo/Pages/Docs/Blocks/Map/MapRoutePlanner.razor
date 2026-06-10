@@ -1,0 +1,238 @@
+@* ============================================================
+   Block: map-route-planner
+   Title: MapRoutePlanner
+   Description: React multi-stop route planner block for Next.js with draggable waypoints, route visualization, distance and time estimates, stop reordering, and optimization controls using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-route-planner.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="navigation" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Route Planner</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-muted-foreground tabular-nums">@(_dist.ToString("F1")) km</span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground tabular-nums">@_time</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    @_stops.Count stops
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="flex flex-col md:flex-row">
+            @* Stop list sidebar *@
+            <div class="w-full border-b md:w-72 md:shrink-0 md:border-b-0 md:border-r">
+                <div class="max-h-[350px] overflow-y-auto md:max-h-[462px]">
+                    @foreach (var stop in _stops)
+                    {
+                        var s = stop;
+                        var index = _stops.IndexOf(s);
+                        var colorClass = _markerColors[index % _markerColors.Length];
+                        var isDragOver = _dragOverId == s.Id;
+                        <div
+                            class="@Cn.Merge("flex items-center gap-2 border-b px-3 py-2.5 transition-colors last:border-b-0", isDragOver ? "bg-muted/50" : "")"
+                            draggable="true"
+                            @ondragstart="@((e) => OnDragStart(e, index))"
+                            @ondragover:preventDefault="true"
+                            @ondragover="@(() => _dragOverId = s.Id)"
+                            @ondragleave="@(() => _dragOverId = null)"
+                            @ondrop:preventDefault="true"
+                            @ondrop="@(() => OnDrop(index))">
+                            <LucideIconCn Name="grip-vertical" Size="14" Class="size-3.5 shrink-0 cursor-grab text-muted-foreground/40" />
+                            <div class="@($"flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium text-white {colorClass}")">
+                                @(index + 1)
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-medium">@s.Name</p>
+                                <p class="truncate text-xs text-muted-foreground">@s.Address</p>
+                            </div>
+                            @if (_stops.Count > 2)
+                            {
+                                var sid = s.Id;
+                                <button
+                                    type="button"
+                                    @onclick="@(() => RemoveStop(sid))"
+                                    class="shrink-0 rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-red-500">
+                                    <LucideIconCn Name="trash" Size="14" Class="size-3.5" />
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="border-t px-3 py-2">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 w-full gap-1.5 text-xs text-muted-foreground">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                        Add stop
+                    </ButtonCn>
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[350px] flex-1 md:h-[500px]">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Route line (SVG overlay) *@
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                        @{
+                            var pts = string.Join(" ", _stops.Select(s =>
+                            {
+                                var p = GetMarkerPosition(s.Lng, s.Lat);
+                                return $"{p.X:F1}%,{p.Y:F1}%";
+                            }));
+                        }
+                        @((MarkupString)$"<polyline points=\"{pts}\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"3\" stroke-opacity=\"0.8\" />")
+                    </svg>
+
+                    @* Stop markers *@
+                    @foreach (var stop in _stops)
+                    {
+                        var s = stop;
+                        var index = _stops.IndexOf(s);
+                        var colorClass = _markerColors[index % _markerColors.Length];
+                        var pos = GetMarkerPosition(s.Lng, s.Lat);
+                        var nextStop = index < _stops.Count - 1 ? _stops[index + 1] : null;
+                        var distToNext = nextStop != null ? HaversineDistance(s.Lng, s.Lat, nextStop.Lng, nextStop.Lat) : 0.0;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                            <div class="group relative">
+                                <div class="@($"flex size-6 items-center justify-center rounded-full text-[11px] font-semibold text-white shadow-md {colorClass}")">
+                                    @(index + 1)
+                                </div>
+                                <span class="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 rounded bg-background/90 px-1 py-0.5 text-[10px] font-medium shadow-sm whitespace-nowrap">
+                                    @s.Name
+                                </span>
+                                @* Tooltip on hover *@
+                                <div class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 hidden group-hover:block min-w-[120px] rounded border bg-card px-2 py-1.5 shadow-lg text-center">
+                                    <p class="font-medium text-xs">@s.Name</p>
+                                    <p class="text-[10px] opacity-70">@s.Address</p>
+                                    @if (nextStop != null)
+                                    {
+                                        <p class="mt-0.5 text-[10px] opacity-70 tabular-nums">@distToNext.ToString("F1") km to next</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                    Map view — New York City
+                </div>
+            </div>
+        </div>
+
+        @* Footer summary *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="map-pin" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="text-xs text-muted-foreground">@(_stops.Count > 0 ? _stops[0].Name : "")</span>
+            </div>
+            <span class="text-xs text-muted-foreground">to</span>
+            <span class="text-xs text-muted-foreground">@(_stops.Count > 0 ? _stops[_stops.Count - 1].Name : "")</span>
+            <div class="ml-auto flex items-center gap-2">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Optimize route
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Stop(string Id, string Name, string Address, double Lng, double Lat);
+
+    private static readonly string[] _markerColors =
+    [
+        "bg-blue-500",
+        "bg-emerald-500",
+        "bg-amber-500",
+        "bg-violet-500",
+        "bg-rose-500",
+        "bg-cyan-500",
+    ];
+
+    private List<Stop> _stops =
+    [
+        new("a", "Warehouse HQ",   "350 5th Ave, New York",         -73.9857, 40.7484),
+        new("b", "Brooklyn Drop",  "200 Eastern Pkwy, Brooklyn",    -73.9632, 40.6714),
+        new("c", "Queens Depot",   "89-02 Astoria Blvd, Queens",    -73.878,  40.7644),
+        new("d", "Jersey City Hub","30 Hudson St, Jersey City",     -74.0346, 40.7178),
+    ];
+
+    private string? _dragOverId = null;
+    private int _dragFromIndex = -1;
+
+    private double _dist => TotalDistance(_stops);
+    private string _time => EstimateTime(_dist);
+
+    private static double HaversineDistance(double lng1, double lat1, double lng2, double lat2)
+    {
+        const double R = 6371;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLon = (lng2 - lng1) * Math.PI / 180;
+        var lat1r = lat1 * Math.PI / 180;
+        var lat2r = lat2 * Math.PI / 180;
+        var sinHalf = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+                    + Math.Cos(lat1r) * Math.Cos(lat2r)
+                    * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(sinHalf), Math.Sqrt(1 - sinHalf));
+    }
+
+    private static double TotalDistance(List<Stop> stops)
+    {
+        double d = 0;
+        for (int i = 0; i < stops.Count - 1; i++)
+        {
+            d += HaversineDistance(stops[i].Lng, stops[i].Lat, stops[i + 1].Lng, stops[i + 1].Lat);
+        }
+        return d;
+    }
+
+    private static string EstimateTime(double km)
+    {
+        var minutes = (int)Math.Round(km / 40 * 60);
+        if (minutes < 60) return $"{minutes} min";
+        var h = minutes / 60;
+        var m = minutes % 60;
+        return m > 0 ? $"{h}h {m}m" : $"{h}h";
+    }
+
+    private void RemoveStop(string id)
+    {
+        _stops = _stops.Where(s => s.Id != id).ToList();
+    }
+
+    private void OnDragStart(Microsoft.AspNetCore.Components.Web.DragEventArgs e, int index)
+    {
+        _dragFromIndex = index;
+    }
+
+    private void OnDrop(int toIndex)
+    {
+        _dragOverId = null;
+        if (_dragFromIndex < 0 || _dragFromIndex == toIndex) return;
+        var item = _stops[_dragFromIndex];
+        _stops.RemoveAt(_dragFromIndex);
+        _stops.Insert(toIndex, item);
+        _dragFromIndex = -1;
+    }
+
+    // Map longitude/latitude to CSS percentage positions.
+    // Viewport: lon [-74.07, -73.85], lat [40.65, 40.79]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.07, lonMax = -73.85;
+        const double latMin = 40.65,  latMax = 40.79;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

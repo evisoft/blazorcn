@@ -1,0 +1,181 @@
+@* ============================================================
+   Block: checkout-marketplace-multi-seller
+   Title: CheckoutMarketplaceMultiSeller
+   Description: A marketplace checkout for React and Next.js with items grouped by seller, per-seller shipping options, seller policy badges, and a combined order total using shadcn/ui and Tailwind CSS
+   Source: original/blocks/checkout/checkout-marketplace-multi-seller.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="package" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Marketplace Checkout</span>
+            <span class="ml-auto text-muted-foreground text-xs">
+                @_totalItems items from @_sellers.Length sellers
+            </span>
+        </div>
+
+        @* Seller groups *@
+        @for (var si = 0; si < _sellers.Length; si++)
+        {
+            var seller = _sellers[si];
+            var sellerIndex = si;
+            var subtotal = GetSellerSubtotal(seller);
+            var shippingCost = GetSellerShippingCost(seller);
+            var isLast = sellerIndex == _sellers.Length - 1;
+            <div class="@Cn.Merge(!isLast ? "border-b" : "")">
+                @* Seller header *@
+                <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2">
+                    <LucideIconCn Name="store" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-sm">@seller.Name</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                        @seller.Items.Length @(seller.Items.Length == 1 ? "item" : "items")
+                    </BadgeCn>
+                </div>
+
+                @* Items *@
+                @foreach (var item in seller.Items)
+                {
+                    <div class="flex items-center justify-between border-b px-4 py-2.5">
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm">@item.Name</span>
+                            <p class="text-muted-foreground text-xs">
+                                @item.Variant
+                                @if (item.Quantity > 1)
+                                {
+                                    <span> &middot; Qty @item.Quantity</span>
+                                }
+                            </p>
+                        </div>
+                        <span class="shrink-0 font-medium text-sm tabular-nums">
+                            $@((item.Price * item.Quantity).ToString("F2"))
+                        </span>
+                    </div>
+                }
+
+                @* Shipping selector *@
+                <div class="flex items-center gap-3 border-b px-4 py-2.5">
+                    <LucideIconCn Name="truck" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                    <div class="flex-1">
+                        @{
+                            var sellerId = seller.Id;
+                        }
+                        <SelectCn Value="@_selectedShipping[sellerId]"
+                                  ValueChanged="@((string v) => SetShipping(sellerId, v))">
+                            <SelectTriggerCn Class="h-8">
+                                <SelectValueCn />
+                            </SelectTriggerCn>
+                            <SelectContentCn>
+                                @foreach (var opt in seller.Shipping)
+                                {
+                                    var optionLabel = opt.Price > 0
+                                        ? $"{opt.Label} · {opt.Estimate} (${opt.Price.ToString("F2")})"
+                                        : $"{opt.Label} · {opt.Estimate} (Free)";
+                                    <SelectItemCn Value="@opt.Id">@optionLabel</SelectItemCn>
+                                }
+                            </SelectContentCn>
+                        </SelectCn>
+                    </div>
+                    <span class="shrink-0 text-sm tabular-nums">
+                        @(shippingCost > 0 ? $"${shippingCost.ToString("F2")}" : "Free")
+                    </span>
+                </div>
+
+                @* Seller policy *@
+                <div class="flex items-center justify-between px-4 py-2">
+                    <span class="text-muted-foreground text-xs">@seller.Policy</span>
+                    <span class="text-muted-foreground text-xs tabular-nums">
+                        Subtotal: $@((subtotal + shippingCost).ToString("F2"))
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* Combined totals *@
+        <div class="border-t px-4 py-3 space-y-1.5">
+            <div class="flex justify-between text-sm">
+                <span class="text-muted-foreground">Items (@_totalItems)</span>
+                <span class="tabular-nums">$@_itemsTotal.ToString("F2")</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-muted-foreground">Shipping (@_sellers.Length sellers)</span>
+                <span class="tabular-nums">$@_shippingTotal.ToString("F2")</span>
+            </div>
+            <div class="flex justify-between border-t pt-1.5 text-sm font-medium">
+                <span>Total</span>
+                <span class="tabular-nums">$@_total.ToString("F2")</span>
+            </div>
+        </div>
+
+        @* CTA *@
+        <div class="border-t px-4 py-3">
+            <ButtonCn Class="w-full">Place Order &middot; $@_total.ToString("F2")</ButtonCn>
+            <p class="mt-2 text-center text-muted-foreground text-xs">
+                Each seller will ship separately. Tracking numbers sent via email.
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CartItem(string Id, string Name, string Variant, double Price, int Quantity);
+    private record ShippingOption(string Id, string Label, double Price, string Estimate);
+    private record Seller(string Id, string Name, string Policy, CartItem[] Items, ShippingOption[] Shipping);
+
+    private static readonly Seller[] _sellers =
+    [
+        new("s1", "Nordic Craft Studio", "30-day returns accepted",
+        [
+            new("i1", "Ceramic Pour-Over Set", "Matte White", 68, 1),
+            new("i2", "Linen Table Runner", "Natural / 72 in", 42, 1),
+        ],
+        [
+            new("sh1", "Standard", 5.99, "5-7 business days"),
+            new("sh2", "Express", 12.99, "2-3 business days"),
+        ]),
+        new("s2", "Voltaic Audio", "14-day returns, buyer pays return shipping",
+        [
+            new("i3", "Portable DAC/Amp", "Graphite", 189, 1),
+        ],
+        [
+            new("sh3", "Standard", 0, "3-5 business days"),
+            new("sh4", "Next Day", 18.99, "1 business day"),
+        ]),
+        new("s3", "Greenleaf Botanics", "No returns on live plants",
+        [
+            new("i4", "Monstera Deliciosa", @"6"" pot", 34, 1),
+            new("i5", "Terracotta Planter", "Medium / Rust", 22, 2),
+            new("i6", "Organic Plant Food", "16 oz", 12, 1),
+        ],
+        [
+            new("sh5", "Plant-Safe Ground", 8.99, "4-6 business days"),
+            new("sh6", "Priority", 16.99, "2-3 business days"),
+        ]),
+    ];
+
+    private Dictionary<string, string> _selectedShipping = _sellers
+        .ToDictionary(s => s.Id, s => s.Shipping[0].Id);
+
+    private void SetShipping(string sellerId, string optionId)
+    {
+        _selectedShipping = new Dictionary<string, string>(_selectedShipping)
+        {
+            [sellerId] = optionId
+        };
+    }
+
+    private static double GetSellerSubtotal(Seller seller) =>
+        seller.Items.Sum(i => i.Price * i.Quantity);
+
+    private double GetSellerShippingCost(Seller seller)
+    {
+        var opt = seller.Shipping.FirstOrDefault(s => s.Id == _selectedShipping[seller.Id]);
+        return opt?.Price ?? 0;
+    }
+
+    private double _itemsTotal => _sellers.Sum(s => GetSellerSubtotal(s));
+    private double _shippingTotal => _sellers.Sum(s => GetSellerShippingCost(s));
+    private double _total => _itemsTotal + _shippingTotal;
+    private int _totalItems => _sellers.Sum(s => s.Items.Sum(i => i.Quantity));
+}

@@ -1,0 +1,254 @@
+@* ============================================================
+   Block: map-population-density
+   Title: MapPopulationDensity
+   Description: Interactive population density visualization map with density-colored markers, city labels, growth trend badges, and density detail tooltips built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-population-density.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="map-pin" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Population Density</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length cities</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    @onclick="@(() => _filter = null)"
+                >
+                    All
+                </button>
+                @foreach (var lvl in _densityLevels)
+                {
+                    var level = lvl;
+                    <button
+                        type="button"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == level ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                        @onclick="@(() => _filter = (_filter == level ? null : level))"
+                    >
+                        <span class="@($"size-1.5 rounded-full {DensityDot(level)}")"></span>
+                        @DensityLabel(level)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map — Map/MapMarker/MarkerContent/MarkerLabel/MarkerTooltip/MarkerPopup are not available in BlazorCN;
+           rendered as a styled world-map placeholder with positioned density markers *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated world map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Density markers positioned to approximate world coordinates *@
+                @foreach (var city in _filtered)
+                {
+                    var c = city;
+                    var markerSize = GetMarkerSize(c.Density);
+                    var pos = GetCityPosition(c.Id);
+                    var isSelected = _selected == c.Id;
+                    <button
+                        type="button"
+                        class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md transition-transform hover:scale-110 focus:outline-none"
+                        style="@($"width:{markerSize}px;height:{markerSize}px;left:{pos.X}%;top:{pos.Y}%;background-color:{DensityColor(c.DensityLevel)}")"
+                        @onclick="@(() => _selected = (_selected == c.Id ? null : c.Id))"
+                        title="@c.Name — @c.Density.ToString("N0")/sq mi"
+                    >
+                    </button>
+                    @* City label below marker *@
+                    <span
+                        class="absolute -translate-x-1/2 rounded bg-background/80 px-1 py-0.5 text-[9px] font-medium backdrop-blur-sm pointer-events-none"
+                        style="@($"left:{pos.X}%;top:calc({pos.Y}% + {markerSize / 2 + 2}px)")"
+                    >@c.Name</span>
+
+                    @* Popup when selected *@
+                    @if (isSelected)
+                    {
+                        <div
+                            class="absolute z-20 w-60 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - {markerSize / 2 + 8}px))")"
+                        >
+                            <div class="mb-2 flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm font-medium">@c.Name</p>
+                                    <p class="text-xs text-muted-foreground">@c.Country</p>
+                                </div>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@DensityLabel(c.DensityLevel)</BadgeCn>
+                            </div>
+                            <div class="mb-2 grid grid-cols-2 gap-2">
+                                <div class="rounded-md bg-muted/50 p-2">
+                                    <p class="text-xs text-muted-foreground">Density</p>
+                                    <p class="text-sm font-semibold tabular-nums">@c.Density.ToString("N0")</p>
+                                    <p class="text-xs text-muted-foreground">per sq mi</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 p-2">
+                                    <p class="text-xs text-muted-foreground">Population</p>
+                                    <p class="text-sm font-semibold tabular-nums">@((c.Population / 1_000_000.0).ToString("F1"))M</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 p-2">
+                                    <p class="text-xs text-muted-foreground">Metro area</p>
+                                    <p class="text-sm font-semibold tabular-nums">@((c.MetroPopulation / 1_000_000.0).ToString("F1"))M</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 p-2">
+                                    <p class="text-xs text-muted-foreground">Growth</p>
+                                    <p class="@Cn.Merge("text-sm font-semibold tabular-nums", c.GrowthRate >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                        @(c.GrowthRate >= 0 ? "+" : "")@c.GrowthRate%
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+
+                <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                    World map view
+                </div>
+            </div>
+        </div>
+
+        @* City list *@
+        <div>
+            @{
+                var sorted = _filtered.OrderByDescending(c => c.Density).ToArray();
+            }
+            @for (int i = 0; i < sorted.Length; i++)
+            {
+                var city = sorted[i];
+                var idx = i;
+                var isExpanded = _expanded == city.Id;
+                var isLast = idx == sorted.Length - 1;
+                <div class="@(isLast && !isExpanded ? "" : "border-t")">
+                    <button
+                        type="button"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                        @onclick="@(() => _expanded = (_expanded == city.Id ? null : city.Id))"
+                    >
+                        <span class="w-5 text-xs font-medium tabular-nums text-muted-foreground">@(idx + 1)</span>
+                        <span class="@($"size-2 shrink-0 rounded-full {DensityDot(city.DensityLevel)}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@city.Name</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@city.Country · @city.AreaSqMi.ToString("N0") sq mi</p>
+                        </div>
+                        <span class="text-xs font-medium tabular-nums">@city.Density.ToString("N0")/mi²</span>
+                        <span class="@Cn.Merge("w-10 text-right text-xs tabular-nums", city.GrowthRate >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                            @(city.GrowthRate >= 0 ? "+" : "")@city.GrowthRate%
+                        </span>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="grid grid-cols-4 gap-3 px-4 pb-4 pl-12">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Population</span>
+                                <p class="mt-1 text-sm font-semibold tabular-nums">@city.Population.ToString("N0")</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Metro pop</span>
+                                <p class="mt-1 text-sm font-semibold tabular-nums">@city.MetroPopulation.ToString("N0")</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Founded</span>
+                                <p class="mt-1 text-sm font-semibold">@city.YearFounded</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Elevation</span>
+                                <p class="mt-1 text-sm font-semibold">@city.Elevation</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record City(
+        string Id, string Name, string Country,
+        double Longitude, double Latitude,
+        int Population, double AreaSqMi, int Density, string DensityLevel,
+        double GrowthRate, int MetroPopulation, string YearFounded, string Elevation
+    );
+
+    private static readonly City[] _cities =
+    [
+        new("p1",  "Manila",       "Philippines",    120.9842,  14.5995, 1846513,   16.56,  111506, "ultra",    1.4,  13923452, "1571",          "16 m"),
+        new("p2",  "Mumbai",       "India",           72.8777,  19.0760, 12478447, 233.0,    53556, "ultra",    1.1,  21673000, "1507",          "14 m"),
+        new("p3",  "Paris",        "France",           2.3522,  48.8566, 2161000,   40.7,    53107, "ultra",    0.3,  12262544, "3rd century BC", "35 m"),
+        new("p4",  "New York",     "United States",  -74.0060,  40.7128, 8336817,  302.6,    27547, "high",    -0.2,  20140470, "1624",          "10 m"),
+        new("p5",  "Singapore",    "Singapore",      103.8198,   1.3521, 5917600,  281.2,    21043, "high",     0.8,   5917600, "1819",          "15 m"),
+        new("p6",  "Tokyo",        "Japan",          139.6917,  35.6762, 13960000, 847.14,   16480, "high",    -0.3,  37400068, "1457",          "40 m"),
+        new("p7",  "London",       "United Kingdom",  -0.1276,  51.5074, 8982000,  607.0,    14797, "moderate", 0.5,  14257962, "43 AD",         "11 m"),
+        new("p8",  "Sao Paulo",    "Brazil",         -46.6333, -23.5505, 12325232, 587.3,    20984, "high",     0.6,  22043028, "1554",          "760 m"),
+        new("p9",  "Los Angeles",  "United States",  -118.2437, 34.0522, 3979576,  502.7,     7918, "moderate",-0.1,  13200998, "1781",          "71 m"),
+        new("p10", "Melbourne",    "Australia",       144.9631, -37.8136, 5078193, 3858.1,    1316, "low",      2.1,   5078193, "1835",          "31 m"),
+    ];
+
+    private static readonly string[] _densityLevels = ["ultra", "high", "moderate", "low"];
+
+    private static readonly int _maxDensity = _cities.Max(c => c.Density);
+
+    private string? _selected = null;
+    private string? _expanded = null;
+    private string? _filter = null;
+
+    private City[] _filtered => _filter != null
+        ? _cities.Where(c => c.DensityLevel == _filter).ToArray()
+        : _cities;
+
+    private static int GetMarkerSize(int density)
+    {
+        const int min = 10;
+        const int max = 24;
+        return (int)Math.Round(min + (density / (double)_maxDensity) * (max - min));
+    }
+
+    private static string DensityDot(string level) => level switch
+    {
+        "ultra"    => "bg-red-500",
+        "high"     => "bg-amber-500",
+        "moderate" => "bg-blue-500",
+        "low"      => "bg-emerald-500",
+        _          => "bg-gray-400",
+    };
+
+    private static string DensityColor(string level) => level switch
+    {
+        "ultra"    => "#ef4444",
+        "high"     => "#f59e0b",
+        "moderate" => "#3b82f6",
+        "low"      => "#10b981",
+        _          => "#9ca3af",
+    };
+
+    private static string DensityLabel(string level) => level switch
+    {
+        "ultra"    => "Ultra dense",
+        "high"     => "High",
+        "moderate" => "Moderate",
+        "low"      => "Low",
+        _          => level,
+    };
+
+    // Map lon/lat to approximate % position in a 4:2.5 world map viewport
+    // center=[30,20] zoom=1.8 — approximated for a Mercator-like flat projection
+    private static (double X, double Y) GetCityPosition(string id) => id switch
+    {
+        "p1"  => (76.0, 52.0),  // Manila
+        "p2"  => (63.0, 50.0),  // Mumbai
+        "p3"  => (47.0, 26.0),  // Paris
+        "p4"  => (22.0, 32.0),  // New York
+        "p5"  => (75.0, 60.0),  // Singapore
+        "p6"  => (79.0, 33.0),  // Tokyo
+        "p7"  => (46.0, 24.0),  // London
+        "p8"  => (30.0, 73.0),  // Sao Paulo
+        "p9"  => (14.0, 38.0),  // Los Angeles
+        "p10" => (80.0, 80.0),  // Melbourne
+        _     => (50.0, 50.0),
+    };
+}

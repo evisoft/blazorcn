@@ -1,0 +1,125 @@
+@* ============================================================
+   Block: monitoring-experimentation-dashboard-mini
+   Title: MonitoringExperimentationDashboardMini
+   Description: A compact experimentation dashboard for tracking A/B test performance, statistical significance, and conversion lifts using shadcn/ui and Recharts.
+   Source: original/blocks/monitoring/monitoring-experimentation-dashboard-mini.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="clock" Size="16" Class="size-4 text-foreground" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">Experiment Tracker</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">
+                        Growth · Main Web Application
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="size-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                <span class="text-xs font-medium uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                    Active Session
+                </span>
+            </div>
+        </div>
+
+        @* Stats Grid *@
+        <div class="grid grid-cols-1 md:grid-cols-3">
+            @foreach (var stat in _stats)
+            {
+                var idx = Array.IndexOf(_stats, stat);
+                var isLast = idx == _stats.Length - 1;
+                var borderClass = isLast ? "p-4" : "p-4 md:border-r border-b md:border-b-0";
+                var color = stat.Status == "info" ? "#3b82f6" : "#10b981";
+                var gradientId = $"gradient-exp-{idx}";
+                var badgeClass = stat.Status == "info"
+                    ? "h-5 px-1.5 font-normal text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/20"
+                    : "h-5 px-1.5 font-normal text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+                var badgeLabel = stat.Status == "info" ? "Growing" : "Positive";
+                <div class="@borderClass">
+                    <div class="flex items-center justify-between mb-2">
+                        <LucideIconCn Name="@stat.Icon" Size="16" Class="size-4 text-muted-foreground" />
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@badgeClass">@badgeLabel</BadgeCn>
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-semibold tabular-nums tracking-tight">@stat.ValueDisplay</span>
+                        <span class="text-muted-foreground text-xs font-medium">@stat.Unit</span>
+                    </div>
+                    <p class="text-xs text-muted-foreground mt-0.5">@stat.Label</p>
+
+                    <div class="h-10 w-full mt-4">
+                        @((MarkupString)RenderSparkline(stat.Trend, color, gradientId))
+                    </div>
+                </div>
+            }
+        </div>
+
+        <hr class="border-t border-border" />
+
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between">
+            <span class="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
+                Next Significance Check: 2h 15m
+            </span>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                Full Experiment Report @("→")
+            </button>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, string ValueDisplay, string Unit, string Icon, string Status, double[] Trend);
+
+    private static readonly double[] _baseData = [2.1, 2.3, 2.2, 2.5, 2.8, 3.1, 3.4, 3.8, 4.2, 4.5];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Active Tests",  "8",     "",  "beaker",     "healthy", _baseData.Select(v => v * 2 + 5).ToArray()),
+        new("Avg. Lift",     "+12.4", "%", "trending-up","healthy", _baseData),
+        new("Sample Size",   "124.5", "k", "users",      "info",    _baseData.Select(v => v * 10 + 20).ToArray()),
+    ];
+
+    private static string RenderSparkline(double[] trend, string color, string gradientId)
+    {
+        if (trend.Length == 0) return string.Empty;
+
+        const int w = 200;
+        const int h = 40;
+        double minV = trend.Min();
+        double maxV = trend.Max();
+        double range = maxV - minV;
+        if (range == 0) range = 1;
+
+        var points = trend.Select((v, i) =>
+        {
+            double x = (double)i / (trend.Length - 1) * w;
+            double y = h - ((v - minV) / range * (h - 4) + 2);
+            return (x, y);
+        }).ToList();
+
+        var lineD = string.Join(" ", points.Select((p, i) =>
+            i == 0 ? $"M {p.x:F1},{p.y:F1}" : $"L {p.x:F1},{p.y:F1}"));
+
+        var areaD = lineD
+            + $" L {points[^1].x:F1},{h} L {points[0].x:F1},{h} Z";
+
+        return $@"<svg viewBox=""0 0 {w} {h}"" preserveAspectRatio=""none"" width=""100%"" height=""100%"" xmlns=""http://www.w3.org/2000/svg"">
+  <defs>
+    <linearGradient id=""{gradientId}"" x1=""0"" y1=""0"" x2=""0"" y2=""1"">
+      <stop offset=""5%"" stop-color=""{color}"" stop-opacity=""0.1""/>
+      <stop offset=""95%"" stop-color=""{color}"" stop-opacity=""0""/>
+    </linearGradient>
+  </defs>
+  <path d=""{areaD}"" fill=""url(#{gradientId})"" />
+  <path d=""{lineD}"" fill=""none"" stroke=""{color}"" stroke-width=""1.5"" />
+</svg>";
+    }
+}

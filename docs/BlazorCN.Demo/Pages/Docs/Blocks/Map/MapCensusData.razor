@@ -1,0 +1,339 @@
+@* ============================================================
+   Block: map-census-data
+   Title: MapCensusData
+   Description: Census data choropleth map block for Next.js with population markers, growth rate badges, median income info, and regional detail overlays using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-census-data.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bar-chart-3" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Census Data</span>
+                <span class="text-xs text-muted-foreground">
+                    @_filtered.Length regions · @FormatNumber(_filtered.Sum(r => r.Population)) people
+                </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    All
+                </button>
+                @foreach (var tier in _tiers)
+                {
+                    var t = tier;
+                    var cfg = GetTierConfig(t);
+                    <button
+                        type="button"
+                        @onclick="@(() => _filter = _filter == t ? null : t)"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == t ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                        @cfg.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + Sidebar *@
+        <div class="flex">
+            @* Map area — Map/MapMarker/MarkerPopup components not available in BlazorCN; rendered as a styled placeholder with population markers *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated US map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Population markers positioned by approximate lat/lon within US viewport *@
+                    @foreach (var r in _filtered)
+                    {
+                        var region = r;
+                        var cfg = GetTierConfig(region.Tier);
+                        var pos = GetMarkerPosition(region.Longitude, region.Latitude);
+                        var markerSize = GetMarkerSize(region.Tier);
+                        var isSelected = _selectedRegion == region.Id;
+                        <button
+                            type="button"
+                            class="@Cn.Merge("absolute flex items-center justify-center rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none", cfg.Dot)"
+                            style="@($"width:{markerSize}px;height:{markerSize}px;left:{pos.X}%;top:{pos.Y}%;opacity:{(isSelected ? 1.0 : 0.85)}")"
+                            @onclick="@(() => ToggleSelected(region.Id))"
+                            title="@region.Name — @FormatNumber(region.Population)"
+                        >
+                            <LucideIconCn Name="users" Size="10" Class="size-2.5 text-white" />
+                        </button>
+                    }
+
+                    @* Selected region popup *@
+                    @if (_activeRegion != null)
+                    {
+                        var active = _activeRegion;
+                        var cfg = GetTierConfig(active.Tier);
+                        var pos = GetMarkerPosition(active.Longitude, active.Latitude);
+                        <div
+                            class="absolute z-20 w-60 rounded-md border bg-popover p-3 shadow-md text-popover-foreground text-sm"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - 16px))")"
+                        >
+                            <div class="mb-2 flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm font-medium">@active.Name, @active.State</p>
+                                    <p class="text-xs text-muted-foreground">@cfg.Label area</p>
+                                </div>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("font-normal text-xs", GrowthBg(active.Growth))">
+                                    @if (active.Growth > 0)
+                                    {
+                                        <LucideIconCn Name="arrow-up" Size="12" Class="mr-0.5 size-3" />
+                                    }
+                                    else if (active.Growth < 0)
+                                    {
+                                        <LucideIconCn Name="arrow-down" Size="12" Class="mr-0.5 size-3" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="minus" Size="12" Class="mr-0.5 size-3" />
+                                    }
+                                    @(active.Growth > 0 ? "+" : "")@active.Growth%
+                                </BadgeCn>
+                            </div>
+                            <div class="mb-2 grid grid-cols-2 gap-2">
+                                <div>
+                                    <span class="block text-[10px] text-muted-foreground">Population</span>
+                                    <span class="text-sm font-semibold tabular-nums">@active.Population.ToString("N0")</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-muted-foreground">Median Income</span>
+                                    <span class="text-sm font-semibold tabular-nums">@("$")@active.MedianIncome.ToString("N0")</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-muted-foreground">Median Age</span>
+                                    <span class="text-xs font-medium tabular-nums">@active.MedianAge</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-muted-foreground">Households</span>
+                                    <span class="text-xs font-medium tabular-nums">@FormatNumber(active.Households)</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-1 border-t pt-2">
+                                @foreach (var emp in active.TopEmployers)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="font-normal text-xs">@emp</BadgeCn>
+                                }
+                            </div>
+                            <button
+                                type="button"
+                                class="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                                @onclick="@(() => _selectedRegion = null)"
+                            >
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                    Map view — United States
+                </div>
+            </div>
+
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-l">
+                <div class="flex items-center justify-between border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Regions</span>
+                    <span class="text-[10px] text-muted-foreground">Pop · Growth · Income</span>
+                </div>
+                <div class="max-h-[460px] overflow-y-auto">
+                    @for (var i = 0; i < _filtered.Length; i++)
+                    {
+                        var region = _filtered[i];
+                        var isExpanded = _expandedRegion == region.Id;
+                        var isLast = i == _filtered.Length - 1;
+                        var cfg = GetTierConfig(region.Tier);
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                @onclick="@(() => ToggleExpanded(region.Id))"
+                                class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+                            >
+                                <span class="@($"size-1.5 shrink-0 rounded-full {cfg.Dot}")"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-xs font-medium">@region.Name, @region.State</span>
+                                    <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                        <span class="tabular-nums">@FormatNumber(region.Population)</span>
+                                        <span class="@($"tabular-nums {GrowthColor(region.Growth)}")">
+                                            @(region.Growth > 0 ? "+" : "")@region.Growth%
+                                        </span>
+                                        <span class="tabular-nums">@FormatCurrency(region.MedianIncome)</span>
+                                    </div>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="px-3 pb-3 pl-7">
+                                    <div class="mb-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                        <div class="flex items-center gap-1 text-xs">
+                                            <LucideIconCn Name="users" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="text-muted-foreground">Pop:</span>
+                                            <span class="tabular-nums">@region.Population.ToString("N0")</span>
+                                        </div>
+                                        <div class="flex items-center gap-1 text-xs">
+                                            <LucideIconCn Name="dollar-sign" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="text-muted-foreground">Inc:</span>
+                                            <span class="tabular-nums">@("$")@region.MedianIncome.ToString("N0")</span>
+                                        </div>
+                                        <div class="flex items-center gap-1 text-xs">
+                                            <LucideIconCn Name="building" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="text-muted-foreground">HH:</span>
+                                            <span class="tabular-nums">@FormatNumber(region.Households)</span>
+                                        </div>
+                                        <div class="flex items-center gap-1 text-xs">
+                                            <LucideIconCn Name="bar-chart-3" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="text-muted-foreground">Age:</span>
+                                            <span class="tabular-nums">@region.MedianAge</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach (var emp in region.TopEmployers)
+                                        {
+                                            <span class="rounded-md bg-muted/50 px-2 py-0.5 text-xs">@emp</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                @foreach (var tier in _tiers)
+                {
+                    var t = tier;
+                    var cfg = GetTierConfig(t);
+                    var cnt = _regions.Count(r => r.Tier == t);
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                        @cfg.Label (@cnt)
+                    </span>
+                }
+            </div>
+            <span class="text-xs text-muted-foreground">
+                Total: @FormatNumber(_regions.Sum(r => r.Population)) people
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TierConfig(string Label, string Dot, string Size);
+
+    private record CensusRegion(
+        string Id,
+        string Name,
+        string State,
+        int Population,
+        double Growth,
+        int MedianIncome,
+        double MedianAge,
+        int Households,
+        string Tier,
+        double Longitude,
+        double Latitude,
+        string[] TopEmployers
+    );
+
+    private static readonly string[] _tiers = ["metro", "urban", "suburban"];
+
+    private static TierConfig GetTierConfig(string tier) => tier switch
+    {
+        "metro"    => new TierConfig("Metro",    "bg-violet-500", "size-7"),
+        "urban"    => new TierConfig("Urban",    "bg-blue-500",   "size-5"),
+        "suburban" => new TierConfig("Suburban", "bg-emerald-500","size-4"),
+        _          => new TierConfig("Other",    "bg-gray-500",   "size-4"),
+    };
+
+    private static readonly CensusRegion[] _regions =
+    [
+        new("nyc",  "New York City", "NY", 8336817, 0.7,  67046, 36.9, 3109784, "metro",    -74.006,   40.7128, ["Finance",       "Healthcare",     "Technology"]),
+        new("la",   "Los Angeles",   "CA", 3979576, 1.2,  65290, 35.9, 1382677, "metro",   -118.2437,  34.0522, ["Entertainment", "Technology",     "Trade"]),
+        new("chi",  "Chicago",       "IL", 2693976, -0.4, 58247, 34.8, 1060661, "metro",    -87.6298,  41.8781, ["Finance",       "Manufacturing",  "Healthcare"]),
+        new("hou",  "Houston",       "TX", 2304580, 2.8,  52338, 33.4,  830480, "metro",    -95.3698,  29.7604, ["Energy",        "Healthcare",     "Aerospace"]),
+        new("aus",  "Austin",        "TX",  978908, 4.1,  71576, 33.4,  398492, "urban",    -97.7431,  30.2672, ["Technology",    "Government",     "Education"]),
+        new("den",  "Denver",        "CO",  715522, 2.4,  68592, 34.6,  308025, "urban",   -104.9903,  39.7392, ["Technology",    "Aerospace",      "Healthcare"]),
+        new("nash", "Nashville",     "TN",  689447, 3.2,  55283, 34.1,  280615, "urban",    -86.7816,  36.1627, ["Healthcare",    "Music Industry", "Finance"]),
+        new("boise","Boise",         "ID",  235684, 5.3,  57957, 36.2,   94205, "suburban",-116.2023,  43.615,  ["Technology",    "Agriculture",    "Government"]),
+        new("chrl", "Charleston",    "SC",  150227, 3.7,  63572, 35.8,   62810, "suburban", -79.9311,  32.7765, ["Tourism",       "Military",       "Healthcare"]),
+        new("bend", "Bend",          "OR",  102059, 6.1,  61835, 38.4,   42580, "suburban",-121.3153,  44.0582, ["Tourism",       "Technology",     "Healthcare"]),
+    ];
+
+    private string? _filter = null;
+    private string? _selectedRegion = null;
+    private string? _expandedRegion = "nyc";
+
+    private CensusRegion[] _filtered => _filter != null
+        ? [.. _regions.Where(r => r.Tier == _filter)]
+        : _regions;
+
+    private CensusRegion? _activeRegion => _selectedRegion != null
+        ? Array.Find(_regions, r => r.Id == _selectedRegion)
+        : null;
+
+    private static string FormatNumber(long n)
+    {
+        if (n >= 1_000_000) return $"{(n / 1_000_000.0):F1}M";
+        if (n >= 1_000)     return $"{(n / 1_000.0):F0}K";
+        return n.ToString();
+    }
+
+    private static string FormatCurrency(int n) => $"${(n / 1000.0):F0}K";
+
+    private static string GrowthColor(double g)
+    {
+        if (g >= 2) return "text-emerald-600 dark:text-emerald-400";
+        if (g > 0)  return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private static string GrowthBg(double g)
+    {
+        if (g >= 2) return "bg-emerald-500/10";
+        if (g > 0)  return "bg-amber-500/10";
+        return "bg-red-500/10";
+    }
+
+    // Map lon/lat to % positions within the placeholder.
+    // US viewport: lon [-125, -66], lat [24, 50]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -125.0, lonMax = -66.0;
+        const double latMin = 24.0,   latMax = 50.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+
+    private static int GetMarkerSize(string tier) => tier switch
+    {
+        "metro"    => 28,
+        "urban"    => 20,
+        "suburban" => 16,
+        _          => 16,
+    };
+
+    private void ToggleSelected(string id)
+    {
+        _selectedRegion = _selectedRegion == id ? null : id;
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        _expandedRegion = _expandedRegion == id ? null : id;
+    }
+}

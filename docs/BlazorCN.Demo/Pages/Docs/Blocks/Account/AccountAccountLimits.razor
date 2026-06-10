@@ -1,0 +1,187 @@
+@* ============================================================
+   Block: account-account-limits
+   Title: AccountAccountLimits
+   Description: A bento grid resource limits dashboard for React and Next.js with animated progress indicators, criticality-based tile sizing, and plan context built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-account-limits.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="px-4 py-3 border-b">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Account Limits</h2>
+                    <p class="text-xs text-muted-foreground mt-0.5">
+                        @_warningCount of @_limits.Length resources above 80% utilization
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] h-5 px-2">
+                    Pro Plan
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Bento Grid *@
+        <div class="p-3 grid grid-cols-4 gap-2">
+            @foreach (var resource in _largeResources)
+            {
+                var pct = GetPercentage(resource.Used, resource.Limit);
+                var status = GetStatus(pct);
+                var accentBorder = GetAccentBorder(status);
+                var barColor = GetBarColor(status);
+                var percentColor = GetPercentColor(status);
+                <div class="@($"col-span-4 sm:col-span-2 rounded-lg border border-l-2 {accentBorder} bg-card p-4 flex flex-col justify-between gap-4")">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-sm font-medium">@resource.Name</p>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                                @FormatValue(resource.Used) / @FormatValue(resource.Limit) @resource.Unit
+                            </p>
+                        </div>
+                        <span class="@($"text-2xl font-semibold tabular-nums {percentColor}")">@pct%</span>
+                    </div>
+                    <div>
+                        <div class="h-2 w-full rounded-full bg-muted/50 overflow-hidden">
+                            <div class="@($"h-full rounded-full {barColor}")" style="@($"width:{pct}%")"></div>
+                        </div>
+                        <div class="mt-1.5 flex items-center justify-between">
+                            @if (resource.ResetDate != null)
+                            {
+                                <span class="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <LucideIconCn Name="rotate-ccw" Size="10" Class="size-2.5" />
+                                    Resets @resource.ResetDate
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-[10px] text-muted-foreground">No monthly reset</span>
+                            }
+                            @if (status == "critical")
+                            {
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 px-1.5 text-[10px] text-red-600 border-red-200 dark:border-red-900 dark:text-red-400">
+                                    Critical
+                                </BadgeCn>
+                            }
+                            @if (status == "warning")
+                            {
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 px-1.5 text-[10px] text-amber-600 border-amber-200 dark:border-amber-900 dark:text-amber-400">
+                                    Nearing limit
+                                </BadgeCn>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+            @foreach (var resource in _compactResources)
+            {
+                var pct = GetPercentage(resource.Used, resource.Limit);
+                var strokeColor = GetStrokeColor(pct);
+                var dashOffset = RingCircumference * (1.0 - pct / 100.0);
+                <div class="col-span-2 sm:col-span-1 rounded-lg border bg-card p-3 flex flex-col items-center gap-2">
+                    <div class="relative">
+                        <svg class="size-12" viewBox="0 0 48 48" aria-hidden="true">
+                            <circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3" class="text-muted/30" />
+                            <circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"
+                                    class="@strokeColor"
+                                    stroke-dasharray="@RingCircumference.ToString("F2")"
+                                    stroke-dashoffset="@dashOffset.ToString("F2")"
+                                    stroke-linecap="round"
+                                    transform="rotate(-90 24 24)" />
+                        </svg>
+                        <span class="absolute inset-0 flex items-center justify-center text-[10px] font-medium tabular-nums text-muted-foreground">
+                            @pct%
+                        </span>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-xs font-medium leading-tight">@resource.Name</p>
+                        <p class="text-[10px] text-muted-foreground mt-0.5">
+                            @FormatValue(resource.Used) / @FormatValue(resource.Limit)
+                        </p>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-muted-foreground">Need higher limits?</span>
+                <span class="text-[10px] text-muted-foreground">
+                    Monthly resources reset Apr 1, 2026
+                </span>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs gap-1">
+                Upgrade Plan
+                <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3" />
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ResourceLimit(string Id, string Name, int Used, int Limit, string Unit, string? ResetDate);
+
+    private static readonly ResourceLimit[] _limits =
+    [
+        new("projects",     "Projects",      8,     10,     "projects",  null),
+        new("api-calls",    "API Calls",     84720, 100000, "calls/mo",  "Apr 1, 2026"),
+        new("storage",      "Storage",       7200,  10000,  "MB",        null),
+        new("bandwidth",    "Bandwidth",     42000, 100000, "MB/mo",     "Apr 1, 2026"),
+        new("team-seats",   "Team Seats",    4,     5,      "users",     null),
+        new("webhooks",     "Webhooks",      6,     10,     "endpoints", null),
+        new("environments", "Environments",  2,     3,      "envs",      null),
+        new("builds",       "Build Minutes", 1840,  2000,   "min/mo",    "Apr 1, 2026"),
+    ];
+
+    private static readonly double RingCircumference = 2 * Math.PI * 20;
+
+    private IEnumerable<ResourceLimit> _largeResources  => _limits.Where(l => GetPercentage(l.Used, l.Limit) >= 80);
+    private IEnumerable<ResourceLimit> _compactResources => _limits.Where(l => GetPercentage(l.Used, l.Limit) < 80);
+    private int _warningCount => _limits.Count(l => GetPercentage(l.Used, l.Limit) >= 80);
+
+    private static int GetPercentage(int used, int limit) =>
+        (int)Math.Min(100, Math.Round((double)used / limit * 100));
+
+    private static string GetStatus(int percentage) => percentage switch
+    {
+        >= 90 => "critical",
+        >= 80 => "warning",
+        _ => "normal",
+    };
+
+    private static string FormatValue(int value) => value switch
+    {
+        >= 100000 => $"{value / 1000}K",
+        >= 10000  => $"{value / 1000.0:F1}K",
+        _         => value.ToString(),
+    };
+
+    private static string GetBarColor(string status) => status switch
+    {
+        "critical" => "bg-red-500",
+        "warning"  => "bg-amber-500",
+        _          => "bg-foreground/20",
+    };
+
+    private static string GetAccentBorder(string status) => status switch
+    {
+        "critical" => "border-l-red-500",
+        "warning"  => "border-l-amber-500",
+        _          => "border-l-transparent",
+    };
+
+    private static string GetPercentColor(string status) => status switch
+    {
+        "critical" => "text-red-600 dark:text-red-400",
+        "warning"  => "text-amber-600 dark:text-amber-400",
+        _          => "text-muted-foreground",
+    };
+
+    private static string GetStrokeColor(int percentage) => percentage switch
+    {
+        >= 80 => "text-amber-500",
+        >= 60 => "text-foreground/50",
+        _     => "text-foreground/30",
+    };
+}

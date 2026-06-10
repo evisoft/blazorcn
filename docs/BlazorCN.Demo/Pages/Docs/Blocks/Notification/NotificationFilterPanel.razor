@@ -1,0 +1,215 @@
+@* ============================================================
+   Block: notification-filter-panel
+   Title: NotificationFilterPanel
+   Description: A notification filter panel block for React and Next.js with type and priority filters, active filter badges, two-panel layout, and staggered Framer Motion animations built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/notification/notification-filter-panel.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="filter" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Filter Notifications</span>
+            </div>
+            @if (_hasFilters)
+            {
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs" OnClick="@ClearFilters">
+                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                    Clear filters
+                </ButtonCn>
+            }
+        </div>
+
+        @* Active filter badges *@
+        @if (_activeFilterLabels.Count > 0)
+        {
+            <div class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2">
+                @foreach (var filter in _activeFilterLabels)
+                {
+                    var f = filter;
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 font-normal text-xs">
+                        @f.Label
+                        <button type="button"
+                                @onclick="@(() => RemoveFilter(f.Key))"
+                                class="ml-0.5 rounded-sm hover:bg-muted"
+                                aria-label="@($"Remove {f.Label} filter")">
+                            <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        </button>
+                    </BadgeCn>
+                }
+                <span class="text-muted-foreground text-xs">
+                    @_filteredNotifications.Count results
+                </span>
+            </div>
+        }
+
+        @* Two-panel layout *@
+        <div class="grid grid-cols-1 md:grid-cols-[220px_1fr]">
+            @* Left: Filters *@
+            <div class="border-b px-4 py-3 md:border-r md:border-b-0">
+                <span class="font-medium text-muted-foreground text-xs">Type</span>
+                <div class="mt-2 space-y-2">
+                    @foreach (var filter in _typeFilters)
+                    {
+                        var tf = filter;
+                        <span class="flex cursor-pointer items-center gap-2"
+                              @onclick="@(() => ToggleType(tf.Id))">
+                            <CheckboxCn Checked="@_activeTypes.Contains(tf.Id)"
+                                        CheckedChanged="@((bool _) => ToggleType(tf.Id))" />
+                            <LucideIconCn Name="@tf.IconName" Size="14" Class="size-3.5 text-muted-foreground" />
+                            <span class="text-sm">@tf.Label</span>
+                        </span>
+                    }
+                </div>
+
+                <div class="mt-4 border-t pt-3">
+                    <span class="font-medium text-muted-foreground text-xs">Priority</span>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                        @foreach (var option in _priorityOptions)
+                        {
+                            var opt = option;
+                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                      Class="@Cn.Merge("h-7 text-xs", _activePriorities.Contains(opt.Id) ? "ring-2 ring-foreground" : "")"
+                                      OnClick="@(() => TogglePriority(opt.Id))">
+                                @opt.Label
+                            </ButtonCn>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Right: Filtered results *@
+            <div class="divide-y">
+                @if (_filteredNotifications.Count == 0)
+                {
+                    <div class="px-4 py-8 text-center">
+                        <LucideIconCn Name="bell" Size="20" Class="mx-auto size-5 text-muted-foreground/40" />
+                        <p class="mt-2 text-muted-foreground text-sm">
+                            No notifications match your filters
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var notification in _filteredNotifications)
+                    {
+                        <div class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                            <div class="relative mt-0.5">
+                                <LucideIconCn Name="@notification.IconName" Size="16" Class="size-4 text-muted-foreground" />
+                                @if (!notification.Read)
+                                {
+                                    <span class="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-blue-500"></span>
+                                }
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="@Cn.Merge("text-sm", notification.Read ? "text-muted-foreground" : "font-medium")">
+                                        @notification.Title
+                                    </span>
+                                    @if (notification.Priority == "high")
+                                    {
+                                        <span class="size-1.5 shrink-0 rounded-full bg-red-500"></span>
+                                    }
+                                </div>
+                                <p class="mt-0.5 truncate text-muted-foreground text-xs">
+                                    @notification.Description
+                                </p>
+                            </div>
+                            <span class="shrink-0 text-muted-foreground text-xs">
+                                @notification.Timestamp
+                            </span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Showing @_filteredNotifications.Count of @_notifications.Length notifications
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TypeFilter(string Id, string Label, string IconName);
+    private record PriorityOption(string Id, string Label);
+    private record NotificationItem(string Id, string IconName, string Title, string Description, string Timestamp, string Type, string Priority, bool Read);
+    private record ActiveFilterLabel(string Key, string Label);
+
+    private static readonly TypeFilter[] _typeFilters =
+    [
+        new("comment",  "Comments",     "message-square"),
+        new("deploy",   "Deployments",  "zap"),
+        new("security", "Security",     "shield-alert"),
+        new("team",     "Team",         "user-plus"),
+        new("pr",       "Pull Requests","git-pull-request"),
+    ];
+
+    private static readonly PriorityOption[] _priorityOptions =
+    [
+        new("high",   "High"),
+        new("medium", "Medium"),
+        new("low",    "Low"),
+    ];
+
+    private static readonly NotificationItem[] _notifications =
+    [
+        new("n1", "shield-alert",    "Critical vulnerability detected",   "CVE-2026-1234 found in express@@4.18.2 dependency.", "5 min ago",  "security", "high",   false),
+        new("n2", "message-square",  "New comment on PR #142",             "Sarah requested changes to the auth module.",         "20 min ago", "comment",  "medium", false),
+        new("n3", "zap",             "Production deploy succeeded",        "v2.4.1 deployed to production in 47 seconds.",        "1 hour ago", "deploy",   "low",    true),
+        new("n4", "user-plus",       "Alex Rivera joined Engineering",     "Accepted the workspace invitation.",                  "2 hours ago","team",     "low",    true),
+        new("n5", "git-pull-request","PR #139 needs review",               "Dashboard refactor is ready for code review.",        "3 hours ago","pr",       "high",   false),
+        new("n6", "shield-alert",    "Two-factor auth reminder",           "3 team members have not enabled 2FA yet.",            "5 hours ago","security", "medium", true),
+        new("n7", "zap",             "Staging deploy failed",              "Build error in checkout-flow branch.",                "6 hours ago","deploy",   "high",   false),
+        new("n8", "message-square",  "Mention in #engineering",            "Jordan tagged you in the API design discussion.",     "1 day ago",  "comment",  "medium", true),
+    ];
+
+    private HashSet<string> _activeTypes = [];
+    private HashSet<string> _activePriorities = [];
+
+    private bool _hasFilters => _activeTypes.Count > 0 || _activePriorities.Count > 0;
+
+    private List<NotificationItem> _filteredNotifications =>
+        _notifications
+            .Where(n =>
+                (_activeTypes.Count == 0 || _activeTypes.Contains(n.Type)) &&
+                (_activePriorities.Count == 0 || _activePriorities.Contains(n.Priority)))
+            .ToList();
+
+    private List<ActiveFilterLabel> _activeFilterLabels =>
+    [
+        .._activeTypes.Select(t => new ActiveFilterLabel($"type-{t}", _typeFilters.FirstOrDefault(f => f.Id == t)?.Label ?? t)),
+        .._activePriorities.Select(p => new ActiveFilterLabel($"priority-{p}", _priorityOptions.FirstOrDefault(f => f.Id == p)?.Label ?? p)),
+    ];
+
+    private void ToggleType(string typeId)
+    {
+        if (!_activeTypes.Add(typeId))
+            _activeTypes.Remove(typeId);
+    }
+
+    private void TogglePriority(string priorityId)
+    {
+        if (!_activePriorities.Add(priorityId))
+            _activePriorities.Remove(priorityId);
+    }
+
+    private void ClearFilters()
+    {
+        _activeTypes.Clear();
+        _activePriorities.Clear();
+    }
+
+    private void RemoveFilter(string key)
+    {
+        if (key.StartsWith("type-"))
+            ToggleType(key["type-".Length..]);
+        else
+            TogglePriority(key["priority-".Length..]);
+    }
+}

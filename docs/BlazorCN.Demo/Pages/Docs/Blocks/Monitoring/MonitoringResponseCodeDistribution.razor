@@ -1,0 +1,136 @@
+@* ============================================================
+   Block: monitoring-response-code-distribution
+   Title: MonitoringResponseCodeDistribution
+   Description: A comprehensive API health dashboard tracking HTTP status code distribution (2xx, 3xx, 4xx, 5xx) with real-time error rate analysis.
+   Source: original/blocks/monitoring/monitoring-response-code-distribution.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-2xl border bg-card shadow-lg">
+        <div class="flex items-center justify-between border-b px-6 py-5 bg-emerald-500/[0.02]">
+            <div class="flex items-center gap-4">
+                <div class="flex size-11 items-center justify-center rounded-xl bg-background border shadow-sm">
+                    <LucideIconCn Name="help-circle" Size="24" Class="size-6 text-muted-foreground" />
+                </div>
+                <div>
+                    <h3 class="text-base font-bold tracking-tight">Status Distribution</h3>
+                    <p class="mt-0.5 text-muted-foreground text-xs font-semibold">
+                        Edge Gateway · Past 24 Hours
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Outline" Class="h-6 px-2.5 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
+                    Operational
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x border-b">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                <div class="p-6 transition-all duration-300 hover:bg-muted/5">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-black text-muted-foreground uppercase tracking-widest">@s.Label</span>
+                        <LucideIconCn Name="@s.IconName" Size="16" Class="@($"size-4 {s.IconColor} opacity-50")" />
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-3xl font-black tabular-nums tracking-tighter">@s.Value.ToString("F2")</span>
+                        <span class="text-muted-foreground text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+
+                    <div class="h-10 w-full mt-6">
+                        @{
+                            var pts = s.Trend;
+                            var tCount = pts.Length;
+                            const int chartW = 200;
+                            const int chartH = 40;
+                            var maxV = pts.Max() * 1.2;
+                            if (maxV < 0.001) maxV = 1.0;
+                            double Px(int i) => tCount <= 1 ? 0 : (double)i / (tCount - 1) * chartW;
+                            double Py(double v) => chartH - (v / maxV * chartH * 0.9);
+                            var polyline = string.Join(" ", Enumerable.Range(0, tCount).Select(i => $"{Px(i):F1},{Py(pts[i]):F1}"));
+                            var area = polyline + $" {Px(tCount - 1):F1},{chartH} 0,{chartH}";
+                        }
+                        <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="@($"grad-{s.GradId}")" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="@s.StrokeColor" stop-opacity="0.15" />
+                                    <stop offset="100%" stop-color="@s.StrokeColor" stop-opacity="0.02" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="@area" fill="@($"url(#grad-{s.GradId})")" />
+                            <polyline points="@polyline" fill="none" stroke="@s.StrokeColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="px-6 py-4 flex items-center justify-between bg-muted/20">
+            <div class="flex items-center gap-8">
+                <div class="flex flex-col">
+                    <span class="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">Total Requests</span>
+                    <span class="text-xs font-black">1.2M</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-0.5">3xx Redirects</span>
+                    <span class="text-xs font-black">0.02%</span>
+                </div>
+            </div>
+            <button type="button" class="text-[10px] font-black uppercase tracking-widest text-primary hover:tracking-[0.1em] transition-all">
+                Inspect Codes →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatItem(
+        string Label,
+        double Value,
+        string Unit,
+        string IconName,
+        string IconColor,
+        string StrokeColor,
+        string GradId,
+        double[] Trend);
+
+    private static readonly double[] _resData =
+    [
+        98.2, 97.5, 99.1, 98.8, 96.4, 92.1, 95.8, 98.2, 99.4, 99.1, 98.7, 99.2,
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new(
+            Label: "2xx Success",
+            Value: 99.2,
+            Unit: "%",
+            IconName: "check-circle-2",
+            IconColor: "text-emerald-500",
+            StrokeColor: "#10b981",
+            GradId: "2xx",
+            Trend: _resData),
+        new(
+            Label: "4xx Client",
+            Value: 0.64,
+            Unit: "%",
+            IconName: "info",
+            IconColor: "text-blue-500",
+            StrokeColor: "#3b82f6",
+            GradId: "4xx",
+            Trend: _resData.Select(v => (100 - v) * 0.7).ToArray()),
+        new(
+            Label: "5xx Server",
+            Value: 0.12,
+            Unit: "%",
+            IconName: "alert-circle",
+            IconColor: "text-red-500",
+            StrokeColor: "#ef4444",
+            GradId: "5xx",
+            Trend: _resData.Select(v => (100 - v) * 0.3).ToArray()),
+    ];
+}

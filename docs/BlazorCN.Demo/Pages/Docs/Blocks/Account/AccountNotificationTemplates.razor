@@ -1,0 +1,352 @@
+@* ============================================================
+   Block: account-notification-templates
+   Title: AccountNotificationTemplates
+   Description: A SendGrid-style notification template manager for React and Next.js with template cards, channel icons, variable tag chips, expandable previews, duplicate and edit actions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-notification-templates.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Notification Templates</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Manage message templates for each notification channel
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-muted-foreground">@ActiveCount active</span>
+                    <span class="text-[10px] text-muted-foreground">@DraftCount draft</span>
+                </div>
+            </div>
+        </div>
+
+        @* Search and filter bar *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                <InputCn @bind-Value="_searchQuery" Placeholder="Search templates..."
+                         Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var ch in _filterOptions)
+                {
+                    <button type="button" @onclick="@(() => _filterChannel = ch)"
+                            class="@Cn.Merge("rounded-md px-2 py-1 text-[10px] font-medium transition-colors", _filterChannel == ch ? "bg-foreground/5 text-foreground" : "text-muted-foreground hover:text-foreground")">
+                        @(ch == "all" ? "All" : ch.ToUpperInvariant())
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Template cards *@
+        <div class="space-y-0 divide-y">
+            @foreach (var (template, idx) in FilteredTemplates.Select((t, i) => (t, i)))
+            {
+                var isExpanded = _expandedId == template.Id;
+                var isCopied = _copiedId == template.Id;
+                var channelIconName = GetChannelIcon(template.Channel);
+
+                @* Card header - clickable *@
+                <button type="button" @onclick="@(() => HandleToggleExpand(template.Id))"
+                        class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30">
+                    @* Channel icon *@
+                    <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
+                        <LucideIconCn Name="@channelIconName" Size="14" Class="size-3.5 text-muted-foreground" />
+                    </div>
+
+                    @* Content *@
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium truncate">@template.Name</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary"
+                                     Class="@Cn.Merge("h-4 shrink-0 px-1.5 text-[10px]", template.Status == "active" ? "bg-emerald-500/10 text-emerald-600" : "bg-muted/50 text-muted-foreground")">
+                                @template.Status
+                            </BadgeCn>
+                        </div>
+
+                        <p class="mt-0.5 text-xs text-muted-foreground truncate">
+                            @template.Subject
+                        </p>
+
+                        @* Variable chips + meta *@
+                        <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            @foreach (var v in template.Variables.Take(4))
+                            {
+                                <span class="inline-flex rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+                                    @("{" + v.Key + "}")
+                                </span>
+                            }
+                            @if (template.Variables.Length > 4)
+                            {
+                                <span class="text-[9px] text-muted-foreground">
+                                    +@(template.Variables.Length - 4) more
+                                </span>
+                            }
+                            <span class="text-[9px] text-muted-foreground">
+                                Edited @template.LastEdited
+                            </span>
+                            @if (template.UsageCount > 0)
+                            {
+                                <span class="text-[9px] text-muted-foreground">
+                                    Sent @($"{template.UsageCount:N0}")x
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    @* Expand chevron *@
+                    <LucideIconCn Name="chevron-down" Size="16"
+                                  Class="@Cn.Merge("mt-1 size-4 shrink-0 text-muted-foreground/40 transition-transform duration-200", isExpanded ? "rotate-180" : "")" />
+                </button>
+
+                @* Expanded detail *@
+                @if (isExpanded)
+                {
+                    <div class="overflow-hidden">
+                        <div class="border-t bg-muted/10 px-4 py-3 space-y-3">
+                            @* Variables with sample values *@
+                            <div>
+                                <span class="text-[10px] font-medium text-muted-foreground">
+                                    VARIABLES
+                                </span>
+                                <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                    @foreach (var v in template.Variables)
+                                    {
+                                        <span class="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1">
+                                            <code class="font-mono text-[10px] text-blue-600">
+                                                @("{" + v.Key + "}")
+                                            </code>
+                                            <span class="text-[10px] text-muted-foreground">
+                                                @v.SampleValue
+                                            </span>
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Full template preview - subject *@
+                            <div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-medium text-muted-foreground">
+                                        SUBJECT
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-sm">@HighlightVariables(template.Subject)</p>
+                            </div>
+
+                            @* Full template preview - body *@
+                            <div>
+                                <span class="text-[10px] font-medium text-muted-foreground">
+                                    BODY
+                                </span>
+                                <div class="mt-1 rounded-md bg-muted/30 p-3">
+                                    <pre class="whitespace-pre-wrap font-sans text-xs leading-relaxed text-foreground/80">@HighlightVariables(template.Body)</pre>
+                                </div>
+                            </div>
+
+                            @* Actions *@
+                            <div class="flex items-center justify-between pt-1">
+                                <div class="flex items-center gap-2">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                              Class="h-7 gap-1.5 text-xs"
+                                              OnClick="@(() => HandleDuplicate(template))">
+                                        <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                        Duplicate
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                              Class="h-7 gap-1.5 text-xs"
+                                              OnClick="@(async () => await HandleCopyBody(template.Id))">
+                                        @if (isCopied)
+                                        {
+                                            <LucideIconCn Name="check" Size="12" Class="size-3 text-emerald-500" />
+                                            <span>Copied</span>
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="pencil" Size="12" Class="size-3" />
+                                            <span>Copy body</span>
+                                        }
+                                    </ButtonCn>
+                                </div>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                          Class="h-7 text-xs text-muted-foreground"
+                                          OnClick="@(() => HandleToggleStatus(template.Id))">
+                                    @(template.Status == "active" ? "Move to draft" : "Set active")
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Empty search state *@
+        @if (!FilteredTemplates.Any())
+        {
+            <div class="px-4 py-8 text-center">
+                <LucideIconCn Name="search" Size="20" Class="mx-auto size-5 text-muted-foreground/40" />
+                <p class="mt-2 text-sm text-muted-foreground">No templates found</p>
+                <p class="text-xs text-muted-foreground">Try a different search or filter</p>
+            </div>
+        }
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-[10px] text-muted-foreground">
+                @_templates.Count templates across @(_templates.Select(t => t.Channel).Distinct().Count()) channels
+            </span>
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 text-[10px] text-muted-foreground">
+                <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                New template
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TemplateVariable(string Key, string SampleValue);
+
+    private record NotificationTemplate(
+        string Id, string Name, string Channel, string Subject, string Body,
+        TemplateVariable[] Variables, string Status, string LastEdited, int UsageCount
+    );
+
+    private static readonly string[] _filterOptions = ["all", "email", "sms", "push"];
+
+    private string? _expandedId;
+    private string _searchQuery = "";
+    private string _filterChannel = "all";
+    private string? _copiedId;
+
+    private int ActiveCount => _templates.Count(t => t.Status == "active");
+    private int DraftCount => _templates.Count(t => t.Status == "draft");
+
+    private IEnumerable<NotificationTemplate> FilteredTemplates => _templates
+        .Where(t =>
+            (_searchQuery.Length == 0 ||
+             t.Name.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+             t.Subject.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) &&
+            (_filterChannel == "all" || t.Channel == _filterChannel));
+
+    private static string GetChannelIcon(string channel) => channel switch
+    {
+        "email" => "mail",
+        "sms" => "smartphone",
+        "push" => "bell",
+        _ => "bell"
+    };
+
+    private void HandleToggleExpand(string id) =>
+        _expandedId = _expandedId == id ? null : id;
+
+    private void HandleDuplicate(NotificationTemplate template)
+    {
+        var duplicate = template with
+        {
+            Id = $"tpl-{_templates.Count + 1}",
+            Name = $"{template.Name} (Copy)",
+            Status = "draft",
+            LastEdited = "Just now",
+            UsageCount = 0
+        };
+        _templates.Add(duplicate);
+    }
+
+    private void HandleToggleStatus(string id)
+    {
+        var idx = _templates.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+        {
+            var t = _templates[idx];
+            _templates[idx] = t with { Status = t.Status == "active" ? "draft" : "active" };
+        }
+    }
+
+    private async Task HandleCopyBody(string id)
+    {
+        _copiedId = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedId = null;
+        StateHasChanged();
+    }
+
+    private RenderFragment HighlightVariables(string text) => builder =>
+    {
+        var parts = System.Text.RegularExpressions.Regex.Split(text, @"(\{[a-z_]+\})");
+        int seq = 0;
+        foreach (var part in parts)
+        {
+            if (System.Text.RegularExpressions.Regex.IsMatch(part, @"^\{[a-z_]+\}$"))
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", "rounded bg-blue-500/10 px-1 font-mono text-blue-600 text-[11px]");
+                builder.AddContent(seq++, part);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(seq++, part);
+            }
+        }
+    };
+
+    private List<NotificationTemplate> _templates =
+    [
+        new("tpl-1", "Welcome Email", "email",
+            "Welcome to {app_name}, {user_name}!",
+            "Hi {user_name},\n\nWelcome to {app_name}! Your account has been created successfully.\n\nGet started by completing your profile at {profile_url}.\n\nIf you have any questions, reach out to us at {support_email}.\n\nBest regards,\nThe {app_name} Team",
+            [
+                new("user_name", "Emma Chen"),
+                new("app_name", "Acme Platform"),
+                new("profile_url", "https://app.acme.com/profile"),
+                new("support_email", "help@acme.com"),
+            ],
+            "active", "Mar 28, 2026", 1247),
+        new("tpl-2", "Payment Received", "email",
+            "Payment of {amount} received",
+            "Hi {user_name},\n\nWe've received your payment of {amount} for {billing_period}.\n\nInvoice: {invoice_id}\nPayment method: {payment_method}\n\nView your receipt at {receipt_url}.\n\nThank you for your business.",
+            [
+                new("user_name", "Emma Chen"),
+                new("amount", "$49.00"),
+                new("billing_period", "March 2026"),
+                new("invoice_id", "INV-2026-0342"),
+                new("payment_method", "Visa ending 4242"),
+                new("receipt_url", "https://app.acme.com/receipts/342"),
+            ],
+            "active", "Mar 22, 2026", 856),
+        new("tpl-3", "Login Alert", "push",
+            "New sign-in detected",
+            "New sign-in to your account from {device_name} in {location}. If this wasn't you, secure your account immediately.",
+            [
+                new("device_name", "MacBook Pro"),
+                new("location", "San Francisco, CA"),
+            ],
+            "active", "Mar 15, 2026", 432),
+        new("tpl-4", "Verification Code", "sms",
+            "Your verification code",
+            "Your {app_name} verification code is {code}. Expires in {expiry_minutes} minutes. Don't share this code with anyone.",
+            [
+                new("app_name", "Acme"),
+                new("code", "847293"),
+                new("expiry_minutes", "10"),
+            ],
+            "active", "Mar 10, 2026", 2103),
+        new("tpl-5", "Team Invitation", "email",
+            "{inviter_name} invited you to join {workspace_name}",
+            "Hi {user_name},\n\n{inviter_name} has invited you to join the {workspace_name} workspace on {app_name}.\n\nRole: {role}\n\nAccept the invitation: {invite_url}\n\nThis invitation expires in {expiry_days} days.",
+            [
+                new("user_name", "Jordan Lee"),
+                new("inviter_name", "Emma Chen"),
+                new("workspace_name", "Engineering"),
+                new("app_name", "Acme Platform"),
+                new("role", "Editor"),
+                new("invite_url", "https://app.acme.com/invite/abc"),
+                new("expiry_days", "7"),
+            ],
+            "draft", "Mar 5, 2026", 0),
+    ];
+}

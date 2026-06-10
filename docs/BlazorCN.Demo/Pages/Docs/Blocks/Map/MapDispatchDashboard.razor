@@ -1,0 +1,321 @@
+@* ============================================================
+   Block: map-dispatch-dashboard
+   Title: MapDispatchDashboard
+   Description: Interactive dispatch operations dashboard with driver location markers, job assignment routes, status indicators, and a dispatch queue side panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-dispatch-dashboard.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="truck" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Dispatch</span>
+                <span class="text-xs text-muted-foreground">@_drivers.Length drivers</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var statusKey in new[] { "available", "en-route", "delivering" })
+                {
+                    var sk = statusKey;
+                    var count = Array.FindAll(_drivers, d => d.Status == sk).Length;
+                    var dotClass = GetStatusColor(sk);
+                    var label = GetStatusLabel(sk).ToLower();
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {dotClass}")"></span>
+                        @count @label
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Map + Queue Panel *@
+        <div class="flex">
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Active route lines (SVG overlay) *@
+                    <svg class="absolute inset-0 h-full w-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                        @foreach (var job in GetActiveJobs())
+                        {
+                            var jb = job;
+                            var driver = Array.Find(_drivers, d => d.Id == jb.AssignedTo);
+                            var color = (driver?.Status == "delivering") ? "#eab308" : "#3b82f6";
+                            var dashArray = (driver?.Status == "delivering") ? "6 4" : "";
+                            if (_routeCoordinates.TryGetValue(jb.Id, out var coords))
+                            {
+                                var points = string.Join(" ", coords.Select(c => {
+                                    var p = GetMarkerPosition(c[0], c[1]);
+                                    return $"{p.X:F1}%,{p.Y:F1}%";
+                                }));
+                                if (dashArray.Length > 0)
+                                {
+                                    @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"3\" stroke-opacity=\"0.7\" stroke-dasharray=\"{dashArray}\" />")
+                                }
+                                else
+                                {
+                                    @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"3\" stroke-opacity=\"0.7\" />")
+                                }
+                            }
+                        }
+                    </svg>
+
+                    @* Driver markers *@
+                    @foreach (var driver in _drivers)
+                    {
+                        var drv = driver;
+                        var drvPos = GetMarkerPosition(driver.Longitude, driver.Latitude);
+                        var drvBg = GetStatusColor(driver.Status);
+                        var isSelected = _selectedDriver == driver.Id;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{drvPos.X:F1}%;top:{drvPos.Y:F1}%")">
+                            <button
+                                type="button"
+                                class="relative"
+                                title="@($"{driver.Name} · {driver.Vehicle}")"
+                                @onclick="@(() => ToggleDriver(drv.Id))">
+                                <div class="@($"flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md {drvBg}")">
+                                    <LucideIconCn Name="truck" Size="14" Class="size-3.5 text-white" />
+                                </div>
+                            </button>
+
+                            @if (isSelected)
+                            {
+                                var currentJob = Array.Find(_jobs, j => j.Id == driver.CurrentJob);
+                                <div class="absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 w-52 rounded-lg border bg-card p-3 shadow-lg">
+                                    <div class="mb-2 flex items-center justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@driver.Name</p>
+                                            <p class="text-xs text-muted-foreground">@driver.Vehicle</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                            @GetStatusLabel(driver.Status)
+                                        </BadgeCn>
+                                    </div>
+                                    <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span class="flex items-center gap-1">
+                                            <LucideIconCn Name="package" Size="12" Class="size-3" />
+                                            @driver.CompletedToday today
+                                        </span>
+                                        @if (driver.CurrentJob != null)
+                                        {
+                                            <span>&middot;</span>
+                                            <span class="flex items-center gap-1">
+                                                <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                                @(currentJob?.Eta ?? "--")
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (driver.CurrentJob != null && currentJob != null)
+                                    {
+                                        <div class="mt-2 border-t pt-2">
+                                            <p class="text-xs font-medium text-muted-foreground">Current job</p>
+                                            <p class="mt-0.5 text-xs">@currentJob.Address</p>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* Destination markers *@
+                    @foreach (var job in GetActiveJobs())
+                    {
+                        var jb = job;
+                        var destPos = GetMarkerPosition(jb.Destination[0], jb.Destination[1]);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{destPos.X:F1}%;top:{destPos.Y:F1}%")"
+                            title="@jb.Address">
+                            <div class="flex size-5 items-center justify-center rounded-full border border-border bg-background shadow-sm">
+                                <LucideIconCn Name="package" Size="10" Class="size-2.5 text-muted-foreground" />
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded absolute bottom-2 left-1/2 -translate-x-1/2">
+                    Map view — Manhattan, NYC
+                </div>
+            </div>
+
+            @* Queue Panel *@
+            <div class="w-64 border-l">
+                <div class="border-b px-4 py-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">Queue</span>
+                        <span class="text-xs text-muted-foreground">@GetQueuedJobs().Length pending</span>
+                    </div>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @_availableCount driver@(_availableCount != 1 ? "s" : "") available
+                    </p>
+                </div>
+                <div class="max-h-[440px] overflow-y-auto">
+                    @{
+                        var queuedJobs = GetQueuedJobs();
+                    }
+                    @for (var qi = 0; qi < queuedJobs.Length; qi++)
+                    {
+                        var job = queuedJobs[qi];
+                        var isLast = qi == queuedJobs.Length - 1;
+                        var isExpanded = _expandedJob == job.Id;
+                        var jb = job;
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                                @onclick="@(() => ToggleJob(jb.Id))">
+                                <span class="@($"size-1.5 shrink-0 rounded-full {GetPriorityDot(jb.Priority)}")"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-sm font-medium">@job.Address</span>
+                                    <p class="mt-0.5 text-xs text-muted-foreground">
+                                        @job.Packages pkg@(job.Packages != 1 ? "s" : "") &middot; @job.Priority
+                                    </p>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="14" Class="@($"size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200{(isExpanded ? " rotate-90" : "")}")" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="px-4 pb-3">
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <p class="mb-1.5 text-xs font-medium text-muted-foreground">
+                                            Available drivers
+                                        </p>
+                                        @foreach (var avail in Array.FindAll(_drivers, d => d.Status == "available"))
+                                        {
+                                            <div class="flex items-center justify-between py-1">
+                                                <span class="flex items-center gap-1.5 text-xs">
+                                                    <LucideIconCn Name="user" Size="12" Class="size-3 text-muted-foreground" />
+                                                    @avail.Name
+                                                </span>
+                                                <span class="text-xs text-muted-foreground">@avail.Vehicle</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">
+                @GetActiveJobs().Length active &middot; @GetQueuedJobs().Length queued
+            </span>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <span class="text-xs text-muted-foreground">
+                @_drivers.Sum(d => d.CompletedToday) completed today
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Driver(
+        string Id,
+        string Name,
+        string Status,
+        string Vehicle,
+        double Longitude,
+        double Latitude,
+        string? CurrentJob,
+        int CompletedToday
+    );
+
+    private record Job(
+        string Id,
+        string Address,
+        string Priority,
+        string? AssignedTo,
+        double[] Destination,
+        string Eta,
+        int Packages
+    );
+
+    private static readonly Driver[] _drivers =
+    [
+        new("d1", "Marcus Chen",  "en-route",   "Van #104", -73.990, 40.735, "j1", 8),
+        new("d2", "Sarah Lopez",  "delivering", "Van #107", -73.982, 40.722, "j2", 11),
+        new("d3", "James Wright", "available",  "Van #112", -74.005, 40.730, null, 6),
+        new("d4", "Aisha Patel",  "en-route",   "Van #109", -73.975, 40.740, "j3", 9),
+        new("d5", "David Kim",    "available",  "Van #115", -74.000, 40.718, null, 12),
+    ];
+
+    private static readonly Job[] _jobs =
+    [
+        new("j1", "215 E 34th St",  "high",   "d1", [-73.978, 40.745], "12 min", 3),
+        new("j2", "88 Delancey St", "normal", "d2", [-73.988, 40.718], "4 min",  1),
+        new("j3", "401 E 60th St",  "high",   "d4", [-73.960, 40.760], "18 min", 5),
+        new("j4", "52 Prince St",   "normal", null, [-73.998, 40.723], "--",     2),
+        new("j5", "780 3rd Ave",    "low",    null, [-73.970, 40.755], "--",     1),
+        new("j6", "133 W 4th St",   "high",   null, [-74.001, 40.732], "--",     4),
+    ];
+
+    private static readonly Dictionary<string, double[][]> _routeCoordinates = new()
+    {
+        ["j1"] = [[-73.990, 40.735], [-73.987, 40.738], [-73.982, 40.742], [-73.978, 40.745]],
+        ["j2"] = [[-73.982, 40.722], [-73.985, 40.720], [-73.988, 40.718]],
+        ["j3"] = [[-73.975, 40.740], [-73.970, 40.748], [-73.965, 40.755], [-73.960, 40.760]],
+    };
+
+    private string? _selectedDriver = null;
+    private string? _expandedJob = null;
+
+    private int _availableCount => Array.FindAll(_drivers, d => d.Status == "available").Length;
+
+    private Job[] GetActiveJobs() => Array.FindAll(_jobs, j => j.AssignedTo != null);
+    private Job[] GetQueuedJobs() => Array.FindAll(_jobs, j => j.AssignedTo == null);
+
+    private void ToggleDriver(string id)
+    {
+        _selectedDriver = _selectedDriver == id ? null : id;
+    }
+
+    private void ToggleJob(string id)
+    {
+        _expandedJob = _expandedJob == id ? null : id;
+    }
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "available"  => "bg-emerald-500",
+        "en-route"   => "bg-blue-500",
+        "delivering" => "bg-amber-500",
+        _            => "bg-muted",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "available"  => "Available",
+        "en-route"   => "En Route",
+        "delivering" => "Delivering",
+        _            => status,
+    };
+
+    private static string GetPriorityDot(string priority) => priority switch
+    {
+        "high"   => "bg-red-500",
+        "normal" => "bg-amber-500",
+        "low"    => "bg-muted-foreground",
+        _        => "bg-muted",
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-74.015, -73.955], lat [40.710, 40.770]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.015, lonMax = -73.955;
+        const double latMin = 40.710,  latMax = 40.770;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

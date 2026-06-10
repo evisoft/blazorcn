@@ -1,0 +1,259 @@
+@* ============================================================
+   Block: account-scheduled-actions
+   Title: AccountScheduledActions
+   Description: A timeline-style scheduled actions manager for React and Next.js with cron-like repeat frequencies, pause/cancel controls, and collapsible completed history built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-scheduled-actions.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Scheduled Actions</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Automated tasks and upcoming account events
+                    </p>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span class="flex items-center gap-1">
+                        <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                        @_activeCount active
+                    </span>
+                    @if (_pausedCount > 0)
+                    {
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-amber-500"></span>
+                            @_pausedCount paused
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Timeline — Upcoming *@
+        <div class="relative px-4 py-3">
+            @* Vertical timeline line *@
+            <div class="absolute bottom-0 left-[29px] top-3 w-px bg-border"></div>
+
+            @if (_upcoming.Count == 0)
+            {
+                <div class="py-6 text-center">
+                    <LucideIconCn Name="calendar-clock" Size="20" Class="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+                    <p class="text-sm text-muted-foreground">No upcoming scheduled actions</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var action in _upcoming)
+                {
+                    var isPaused = action.Status == "paused";
+                    var isCancelling = _cancellingId == action.Id;
+                    var isToggling = _togglingId == action.Id;
+                    <div class="@Cn.Merge("relative mb-4 last:mb-0 pl-8", isPaused ? "opacity-60" : "", isCancelling ? "opacity-40" : "")">
+                        @* Timeline node *@
+                        <div class="@Cn.Merge("absolute left-0 top-0.5 flex size-5 items-center justify-center rounded-full border-2 bg-card", isPaused ? "border-amber-400" : "border-emerald-500")">
+                            <LucideIconCn Name="@GetActionIcon(action.Type)" Size="10" Class="h-2.5 w-2.5 text-muted-foreground" />
+                        </div>
+
+                        @* Action card *@
+                        <div class="@Cn.Merge("rounded-md border p-3 transition-colors", isPaused ? "border-dashed border-muted-foreground/30" : "hover:bg-muted/30")">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0 flex-1">
+                                    <div class="mb-1 flex flex-wrap items-center gap-1.5">
+                                        <span class="font-mono text-[11px] text-muted-foreground">
+                                            @action.ScheduledAt @action.ScheduledTime
+                                        </span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("h-4 px-1.5 text-[10px]", GetFrequencyColor(action.Frequency))">
+                                            @action.Frequency
+                                        </BadgeCn>
+                                        @if (isPaused)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 border-amber-400 px-1.5 text-[10px] text-amber-600">
+                                                paused
+                                            </BadgeCn>
+                                        }
+                                    </div>
+                                    <p class="text-sm font-medium leading-snug">@action.Description</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">@action.Details</p>
+                                    @if (!string.IsNullOrEmpty(action.NextOccurrence) && action.Frequency != "one-time")
+                                    {
+                                        <p class="mt-1 text-[10px] text-muted-foreground">
+                                            Next: @(isPaused ? "Resumes on unpause" : action.NextOccurrence)
+                                        </p>
+                                    }
+                                </div>
+
+                                @* Action buttons *@
+                                <div class="flex shrink-0 items-center gap-1">
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 w-7 p-0" Disabled="@(isToggling || isCancelling)" OnClick="@(async (_) => await HandleTogglePause(action.Id))">
+                                        @if (isToggling)
+                                        {
+                                            <LucideIconCn Name="loader-2" Size="14" Class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                        }
+                                        else if (isPaused)
+                                        {
+                                            <LucideIconCn Name="play" Size="14" Class="h-3.5 w-3.5 text-emerald-600" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="circle-pause" Size="14" Class="h-3.5 w-3.5 text-muted-foreground" />
+                                        }
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 w-7 p-0 text-destructive hover:text-destructive" Disabled="@(isCancelling || isToggling)" OnClick="@(async (_) => await HandleCancel(action.Id))">
+                                        @if (isCancelling)
+                                        {
+                                            <LucideIconCn Name="loader-2" Size="14" Class="h-3.5 w-3.5 animate-spin" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="x" Size="14" Class="h-3.5 w-3.5" />
+                                        }
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Completed Actions — Collapsible *@
+        @if (_completed.Length > 0)
+        {
+            <div class="border-t">
+                <button
+                    type="button"
+                    class="flex w-full items-center justify-between px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/30"
+                    @onclick="@(() => _showCompleted = !_showCompleted)">
+                    <span class="flex items-center gap-1.5">
+                        <LucideIconCn Name="check-circle-2" Size="12" Class="h-3 w-3" />
+                        @_completed.Length completed actions
+                    </span>
+                    <LucideIconCn Name="chevron-down" Size="12" Class="@Cn.Merge("h-3 w-3 transition-transform duration-200", _showCompleted ? "rotate-180" : "")" />
+                </button>
+
+                @if (_showCompleted)
+                {
+                    <div class="overflow-hidden">
+                        <div class="relative border-t px-4 py-3">
+                            <div class="absolute bottom-0 left-[29px] top-3 w-px bg-border"></div>
+                            @foreach (var action in _completed)
+                            {
+                                <div class="relative mb-3 pl-8 last:mb-0 opacity-50">
+                                    <div class="absolute left-0 top-0.5 flex size-5 items-center justify-center rounded-full border-2 border-muted bg-card">
+                                        <LucideIconCn Name="@GetActionIcon(action.Type)" Size="10" Class="h-2.5 w-2.5 text-muted-foreground" />
+                                    </div>
+                                    <div class="rounded-md bg-muted/30 p-2.5">
+                                        <div class="mb-0.5 flex items-center gap-1.5">
+                                            <span class="font-mono text-[11px] text-muted-foreground">
+                                                @action.ScheduledAt @action.ScheduledTime
+                                            </span>
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">
+                                                @action.Frequency
+                                            </BadgeCn>
+                                        </div>
+                                        <p class="text-xs text-muted-foreground line-through">@action.Description</p>
+                                        <p class="mt-0.5 text-[10px] text-muted-foreground">@action.Details</p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Footer *@
+        <div class="border-t bg-muted/20 px-4 py-2">
+            <div class="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>
+                    @_upcoming.Count upcoming &middot; @_completed.Length completed
+                </span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="trash-2" Size="10" Class="h-2.5 w-2.5" />
+                    Cancelled actions are permanently removed
+                </span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ScheduledAction(
+        string Id,
+        string Type,
+        string Description,
+        string ScheduledAt,
+        string ScheduledTime,
+        string Frequency,
+        string Status,
+        string Details,
+        string? NextOccurrence = null
+    );
+
+    private List<ScheduledAction> _upcoming =
+    [
+        new("sa-1", "data-purge", "Purge inactive user sessions older than 90 days", "2026-04-07", "03:00 UTC", "weekly", "active", "Removes expired session tokens and associated metadata from the sessions table. Estimated 12,400 records.", "Apr 14, 2026"),
+        new("sa-2", "auto-renewal", "Pro plan renewal — $29/mo charged to Visa ending 4242", "2026-04-12", "00:00 UTC", "monthly", "active", "Automatic charge to payment method on file. Receipt sent to alex@company.com. Cancel before this date to avoid charge.", "May 12, 2026"),
+        new("sa-3", "report-generation", "Weekly usage analytics report — PDF + CSV export", "2026-04-08", "06:00 UTC", "weekly", "paused", "Generates aggregated API usage, error rates, and latency percentiles. Delivered to team-reports@company.com.", "Paused"),
+        new("sa-4", "backup", "Full database snapshot to S3 (us-east-1)", "2026-04-06", "02:00 UTC", "daily", "active", "Compressed PostgreSQL dump uploaded to s3://backups-prod/daily/. Retention: 30 days. Last backup size: 2.4 GB."),
+        new("sa-5", "data-purge", "One-time PII removal for GDPR deletion request #4821", "2026-04-10", "00:00 UTC", "one-time", "active", "Permanently removes all personal data associated with user ID usr_k8mQ3x. Affects users, orders, and audit_logs tables."),
+    ];
+
+    private static readonly ScheduledAction[] _completed =
+    [
+        new("sa-c1", "report-generation", "Monthly billing summary — March 2026", "2026-04-01", "06:00 UTC", "monthly", "completed", "Generated and delivered to finance@company.com. Total: $1,247.00 across 3 workspaces."),
+        new("sa-c2", "backup", "Full database snapshot to S3 (us-east-1)", "2026-04-05", "02:00 UTC", "daily", "completed", "Completed in 4m 12s. Snapshot size: 2.4 GB. Verified checksum integrity."),
+        new("sa-c3", "data-purge", "Purge inactive user sessions older than 90 days", "2026-03-31", "03:00 UTC", "weekly", "completed", "Removed 11,892 expired session records. Freed 340 MB of storage."),
+    ];
+
+    private bool _showCompleted;
+    private string? _cancellingId;
+    private string? _togglingId;
+
+    private int _activeCount => _upcoming.Count(a => a.Status == "active");
+    private int _pausedCount => _upcoming.Count(a => a.Status == "paused");
+
+    private static string GetActionIcon(string type) => type switch
+    {
+        "auto-renewal" => "refresh-cw",
+        "data-purge" => "database",
+        "report-generation" => "file-bar-chart",
+        "backup" => "database",
+        _ => "calendar-clock",
+    };
+
+    private static string GetFrequencyColor(string frequency) => frequency switch
+    {
+        "one-time" => "bg-blue-500/10 text-blue-600",
+        "daily" => "bg-emerald-500/10 text-emerald-600",
+        "weekly" => "bg-amber-500/10 text-amber-600",
+        "monthly" => "bg-muted text-muted-foreground",
+        _ => "",
+    };
+
+    private async Task HandleTogglePause(string id)
+    {
+        _togglingId = id;
+        StateHasChanged();
+        await Task.Delay(600);
+        var idx = _upcoming.FindIndex(a => a.Id == id);
+        if (idx >= 0)
+        {
+            var a = _upcoming[idx];
+            _upcoming[idx] = a with { Status = a.Status == "active" ? "paused" : "active" };
+        }
+        _togglingId = null;
+    }
+
+    private async Task HandleCancel(string id)
+    {
+        _cancellingId = id;
+        StateHasChanged();
+        await Task.Delay(800);
+        _upcoming.RemoveAll(a => a.Id == id);
+        _cancellingId = null;
+    }
+}

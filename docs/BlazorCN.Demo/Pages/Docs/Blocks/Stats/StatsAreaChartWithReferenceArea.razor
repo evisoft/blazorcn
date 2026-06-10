@@ -1,0 +1,163 @@
+@* ============================================================
+   Block: stats-area-chart-with-reference-area
+   Title: StatsAreaChartWithReferenceArea
+   Description: An area chart stats card for React and Next.js with a ReferenceArea highlighting an incident window, gradient fill via var(--chart-1), and a labeled amber overlay built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-area-chart-with-reference-area.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">API p95 latency</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Last 12 days · us-east-1</p>
+            </div>
+            <div class="flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-0.5">
+                <LucideIconCn Name="triangle-alert" Size="12" Class="size-3 text-amber-600 dark:text-amber-400" />
+                <span class="text-xs font-medium text-amber-600 dark:text-amber-400">
+                    @_incidentLabel
+                </span>
+            </div>
+        </div>
+
+        <div class="px-4 py-4">
+            <div class="h-[220px] w-full">
+                <svg viewBox="0 0 @_svgWidth @_svgHeight" class="h-full w-full overflow-visible" aria-label="API p95 latency area chart">
+                    <defs>
+                        <linearGradient id="fill-latency-ref" x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stop-color="var(--chart-1)" stop-opacity="0.35" />
+                            <stop offset="100%" stop-color="var(--chart-1)" stop-opacity="0" />
+                        </linearGradient>
+                    </defs>
+
+                    @* Cartesian grid — horizontal lines only *@
+                    @foreach (var gy in _gridYValues)
+                    {
+                        var yPx = ValueToY(gy);
+                        <line x1="@_plotLeft" y1="@yPx" x2="@_plotRight" y2="@yPx"
+                              stroke="currentColor" stroke-opacity="0.1" stroke-dasharray="3 3" />
+                    }
+
+                    @* ReferenceArea: incident window Apr 7 – Apr 9 (indices 6..8) *@
+                    @{
+                        var refX1 = DateToX("2026-04-07");
+                        var refX2 = DateToX("2026-04-09");
+                    }
+                    <rect x="@refX1" y="@_plotTop" width="@(refX2 - refX1)" height="@_plotHeight"
+                          fill="oklch(0.82 0.18 84)" fill-opacity="0.18"
+                          stroke="oklch(0.82 0.18 84)" stroke-opacity="0.4" stroke-width="1" />
+
+                    @* Area fill *@
+                    <path d="@_areaPath" fill="url(#fill-latency-ref)" />
+
+                    @* Area stroke line *@
+                    <path d="@_linePath" fill="none" stroke="var(--chart-1)" stroke-width="2" />
+
+                    @* X-axis tick labels *@
+                    @foreach (var pt in _labelPoints)
+                    {
+                        var lx = DateToX(pt.Date);
+                        @((MarkupString)$"<text x=\"{lx}\" y=\"{_svgHeight - 2}\" text-anchor=\"middle\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.6\">{pt.Label}</text>")
+                    }
+                </svg>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DataPoint(string Date, int Latency);
+    private record LabelPoint(string Date, string Label);
+
+    private static readonly DataPoint[] _chartData =
+    [
+        new("2026-04-01", 142),
+        new("2026-04-02", 138),
+        new("2026-04-03", 145),
+        new("2026-04-04", 151),
+        new("2026-04-05", 148),
+        new("2026-04-06", 162),
+        new("2026-04-07", 298),
+        new("2026-04-08", 412),
+        new("2026-04-09", 354),
+        new("2026-04-10", 188),
+        new("2026-04-11", 156),
+        new("2026-04-12", 149),
+    ];
+
+    private const string _incidentLabel = "Apr 7 – Apr 9 incident window";
+
+    // SVG viewport
+    private const double _svgWidth = 600;
+    private const double _svgHeight = 220;
+    private const double _plotLeft = 8;
+    private const double _plotRight = 592;
+    private const double _plotTop = 4;
+    private const double _plotBottom = 190;
+    private double _plotHeight => _plotBottom - _plotTop;
+
+    // Y-axis grid lines (rough intervals)
+    private static readonly int[] _gridYValues = [100, 200, 300, 400];
+
+    // Evenly-spaced labels (first, middle, last)
+    private static readonly LabelPoint[] _labelPoints =
+    [
+        new("2026-04-01", "Apr 1"),
+        new("2026-04-04", "Apr 4"),
+        new("2026-04-07", "Apr 7"),
+        new("2026-04-10", "Apr 10"),
+        new("2026-04-12", "Apr 12"),
+    ];
+
+    private static readonly int _minLatency = 0;
+    private static readonly int _maxLatency = 430;
+
+    private double ValueToY(double value)
+    {
+        var ratio = 1.0 - (value - _minLatency) / (_maxLatency - _minLatency);
+        return _plotTop + ratio * _plotHeight;
+    }
+
+    private double DateToX(string date)
+    {
+        // Map date string to an index among the 12 data points
+        var idx = System.Array.FindIndex(_chartData, d => d.Date == date);
+        if (idx < 0) idx = 0;
+        var step = (_plotRight - _plotLeft) / (_chartData.Length - 1);
+        return _plotLeft + idx * step;
+    }
+
+    private string _linePath
+    {
+        get
+        {
+            var sb = new System.Text.StringBuilder();
+            for (var i = 0; i < _chartData.Length; i++)
+            {
+                var x = DateToX(_chartData[i].Date);
+                var y = ValueToY(_chartData[i].Latency);
+                sb.Append(i == 0 ? $"M{x:F1},{y:F1}" : $" L{x:F1},{y:F1}");
+            }
+            return sb.ToString();
+        }
+    }
+
+    private string _areaPath
+    {
+        get
+        {
+            var sb = new System.Text.StringBuilder();
+            for (var i = 0; i < _chartData.Length; i++)
+            {
+                var x = DateToX(_chartData[i].Date);
+                var y = ValueToY(_chartData[i].Latency);
+                sb.Append(i == 0 ? $"M{x:F1},{y:F1}" : $" L{x:F1},{y:F1}");
+            }
+            // Close down to baseline
+            var lastX = DateToX(_chartData[_chartData.Length - 1].Date);
+            var firstX = DateToX(_chartData[0].Date);
+            sb.Append($" L{lastX:F1},{_plotBottom:F1} L{firstX:F1},{_plotBottom:F1} Z");
+            return sb.ToString();
+        }
+    }
+}

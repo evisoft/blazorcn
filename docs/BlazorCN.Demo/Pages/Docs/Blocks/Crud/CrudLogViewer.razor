@@ -1,0 +1,150 @@
+@* ============================================================
+   Block: crud-log-viewer
+   Title: CrudLogViewer
+   Description: Application log browser with severity filtering, timestamp display, source tracking, and search
+   Source: original/blocks/crud/crud-log-viewer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="terminal" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Application Logs</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_logs.Count entries · @(_logs.Count(l => l.Level == "error")) errors
+                        </p>
+                    </div>
+                </div>
+                <div class="flex gap-1">
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 px-2 text-xs" @onclick="@(() => HandleClearLevel("debug"))">
+                        Clear Debug
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 px-2 text-xs">
+                        Export
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search logs..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var lvl in _filterOptions)
+                {
+                    var level = lvl;
+                    <button type="button"
+                            @onclick="@(() => _filter = level)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == level ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @(level.Substring(0, 1).ToUpper() + level.Substring(1))
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @{
+                var filtered = _logs
+                    .Where(l => _filter == "all" || l.Level == _filter)
+                    .Where(l => string.IsNullOrEmpty(_search) ||
+                        l.Message.Contains(_search, System.StringComparison.OrdinalIgnoreCase) ||
+                        l.Source.Contains(_search, System.StringComparison.OrdinalIgnoreCase) ||
+                        l.RequestId.Contains(_search, System.StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            @foreach (var log in filtered)
+            {
+                var logItem = log;
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", LevelColor(logItem.Level))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-xs text-muted-foreground">@logItem.Timestamp</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0 uppercase">
+                                    @logItem.Level
+                                </BadgeCn>
+                                <span class="font-mono text-xs text-muted-foreground">@logItem.Source</span>
+                            </div>
+                            <p class="mt-0.5 text-sm font-medium">@logItem.Message</p>
+                            <p class="mt-0.5 font-mono text-xs text-muted-foreground line-clamp-1">
+                                @logItem.Details
+                            </p>
+                            <div class="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span class="font-mono">@logItem.RequestId</span>
+                            </div>
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>View Details</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Copy Request ID</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Filter by Source</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(logItem.Id))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Dismiss
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (!filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">No logs found</div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record LogEntry(int Id, string Timestamp, string Level, string Source, string Message, string Details, string RequestId);
+
+    private static readonly LogEntry[] _initial =
+    [
+        new(1, "14:23:45.123", "error", "api-gateway", "Connection refused to upstream service", "ECONNREFUSED 10.0.1.45:5432 - PostgreSQL connection pool exhausted", "req_8f3k2m"),
+        new(2, "14:23:44.890", "warn", "auth-service", "Rate limit threshold reached for IP 192.168.1.42", "150/100 requests per minute. Throttling enabled.", "req_7d2n1p"),
+        new(3, "14:23:44.567", "info", "payment-service", "Stripe webhook processed successfully", "Event: invoice.payment_succeeded, Customer: cus_N8x2kL", "req_9a4b3c"),
+        new(4, "14:23:43.234", "error", "worker", "Job processing failed: email-send", "TimeoutError: SendGrid API response exceeded 30s timeout", "job_k2m4n6"),
+        new(5, "14:23:42.901", "debug", "cache", "Cache miss for key: user:preferences:12847", "Falling back to database query. TTL: 3600s", "req_5f7g8h"),
+        new(6, "14:23:42.678", "info", "api-gateway", "Health check passed for all upstream services", "5/5 services healthy. Avg response: 12ms", "sys_health"),
+        new(7, "14:23:41.345", "warn", "storage", "Disk usage at 85% on volume /data", "Current: 425GB / 500GB. Consider scaling or cleanup.", "sys_monitor"),
+        new(8, "14:23:40.012", "info", "deploy", "Deployment v2.14.3 completed successfully", "Rollout: 100% of 12 instances. Duration: 45s", "deploy_2143"),
+    ];
+
+    private List<LogEntry> _logs = _initial.ToList();
+    private string _search = "";
+    private string _filter = "all";
+
+    private static readonly string[] _filterOptions = ["all", "error", "warn", "info", "debug"];
+
+    private static string LevelColor(string level) => level switch
+    {
+        "error" => "bg-red-500",
+        "warn"  => "bg-amber-500",
+        "info"  => "bg-blue-500",
+        "debug" => "bg-muted-foreground/40",
+        _       => "bg-muted-foreground/40",
+    };
+
+    private void HandleDelete(int id)
+    {
+        _logs = _logs.Where(l => l.Id != id).ToList();
+    }
+
+    private void HandleClearLevel(string level)
+    {
+        _logs = _logs.Where(l => l.Level != level).ToList();
+    }
+}

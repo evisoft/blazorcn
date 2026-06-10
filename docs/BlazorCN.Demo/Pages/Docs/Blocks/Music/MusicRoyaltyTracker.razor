@@ -1,0 +1,191 @@
+@* ============================================================
+   Block: music-royalty-tracker
+   Title: MusicRoyaltyTracker
+   Description: A music royalty earnings tracker block for React and Next.js with platform breakdown, monthly chart, per-stream rate, and payout history built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-royalty-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="music" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Royalty Tracker</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                Last 12 months
+            </BadgeCn>
+        </div>
+
+        @* Stats row *@
+        <div class="grid grid-cols-3 border-b">
+            <div class="border-r px-4 py-3">
+                <span class="text-muted-foreground text-xs">Total Streams</span>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">@((_totalStreams / 1_000_000.0).ToString("F1"))M</p>
+            </div>
+            <div class="border-r px-4 py-3">
+                <span class="text-muted-foreground text-xs">Total Revenue</span>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">$@(_totalRevenue.ToString("N0"))</p>
+            </div>
+            <div class="px-4 py-3">
+                <span class="text-muted-foreground text-xs">Avg. Per Stream</span>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">
+                    $@(((_totalRevenue / _totalStreams) * 1000).ToString("F2"))
+                    <span class="font-normal text-muted-foreground text-xs">/1K</span>
+                </p>
+            </div>
+        </div>
+
+        @* Chart *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">Monthly Earnings</span>
+            <div class="h-[180px] w-full">
+                @{
+                    var chartMax = _chartData.Max(d => d.Earnings);
+                    var chartWidth = 560;
+                    var chartHeight = 150;
+                    var barCount = _chartData.Length;
+                    var barAreaWidth = chartWidth - 48;
+                    var barSlotWidth = barAreaWidth / barCount;
+                    var barWidth = (int)(barSlotWidth * 0.6);
+                    var barGap = barSlotWidth - barWidth;
+                }
+                <svg viewBox="0 0 @(chartWidth) @(chartHeight + 24)" class="w-full h-full" aria-label="Monthly Earnings Bar Chart">
+                    @* Y-axis grid lines *@
+                    @for (var gi = 0; gi <= 4; gi++)
+                    {
+                        var gy = (int)(chartHeight - (gi / 4.0) * chartHeight);
+                        var labelVal = (int)((gi / 4.0) * chartMax);
+                        var labelStr = labelVal >= 1000 ? $"${labelVal / 1000}k" : $"${labelVal}";
+                        @((MarkupString)$"<line x1=\"36\" y1=\"{gy}\" x2=\"{chartWidth}\" y2=\"{gy}\" stroke=\"currentColor\" stroke-opacity=\"0.1\" stroke-width=\"1\" />")
+                        @((MarkupString)$"<text x=\"32\" y=\"{gy + 4}\" text-anchor=\"end\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.5\">{labelStr}</text>")
+                    }
+                    @* Bars and X labels *@
+                    @for (var bi = 0; bi < _chartData.Length; bi++)
+                    {
+                        var entry = _chartData[bi];
+                        var barH = (int)((entry.Earnings / (double)chartMax) * chartHeight);
+                        var barX = 36 + (int)(bi * barSlotWidth) + (int)(barGap / 2.0);
+                        var barY = chartHeight - barH;
+                        var labelX = 36 + (int)(bi * barSlotWidth) + barSlotWidth / 2;
+                        @((MarkupString)$"<rect x=\"{barX}\" y=\"{barY}\" width=\"{barWidth}\" height=\"{barH}\" rx=\"4\" fill=\"var(--chart-1, hsl(var(--primary)))\" />")
+                        @((MarkupString)$"<text x=\"{labelX}\" y=\"{chartHeight + 16}\" text-anchor=\"middle\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.5\">{entry.Month}</text>")
+                    }
+                </svg>
+            </div>
+        </div>
+
+        @* Platform breakdown *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">Platform Breakdown</span>
+            <div class="space-y-1">
+                @foreach (var platform in _platforms)
+                {
+                    var pid = platform.Id;
+                    <button type="button"
+                            class="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => _selectedPlatform = (_selectedPlatform == pid ? null : pid))">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", platform.Color)"></span>
+                        <span class="min-w-0 flex-1 font-medium text-sm">@platform.Name</span>
+                        <div class="flex items-center gap-4">
+                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                <LucideIconCn Name="headphones" Size="12" Class="size-3" />
+                                @((platform.Streams / 1000.0).ToString("F0"))K
+                            </span>
+                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                                @platform.RatePerStream
+                            </span>
+                            <span class="w-16 text-right font-medium text-sm tabular-nums">
+                                $@platform.Revenue.ToString("N0")
+                            </span>
+                        </div>
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Payout history *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2 flex items-center justify-between">
+                <span class="font-medium text-muted-foreground text-xs">Payout History</span>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="download" Size="12" Class="size-3" />
+                    Export
+                </ButtonCn>
+            </div>
+            <div class="space-y-0">
+                @foreach (var payout in _payouts)
+                {
+                    <div class="flex items-center gap-3 py-2">
+                        <LucideIconCn Name="dollar-sign" Size="14" Class="size-3.5 text-muted-foreground" />
+                        <span class="text-sm">@payout.Date</span>
+                        <span class="@Cn.Merge("size-1.5 rounded-full", _statusDot.TryGetValue(payout.Status, out var dotColor) ? dotColor : "bg-muted")"></span>
+                        <span class="text-muted-foreground text-xs capitalize">@payout.Status</span>
+                        <span class="ml-auto font-medium text-sm tabular-nums">@payout.Amount</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Payouts processed monthly via ACH &middot; Minimum threshold $50
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Platform(string Id, string Name, int Streams, double Revenue, string RatePerStream, string Color);
+    private record Payout(string Id, string Date, string Amount, string Status);
+    private record ChartEntry(string Month, int Earnings);
+
+    private static readonly Platform[] _platforms =
+    [
+        new("spotify",  "Spotify",       1842650, 7370.6,  "$0.004", "bg-emerald-500"),
+        new("apple",    "Apple Music",    623400, 4988.0,  "$0.008", "bg-red-500"),
+        new("youtube",  "YouTube Music", 2156300, 2156.3,  "$0.001", "bg-amber-500"),
+        new("tidal",    "Tidal",           98200, 1276.6,  "$0.013", "bg-blue-500"),
+    ];
+
+    private static readonly ChartEntry[] _chartData =
+    [
+        new("Jul", 1820),
+        new("Aug", 2140),
+        new("Sep", 1960),
+        new("Oct", 2480),
+        new("Nov", 2890),
+        new("Dec", 3420),
+        new("Jan", 3150),
+        new("Feb", 2980),
+        new("Mar", 3640),
+        new("Apr", 3210),
+        new("May", 3780),
+        new("Jun", 4120),
+    ];
+
+    private static readonly Payout[] _payouts =
+    [
+        new("p1", "Mar 15, 2026", "$3,640.20", "completed"),
+        new("p2", "Feb 15, 2026", "$2,980.50", "completed"),
+        new("p3", "Jan 15, 2026", "$3,150.80", "completed"),
+        new("p4", "Apr 15, 2026", "$4,120.00", "pending"),
+    ];
+
+    private static readonly Dictionary<string, string> _statusDot = new()
+    {
+        ["completed"]  = "bg-emerald-500",
+        ["pending"]    = "bg-amber-500",
+        ["processing"] = "bg-blue-500",
+    };
+
+    private static readonly int _totalStreams = _platforms.Sum(p => p.Streams);
+    private static readonly double _totalRevenue = _platforms.Sum(p => p.Revenue);
+
+    private string? _selectedPlatform;
+}

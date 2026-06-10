@@ -1,0 +1,230 @@
+@* ============================================================
+   Block: file-upload-invoice-processor
+   Title: FileUploadInvoiceProcessor
+   Description: An invoice upload and data extraction block for React and Next.js with PDF and image upload, automatic field extraction for vendor, invoice number, date, and line items, editable extracted fields, total calculation, and mark as processed workflow using shadcn/ui Button, Badge, Input, and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-invoice-processor.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="file-text" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Invoice Processor</span>
+            <div class="ml-auto flex items-center gap-2">
+                @if (_processed)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 font-normal text-xs">
+                        <LucideIconCn Name="check" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                        Processed
+                    </BadgeCn>
+                }
+                else
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                        Pending review
+                    </BadgeCn>
+                }
+            </div>
+        </div>
+
+        @if (!_uploaded)
+        {
+            @* Upload area *@
+            <div class="flex flex-col items-center px-4 py-10">
+                <LucideIconCn Name="upload" Size="32" Class="mb-3 size-8 text-muted-foreground" />
+                <span class="font-medium text-sm">Upload an invoice</span>
+                <span class="mt-1 text-muted-foreground text-xs">PDF, PNG, or JPG up to 25 MB</span>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-4 h-7 text-xs" OnClick="@(() => _uploaded = true)">
+                    Choose file
+                </ButtonCn>
+            </div>
+        }
+        else
+        {
+            @* File info *@
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted/50">
+                    <LucideIconCn Name="file-text" Size="16" Class="size-4 text-muted-foreground/60" />
+                </div>
+                <div class="min-w-0 flex-1">
+                    <span class="block truncate font-medium text-sm">acme-invoice-04892.pdf</span>
+                    <span class="text-muted-foreground text-xs">248 KB</span>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-mono font-normal text-xs">
+                    PDF
+                </BadgeCn>
+            </div>
+
+            @* Extracted fields *@
+            <div class="border-b px-4 py-3">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="font-medium text-muted-foreground text-xs">Extracted fields</span>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs" OnClick="@(() => _editing = !_editing)">
+                        <LucideIconCn Name="pencil" Size="12" Class="size-3" />
+                        @(_editing ? "Done" : "Edit")
+                    </ButtonCn>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <span class="text-muted-foreground text-xs">Vendor</span>
+                        @if (_editing)
+                        {
+                            <InputCn @bind-Value="_vendor" Class="mt-0.5 h-7 text-sm" />
+                        }
+                        else
+                        {
+                            <p class="mt-0.5 text-sm">@_vendor</p>
+                        }
+                    </div>
+                    <div>
+                        <span class="text-muted-foreground text-xs">Invoice number</span>
+                        @if (_editing)
+                        {
+                            <InputCn @bind-Value="_invoiceNumber" Class="mt-0.5 h-7 font-mono text-sm" />
+                        }
+                        else
+                        {
+                            <p class="mt-0.5 font-mono text-sm">@_invoiceNumber</p>
+                        }
+                    </div>
+                    <div>
+                        <span class="text-muted-foreground text-xs">Invoice date</span>
+                        @if (_editing)
+                        {
+                            <InputCn @bind-Value="_date" Class="mt-0.5 h-7 text-sm" />
+                        }
+                        else
+                        {
+                            <p class="mt-0.5 text-sm">@_date</p>
+                        }
+                    </div>
+                    <div>
+                        <span class="text-muted-foreground text-xs">Due date</span>
+                        @if (_editing)
+                        {
+                            <InputCn @bind-Value="_dueDate" Class="mt-0.5 h-7 text-sm" />
+                        }
+                        else
+                        {
+                            <p class="mt-0.5 text-sm">@_dueDate</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Line items *@
+            <div class="border-b">
+                <div class="px-4 py-2">
+                    <span class="font-medium text-muted-foreground text-xs">
+                        Line items (@_lineItems.Length)
+                    </span>
+                </div>
+                @for (int i = 0; i < _lineItems.Length; i++)
+                {
+                    var item = _lineItems[i];
+                    var isLast = i == _lineItems.Length - 1;
+                    var isExpanded = _expandedItem == item.Id;
+                    <div class="@(isLast ? "" : "border-b")">
+                        <button type="button"
+                                @onclick="@(() => ToggleItem(item.Id))"
+                                class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm">@item.Description</span>
+                            </div>
+                            <span class="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">
+                                @FormatCurrency(item.Amount)
+                            </span>
+                            <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        </button>
+                        @if (isExpanded)
+                        {
+                            <div class="px-4 pb-3">
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <div class="grid grid-cols-3 gap-2 text-xs">
+                                        <div>
+                                            <span class="text-muted-foreground">Quantity</span>
+                                            <p class="font-mono tabular-nums">@item.Quantity</p>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted-foreground">Unit price</span>
+                                            <p class="font-mono tabular-nums">@FormatCurrency(item.UnitPrice)</p>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted-foreground">Amount</span>
+                                            <p class="font-mono tabular-nums">@FormatCurrency(item.Amount)</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* Totals *@
+            <div class="border-b px-4 py-3">
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">Subtotal</span>
+                        <span class="font-mono tabular-nums">@FormatCurrency(_subtotal)</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">Tax</span>
+                        <span class="font-mono tabular-nums">@FormatCurrency(_tax)</span>
+                    </div>
+                    <div class="flex items-center justify-between pt-1.5">
+                        <span class="font-medium text-sm">Total</span>
+                        <span class="font-mono font-semibold text-sm tabular-nums">@FormatCurrency(_total)</span>
+                    </div>
+                </div>
+            </div>
+
+            @* Actions *@
+            <div class="flex items-center justify-end gap-2 px-4 py-3">
+                @if (!_processed)
+                {
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="@(() => _processed = true)">
+                        <LucideIconCn Name="check" Size="12" Class="size-3" />
+                        Mark as processed
+                    </ButtonCn>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record LineItem(string Id, string Description, int Quantity, double UnitPrice, double Amount);
+
+    private static readonly LineItem[] _defaultLineItems =
+    [
+        new("1", "Cloud Compute (Standard)",       3, 249.0, 747.0),
+        new("2", "Managed Database (PostgreSQL)",  1, 189.0, 189.0),
+        new("3", "CDN Bandwidth (500 GB)",         1,  49.0,  49.0),
+        new("4", "SSL Certificate (Wildcard)",     2,  29.0,  58.0),
+    ];
+
+    private bool _uploaded = true;
+    private bool _editing = false;
+    private bool _processed = false;
+
+    private string _vendor        = "Acme Cloud Services Inc.";
+    private string _invoiceNumber = "INV-2026-04892";
+    private string _date          = "Mar 12, 2026";
+    private string _dueDate       = "Apr 11, 2026";
+
+    private LineItem[] _lineItems = _defaultLineItems;
+    private double _subtotal = 1043.0;
+    private double _tax      = 93.87;
+    private double _total    = 1136.87;
+
+    private string? _expandedItem = null;
+
+    private void ToggleItem(string id)
+    {
+        _expandedItem = _expandedItem == id ? null : id;
+    }
+
+    private static string FormatCurrency(double value) => $"${value:F2}";
+}

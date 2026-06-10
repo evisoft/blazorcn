@@ -1,0 +1,328 @@
+@* ============================================================
+   Block: map-sports-facilities
+   Title: MapSportsFacilities
+   Description: React sports facility locator map block for Next.js with activity type markers, court availability indicators, booking links, and facility detail cards using mapcn and shadcn/ui
+   Source: original/blocks/map/map-sports-facilities.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Sports Facilities</span>
+            <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                <span class="tabular-nums">@_filteredFacilities.Length venues</span>
+                <span>·</span>
+                <span class="tabular-nums">@TotalAvailable slots available</span>
+            </div>
+        </div>
+
+        @* Sport filters *@
+        <div class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2.5">
+            @foreach (var sport in _sportKeys)
+            {
+                var s = sport;
+                var isActive = _sportFilter.Contains(s);
+                <button
+                    type="button"
+                    @onclick="@(() => ToggleSport(s))"
+                    class="@Cn.Merge("flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors", isActive ? "border-foreground/20 bg-foreground/10 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/50")">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", GetSportDot(s))"></span>
+                    @GetSportLabel(s)
+                </button>
+            }
+            @if (_sportFilter.Count > 0)
+            {
+                <button
+                    type="button"
+                    @onclick="@(() => _sportFilter.Clear())"
+                    class="ml-1 text-muted-foreground text-xs underline underline-offset-2 hover:text-foreground">
+                    Clear
+                </button>
+            }
+        </div>
+
+        @* Map — Map/MapMarker/MarkerContent/MarkerTooltip/MapControls are custom registry
+           components with no BlazorCN equivalent; rendered as a styled static map placeholder
+           showing all markers and a tooltip on hover for each facility. *@
+        <div class="relative h-[370px] border-b bg-muted/30">
+            @* Map background grid lines *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[28%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[52%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[72%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[22%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[48%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[70%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                New York City
+            </div>
+
+            @* Map zoom controls (top-right) *@
+            <div class="absolute right-4 top-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* Facility markers *@
+            @foreach (var facility in _filteredFacilities)
+            {
+                var fac = facility;
+                var pos = GetMarkerPosition(fac);
+                var isSelected = _selected == fac.Id;
+                var primarySport = fac.Sports[0];
+                var slotsOpen = fac.Courts.Sum(c => c.Available);
+                <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => HandleMarkerClick(fac.Id))"
+                        class="group relative flex flex-col items-center">
+                        @* MarkerContent *@
+                        <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md transition-transform", GetSportDot(primarySport), isSelected ? "scale-125 ring-2 ring-foreground/20" : "")">
+                            <span class="font-bold text-white text-[10px]">@GetSportEmoji(primarySport)</span>
+                        </div>
+                        @* MarkerTooltip (hover) *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[130px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            <div class="flex flex-col gap-0.5">
+                                <span class="font-medium">@fac.Name</span>
+                                <span class="text-[10px] opacity-70">@slotsOpen slots open</span>
+                            </div>
+                        </div>
+                    </button>
+                </div>
+            }
+        </div>
+
+        @* Facility list *@
+        <div>
+            @for (int idx = 0; idx < _filteredFacilities.Length; idx++)
+            {
+                var fac = _filteredFacilities[idx];
+                var isLast = idx == _filteredFacilities.Length - 1;
+                var isExpanded = _expanded == fac.Id;
+                var facilityAvailable = fac.Courts.Sum(c => c.Available);
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => { _expanded = isExpanded ? null : fac.Id; _selected = fac.Id; })"
+                        class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", _selected == fac.Id ? "bg-muted/30" : "")">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", GetSportDot(fac.Sports[0]))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@fac.Name</span>
+                                @if (fac.Indoor)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">Indoor</BadgeCn>
+                                }
+                            </div>
+                            <p class="mt-0.5 text-muted-foreground text-xs">@string.Join(", ", fac.Sports.Select(s => GetSportLabel(s)))</p>
+                        </div>
+                        <span class="@Cn.Merge("text-xs font-medium tabular-nums", facilityAvailable > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                            @(facilityAvailable > 0 ? $"{facilityAvailable} open" : "Full")
+                        </span>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="space-y-1.5">
+                                    @foreach (var court in fac.Courts)
+                                    {
+                                        var c = court;
+                                        <div class="flex items-center gap-2 text-xs">
+                                            <span class="@Cn.Merge("size-1.5 rounded-full", AvailabilityDot(c.Available))"></span>
+                                            <span class="flex-1">@c.Name</span>
+                                            <span class="tabular-nums text-muted-foreground">@c.Available/@c.Total</span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="mt-3 flex items-center justify-between">
+                                    <div class="space-y-0.5 text-xs text-muted-foreground">
+                                        <div class="flex items-center gap-1.5">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            @fac.Hours
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <LucideIconCn Name="map-pin" Size="12" Class="size-3" />
+                                            @fac.Address
+                                        </div>
+                                    </div>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                                        Book
+                                        <LucideIconCn Name="external-link" Size="12" Class="size-3" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Court(string Name, int Available, int Total);
+
+    private record SportsFacility(
+        string Id,
+        string Name,
+        string[] Sports,
+        Court[] Courts,
+        string Hours,
+        double Rating,
+        string Address,
+        double Longitude,
+        double Latitude,
+        bool Indoor
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    // sport key -> (label, emoji, dot)
+    private static readonly (string Label, string Emoji, string Dot)[] _sportConfigValues =
+    [
+        ("Tennis",     "T", "bg-emerald-500"),
+        ("Basketball", "B", "bg-orange-500"),
+        ("Soccer",     "S", "bg-blue-500"),
+        ("Swimming",   "W", "bg-cyan-500"),
+        ("Gym",        "G", "bg-violet-500"),
+    ];
+
+    private static readonly string[] _sportKeys = ["tennis", "basketball", "soccer", "swimming", "gym"];
+
+    private static string GetSportLabel(string sport) => sport switch
+    {
+        "tennis"     => "Tennis",
+        "basketball" => "Basketball",
+        "soccer"     => "Soccer",
+        "swimming"   => "Swimming",
+        "gym"        => "Gym",
+        _            => sport,
+    };
+
+    private static string GetSportEmoji(string sport) => sport switch
+    {
+        "tennis"     => "T",
+        "basketball" => "B",
+        "soccer"     => "S",
+        "swimming"   => "W",
+        "gym"        => "G",
+        _            => "?",
+    };
+
+    private static string GetSportDot(string sport) => sport switch
+    {
+        "tennis"     => "bg-emerald-500",
+        "basketball" => "bg-orange-500",
+        "soccer"     => "bg-blue-500",
+        "swimming"   => "bg-cyan-500",
+        "gym"        => "bg-violet-500",
+        _            => "bg-muted-foreground",
+    };
+
+    private static string AvailabilityDot(int available)
+    {
+        if (available >= 2) return "bg-emerald-500";
+        if (available == 1) return "bg-amber-500";
+        return "bg-muted-foreground/30";
+    }
+
+    private static readonly SportsFacility[] _allFacilities =
+    [
+        new("sf1", "Riverside Sports Complex", ["tennis", "basketball", "swimming"],
+            [
+                new("Tennis Court A", 2, 4),
+                new("Tennis Court B", 0, 4),
+                new("Basketball Gym", 1, 2),
+                new("Pool Lanes",     5, 8),
+            ],
+            "6 AM - 10 PM", 4.5, "West Side Hwy & 72nd St", -73.9905, 40.7787, false),
+
+        new("sf2", "Chelsea Piers Fitness", ["gym", "swimming", "basketball"],
+            [
+                new("Weight Room",    1, 1),
+                new("Lap Pool",       3, 6),
+                new("Indoor Court",   0, 2),
+            ],
+            "5 AM - 11 PM", 4.7, "62 Chelsea Piers", -74.0008, 40.7467, true),
+
+        new("sf3", "Central Park Tennis Center", ["tennis"],
+            [
+                new("Hard Court 1-4", 3, 4),
+                new("Clay Court 1-2", 1, 2),
+            ],
+            "7 AM - 9 PM", 4.3, "Central Park W & 94th St", -73.9654, 40.7905, false),
+
+        new("sf4", "East Side Soccer Fields", ["soccer"],
+            [
+                new("Full Field",    0, 1),
+                new("Half Field A",  1, 1),
+                new("Half Field B",  1, 1),
+            ],
+            "8 AM - 8 PM", 4.0, "FDR Dr & 60th St", -73.9581, 40.7614, false),
+
+        new("sf5", "Midtown Athletic Club", ["gym", "basketball", "swimming"],
+            [
+                new("Main Gym",          1, 1),
+                new("Basketball Court",  1, 1),
+                new("Pool",              2, 4),
+            ],
+            "6 AM - 10 PM", 4.6, "533 W 43rd St", -73.9932, 40.7602, true),
+    ];
+
+    private readonly HashSet<string> _sportFilter = [];
+    private string? _selected;
+    private string? _expanded;
+
+    private SportsFacility[] _filteredFacilities =>
+        _sportFilter.Count == 0
+            ? _allFacilities
+            : [.. _allFacilities.Where(f => f.Sports.Any(s => _sportFilter.Contains(s)))];
+
+    private int TotalAvailable => _filteredFacilities.Sum(f => f.Courts.Sum(c => c.Available));
+
+    private void ToggleSport(string sport)
+    {
+        if (_sportFilter.Contains(sport))
+            _sportFilter.Remove(sport);
+        else
+            _sportFilter.Add(sport);
+    }
+
+    private void HandleMarkerClick(string id)
+    {
+        _selected = id;
+        _expanded = null;
+    }
+
+    // Map bounding box: lon [-74.005, -73.955], lat [37.744, 40.795]
+    private static MarkerPos GetMarkerPosition(SportsFacility fac)
+    {
+        var lonMin = -74.005;
+        var lonMax = -73.955;
+        var latMin = 40.744;
+        var latMax = 40.795;
+        var left = (fac.Longitude - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - fac.Latitude) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

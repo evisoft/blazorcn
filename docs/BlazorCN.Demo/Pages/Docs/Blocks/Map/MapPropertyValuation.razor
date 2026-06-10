@@ -1,0 +1,343 @@
+@* ============================================================
+   Block: map-property-valuation
+   Title: MapPropertyValuation
+   Description: Property value heatmap block for Next.js with price-gradient markers, comparable sale markers, valuation range info, and property detail cards using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-property-valuation.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="tag" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Property Valuations</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length properties</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    @onclick="@(() => _filter = null)">
+                    All
+                </button>
+                @foreach (var t in _propertyTypes)
+                {
+                    var pt = t;
+                    <button
+                        type="button"
+                        class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == pt ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                        @onclick="@(() => _filter = (_filter == pt ? null : pt))">
+                        @TypeLabel(pt)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Summary stats *@
+        <div class="flex items-center gap-4 border-b px-4 py-2.5">
+            <div class="flex items-baseline gap-1">
+                <span class="text-2xl font-semibold tabular-nums">@FormatPrice(_avgValue)</span>
+                <span class="text-xs text-muted-foreground">avg assessed</span>
+            </div>
+            <span class="text-xs text-muted-foreground">·</span>
+            <span class="text-xs text-muted-foreground">$@_avgPsf/sqft avg</span>
+            <div class="ml-auto flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-violet-500"></span>
+                    $1.5M+
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    $1M+
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    $600K+
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    &lt;$600K
+                </span>
+            </div>
+        </div>
+
+        @* Map + Sidebar *@
+        <div class="flex">
+            @* Map area — rendered as a styled mock since BlazorCN has no MapCn component *@
+            <div class="relative h-[500px] flex-1 bg-muted/30">
+                @* Map background grid *@
+                <div class="absolute inset-0 overflow-hidden">
+                    <svg class="h-full w-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <pattern id="pv-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1" />
+                            </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill="url(#pv-grid)" />
+                    </svg>
+                </div>
+
+                @* Map controls placeholder (bottom-right) *@
+                <div class="absolute bottom-3 right-3 z-10 flex flex-col gap-1">
+                    <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5 text-foreground" />
+                    </button>
+                    <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5 text-foreground" />
+                    </button>
+                </div>
+
+                @* Property markers *@
+                @foreach (var p in _filtered)
+                {
+                    var prop = p;
+                    @* Longitude range: ~-73.983 to ~-73.948; Latitude range: ~40.742 to ~40.768 *@
+                    var leftPct = (int)Math.Round((prop.Longitude - (-73.983)) / ((-73.948) - (-73.983)) * 80 + 5);
+                    var topPct = (int)Math.Round((40.768 - prop.Latitude) / (40.768 - 40.742) * 80 + 5);
+                    <div class="absolute z-10" style="@($"left:{leftPct}%;top:{topPct}%")">
+                        <div class="relative">
+                            @* Marker button *@
+                            <button
+                                type="button"
+                                class="relative"
+                                @onclick="@(() => ToggleSelected(prop.Id))">
+                                <div class="@Cn.Merge("flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md", ValueTierColor(prop.AssessedValue))">
+                                    <LucideIconCn Name="@TypeIcon(prop.Type)" Size="12" Class="size-3 text-white" />
+                                </div>
+                            </button>
+
+                            @* Tooltip below marker *@
+                            <div class="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-card px-2 py-1 text-[10px] shadow-md">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium">@FormatPrice(prop.AssessedValue)</span>
+                                    <span class="text-muted-foreground">$@(prop.PricePerSqft)/sqft</span>
+                                </div>
+                            </div>
+
+                            @* Popup card *@
+                            @if (_selectedId == prop.Id)
+                            {
+                                <div class="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-64 rounded-md border bg-card p-3 shadow-md">
+                                    <div class="mb-2 flex items-start justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@prop.Address</p>
+                                            <p class="text-xs text-muted-foreground">@TypeLabel(prop.Type)</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@ValueTierLabel(prop.AssessedValue)</BadgeCn>
+                                    </div>
+                                    <div class="mb-2">
+                                        <div class="flex items-baseline gap-1">
+                                            <span class="text-lg font-semibold tabular-nums">@FormatPrice(prop.AssessedValue)</span>
+                                            <span class="text-xs text-muted-foreground">assessed</span>
+                                        </div>
+                                        @if (prop.LastSalePrice.HasValue)
+                                        {
+                                            <div class="mt-0.5 flex items-center gap-1 text-xs">
+                                                <LucideIconCn Name="arrow-up" Size="12" Class="size-3 text-emerald-500" />
+                                                <span class="text-muted-foreground">Sold @FormatPrice(prop.LastSalePrice.Value) · @prop.LastSaleDate</span>
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="mb-2 grid grid-cols-3 gap-2 border-t pt-2 text-xs">
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="ruler" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span>@(prop.Sqft.ToString("N0")) sqft</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="bed-double" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span>@(prop.Bedrooms)bd/@(prop.Bathrooms)ba</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="land-plot" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span>@prop.LotSize</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
+                                        <span>Built @prop.YearBuilt</span>
+                                        <span>·</span>
+                                        <span class="font-mono tabular-nums">$@(prop.PricePerSqft)/sqft</span>
+                                        @if (prop.LastSalePrice.HasValue)
+                                        {
+                                            <span>·</span>
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 text-[10px] font-normal">Recent sale</BadgeCn>
+                                        }
+                                    </div>
+                                    @* Close button *@
+                                    <button type="button"
+                                        class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/50"
+                                        @onclick="@(() => _selectedId = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-l">
+                <div class="flex items-center justify-between border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Properties</span>
+                    <span class="text-[10px] text-muted-foreground">Value · $/sqft</span>
+                </div>
+                <div class="max-h-[460px] overflow-y-auto">
+                    @for (int i = 0; i < _filtered.Length; i++)
+                    {
+                        var prop = _filtered[i];
+                        var isLast = i == _filtered.Length - 1;
+                        var isExpanded = _expandedId == prop.Id;
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+                                @onclick="@(() => _expandedId = (_expandedId == prop.Id ? null : prop.Id))">
+                                <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", ValueTierColor(prop.AssessedValue))"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="block truncate text-xs font-medium">@prop.Address</span>
+                                    <div class="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                        <span class="tabular-nums">@FormatPrice(prop.AssessedValue)</span>
+                                        <span>·</span>
+                                        <span class="tabular-nums">$@(prop.PricePerSqft)/sqft</span>
+                                        @if (prop.LastSalePrice.HasValue)
+                                        {
+                                            <span>·</span>
+                                            <span class="text-emerald-600 dark:text-emerald-400">Sold</span>
+                                        }
+                                    </div>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="px-3 pb-3 pl-7">
+                                    <div class="mb-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="ruler" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="tabular-nums">@(prop.Sqft.ToString("N0")) sqft</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="bed-double" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span>@(prop.Bedrooms)bd / @(prop.Bathrooms)ba</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="land-plot" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span>@prop.LotSize</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="home" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span>Built @prop.YearBuilt</span>
+                                        </div>
+                                    </div>
+                                    @if (prop.LastSalePrice.HasValue)
+                                    {
+                                        <div class="rounded-md bg-muted/50 p-2">
+                                            <span class="block text-[10px] font-medium text-muted-foreground">Last sale</span>
+                                            <div class="flex items-center gap-2 text-xs">
+                                                <span class="font-medium tabular-nums">@FormatPrice(prop.LastSalePrice.Value)</span>
+                                                <span class="text-muted-foreground">@prop.LastSaleDate</span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                @foreach (var t in _propertyTypes)
+                {
+                    var pt = t;
+                    var cnt = _properties.Count(p => p.Type == pt);
+                    <span class="text-xs text-muted-foreground">@TypeLabel(pt) (@cnt)</span>
+                }
+            </div>
+            <span class="text-xs text-muted-foreground">
+                @_properties.Count(p => p.LastSalePrice.HasValue) recent sales
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Property(
+        string Id, string Address, string Type, int AssessedValue,
+        int? LastSalePrice, string? LastSaleDate, int Sqft, string LotSize,
+        int Bedrooms, int Bathrooms, int YearBuilt,
+        double Longitude, double Latitude, int PricePerSqft);
+
+    private static readonly string[] _propertyTypes = ["single-family", "condo", "multi-family", "commercial"];
+
+    private static readonly Property[] _properties =
+    [
+        new("p1", "142 Maple Avenue", "single-family", 1850000, 1725000, "Nov 2025", 3200, "0.38 acres", 4, 3, 1998, -73.9685, 40.758, 578),
+        new("p2", "88 Oak Street, Unit 12B", "condo", 920000, 895000, "Jan 2026", 1450, "N/A", 2, 2, 2019, -73.975, 40.752, 634),
+        new("p3", "310 Elm Boulevard", "single-family", 1240000, null, null, 2650, "0.25 acres", 3, 2, 1987, -73.9612, 40.7635, 468),
+        new("p4", "55 River Road", "multi-family", 2350000, 2180000, "Aug 2025", 5800, "0.52 acres", 8, 6, 1972, -73.952, 40.749, 405),
+        new("p5", "201 Commerce Drive", "commercial", 3100000, 2950000, "Mar 2025", 8500, "1.2 acres", 0, 4, 2005, -73.983, 40.745, 365),
+        new("p6", "77 Birch Lane", "single-family", 685000, 650000, "Sep 2025", 1800, "0.18 acres", 3, 2, 1965, -73.956, 40.7555, 381),
+        new("p7", "425 Park West, Unit 8A", "condo", 1580000, 1520000, "Feb 2026", 2100, "N/A", 3, 2, 2022, -73.972, 40.761, 752),
+        new("p8", "16 Cedar Court", "single-family", 530000, null, null, 1420, "0.15 acres", 2, 1, 1952, -73.948, 40.751, 373),
+        new("p9", "900 Lakeside Terrace", "multi-family", 1720000, 1650000, "Dec 2025", 4200, "0.42 acres", 6, 4, 1990, -73.965, 40.742, 410),
+        new("p10", "33 Walnut Street", "single-family", 790000, 760000, "Oct 2025", 2050, "0.22 acres", 3, 2, 1978, -73.978, 40.768, 385),
+    ];
+
+    private string? _filter = null;
+    private string? _selectedId = null;
+    private string? _expandedId = "p1";
+
+    private Property[] _filtered => _filter == null
+        ? _properties
+        : _properties.Where(p => p.Type == _filter).ToArray();
+
+    private int _avgValue => _filtered.Length == 0 ? 0 : (int)Math.Round(_filtered.Average(p => p.AssessedValue));
+    private int _avgPsf => _filtered.Length == 0 ? 0 : (int)Math.Round(_filtered.Average(p => p.PricePerSqft));
+
+    private void ToggleSelected(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+    }
+
+    private static string ValueTierColor(int value)
+    {
+        if (value >= 1500000) return "bg-violet-500";
+        if (value >= 1000000) return "bg-blue-500";
+        if (value >= 600000) return "bg-emerald-500";
+        return "bg-amber-500";
+    }
+
+    private static string ValueTierLabel(int value)
+    {
+        if (value >= 1500000) return "$1.5M+";
+        if (value >= 1000000) return "$1M-1.5M";
+        if (value >= 600000) return "$600K-1M";
+        return "Under $600K";
+    }
+
+    private static string FormatPrice(int n)
+    {
+        if (n >= 1000000) return $"${(n / 1000000.0):F2}M";
+        return $"${(n / 1000.0):F0}K";
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        "single-family" => "Single Family",
+        "condo" => "Condo",
+        "multi-family" => "Multi-Family",
+        "commercial" => "Commercial",
+        _ => type,
+    };
+
+    private static string TypeIcon(string type) => type switch
+    {
+        "single-family" => "home",
+        _ => "building",
+    };
+}

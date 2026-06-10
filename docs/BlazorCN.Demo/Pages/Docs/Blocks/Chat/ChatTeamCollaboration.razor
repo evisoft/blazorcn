@@ -1,0 +1,207 @@
+@* ============================================================
+   Block: chat-team-collaboration
+   Title: ChatTeamCollaboration
+   Description: React team collaboration chat block for Next.js with channel header, multi-user avatars, system messages, highlighted mentions, emoji reactions, thread counts, unread divider, and typing indicator using shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-team-collaboration.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Channel header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="hash" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">@_channelName</span>
+            </div>
+            <span class="text-muted-foreground text-xs">·</span>
+            <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <LucideIconCn Name="users" Size="14" Class="size-3.5" />
+                <span>@_memberCount members</span>
+            </div>
+        </div>
+
+        @* Messages — flat layout with grouping *@
+        <div class="flex flex-1 flex-col overflow-y-auto">
+            @for (int i = 0; i < _initialMessages.Length; i++)
+            {
+                var msg = _initialMessages[i];
+                var idx = i;
+
+                @if (msg.Role == "system")
+                {
+                    <div class="flex justify-center px-4 py-2">
+                        <span class="text-muted-foreground text-xs">
+                            @msg.Content
+                            <span class="ml-2 text-muted-foreground/60">@msg.Timestamp</span>
+                        </span>
+                    </div>
+                }
+                else
+                {
+                    var user = _users.TryGetValue(msg.UserId ?? "", out var u) ? u : null;
+                    @if (user != null)
+                    {
+                        var prevMsg = idx > 0 ? _initialMessages[idx - 1] : null;
+                        var showHeader = prevMsg == null || prevMsg.Role != "user" || prevMsg.UserId != msg.UserId;
+                        var rowClass = Cn.Merge(
+                            "group flex gap-2 px-4 transition-colors hover:bg-accent",
+                            showHeader ? "pt-2.5 pb-0.5" : "py-0.5"
+                        );
+
+                        <div>
+                            @* Unread divider *@
+                            @if (msg.UnreadBefore)
+                            {
+                                <div class="flex items-center gap-3 px-4 py-1">
+                                    <div class="flex-1 border-t border-red-500/40"></div>
+                                    <span class="font-medium text-red-500 text-[10px]">New messages</span>
+                                    <div class="flex-1 border-t border-red-500/40"></div>
+                                </div>
+                            }
+                            <div class="@rowClass">
+                                @* Avatar column *@
+                                <div class="w-10 shrink-0">
+                                    @if (showHeader)
+                                    {
+                                        <AvatarCn Class="size-8">
+                                            <AvatarFallbackCn Class="@Cn.Merge("text-white text-[10px]", user.Color)">@user.Initials</AvatarFallbackCn>
+                                        </AvatarCn>
+                                    }
+                                </div>
+                                @* Body *@
+                                <div class="min-w-0 flex-1">
+                                    @if (showHeader)
+                                    {
+                                        <div class="flex items-baseline gap-2">
+                                            <span class="font-medium text-sm">@user.Name</span>
+                                            <span class="text-muted-foreground text-xs">@msg.Timestamp</span>
+                                        </div>
+                                    }
+                                    <p class="text-sm leading-relaxed">@((Microsoft.AspNetCore.Components.MarkupString)RenderContent(msg.Content))</p>
+                                    @if (!showHeader)
+                                    {
+                                        <span class="hidden text-muted-foreground text-[10px] group-hover:inline">@msg.Timestamp</span>
+                                    }
+                                    @* Emoji reactions *@
+                                    @if (msg.Reactions != null && msg.Reactions.Length > 0)
+                                    {
+                                        <div class="mt-1 flex items-center gap-1">
+                                            @foreach (var r in msg.Reactions)
+                                            {
+                                                <span class="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-1.5 py-0.5 text-[10px]">
+                                                    @r.Emoji <span class="tabular-nums text-muted-foreground">@r.Count</span>
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                    @* Thread count *@
+                                    @if (msg.ThreadCount != null && msg.ThreadCount > 0)
+                                    {
+                                        <button type="button" class="mt-1 flex items-center gap-1 text-blue-600 text-xs hover:underline dark:text-blue-400">
+                                            <LucideIconCn Name="message-square" Size="12" Class="size-3" />
+                                            @msg.ThreadCount @(msg.ThreadCount == 1 ? "reply" : "replies")
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            }
+        </div>
+
+        @* Typing indicator + Toolbar *@
+        <div class="border-t">
+            @* Typing indicator *@
+            <div class="px-4 pt-1.5 pb-0">
+                <span class="text-muted-foreground text-xs">
+                    Alex, Priya, and Sam are typing
+                    <span class="ml-0.5 inline-flex gap-0.5 align-middle">
+                        <span class="inline-block size-1 animate-pulse rounded-full bg-muted-foreground/50"></span>
+                        <span class="inline-block size-1 animate-pulse rounded-full bg-muted-foreground/50" style="animation-delay:200ms"></span>
+                        <span class="inline-block size-1 animate-pulse rounded-full bg-muted-foreground/50" style="animation-delay:400ms"></span>
+                    </span>
+                </span>
+            </div>
+            <div class="px-4 py-3">
+                <form @onsubmit="HandleSubmit" class="flex items-center gap-2">
+                    <input @bind="_input" @bind:event="oninput"
+                           placeholder="@($"Message #{_channelName}")"
+                           class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0 rounded-md px-3 text-sm outline-none placeholder:text-muted-foreground" />
+                    <ButtonCn type="submit" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                              Disabled="@string.IsNullOrWhiteSpace(_input)"
+                              Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="send" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record UserInfo(string Id, string Name, string Initials, string Color);
+    private record Reaction(string Emoji, int Count);
+    private record Message(
+        string Id,
+        string Role,
+        string Content,
+        string Timestamp,
+        string? UserId = null,
+        int? ThreadCount = null,
+        Reaction[]? Reactions = null,
+        bool UnreadBefore = false
+    );
+
+    private static readonly Dictionary<string, UserInfo> _users = new()
+    {
+        ["u1"] = new("u1", "Alex Rivera",   "AR", "bg-blue-600"),
+        ["u2"] = new("u2", "Priya Sharma",  "PS", "bg-violet-600"),
+        ["u3"] = new("u3", "Jordan Lee",    "JL", "bg-emerald-600"),
+        ["u4"] = new("u4", "Sam Nakamura",  "SN", "bg-amber-600"),
+        ["u5"] = new("u5", "Cass Morgan",   "CM", "bg-rose-600"),
+    };
+
+    private const string _channelName = "engineering";
+    private const int _memberCount = 12;
+
+    private static readonly Message[] _initialMessages =
+    [
+        new("1",  "system", "Cass Morgan joined the channel",                                                                                                                                           "9:30 AM"),
+        new("2",  "user",   "Morning team. The deployment pipeline is green again. Fixed the flaky test in the auth module.",                                                                           "9:42 AM",  "u1", 3, [new("🎉", 4), new("👍", 2)]),
+        new("3",  "user",   "@Alex Rivera nice, that one's been failing intermittently for a week. Was it the timeout issue?",                                                                          "9:44 AM",  "u2"),
+        new("4",  "user",   "Yeah, the session mock wasn't being cleaned up between test runs. Added a proper teardown hook.",                                                                           "9:45 AM",  "u1"),
+        new("5",  "user",   "Quick update on the API redesign: the new endpoints are ready for review. PR #847 has the full diff. @Priya Sharma I'd appreciate your eyes on the auth middleware changes.", "9:52 AM", "u3", 7, [new("👀", 3)]),
+        new("6",  "user",   "On it. I'll review this morning and leave comments by lunch.",                                                                                                              "9:53 AM",  "u2"),
+        new("7",  "user",   "Heads up — I'm bumping the Node version in staging to 22. If anyone has local env issues after pulling, check your .nvmrc.",                                               "10:01 AM", "u4", 2, null, true),
+        new("8",  "system", "Sam Nakamura pinned a message",                                                                                                                                            "10:02 AM"),
+        new("9",  "user",   "Hey everyone! Just getting up to speed. Where can I find the onboarding docs for the codebase?",                                                                           "10:05 AM", "u5", null, [new("👋", 5)]),
+        new("10", "user",   "@Cass Morgan welcome! Check the /docs folder in the monorepo — there's a CONTRIBUTING.md and an architecture overview. Happy to pair on anything this week.",              "10:07 AM", "u3"),
+    ];
+
+    private string _input = "";
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+
+    private static string RenderContent(string content)
+    {
+        var parts = System.Text.RegularExpressions.Regex.Split(content, @"(@[\w][\w\s]*?)(?=\s|$|,|\.)");
+        var sb = new System.Text.StringBuilder();
+        foreach (var part in parts)
+        {
+            if (part.StartsWith("@"))
+            {
+                sb.Append($"<span class=\"rounded bg-blue-500/10 px-1 text-blue-600 dark:text-blue-400\">{System.Net.WebUtility.HtmlEncode(part)}</span>");
+            }
+            else
+            {
+                sb.Append(System.Net.WebUtility.HtmlEncode(part));
+            }
+        }
+        return sb.ToString();
+    }
+}

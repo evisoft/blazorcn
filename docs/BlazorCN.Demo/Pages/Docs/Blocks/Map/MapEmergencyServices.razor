@@ -1,0 +1,267 @@
+@* ============================================================
+   Block: map-emergency-services
+   Title: MapEmergencyServices
+   Description: Emergency services locator map with hospital, fire station, and police markers, response time indicators, and facility detail cards built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-emergency-services.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="building" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Emergency Services</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length facilities</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => SetFilter(null))"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                @foreach (var t in _types)
+                {
+                    var typeVal = t;
+                    var cfg = GetTypeConfig(typeVal);
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleFilter(typeVal))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == typeVal ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Dot)"></span>
+                        @cfg.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Stats bar *@
+        <div class="flex items-center gap-4 border-b px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">
+                Avg response: <span class="font-medium tabular-nums text-foreground">5 min</span>
+            </span>
+            <span class="text-xs text-muted-foreground">·</span>
+            @foreach (var t in _types)
+            {
+                var typeVal = t;
+                var count = _facilities.Count(f => f.Type == typeVal);
+                var cfg = GetTypeConfig(typeVal);
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Dot)"></span>
+                    @count @cfg.Label.ToLower()@(count != 1 ? "s" : "")
+                </span>
+            }
+        </div>
+
+        @* Map area — Map/MapMarker/MarkerContent/MarkerTooltip/MarkerPopup are custom registry
+           components with no BlazorCN equivalent; rendered as a styled static map placeholder
+           showing all markers and popup detail for the selected facility. *@
+        <div class="relative h-[460px] bg-muted/30">
+            @* Map background grid lines to suggest a map *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                Chicago, IL — Near West Side
+            </div>
+
+            @* Map zoom controls (bottom-right) *@
+            <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="locate" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* Facility markers plotted by relative position *@
+            @foreach (var f in _filtered)
+            {
+                var facility = f;
+                var cfg = GetTypeConfig(facility.Type);
+                var pos = GetMarkerPosition(facility);
+                <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSelected(facility.Id))"
+                        class="group relative flex flex-col items-center">
+                        @* Marker pin *@
+                        <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md", cfg.Color)">
+                            <LucideIconCn Name="@cfg.IconName" Size="14" Class="size-3.5 text-white" />
+                        </div>
+                        @* Tooltip (shown on hover via group-hover) *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@facility.Name</span>
+                                <span class="text-muted-foreground">· @facility.ResponseTime</span>
+                            </div>
+                        </div>
+                    </button>
+
+                    @* Popup (shown when selected) *@
+                    @if (_selected == facility.Id)
+                    {
+                        var statusCfg = GetStatusConfig(facility.Status);
+                        <div class="absolute bottom-full left-1/2 mb-2 w-60 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                            <div class="mb-2">
+                                <div class="flex items-start justify-between">
+                                    <p class="text-sm font-medium">@facility.Name</p>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                        @cfg.Label
+                                    </BadgeCn>
+                                </div>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@facility.Address</p>
+                            </div>
+                            <div class="mb-2 grid grid-cols-2 gap-2">
+                                <div>
+                                    <p class="text-xs text-muted-foreground">Response time</p>
+                                    <p class="text-sm font-medium tabular-nums">@facility.ResponseTime</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-muted-foreground">Status</p>
+                                    <p class="@Cn.Merge("text-sm font-medium", statusCfg.Color)">@statusCfg.Label</p>
+                                </div>
+                            </div>
+                            @if (facility.Capacity != null)
+                            {
+                                <div class="mb-2 rounded-md bg-muted/50 px-3 py-2">
+                                    <p class="text-xs text-muted-foreground">Capacity: @facility.Capacity</p>
+                                </div>
+                            }
+                            <div class="flex items-center justify-between border-t pt-2">
+                                <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="phone" Size="12" Class="size-3" />
+                                    @facility.Phone
+                                </div>
+                                <span class="text-xs text-muted-foreground">@facility.Hours</span>
+                            </div>
+                            @* Close button *@
+                            <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">
+                Emergency: <span class="font-medium text-foreground">911</span>
+            </span>
+            <span class="text-xs text-muted-foreground">
+                Non-emergency: <span class="font-medium text-foreground">311</span>
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Facility(
+        string Id,
+        string Name,
+        string Type,
+        string Address,
+        string Phone,
+        string ResponseTime,
+        string Status,
+        string? Capacity,
+        string Hours,
+        double Longitude,
+        double Latitude
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private record TypeConfig(string IconName, string Color, string Label, string Dot);
+
+    private record StatusConfig(string Label, string Color);
+
+    private static readonly Facility[] _facilities =
+    [
+        new("f1", "Chicago General Hospital", "hospital", "1740 W Taylor St, Chicago, IL", "(312) 555-0142", "4 min", "operational", "78% occupied", "24/7 Emergency", -87.6694, 41.8694),
+        new("f2", "Rush University Medical Center", "hospital", "1653 W Congress Pkwy, Chicago, IL", "(312) 555-0198", "6 min", "busy", "92% occupied", "24/7 Emergency", -87.667, 41.875),
+        new("f3", "Engine Company 18", "fire", "1123 W Roosevelt Rd, Chicago, IL", "(312) 555-0167", "3 min", "operational", null, "24/7", -87.656, 41.8665),
+        new("f4", "Ladder Company 7", "fire", "212 S Aberdeen St, Chicago, IL", "(312) 555-0134", "5 min", "operational", null, "24/7", -87.6535, 41.878),
+        new("f5", "12th District Station", "police", "1412 S Blue Island Ave, Chicago, IL", "(312) 555-0189", "7 min", "operational", null, "24/7", -87.661, 41.862),
+        new("f6", "1st District Station", "police", "1718 S State St, Chicago, IL", "(312) 555-0155", "5 min", "busy", null, "24/7", -87.6274, 41.8584),
+        new("f7", "Stroger Hospital", "hospital", "1969 W Ogden Ave, Chicago, IL", "(312) 555-0177", "5 min", "limited", "96% occupied", "24/7 Emergency", -87.674, 41.874),
+    ];
+
+    private static readonly string[] _types = ["hospital", "fire", "police"];
+
+    private string? _filter = null;
+    private string? _selected = null;
+
+    private Facility[] _filtered => _filter == null
+        ? _facilities
+        : _facilities.Where(f => f.Type == _filter).ToArray();
+
+    private void SetFilter(string? f)
+    {
+        _filter = f;
+        _selected = null;
+    }
+
+    private void ToggleFilter(string t)
+    {
+        _filter = _filter == t ? null : t;
+        _selected = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static TypeConfig GetTypeConfig(string type) => type switch
+    {
+        "hospital" => new TypeConfig("heart-pulse", "bg-red-500", "Hospital", "bg-red-500"),
+        "fire"     => new TypeConfig("flame", "bg-orange-500", "Fire Station", "bg-orange-500"),
+        "police"   => new TypeConfig("shield", "bg-blue-500", "Police", "bg-blue-500"),
+        _          => new TypeConfig("building", "bg-zinc-500", "Other", "bg-zinc-500"),
+    };
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "operational" => new StatusConfig("Operational", "text-emerald-600 dark:text-emerald-400"),
+        "busy"        => new StatusConfig("High volume", "text-amber-600 dark:text-amber-400"),
+        "limited"     => new StatusConfig("Limited capacity", "text-red-600 dark:text-red-400"),
+        _             => new StatusConfig("Unknown", "text-muted-foreground"),
+    };
+
+    // Map bounding box: lon [-87.68, -87.62], lat [41.855, 41.882]
+    private static MarkerPos GetMarkerPosition(Facility f)
+    {
+        var lonMin = -87.680;
+        var lonMax = -87.620;
+        var latMin = 41.855;
+        var latMax = 41.882;
+        var left = (f.Longitude - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - f.Latitude) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

@@ -1,0 +1,109 @@
+@* ============================================================
+   Block: stats-status-matrix-grid
+   Title: StatsStatusMatrixGrid
+   Description: A status matrix grid stats card for React and Next.js with rows of services and columns of time-slot checks, colored square cells for pass fail and warning states, row summary percentages, and semantic status encoding built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-status-matrix-grid.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">System status</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Last 24 hours · 3h intervals</p>
+            </div>
+            <span class="@Cn.Merge("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", _allPass ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")">
+                <span class="@Cn.Merge("size-1.5 rounded-full", _allPass ? "bg-emerald-500" : "bg-amber-500")"></span>
+                @(_allPass ? "All systems operational" : "Some issues detected")
+            </span>
+        </div>
+        <div class="overflow-x-auto px-4 py-4">
+            <table class="w-full">
+                <thead>
+                    <tr>
+                        <th class="pb-2 pr-4 text-left text-[10px] font-medium text-muted-foreground">Service</th>
+                        @foreach (var t in _timeSlots)
+                        {
+                            <th class="pb-2 text-center text-[10px] font-medium text-muted-foreground tabular-nums">@t</th>
+                        }
+                        <th class="pb-2 pl-4 text-right text-[10px] font-medium text-muted-foreground">Uptime</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var svc in _services)
+                    {
+                        var uptime = GetUptime(svc.Checks);
+                        var uptimeClass = uptime == 100.0
+                            ? "py-1 pl-4 text-right text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400"
+                            : uptime >= 90.0
+                                ? "py-1 pl-4 text-right text-xs font-medium tabular-nums text-amber-600 dark:text-amber-400"
+                                : "py-1 pl-4 text-right text-xs font-medium tabular-nums text-red-600 dark:text-red-400";
+                        <tr>
+                            <td class="py-1 pr-4 text-xs font-medium">@svc.Name</td>
+                            @for (var i = 0; i < svc.Checks.Length; i++)
+                            {
+                                var check = svc.Checks[i];
+                                var slot = _timeSlots[i];
+                                var colorClass = StatusColor(check);
+                                var ariaLabel = $"{svc.Name} at {slot}: {check}";
+                                <td class="p-0.5 text-center">
+                                    <div class="@Cn.Merge("mx-auto size-3 rounded-sm", colorClass)"
+                                         aria-label="@ariaLabel"></div>
+                                </td>
+                            }
+                            <td class="@uptimeClass">@(uptime)%</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="flex items-center gap-3 border-t px-4 py-2.5">
+            <div class="flex items-center gap-1.5">
+                <span class="size-2.5 rounded-sm bg-emerald-500"></span>
+                <span class="text-xs text-muted-foreground">Pass</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="size-2.5 rounded-sm bg-amber-500"></span>
+                <span class="text-xs text-muted-foreground">Degraded</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="size-2.5 rounded-sm bg-red-500"></span>
+                <span class="text-xs text-muted-foreground">Fail</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ServiceData(string Id, string Name, string[] Checks);
+
+    private static readonly string[] _timeSlots = ["00:00", "03:00", "06:00", "09:00", "12:00", "15:00", "18:00", "21:00"];
+
+    private static readonly ServiceData[] _services =
+    [
+        new("api",   "API Gateway", ["pass", "pass", "pass", "pass",     "pass", "pass", "pass", "pass"]),
+        new("auth",  "Auth Service",["pass", "pass", "pass", "degraded", "pass", "pass", "pass", "pass"]),
+        new("db",    "Database",    ["pass", "pass", "pass", "pass",     "pass", "pass", "fail", "pass"]),
+        new("cache", "Cache Layer", ["pass", "pass", "pass", "pass",     "pass", "pass", "pass", "pass"]),
+        new("cdn",   "CDN",         ["pass", "pass", "degraded", "degraded", "pass", "pass", "pass", "pass"]),
+        new("queue", "Job Queue",   ["pass", "fail", "fail", "pass",     "pass", "pass", "pass", "pass"]),
+    ];
+
+    private static readonly bool _allPass = Array.TrueForAll(_services, s => Array.TrueForAll(s.Checks, c => c == "pass"));
+
+    private static double GetUptime(string[] checks)
+    {
+        var passed = 0;
+        foreach (var c in checks)
+            if (c == "pass") passed++;
+        return Math.Round((double)passed / checks.Length * 1000.0) / 10.0;
+    }
+
+    private static string StatusColor(string status) => status switch
+    {
+        "pass"     => "bg-emerald-500",
+        "fail"     => "bg-red-500",
+        "degraded" => "bg-amber-500",
+        _          => "bg-muted",
+    };
+}

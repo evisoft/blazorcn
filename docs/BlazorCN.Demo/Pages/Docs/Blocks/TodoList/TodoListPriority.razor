@@ -1,0 +1,183 @@
+@* ============================================================
+   Block: todo-list-priority
+   Title: TodoListPriority
+   Description: A priority-based todo list block for React and Next.js with color-coded priority levels, filter controls, and completion tracking built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-priority.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with filter pills *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm font-medium">Tasks</h2>
+                <span class="text-xs text-muted-foreground">
+                    @_completedCount/@_todos.Count completed
+                </span>
+            </div>
+            <div class="mt-2.5 flex items-center gap-1 rounded-md bg-muted/50 p-1">
+                @foreach (var f in _filterOptions)
+                {
+                    var filterVal = f;
+                    <button type="button"
+                            @onclick="@(() => _filter = filterVal)"
+                            class="@Cn.Merge("flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium transition-all", _filter == filterVal ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                        @if (filterVal != "all")
+                        {
+                            <span class="@Cn.Merge("size-1.5 rounded-full", DotClass(filterVal))"></span>
+                        }
+                        @(filterVal == "all" ? "All" : PriorityLabel(filterVal))
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Add task row *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <button type="button"
+                    @onclick="CyclePriority"
+                    class="flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+                    title="@($"Priority: {PriorityLabel(_newPriority)}. Click to cycle.")">
+                <span class="@Cn.Merge("size-1.5 rounded-full", DotClass(_newPriority))"></span>
+                @PriorityLabel(_newPriority)
+            </button>
+            <InputCn @bind-Value="_newTask"
+                     @onkeydown="HandleInputKeyDown"
+                     Placeholder="Add a new task..."
+                     Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+            <ButtonCn Size="ButtonSize.Sm"
+                      Variant="ButtonVariant.Outline"
+                      Class="h-7 shrink-0 gap-1 text-xs"
+                      @onclick="AddTodo">
+                <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                Add
+            </ButtonCn>
+        </div>
+
+        @* Task list *@
+        <div>
+            @if (_filteredTodos.Count == 0)
+            {
+                <div class="flex flex-col items-center justify-center py-12 text-center">
+                    <LucideIconCn Name="circle" Size="32" Class="size-8 text-muted-foreground/30" />
+                    <p class="mt-3 text-sm font-medium">No tasks</p>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        @(_filter == "all" ? "Add a task to get started" : $"No {PriorityLabel(_filter).ToLower()} priority tasks")
+                    </p>
+                </div>
+            }
+            @for (int i = 0; i < _filteredTodos.Count; i++)
+            {
+                var todo = _filteredTodos[i];
+                var isLast = i == _filteredTodos.Count - 1;
+                var todoId = todo.Id;
+                <div class="@(!isLast ? "border-b" : "")">
+                    <label class="flex w-full cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", DotClass(todo.Priority))"></span>
+                        <CheckboxCn Checked="@todo.Completed"
+                                    CheckedChanged="@((bool _) => ToggleTodo(todoId))" />
+                        <span class="@Cn.Merge("min-w-0 flex-1 text-sm", todo.Completed ? "text-muted-foreground line-through" : "")">
+                            @todo.Text
+                        </span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal">
+                            @PriorityLabel(todo.Priority)
+                        </BadgeCn>
+                    </label>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t bg-muted/30 px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">
+                @_filteredTodos.Count @(_filteredTodos.Count == 1 ? "task" : "tasks")@(_filter != "all" ? $" ({PriorityLabel(_filter).ToLower()})" : "")
+            </span>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_highCount
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_mediumCount
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @_lowCount
+                </span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TodoItem(string Id, string Text, bool Completed, string Priority);
+
+    private static readonly string[] _priorityOptions = ["high", "medium", "low"];
+    private static readonly string[] _filterOptions = ["all", "high", "medium", "low"];
+
+    private List<TodoItem> _todos =
+    [
+        new("1", "Complete project documentation", false, "high"),
+        new("2", "Purchase themed blocks from shadcnblocks.com", false, "medium"),
+        new("3", "Buy groceries", true, "low"),
+        new("4", "Attend performance review meeting", false, "high"),
+        new("5", "Read React documentation", true, "medium"),
+    ];
+
+    private string _filter = "all";
+    private string _newTask = "";
+    private string _newPriority = "medium";
+    private int _nextId = 6;
+
+    private List<TodoItem> _filteredTodos =>
+        _filter == "all" ? _todos : _todos.Where(t => t.Priority == _filter).ToList();
+
+    private int _completedCount => _todos.Count(t => t.Completed);
+    private int _highCount => _todos.Count(t => t.Priority == "high");
+    private int _mediumCount => _todos.Count(t => t.Priority == "medium");
+    private int _lowCount => _todos.Count(t => t.Priority == "low");
+
+    private static string DotClass(string priority) => priority switch
+    {
+        "high" => "bg-red-500",
+        "medium" => "bg-amber-500",
+        "low" => "bg-blue-500",
+        _ => ""
+    };
+
+    private static string PriorityLabel(string priority) => priority switch
+    {
+        "high" => "High",
+        "medium" => "Medium",
+        "low" => "Low",
+        _ => ""
+    };
+
+    private void ToggleTodo(string id)
+    {
+        var idx = _todos.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _todos[idx] = _todos[idx] with { Completed = !_todos[idx].Completed };
+    }
+
+    private void AddTodo()
+    {
+        var trimmed = _newTask.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        _todos.Add(new TodoItem(_nextId.ToString(), trimmed, false, _newPriority));
+        _nextId++;
+        _newTask = "";
+    }
+
+    private void CyclePriority()
+    {
+        var idx = Array.IndexOf(_priorityOptions, _newPriority);
+        _newPriority = _priorityOptions[(idx + 1) % _priorityOptions.Length];
+    }
+
+    private void HandleInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddTodo();
+    }
+}

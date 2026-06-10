@@ -1,0 +1,239 @@
+@* ============================================================
+   Block: chat-home-automation
+   Title: ChatHomeAutomation
+   Description: React smart home control chat block for Next.js with device cards, toggle switches, temperature sliders, room grouping, scene activation, and voice command input using shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-home-automation.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <LucideIconCn Name="home" Size="16" Class="size-4 text-muted-foreground" />
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Home Dashboard</span>
+                <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                    <span>@ActiveDeviceCount() devices active</span>
+                    <span>·</span>
+                    <span class="flex items-center gap-1">
+                        <LucideIconCn Name="zap" Size="12" Class="size-3" />
+                        @_energyUsage today
+                    </span>
+                </div>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 font-normal text-xs">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                Online
+            </BadgeCn>
+        </div>
+
+        @* Content *@
+        <div class="flex-1 overflow-y-auto">
+            @* Scenes *@
+            <div class="border-b px-4 py-3">
+                <span class="mb-2 block font-medium text-muted-foreground text-xs">Scenes</span>
+                <div class="flex flex-wrap gap-2">
+                    @foreach (var scene in _scenes)
+                    {
+                        var s = scene;
+                        <ButtonCn Variant="@(s.Active ? ButtonVariant.Default : ButtonVariant.Outline)" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" OnClick="@(() => ActivateScene(s.Id))">
+                            @if (s.Active)
+                            {
+                                <LucideIconCn Name="bolt" Size="12" Class="size-3" />
+                            }
+                            @s.Name
+                        </ButtonCn>
+                    }
+                </div>
+                @{
+                    var activeScene = _scenes.FirstOrDefault(s => s.Active);
+                }
+                @if (activeScene != null)
+                {
+                    <p class="mt-1.5 text-muted-foreground text-xs">@activeScene.Description</p>
+                }
+            </div>
+
+            @* Devices by room *@
+            @foreach (var room in _roomOrder)
+            {
+                var roomDevices = _devices.Where(d => d.Room == room).ToList();
+                if (roomDevices.Count == 0) continue;
+
+                <div class="border-b">
+                    <div class="flex items-center justify-between bg-muted/30 px-4 py-2">
+                        <span class="font-medium text-muted-foreground text-xs">@room</span>
+                        <span class="text-muted-foreground text-xs">@roomDevices.Count(d => d.IsOn)/@roomDevices.Count on</span>
+                    </div>
+                    @for (var i = 0; i < roomDevices.Count; i++)
+                    {
+                        var device = roomDevices[i];
+                        var isLast = i == roomDevices.Count - 1;
+                        var iconName = GetDeviceIconName(device.Type);
+
+                        <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5", !isLast ? "border-b" : "")">
+                            <div class="@Cn.Merge("flex size-8 items-center justify-center rounded-md", device.IsOn ? "bg-foreground/10" : "bg-muted/50")">
+                                <LucideIconCn Name="@iconName" Size="16" Class="@Cn.Merge("size-4", device.IsOn ? "text-foreground" : "text-muted-foreground/50")" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="@Cn.Merge("text-sm", device.IsOn ? "font-medium" : "text-muted-foreground")">@device.Name</span>
+                                @if (device.Type == "thermostat" && device.Temperature.HasValue)
+                                {
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-muted-foreground text-xs">@device.Temperature°F</span>
+                                        @if (device.TargetTemp.HasValue)
+                                        {
+                                            <span class="text-muted-foreground text-xs">·</span>
+                                            <span class="text-xs">Target <span class="font-medium tabular-nums">@device.TargetTemp°F</span></span>
+                                        }
+                                    </div>
+                                }
+                                @if (device.Type == "light" && device.Brightness.HasValue && device.IsOn)
+                                {
+                                    <div class="flex items-center gap-1.5">
+                                        <LucideIconCn Name="sun" Size="12" Class="size-3 text-muted-foreground" />
+                                        <span class="text-muted-foreground text-xs tabular-nums">@device.Brightness%</span>
+                                    </div>
+                                }
+                                @if (device.Type == "lock")
+                                {
+                                    <span class="text-muted-foreground text-xs">@(device.IsOn ? "Locked" : "Unlocked")</span>
+                                }
+                            </div>
+
+                            @* Controls *@
+                            @if (device.Type == "thermostat" && device.TargetTemp.HasValue)
+                            {
+                                var dev = device;
+                                <div class="flex items-center gap-1">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Icon" Class="size-6 text-xs" OnClick="@(() => AdjustTemp(dev.Id, -1))">-</ButtonCn>
+                                    <span class="w-8 text-center font-mono text-xs tabular-nums">@dev.TargetTemp°</span>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Icon" Class="size-6 text-xs" OnClick="@(() => AdjustTemp(dev.Id, 1))">+</ButtonCn>
+                                </div>
+                            }
+                            else
+                            {
+                                var dev = device;
+                                <SwitchCn Checked="@dev.IsOn" OnCheckedChange="@((bool _) => ToggleDevice(dev.Id))" />
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @* System events *@
+            <div class="px-4 py-3">
+                <span class="mb-2 block font-medium text-muted-foreground text-xs">Recent Activity</span>
+                <div class="space-y-2">
+                    @foreach (var evt in _systemEvents)
+                    {
+                        <div class="flex items-start gap-2">
+                            <span class="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground/40"></span>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm">@evt.Content</span>
+                            </div>
+                            <span class="shrink-0 text-muted-foreground text-xs">@evt.Timestamp</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <InputCn @bind-Value="_input" Placeholder="Try: Turn off living room lights..." Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn Type="button" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Disabled="@(string.IsNullOrWhiteSpace(_input))" Class="size-9 shrink-0 text-muted-foreground hover:text-foreground" OnClick="@HandleSubmit">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _input = "";
+    private const string _energyUsage = "2.4 kWh";
+
+    private static readonly string[] _roomOrder = ["Living Room", "Bedroom", "Entryway"];
+
+    private record Device(
+        string Id,
+        string Name,
+        string Room,
+        string Type,
+        bool IsOn,
+        int? Brightness = null,
+        int? Temperature = null,
+        int? TargetTemp = null
+    );
+
+    private record Scene(string Id, string Name, string Description, bool Active);
+
+    private record SystemEvent(string Id, string Content, string Timestamp);
+
+    private List<Device> _devices =
+    [
+        new("d1", "Ceiling Light",   "Living Room", "light",      IsOn: true,  Brightness: 80),
+        new("d2", "Floor Lamp",      "Living Room", "light",      IsOn: false, Brightness: 0),
+        new("d3", "Smart TV",        "Living Room", "tv",         IsOn: true),
+        new("d4", "Thermostat",      "Living Room", "thermostat", IsOn: true,  Temperature: 71, TargetTemp: 72),
+        new("d5", "Bedroom Light",   "Bedroom",     "light",      IsOn: false, Brightness: 0),
+        new("d6", "Ceiling Fan",     "Bedroom",     "fan",        IsOn: true),
+        new("d7", "Front Door Lock", "Entryway",    "lock",       IsOn: true),
+        new("d8", "Porch Light",     "Entryway",    "light",      IsOn: true,  Brightness: 100),
+    ];
+
+    private List<Scene> _scenes =
+    [
+        new("s1", "Good Morning", "Lights on, thermostat to 72, unlock door",    Active: false),
+        new("s2", "Movie Night",  "Dim lights to 20%, TV on",                    Active: true),
+        new("s3", "Away Mode",    "All lights off, lock doors, thermostat to 65", Active: false),
+        new("s4", "Bedtime",      "Bedroom light off, fan on, lock doors",        Active: false),
+    ];
+
+    private static readonly SystemEvent[] _systemEvents =
+    [
+        new("e1", "Front door locked automatically",                        "8:30 PM"),
+        new("e2", "Movie Night scene activated",                            "8:15 PM"),
+        new("e3", "Thermostat reached target temperature of 72°F",          "7:50 PM"),
+        new("e4", "Motion detected in Entryway — porch light turned on",   "7:32 PM"),
+    ];
+
+    private int ActiveDeviceCount() => _devices.Count(d => d.IsOn);
+
+    private static string GetDeviceIconName(string type) => type switch
+    {
+        "light"      => "lamp-desk",
+        "thermostat" => "thermometer",
+        "lock"       => "lock",
+        "fan"        => "fan",
+        "tv"         => "tv",
+        _            => "circle",
+    };
+
+    private void ToggleDevice(string id)
+    {
+        _devices = _devices.Select(d => d.Id == id ? d with { IsOn = !d.IsOn } : d).ToList();
+    }
+
+    private void AdjustTemp(string id, int delta)
+    {
+        _devices = _devices.Select(d =>
+            d.Id == id && d.TargetTemp.HasValue
+                ? d with { TargetTemp = d.TargetTemp.Value + delta }
+                : d
+        ).ToList();
+    }
+
+    private void ActivateScene(string id)
+    {
+        _scenes = _scenes.Select(s => s with { Active = s.Id == id }).ToList();
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

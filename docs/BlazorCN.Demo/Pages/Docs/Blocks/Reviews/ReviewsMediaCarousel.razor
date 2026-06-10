@@ -1,0 +1,247 @@
+@* ============================================================
+   Block: reviews-media-carousel
+   Title: ReviewsMediaCarousel
+   Description: A visual-first review media carousel block for React and Next.js with horizontal scrolling photo and video thumbnails, expandable review detail panel, media type filters, lightbox-style selection, and smooth scroll animations built with shadcn/ui Badge and Button components, motion/react animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-media-carousel.tsx
+   ============================================================ *@
+
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">Customer Media</span>
+                <span class="text-xs text-muted-foreground tabular-nums">
+                    @_mediaItems.Length items
+                </span>
+            </div>
+            <div class="flex items-center gap-1">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-7 p-0" @onclick="@(() => Scroll("left"))">
+                    <LucideIconCn Name="chevron-left" Size="16" Class="size-4" />
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-7 p-0" @onclick="@(() => Scroll("right"))">
+                    <LucideIconCn Name="chevron-right" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Media type filter *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2">
+            @foreach (var opt in _filterOptions)
+            {
+                var optVal = opt.Value;
+                <button
+                    type="button"
+                    @onclick="@(() => _mediaFilter = optVal)"
+                    class="@Cn.Merge("flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors", _mediaFilter == opt.Value ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:bg-muted")">
+                    @if (opt.Value == "photo")
+                    {
+                        <LucideIconCn Name="image" Size="12" Class="size-3 opacity-60" />
+                    }
+                    @if (opt.Value == "video")
+                    {
+                        <LucideIconCn Name="video" Size="12" Class="size-3 opacity-60" />
+                    }
+                    @opt.Label
+                    <span class="tabular-nums opacity-60">@opt.Count</span>
+                </button>
+            }
+        </div>
+
+        @* Scrollable media strip *@
+        <div @ref="_scrollRef" class="flex gap-2 overflow-x-auto px-4 py-3 scrollbar-none">
+            @foreach (var item in FilteredMedia)
+            {
+                var itemId = item.Id;
+                <button
+                    type="button"
+                    @onclick="@(() => _selected = (_selected == itemId ? null : itemId))"
+                    class="@Cn.Merge("group relative shrink-0 overflow-hidden rounded-lg transition-all", _selected == item.Id ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : "hover:ring-1 hover:ring-foreground/20")">
+                    <div class="@Cn.Merge("flex h-28 w-36 flex-col items-center justify-center gap-1.5", item.Color)">
+                        @if (item.Type == "video")
+                        {
+                            <div class="flex size-9 items-center justify-center rounded-full bg-black/40">
+                                <LucideIconCn Name="play" Size="16" Class="size-4 fill-white text-white" />
+                            </div>
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="image" Size="20" Class="size-5 text-muted-foreground/40" />
+                        }
+                        <span class="max-w-[120px] truncate px-2 text-[10px] text-muted-foreground/60">
+                            @item.Caption
+                        </span>
+                    </div>
+
+                    @* Author overlay on hover *@
+                    <div class="absolute inset-x-0 bottom-0 translate-y-full bg-black/60 px-2 py-1 transition-transform group-hover:translate-y-0">
+                        <div class="flex items-center gap-1">
+                            <div class="flex size-4 shrink-0 items-center justify-center rounded-full bg-white/20 text-[8px] text-white">
+                                @item.Initials
+                            </div>
+                            <span class="truncate text-[10px] text-white/80">@item.Author</span>
+                        </div>
+                    </div>
+                </button>
+            }
+        </div>
+
+        @* Selected media detail panel *@
+        @if (SelectedItem is not null)
+        {
+            <div class="overflow-hidden border-t">
+                <div class="px-4 py-3">
+                    @* Author + rating row *@
+                    <div class="flex items-center gap-2.5">
+                        <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+                            @SelectedItem.Initials
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-medium">@SelectedItem.Author</span>
+                                <div class="flex items-center gap-0.5">
+                                    @for (int i = 0; i < 5; i++)
+                                    {
+                                        var starIndex = i;
+                                        <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("size-3", starIndex < SelectedItem.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                    }
+                                </div>
+                            </div>
+                            <span class="text-[10px] text-muted-foreground">
+                                @SelectedItem.Date &middot; @SelectedItem.Product
+                            </span>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal">
+                            @(SelectedItem.Type == "video" ? "Video" : "Photo")
+                        </BadgeCn>
+                    </div>
+
+                    @* Caption *@
+                    <p class="mt-2 text-sm font-medium">@SelectedItem.Caption</p>
+
+                    @* Review snippet *@
+                    <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        @SelectedItem.ReviewSnippet
+                    </p>
+
+                    @* Footer *@
+                    <div class="mt-2.5 flex items-center justify-between">
+                        <span class="text-[10px] text-muted-foreground">
+                            @SelectedItem.HelpfulCount people found this helpful
+                        </span>
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-0 text-xs text-muted-foreground">
+                            View full review &rarr;
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Footer counts *@
+        <div class="flex items-center justify-between border-t px-4 py-2">
+            <div class="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="image" Size="12" Class="size-3" />
+                    @_photoCount photos
+                </span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="video" Size="12" Class="size-3" />
+                    @_videoCount videos
+                </span>
+            </div>
+            <span class="text-[10px] text-muted-foreground">Scroll or use arrows to browse</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record MediaReview(
+        string Id,
+        string Type,
+        string Author,
+        string Initials,
+        int Rating,
+        string Date,
+        string Caption,
+        string ReviewSnippet,
+        string Product,
+        int HelpfulCount,
+        string Color
+    );
+
+    private record FilterOption(string Value, string Label, int Count);
+
+    private IJSObjectReference? _module;
+    private ElementReference _scrollRef;
+    private string? _selected;
+    private string _mediaFilter = "all";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./demo.js");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+            await _module.DisposeAsync();
+    }
+
+    private static readonly MediaReview[] _mediaItems =
+    [
+        new("m1", "photo", "Sarah Chen", "SC", 5, "Mar 22, 2026", "Dashboard integration — running in production",
+            "The dashboard blocks saved us 3 weeks of development time. Clean layout, responsive out of the box, and the chart components plugged right into our existing data pipeline. Our design team signed off immediately.",
+            "Pro Dashboard Kit", 23, "bg-zinc-100 dark:bg-zinc-800"),
+        new("m2", "photo", "Marcus Johnson", "MJ", 4, "Mar 19, 2026", "Mobile responsive view on iPhone 15 Pro",
+            "Tested across 8 different mobile devices. Responsive behavior is excellent on all of them. Minor spacing adjustment needed on the hero section for iPad landscape.",
+            "Landing Page Blocks", 15, "bg-stone-100 dark:bg-stone-800"),
+        new("m3", "video", "Elena Rodriguez", "ER", 5, "Mar 16, 2026", "5-minute setup walkthrough from scratch",
+            "Recorded this walkthrough for my team. From npx create-next-app to a fully styled dashboard in under 5 minutes. The copy-paste workflow is genuinely faster than any component library I have used before.",
+            "Full Component Suite", 67, "bg-neutral-100 dark:bg-neutral-800"),
+        new("m4", "photo", "Priya Patel", "PP", 5, "Mar 12, 2026", "Client landing page — shipped in 4 hours",
+            "Combined the hero, features grid, and pricing table blocks for a client project. Total build time: 4 hours from Figma mockup to deployed site. Client thought we had been working on it for weeks.",
+            "Landing Page Blocks", 41, "bg-zinc-100 dark:bg-zinc-800"),
+        new("m5", "photo", "David Kim", "DK", 4, "Mar 9, 2026", "Custom theme applied — brand colors",
+            "The theming system is well thought out. Swapped our brand colors into the CSS variables and everything adapted cleanly. A few components needed manual HSL adjustments but nothing major.",
+            "Pro Dashboard Kit", 18, "bg-stone-100 dark:bg-stone-800"),
+        new("m6", "video", "Anna Weber", "AW", 5, "Mar 6, 2026", "Component animation showcase reel",
+            "Put together this showcase for our internal design review. The motion animations are subtle and tasteful. Nothing flashy, just polished transitions that make the UI feel premium without any jank.",
+            "Full Component Suite", 52, "bg-neutral-100 dark:bg-neutral-800"),
+        new("m7", "photo", "James Park", "JP", 4, "Mar 3, 2026", "Dark mode comparison — before and after",
+            "Dark mode support is comprehensive. Every component handles the toggle correctly with no flash of unstyled content. The color tokens make it easy to fine-tune contrast ratios.",
+            "Full Component Suite", 29, "bg-zinc-100 dark:bg-zinc-800"),
+        new("m8", "photo", "Lisa Chang", "LC", 5, "Feb 28, 2026", "Form builder — complex validation working",
+            "The form components handle complex validation patterns beautifully. Hooked up React Hook Form with Zod schemas and everything just worked. Error states, field groups, conditional fields — all production ready.",
+            "Pro Dashboard Kit", 36, "bg-stone-100 dark:bg-stone-800"),
+        new("m9", "video", "Tom Bennett", "TB", 5, "Feb 24, 2026", "Drag and drop kanban demo",
+            "The kanban block handles drag and drop smoothly even with 50+ cards. Performance stays snappy and the animations during reorder are clean. Used it as-is for a project management tool.",
+            "Full Component Suite", 44, "bg-neutral-100 dark:bg-neutral-800"),
+    ];
+
+    private static readonly int _photoCount = _mediaItems.Count(m => m.Type == "photo");
+    private static readonly int _videoCount = _mediaItems.Count(m => m.Type == "video");
+
+    private FilterOption[] _filterOptions => new[]
+    {
+        new FilterOption("all", "All", _mediaItems.Length),
+        new FilterOption("photo", "Photos", _photoCount),
+        new FilterOption("video", "Videos", _videoCount),
+    };
+
+    private MediaReview[] FilteredMedia =>
+        _mediaFilter == "all" ? _mediaItems : _mediaItems.Where(m => m.Type == _mediaFilter).ToArray();
+
+    private MediaReview? SelectedItem =>
+        _selected is not null ? _mediaItems.FirstOrDefault(m => m.Id == _selected) : null;
+
+    private async Task Scroll(string direction)
+    {
+        if (_module is null) return;
+        var amount = direction == "left" ? -280 : 280;
+        await _module.InvokeVoidAsync("scrollElementBy", _scrollRef, amount, 0);
+    }
+}

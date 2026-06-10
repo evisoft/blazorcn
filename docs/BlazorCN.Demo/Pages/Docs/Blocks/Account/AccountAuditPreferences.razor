@@ -1,0 +1,306 @@
+@* ============================================================
+   Block: account-audit-preferences
+   Title: AccountAuditPreferences
+   Description: An audit logging configuration panel for React and Next.js with searchable event category table, per-category toggles, retention badges, severity indicators, and bulk actions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-audit-preferences.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with stats *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Audit Configuration</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Control which events are tracked in your audit log
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-right">
+                        <p class="text-xs font-medium tabular-nums">
+                            @_enabledCount/@_categories.Length
+                        </p>
+                        <p class="text-[10px] text-muted-foreground">enabled</p>
+                    </div>
+                    <div class="h-6 w-px bg-border"></div>
+                    <div class="text-right">
+                        <p class="text-xs font-medium tabular-nums">
+                            @_totalEventsPerDay.ToString("N0")
+                        </p>
+                        <p class="text-[10px] text-muted-foreground">events/day</p>
+                    </div>
+                    <div class="h-6 w-px bg-border"></div>
+                    <div class="text-right">
+                        <p class="text-xs font-medium tabular-nums">
+                            @FormatStorage(_totalStoragePerMonth)
+                        </p>
+                        <p class="text-[10px] text-muted-foreground">/month</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Search and filters *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Placeholder="Search categories..." @bind-Value="_searchQuery" Class="h-8 pl-8 text-xs" />
+                @if (!string.IsNullOrEmpty(_searchQuery))
+                {
+                    <button type="button" @onclick="@(() => _searchQuery = "")"
+                            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="x" Size="12" Class="h-3 w-3" />
+                    </button>
+                }
+            </div>
+            <SelectCn Value="@_severityFilter" ValueChanged="@(v => _severityFilter = v ?? "all")">
+                <SelectTriggerCn Class="h-8 w-[120px] text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="all">All Severity</SelectItemCn>
+                    <SelectItemCn Value="critical">Critical</SelectItemCn>
+                    <SelectItemCn Value="high">High</SelectItemCn>
+                    <SelectItemCn Value="medium">Medium</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Bulk actions *@
+        <div class="flex items-center justify-between bg-muted/30 px-4 py-1.5">
+            <span class="text-[10px] text-muted-foreground">
+                @FilteredCategories.Count() categories shown
+            </span>
+            <div class="flex items-center gap-1">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-2 text-[10px]" OnClick="EnableAll">
+                    Enable All
+                </ButtonCn>
+                <span class="text-muted-foreground/40 text-[10px]">|</span>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-2 text-[10px]" OnClick="DisableNonCritical">
+                    Critical Only
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Table header *@
+        <div class="grid grid-cols-[1fr_80px_72px_80px_48px] items-center gap-2 border-b border-t bg-muted/20 px-4 py-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+            <span>Category</span>
+            <span class="hidden sm:block">Severity</span>
+            <span class="text-right hidden sm:block">Storage</span>
+            <span class="text-right">Retention</span>
+            <span class="text-right">Track</span>
+        </div>
+
+        @* Category rows *@
+        <div>
+            @if (!FilteredCategories.Any())
+            {
+                <div class="px-4 py-8 text-center">
+                    <p class="text-sm text-muted-foreground">No categories match your search</p>
+                    <button type="button" @onclick="ClearFilters"
+                            class="mt-1 text-xs text-muted-foreground underline hover:text-foreground">
+                        Clear filters
+                    </button>
+                </div>
+            }
+            else
+            {
+                @foreach (var cat in FilteredCategories)
+                {
+                    var sev = _severityConfig[cat.Severity];
+                    <div class="@(Cn.Merge("grid grid-cols-[1fr_80px_72px_80px_48px] items-center gap-2 border-b px-4 py-2.5 transition-colors last:border-b-0 hover:bg-muted/50", !cat.Enabled ? "opacity-60" : ""))">
+                        @* Category info *@
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <div class="@(Cn.Merge("flex h-7 w-7 shrink-0 items-center justify-center rounded-md", cat.Enabled ? "bg-muted/80" : "bg-muted/40"))">
+                                <LucideIconCn Name="@cat.IconName" Size="14" Class="h-3.5 w-3.5 text-muted-foreground" />
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-sm font-medium truncate">@cat.Label</span>
+                                    <span class="text-[10px] text-muted-foreground tabular-nums hidden sm:inline">
+                                        ~@cat.EventsPerDay.ToString("N0")/day
+                                    </span>
+                                </div>
+                                <p class="text-xs text-muted-foreground truncate">@cat.Description</p>
+                            </div>
+                        </div>
+
+                        @* Severity badge *@
+                        <div class="hidden sm:block">
+                            <span class="@($"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium {sev.ClassName}")">
+                                <span class="@($"h-1 w-1 rounded-full {sev.DotClass}")"></span>
+                                @sev.Label
+                            </span>
+                        </div>
+
+                        @* Storage estimate *@
+                        <div class="text-right hidden sm:block">
+                            <span class="font-mono text-[10px] tabular-nums text-muted-foreground">
+                                @FormatStorage(cat.StorageMbPerMonth)
+                            </span>
+                        </div>
+
+                        @* Retention *@
+                        <div class="text-right">
+                            <BadgeCn Variant="BadgeVariant.Outline" Class="h-5 px-1.5 text-[10px] font-normal">
+                                @cat.Retention
+                            </BadgeCn>
+                        </div>
+
+                        @* Toggle *@
+                        <div class="flex justify-end">
+                            <SwitchCn Checked="@cat.Enabled" CheckedChanged="@(() => ToggleCategory(cat.Id))" Class="scale-90" />
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Global retention override *@
+        <div class="flex items-center justify-between border-t bg-muted/20 px-4 py-2.5">
+            <div>
+                <span class="text-xs font-medium">Default Retention</span>
+                <p class="text-[10px] text-muted-foreground">
+                    Override retention for new categories
+                </p>
+            </div>
+            <SelectCn Value="@_globalRetention" ValueChanged="@(v => _globalRetention = v ?? "90")">
+                <SelectTriggerCn Class="h-7 w-[110px] text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="30">30 days</SelectItemCn>
+                    <SelectItemCn Value="90">90 days</SelectItemCn>
+                    <SelectItemCn Value="180">180 days</SelectItemCn>
+                    <SelectItemCn Value="365">1 year</SelectItemCn>
+                    <SelectItemCn Value="indefinite">Indefinite</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Footer actions *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="download" Size="12" Class="h-3 w-3" />
+                Export Config
+            </ButtonCn>
+            <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs" Disabled="@_isSaving" OnClick="HandleSave">
+                @if (_isSaving)
+                {
+                    <LucideIconCn Name="loader-2" Size="14" Class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    <span>Saving...</span>
+                }
+                else if (_justSaved)
+                {
+                    <LucideIconCn Name="check" Size="14" Class="mr-1.5 h-3.5 w-3.5" />
+                    <span>Saved</span>
+                }
+                else
+                {
+                    <span>Save Configuration</span>
+                }
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SeverityInfo(string Label, string ClassName, string DotClass);
+
+    private sealed class AuditCategory(
+        string id, string label, string description, string iconName,
+        string severity, string retention, int eventsPerDay, double storageMbPerMonth, bool enabled)
+    {
+        public string Id { get; } = id;
+        public string Label { get; } = label;
+        public string Description { get; } = description;
+        public string IconName { get; } = iconName;
+        public string Severity { get; } = severity;
+        public string Retention { get; } = retention;
+        public int EventsPerDay { get; } = eventsPerDay;
+        public double StorageMbPerMonth { get; } = storageMbPerMonth;
+        public bool Enabled { get; set; } = enabled;
+    }
+
+    private static readonly Dictionary<string, SeverityInfo> _severityConfig = new()
+    {
+        ["critical"] = new("Critical", "text-red-700 bg-red-500/10 dark:text-red-400", "bg-red-500"),
+        ["high"]     = new("High",     "text-amber-700 bg-amber-500/10 dark:text-amber-400", "bg-amber-500"),
+        ["medium"]   = new("Medium",   "text-blue-700 bg-blue-500/10 dark:text-blue-400", "bg-blue-500"),
+        ["low"]      = new("Low",      "text-muted-foreground bg-muted", "bg-muted-foreground"),
+    };
+
+    private readonly AuditCategory[] _categories =
+    [
+        new("auth",          "Authentication",    "Login attempts, password resets, MFA challenges, session creation",      "key",           "critical", "1 year",   342,   12.4,  true),
+        new("permissions",   "Permission Changes","Role assignments, policy updates, access grants and revocations",        "shield",        "critical", "1 year",   48,    1.8,   true),
+        new("data-mutations","Data Modifications","Create, update, delete operations on sensitive resources",               "server",        "high",     "180 days", 2847,  98.3,  true),
+        new("admin",         "Admin Actions",     "User management, workspace settings, billing changes",                  "user-cog",      "high",     "180 days", 89,    3.2,   true),
+        new("api-access",    "API Access",        "Token usage, rate limit events, endpoint authorization",                "globe",         "medium",   "90 days",  12450, 445.0, false),
+        new("team",          "Team Activity",     "Member invitations, removals, team transfers",                          "users",         "medium",   "90 days",  23,    0.8,   true),
+        new("webhooks",      "Webhook Deliveries","Outbound webhook attempts, failures, retries",                          "webhook",       "medium",   "30 days",  5670,  189.0, false),
+        new("billing",       "Billing Events",    "Payment processing, invoice generation, plan changes",                  "shopping-cart", "high",     "1 year",   15,    0.5,   true),
+        new("security",      "Security Alerts",   "Suspicious activity, brute force detection, IP blocks",                 "shield-alert",  "critical", "1 year",   7,     0.3,   true),
+    ];
+
+    private string _searchQuery    = "";
+    private string _severityFilter = "all";
+    private string _globalRetention = "90";
+    private bool   _isSaving;
+    private bool   _justSaved;
+
+    private int    _enabledCount         => _categories.Count(c => c.Enabled);
+    private int    _totalEventsPerDay    => _categories.Where(c => c.Enabled).Sum(c => c.EventsPerDay);
+    private double _totalStoragePerMonth => _categories.Where(c => c.Enabled).Sum(c => c.StorageMbPerMonth);
+
+    private IEnumerable<AuditCategory> FilteredCategories => _categories.Where(cat =>
+    {
+        var matchesSearch = string.IsNullOrEmpty(_searchQuery) ||
+            cat.Label.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+            cat.Description.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase);
+        var matchesSeverity = _severityFilter == "all" || cat.Severity == _severityFilter;
+        return matchesSearch && matchesSeverity;
+    });
+
+    private void ToggleCategory(string id)
+    {
+        var cat = Array.Find(_categories, c => c.Id == id);
+        if (cat is not null) cat.Enabled = !cat.Enabled;
+    }
+
+    private void EnableAll()
+    {
+        foreach (var cat in _categories) cat.Enabled = true;
+    }
+
+    private void DisableNonCritical()
+    {
+        foreach (var cat in _categories) cat.Enabled = cat.Severity == "critical";
+    }
+
+    private void ClearFilters()
+    {
+        _searchQuery = "";
+        _severityFilter = "all";
+    }
+
+    private async Task HandleSave()
+    {
+        _isSaving = true;
+        StateHasChanged();
+        await Task.Delay(1200);
+        _isSaving = false;
+        _justSaved = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _justSaved = false;
+    }
+
+    private static string FormatStorage(double mb)
+    {
+        if (mb >= 1000) return $"{mb / 1000:F1} GB";
+        if (mb >= 1)    return $"{mb:F1} MB";
+        return $"{(int)Math.Round(mb * 1024)} KB";
+    }
+}

@@ -1,0 +1,171 @@
+@* ============================================================
+   Block: crud-integration-setup
+   Title: CrudIntegrationSetup
+   Description: Integration configuration wizard with connection status, API key management, and webhook settings
+   Source: original/blocks/crud/crud-integration-setup.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="puzzle" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Integrations</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_integrations.Count configured · @_integrations.Count(i => i.Status == "connected") active
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    Add Integration
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Search + Filter bar *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search integrations..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var s in _filterOptions)
+                {
+                    var filterVal = s;
+                    <button type="button"
+                            @onclick="@(() => _filter = filterVal)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == filterVal ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @(filterVal == "all" ? "All" : GetStatusLabel(filterVal))
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Integration rows *@
+        <div>
+            @{
+                var filtered = _integrations
+                    .Where(i => _filter == "all" || i.Status == _filter)
+                    .Where(i => i.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                                i.Category.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            @foreach (var it in filtered)
+            {
+                var item = it;
+                var dotColor = GetStatusColor(item.Status);
+                var isLast = filtered.IndexOf(item) == filtered.Count - 1;
+                <div class="@Cn.Merge("border-b px-4 py-3 transition-colors hover:bg-muted/50", isLast ? "border-b-0" : "")">
+                    <div class="flex items-start gap-3">
+                        <span class="@($"mt-1.5 size-1.5 shrink-0 rounded-full {dotColor}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@item.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">@item.Category</BadgeCn>
+                                <span class="font-mono text-[10px] text-muted-foreground">@item.Version</span>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@item.Description</p>
+                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span>Last sync: @item.LastSync</span>
+                                <span>·</span>
+                                <span class="tabular-nums">@item.Events.ToString("N0") events</span>
+                            </div>
+                        </div>
+
+                        @* Dropdown menu *@
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>Configure</DropdownMenuItemCn>
+                                <DropdownMenuItemCn @onclick="@(() => HandleToggle(item.Id))">
+                                    @(item.Status == "connected" ? "Disconnect" : "Connect")
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View Logs</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Sync Now</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" @onclick="@(() => HandleDelete(item.Id))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Remove
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (!filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No integrations found
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private class Integration
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Category { get; set; } = "";
+        public string Status { get; set; } = "disconnected";
+        public string LastSync { get; set; } = "";
+        public int Events { get; set; }
+        public string Version { get; set; } = "";
+    }
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private static readonly string[] _filterOptions = ["all", "connected", "disconnected", "error", "pending"];
+
+    private readonly List<Integration> _integrations =
+    [
+        new() { Id = 1, Name = "Stripe",      Description = "Payment processing and subscription billing",  Category = "Payments",      Status = "connected",    LastSync = "2 min ago",   Events = 14520, Version = "v2024-12" },
+        new() { Id = 2, Name = "Slack",       Description = "Team notifications and workflow alerts",       Category = "Communication", Status = "connected",    LastSync = "5 min ago",   Events = 8930,  Version = "v2.1"     },
+        new() { Id = 3, Name = "GitHub",      Description = "Repository sync and deployment triggers",      Category = "Developer",     Status = "connected",    LastSync = "1 min ago",   Events = 23450, Version = "v3"       },
+        new() { Id = 4, Name = "Salesforce",  Description = "CRM data sync and lead management",            Category = "Sales",         Status = "error",        LastSync = "3 hours ago", Events = 5670,  Version = "v58.0"    },
+        new() { Id = 5, Name = "SendGrid",    Description = "Transactional email delivery and tracking",    Category = "Email",         Status = "connected",    LastSync = "10 min ago",  Events = 45200, Version = "v3"       },
+        new() { Id = 6, Name = "Datadog",     Description = "Application monitoring and log aggregation",   Category = "Monitoring",    Status = "pending",      LastSync = "Never",       Events = 0,     Version = "v2"       },
+        new() { Id = 7, Name = "Jira",        Description = "Issue tracking and project management sync",   Category = "Project",       Status = "disconnected", LastSync = "2 days ago",  Events = 3120,  Version = "v3"       },
+    ];
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "connected"    => "bg-emerald-500",
+        "disconnected" => "bg-muted-foreground/40",
+        "error"        => "bg-red-500",
+        "pending"      => "bg-amber-500",
+        _              => "bg-muted-foreground/40",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "connected"    => "Connected",
+        "disconnected" => "Disconnected",
+        "error"        => "Error",
+        "pending"      => "Pending",
+        _              => status,
+    };
+
+    private void HandleDelete(int id) => _integrations.RemoveAll(i => i.Id == id);
+
+    private void HandleToggle(int id)
+    {
+        var item = _integrations.FirstOrDefault(i => i.Id == id);
+        if (item is null) return;
+        item.Status = item.Status == "connected" ? "disconnected" : "connected";
+    }
+}

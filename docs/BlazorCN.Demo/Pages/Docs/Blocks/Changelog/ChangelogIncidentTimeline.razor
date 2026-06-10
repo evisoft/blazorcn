@@ -1,0 +1,165 @@
+@* ============================================================
+   Block: changelog-incident-timeline
+   Title: ChangelogIncidentTimeline
+   Description: An incident response timeline showing status progression from investigating through identified, monitoring, to resolved, with timestamps and staggered entrance animations.
+   Source: original/blocks/changelog/changelog-incident-timeline.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="alert-circle" Size="16" Class="size-4 text-muted-foreground" />
+            <h2 class="text-sm font-medium">Incident Timeline</h2>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto text-xs">@_incidents.Length incidents</BadgeCn>
+        </div>
+
+        @* Incident rows *@
+        @foreach (var inc in _incidents)
+        {
+            var incident = inc;
+            var isExpanded = _expanded == incident.Id;
+            var latestStatus = incident.Updates[0].Status;
+            <div>
+                <button type="button"
+                        class="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                        @onclick="@(() => ToggleIncident(incident.Id))">
+                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", ImpactColor(incident.Impact))" />
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-medium">@incident.Title</p>
+                        <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>@ImpactLabel(incident.Impact)</span>
+                            <span>·</span>
+                            <span>@incident.StartTime</span>
+                            @if (incident.TotalDuration != null)
+                            {
+                                <span>·</span>
+                                <span>@incident.TotalDuration</span>
+                            }
+                        </div>
+                    </div>
+                    <LucideIconCn Name="@StatusIcon(latestStatus)" Size="16" Class="@Cn.Merge("size-4 shrink-0", StatusColor(latestStatus))" />
+                    <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                </button>
+
+                @if (isExpanded)
+                {
+                    <div class="border-b bg-muted/30 px-4 py-3">
+                        <div class="relative space-y-0">
+                            @for (var idx = 0; idx < incident.Updates.Length; idx++)
+                            {
+                                var update = incident.Updates[idx];
+                                var isLast = idx == incident.Updates.Length - 1;
+                                <div class="relative flex gap-3 pb-3">
+                                    <div class="flex flex-col items-center">
+                                        <div class="@Cn.Merge("flex size-5 shrink-0 items-center justify-center rounded-full", $"{StatusDotColor(update.Status)}/10")">
+                                            <LucideIconCn Name="@StatusIcon(update.Status)" Size="12" Class="@Cn.Merge("size-3", StatusColor(update.Status))" />
+                                        </div>
+                                        @if (!isLast)
+                                        {
+                                            <div class="mt-1 w-px flex-1 bg-border" />
+                                        }
+                                    </div>
+                                    <div class="min-w-0 flex-1 pb-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="@Cn.Merge("text-xs font-medium capitalize", StatusColor(update.Status))">@update.Status</span>
+                                            <span class="font-mono text-xs text-muted-foreground">@update.Timestamp</span>
+                                        </div>
+                                        <p class="mt-0.5 text-xs text-muted-foreground">@update.Message</p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Footer *@
+        <div class="px-4 py-3">
+            <p class="text-center text-xs text-muted-foreground">Subscribe to incident updates via email or webhook</p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record StatusUpdate(string Status, string Message, string Timestamp);
+    private record Incident(string Id, string Title, string Impact, string StartTime, string? ResolvedTime, string? TotalDuration, StatusUpdate[] Updates);
+
+    private static readonly Incident[] _incidents =
+    [
+        new("inc-301", "Elevated API error rates in US-East region", "major",
+            "Mar 27, 2026 · 08:14 UTC", "Mar 27, 2026 · 09:47 UTC", "1h 33m",
+            [
+                new("resolved", "All services operating normally. Root cause was an expired internal certificate that caused cascading auth failures.", "09:47 UTC"),
+                new("monitoring", "Certificate rotated and deployed. Error rates returning to baseline. Monitoring for 30 minutes.", "09:22 UTC"),
+                new("identified", "Root cause identified as an expired mTLS certificate between API gateway and auth service.", "08:51 UTC"),
+                new("investigating", "We are seeing elevated 503 errors on API endpoints. Engineering team is investigating.", "08:14 UTC"),
+            ]),
+        new("inc-298", "Webhook delivery delays exceeding SLA", "minor",
+            "Mar 24, 2026 · 15:30 UTC", "Mar 24, 2026 · 16:12 UTC", "42m",
+            [
+                new("resolved", "Webhook delivery backlog cleared. All pending webhooks delivered within retry window.", "16:12 UTC"),
+                new("monitoring", "Scaled webhook workers from 8 to 16. Processing rate recovering.", "15:55 UTC"),
+                new("identified", "A spike in event volume from a single tenant saturated the delivery queue.", "15:42 UTC"),
+                new("investigating", "Webhook deliveries are experiencing delays of 5-10 minutes. Investigating queue health.", "15:30 UTC"),
+            ]),
+        new("inc-295", "Dashboard loading failures for EU customers", "critical",
+            "Mar 21, 2026 · 02:05 UTC", "Mar 21, 2026 · 04:18 UTC", "2h 13m",
+            [
+                new("resolved", "EU dashboard fully restored. Failover to backup database completed. Primary DB recovery scheduled for maintenance window.", "04:18 UTC"),
+                new("monitoring", "Failover database serving traffic. Monitoring latency and error rates.", "03:30 UTC"),
+                new("identified", "EU-West-1 primary database node is unresponsive. Initiating failover to standby replica.", "02:28 UTC"),
+                new("investigating", "EU customers reporting blank dashboard screens. Infrastructure team paged.", "02:05 UTC"),
+            ]),
+    ];
+
+    private string? _expanded;
+
+    private void ToggleIncident(string id) => _expanded = _expanded == id ? null : id;
+
+    private static string StatusIcon(string status) => status switch
+    {
+        "investigating" => "search",
+        "identified"    => "alert-circle",
+        "monitoring"    => "eye",
+        "resolved"      => "check-circle-2",
+        _               => "circle",
+    };
+
+    private static string StatusColor(string status) => status switch
+    {
+        "investigating" => "text-red-500",
+        "identified"    => "text-amber-500",
+        "monitoring"    => "text-blue-500",
+        "resolved"      => "text-emerald-500",
+        _               => "",
+    };
+
+    private static string StatusDotColor(string status) => status switch
+    {
+        "investigating" => "bg-red-500",
+        "identified"    => "bg-amber-500",
+        "monitoring"    => "bg-blue-500",
+        "resolved"      => "bg-emerald-500",
+        _               => "",
+    };
+
+    private static string ImpactColor(string impact) => impact switch
+    {
+        "minor"    => "bg-amber-500",
+        "major"    => "bg-red-500",
+        "critical" => "bg-red-700",
+        _          => "",
+    };
+
+    private static string ImpactLabel(string impact) => impact switch
+    {
+        "minor"    => "Minor",
+        "major"    => "Major",
+        "critical" => "Critical",
+        _          => impact,
+    };
+}

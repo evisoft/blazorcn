@@ -1,0 +1,222 @@
+@* ============================================================
+   Block: chat-date-divider
+   Title: ChatDateDivider
+   Description: React chat interface with date separator dividers and a calendar widget for Next.js that groups messages by day and lets users navigate to specific dates using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-date-divider.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8 shrink-0">
+                <AvatarFallbackCn Class="text-[10px]">RM</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Riley Morgan</span>
+                <p class="text-muted-foreground text-xs">Backend Engineer</p>
+            </div>
+            <ButtonCn Variant="@(_calendarOpen ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                      Size="ButtonSize.Icon"
+                      Class="size-7"
+                      OnClick="@ToggleCalendar">
+                @if (_calendarOpen)
+                {
+                    <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                }
+                else
+                {
+                    <LucideIconCn Name="calendar" Size="14" Class="size-3.5" />
+                }
+            </ButtonCn>
+        </div>
+
+        @* Calendar widget *@
+        @if (_calendarOpen)
+        {
+            <div class="border-b px-4 py-2">
+                <div class="mb-1 text-center text-muted-foreground text-xs font-medium">March 2026</div>
+                <div class="grid grid-cols-7 gap-0.5">
+                    @foreach (var d in _weekdays)
+                    {
+                        <div class="flex h-6 items-center justify-center text-muted-foreground text-[10px]">@d</div>
+                    }
+                    @for (int i = 0; i < _startOffset; i++)
+                    {
+                        <div></div>
+                    }
+                    @for (int i = 0; i < _totalDays; i++)
+                    {
+                        var day = i + 1;
+                        var hasMessages = _daysWithMessages.Contains(day);
+                        var isSelected = _selectedDay == day;
+                        var btnClass = Cn.Merge(
+                            "flex h-6 items-center justify-center rounded text-[10px] transition-colors",
+                            hasMessages
+                                ? "cursor-pointer font-medium text-foreground hover:bg-accent"
+                                : "cursor-default text-muted-foreground/30",
+                            isSelected ? "bg-foreground text-background hover:bg-foreground" : ""
+                        );
+                        <button type="button"
+                                disabled="@(!hasMessages)"
+                                class="@btnClass"
+                                @onclick="@(() => { if (hasMessages) ScrollToDay(day); })">
+                            @day
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Messages *@
+        <div class="flex flex-1 flex-col overflow-y-auto py-2">
+            <div class="flex flex-1 flex-col justify-end">
+                @foreach (var group in _groups)
+                {
+                    <div>
+                        @* Date divider *@
+                        <div class="flex items-center gap-3 px-4 py-3">
+                            <div class="h-px flex-1 bg-border"></div>
+                            <span class="shrink-0 text-muted-foreground text-xs">
+                                @group.Label
+                                <span class="ml-1.5 text-muted-foreground/50">(@group.Messages.Length)</span>
+                            </span>
+                            <div class="h-px flex-1 bg-border"></div>
+                        </div>
+
+                        @* Messages in this group *@
+                        @for (int i = 0; i < group.Messages.Length; i++)
+                        {
+                            var msg = group.Messages[i];
+                            var idx = i;
+                            var prevMsg = idx > 0 ? group.Messages[idx - 1] : null;
+                            var isConsecutive = prevMsg?.Sender == msg.Sender;
+                            var rowClass = Cn.Merge(
+                                "flex gap-2 px-4 transition-colors hover:bg-accent",
+                                isConsecutive ? "pt-0.5" : "pt-3"
+                            );
+                            <div class="@rowClass">
+                                @if (!isConsecutive)
+                                {
+                                    <AvatarCn Class="mt-0.5 size-8 shrink-0">
+                                        <AvatarFallbackCn Class="text-[10px]">@msg.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                }
+                                else
+                                {
+                                    <div class="size-8 shrink-0"></div>
+                                }
+                                <div class="min-w-0 flex-1">
+                                    @if (!isConsecutive)
+                                    {
+                                        <div class="flex items-baseline gap-2">
+                                            <span class="font-medium text-sm">@msg.Sender</span>
+                                            <span class="text-muted-foreground text-xs">@msg.Time</span>
+                                        </div>
+                                    }
+                                    <p class="text-sm leading-relaxed">@msg.Content</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                <div class="h-2"></div>
+            </div>
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" class="flex items-center gap-2">
+                <div class="flex flex-1 items-center rounded-md border bg-muted/50">
+                    <InputCn @bind-Value="_input"
+                             Placeholder="Type a message..."
+                             Class="h-9 flex-1 border-0 bg-transparent text-sm shadow-none focus-visible:ring-0" />
+                    <ButtonCn type="submit"
+                              Size="ButtonSize.Icon"
+                              Variant="ButtonVariant.Ghost"
+                              Disabled="@string.IsNullOrWhiteSpace(_input)"
+                              Class="mr-1 size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Message(
+        string Id,
+        string Content,
+        string Sender,
+        string Initials,
+        string Time,
+        bool IsMe,
+        string Date,
+        int Day
+    );
+
+    private record DateGroup(string Label, int Day, Message[] Messages);
+
+    private string _input = "";
+    private bool _calendarOpen = false;
+    private int? _selectedDay = null;
+
+    private static readonly int[] _daysWithMessages = [25, 26, 27];
+    private static readonly string[] _weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    private const int _startOffset = 6;
+    private const int _totalDays = 31;
+
+    private static readonly Message[] _allMessages =
+    [
+        new("1",  "Hey, I pushed the initial schema migration. Can you take a look?", "Riley Morgan", "RM", "9:12 AM",  false, "March 25", 25),
+        new("2",  "Sure, I'll review it after lunch.",                                "You",          "YO", "9:45 AM",  true,  "March 25", 25),
+        new("3",  "Looks good overall. One thing — the users table should have a unique constraint on email.", "You", "YO", "1:30 PM", true, "March 25", 25),
+        new("4",  "Good catch, I'll add that in the next migration.",                 "Riley Morgan", "RM", "1:32 PM",  false, "March 25", 25),
+        new("5",  "I updated the migration and added indexes on the foreign keys too.", "Riley Morgan", "RM", "10:05 AM", false, "March 26", 26),
+        new("6",  "Nice. Did you run the seed script against the new schema?",        "You",          "YO", "10:20 AM", true,  "March 26", 26),
+        new("7",  "Yeah, all 500 test records inserted cleanly. No constraint violations.", "Riley Morgan", "RM", "10:22 AM", false, "March 26", 26),
+        new("8",  "The staging deploy went through. Everything looks stable so far.", "Riley Morgan", "RM", "9:00 AM",  false, "March 27", 27),
+        new("9",  "Great. I'll run the load test this morning and share the results.", "You",          "YO", "9:05 AM",  true,  "March 27", 27),
+        new("10", "Load test passed — p99 latency is under 200ms with 1k concurrent users.", "You",   "YO", "11:30 AM", true,  "March 27", 27),
+        new("11", "That's solid. Let's ship it to production after the standup.",     "Riley Morgan", "RM", "11:35 AM", false, "March 27", 27),
+    ];
+
+    private DateGroup[] _groups = [];
+
+    protected override void OnInitialized()
+    {
+        _groups = GroupByDate(_allMessages);
+    }
+
+    private static DateGroup[] GroupByDate(Message[] msgs)
+    {
+        var groups = new List<(string Label, int Day, List<Message> Messages)>();
+        foreach (var msg in msgs)
+        {
+            if (groups.Count == 0 || groups[^1].Label != msg.Date)
+                groups.Add((msg.Date, msg.Day, new List<Message>()));
+            groups[^1].Messages.Add(msg);
+        }
+        return groups.Select(g => new DateGroup(g.Label, g.Day, g.Messages.ToArray())).ToArray();
+    }
+
+    private void ToggleCalendar()
+    {
+        _calendarOpen = !_calendarOpen;
+        if (!_calendarOpen)
+            _selectedDay = null;
+    }
+
+    private void ScrollToDay(int day)
+    {
+        _selectedDay = day;
+        // Scrolling to anchor is a JS-only feature; we just update selection state
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

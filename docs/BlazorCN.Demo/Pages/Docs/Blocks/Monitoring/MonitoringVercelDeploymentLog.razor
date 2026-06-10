@@ -1,0 +1,135 @@
+@* ============================================================
+   Block: monitoring-vercel-deployment-log
+   Title: MonitoringVercelDeploymentLog
+   Description: A real-time monitoring dashboard for Vercel deployments, tracking build logs, serverless function performance, and deployment status history.
+   Source: original/blocks/monitoring/monitoring-vercel-deployment-log.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-2xl border bg-zinc-950 text-zinc-100 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-zinc-800 px-6 py-5 bg-white/[0.02]">
+            <div class="flex items-center gap-4">
+                <div class="flex size-11 items-center justify-center rounded-xl bg-white text-black shadow-lg">
+                    <LucideIconCn Name="rocket" Size="24" Class="size-6" />
+                </div>
+                <div>
+                    <h3 class="text-base font-bold tracking-tight">Vercel Deployments</h3>
+                    <p class="mt-0.5 text-zinc-500 text-xs font-medium">
+                        shadcnio-docs · production
+                    </p>
+                </div>
+            </div>
+            <div class="flex flex-col items-end gap-1.5">
+                <div class="flex items-center gap-2">
+                    <div class="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-emerald-500">
+                        Ready
+                    </span>
+                </div>
+                <span class="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter">SHA: 7a2b9d1</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-zinc-800 border-b border-zinc-800">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">@s.Label</span>
+                        <LucideIconCn Name="@s.IconName" Size="16" Class="size-4 text-zinc-700" />
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-3xl font-black tabular-nums tracking-tighter text-white">
+                            @s.DisplayValue
+                        </span>
+                        <span class="text-zinc-600 text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+
+                    <div class="h-10 w-full mt-6">
+                        @((MarkupString)RenderSparkline(s.Trend, s.Status == "warning" ? "#f59e0b" : "#ffffff"))
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="px-6 py-4 flex items-center justify-between bg-white/[0.01]">
+            <div class="flex items-center gap-5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                <div class="flex flex-col">
+                    <span class="opacity-60 mb-0.5">Edge Runtime</span>
+                    <span class="text-white">v19.4.0</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="opacity-60 mb-0.5">Success Rate</span>
+                    <span class="text-emerald-500">100%</span>
+                </div>
+            </div>
+            <button type="button" class="text-[10px] font-black uppercase tracking-widest text-white hover:opacity-70 transition-opacity">
+                Live Logs →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, string DisplayValue, string Unit, string IconName, string Status, double[] Trend);
+
+    private static readonly double[] _buildData = [45, 42, 58, 48, 52, 41, 39, 44, 46, 43, 40, 38];
+
+    private static readonly double[] _latencyData = [162.5, 155, 195, 170, 180, 152.5, 147.5, 160, 165, 157.5, 150, 145];
+
+    private static readonly double[] _bundleData = [1.2, 1.22, 1.24, 1.26, 1.28, 1.30, 1.32, 1.34, 1.36, 1.38, 1.40, 1.42];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Avg. Build Time",  "42",   "sec", "timer",  "healthy", _buildData),
+        new("Func. Latency",    "124",  "ms",  "cpu",    "healthy", _latencyData),
+        new("Bundle Size",      "1.42", "MB",  "box",    "warning", _bundleData),
+    ];
+
+    private static string RenderSparkline(double[] values, string color)
+    {
+        if (values.Length == 0) return string.Empty;
+
+        double min = double.MaxValue;
+        double max = double.MinValue;
+        foreach (var v in values)
+        {
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        double range = max - min;
+        if (range == 0) range = 1;
+
+        double svgWidth = 200;
+        double svgHeight = 40;
+        double stepX = svgWidth / (values.Length - 1);
+
+        var points = new System.Text.StringBuilder();
+        for (int i = 0; i < values.Length; i++)
+        {
+            double x = i * stepX;
+            double y = svgHeight - ((values[i] - min) / range) * (svgHeight * 0.8) - svgHeight * 0.1;
+            if (i == 0)
+                points.Append($"M{x:F1},{y:F1}");
+            else
+                points.Append($" L{x:F1},{y:F1}");
+        }
+
+        // Build fill path (close to bottom)
+        var fillPoints = new System.Text.StringBuilder();
+        fillPoints.Append(points.ToString());
+        fillPoints.Append($" L{svgWidth:F1},{svgHeight:F1} L0,{svgHeight:F1} Z");
+
+        // Escape for attribute string (no quotes inside attribute — use single-quote SVG)
+        string stroke = color;
+        string escapedStroke = stroke.Replace("\"", "&quot;");
+        string fillOpacityVal = "0.03";
+
+        return $"<svg viewBox='0 0 {svgWidth} {svgHeight}' preserveAspectRatio='none' width='100%' height='100%' xmlns='http://www.w3.org/2000/svg'>" +
+               $"<path d='{fillPoints}' fill='{escapedStroke}' fill-opacity='{fillOpacityVal}' stroke='none'/>" +
+               $"<path d='{points}' fill='none' stroke='{escapedStroke}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/>" +
+               $"</svg>";
+    }
+}

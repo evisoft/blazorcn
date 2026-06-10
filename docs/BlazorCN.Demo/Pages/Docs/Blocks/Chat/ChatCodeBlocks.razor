@@ -1,0 +1,270 @@
+@* ============================================================
+   Block: chat-code-blocks
+   Title: ChatCodeBlocks
+   Description: React chat block with code snippet messages for Next.js featuring syntax-highlighted dark code blocks, copy buttons, language badges, and mixed text and code using shadcn/ui, TypeScript, and Tailwind CSS
+   Source: original/blocks/chat/chat-code-blocks.tsx
+   ============================================================ *@
+
+@inject IJSRuntime JS
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header - channel style *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="hash" Size="16" Class="size-4 text-muted-foreground" />
+            <p class="font-medium text-sm">code-review</p>
+            <div class="min-w-0 flex-1"></div>
+            <div class="flex items-center gap-1">
+                <AvatarCn Class="size-5">
+                    <AvatarFallbackCn Class="text-[8px]">SP</AvatarFallbackCn>
+                </AvatarCn>
+                <AvatarCn Class="-ml-1.5 size-5">
+                    <AvatarFallbackCn Class="text-[8px]">YO</AvatarFallbackCn>
+                </AvatarCn>
+                <span class="ml-1 text-muted-foreground text-xs">2</span>
+            </div>
+        </div>
+
+        @* Messages - flat layout *@
+        <div class="flex-1 overflow-y-auto py-2">
+            @foreach (var group in _grouped)
+            {
+                var grp = group;
+                <div class="mb-1">
+                    @for (int gi = 0; gi < grp.Length; gi++)
+                    {
+                        var msg = grp[gi];
+                        var isFirst = gi == 0;
+                        <div class="flex gap-2 px-4 py-0.5 hover:bg-accent">
+                            <div class="flex w-8 shrink-0 items-start justify-center pt-0.5">
+                                @if (isFirst)
+                                {
+                                    <AvatarCn Class="size-7">
+                                        <AvatarFallbackCn Class="text-[10px]">@msg.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                }
+                                else
+                                {
+                                    <span class="pt-1 text-muted-foreground text-[10px] opacity-0 group-hover:opacity-100">@msg.Time</span>
+                                }
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                @if (isFirst)
+                                {
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium text-sm">@msg.Sender</span>
+                                        <span class="text-muted-foreground text-[10px]">@msg.Time</span>
+                                    </div>
+                                }
+                                @if (msg.Content != null)
+                                {
+                                    <p class="text-sm leading-relaxed">
+                                        @foreach (var part in RenderInlineCode(msg.Content))
+                                        {
+                                            if (part.IsCode)
+                                            {
+                                                <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">@part.Text</code>
+                                            }
+                                            else
+                                            {
+                                                <span>@part.Text</span>
+                                            }
+                                        }
+                                    </p>
+                                }
+                                @if (msg.CodeBlock != null)
+                                {
+                                    var msgId = msg.Id;
+                                    var codeText = msg.CodeBlock.Code;
+                                    <div class="mt-1 overflow-hidden rounded-md bg-zinc-950">
+                                        <div class="flex items-center justify-between px-3 py-2">
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 bg-zinc-800 font-mono text-[10px] text-zinc-400 hover:bg-zinc-800">
+                                                @msg.CodeBlock.Language
+                                            </BadgeCn>
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                      Class="h-6 gap-1 px-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                                                      OnClick="@(() => HandleCopy(msgId, codeText))">
+                                                @if (_copied == msg.Id)
+                                                {
+                                                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                                    <span>Copied</span>
+                                                }
+                                                else
+                                                {
+                                                    <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                                    <span>Copy</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                        <pre class="overflow-x-auto px-3 pb-3 font-mono text-sm leading-relaxed"><code class="text-zinc-100">@foreach (var token in HighlightCode(msg.CodeBlock.Code))
+                                            {
+                                                if (token.ClassName != null)
+                                                {
+                                                    <span class="@token.ClassName">@token.Text</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>@token.Text</span>
+                                                }
+                                            }</code></pre>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault
+                  class="flex items-center gap-2 rounded-md border px-3 py-1.5">
+                <InputCn @bind-Value="_input"
+                         Placeholder="Ask a coding question..."
+                         Class="h-7 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0" />
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Sm"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="@Cn.Merge("size-7 shrink-0 p-0", !string.IsNullOrWhiteSpace(_input) ? "text-foreground" : "text-muted-foreground")">
+                    <LucideIconCn Name="send" Size="14" Class="size-3.5" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CodeBlockData(string Language, string Code);
+
+    private record ChatMessage(
+        string Id,
+        string Sender,
+        string Initials,
+        string? Content,
+        CodeBlockData? CodeBlock,
+        string Time);
+
+    private record InlinePart(string Text, bool IsCode);
+
+    private record HighlightToken(string Text, string? ClassName);
+
+    private string _input = "";
+    private string? _copied = null;
+    private System.Threading.CancellationTokenSource? _copyCts;
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("1", "You",      "YO", "How do I create a custom hook for debounced search in React?", null, "3:10 PM"),
+        new("2", "Sam Park", "SP", "Here's a clean `useDebounce` hook. It takes a value and delay, returns the debounced value.", null, "3:12 PM"),
+        new("3", "Sam Park", "SP", null,
+            new CodeBlockData("typescript",
+                "import { useEffect, useState } from \"react\"\n\nexport function useDebounce<T>(value: T, delay: number): T {\n  const [debounced, setDebounced] = useState<T>(value)\n\n  useEffect(() => {\n    const timer = setTimeout(() => setDebounced(value), delay)\n    return () => clearTimeout(timer)\n  }, [value, delay])\n\n  return debounced\n}"),
+            "3:12 PM"),
+        new("4", "You",      "YO", "Nice. How would I use it with an API call in a search component?", null, "3:15 PM"),
+        new("5", "Sam Park", "SP", "Wire it up like this. The API call only fires when the debounced value changes.", null, "3:17 PM"),
+        new("6", "Sam Park", "SP", null,
+            new CodeBlockData("tsx",
+                "function SearchBar() {\n  const [query, setQuery] = useState(\"\")\n  const debouncedQuery = useDebounce(query, 300)\n  const [results, setResults] = useState<string[]>([])\n\n  useEffect(() => {\n    if (!debouncedQuery) return setResults([])\n    fetch(`/api/search?q=${debouncedQuery}`)\n      .then(res => res.json())\n      .then(data => setResults(data.items))\n  }, [debouncedQuery])\n\n  return (\n    <div>\n      <input\n        value={query}\n        onChange={e => setQuery(e.target.value)}\n        placeholder=\"Search...\"\n      />\n      {results.map(item => (\n        <div key={item}>{item}</div>\n      ))}\n    </div>\n  )\n}"),
+            "3:17 PM"),
+        new("7", "You",      "YO", "What about cancelling the fetch if the user types again before the response comes back?", null, "3:20 PM"),
+        new("8", "Sam Park", "SP", "Use an `AbortController`. Return the cleanup in the effect.", null, "3:22 PM"),
+        new("9", "Sam Park", "SP", null,
+            new CodeBlockData("typescript",
+                "useEffect(() => {\n  if (!debouncedQuery) return setResults([])\n\n  const controller = new AbortController()\n  fetch(`/api/search?q=${debouncedQuery}`, {\n    signal: controller.signal,\n  })\n    .then(res => res.json())\n    .then(data => setResults(data.items))\n    .catch(err => {\n      if (err.name !== \"AbortError\") throw err\n    })\n\n  return () => controller.abort()\n}, [debouncedQuery])"),
+            "3:22 PM"),
+    ];
+
+    private static ChatMessage[][] _grouped = GroupMessages(_messages);
+
+    private static ChatMessage[][] GroupMessages(ChatMessage[] msgs)
+    {
+        var groups = new System.Collections.Generic.List<System.Collections.Generic.List<ChatMessage>>();
+        foreach (var msg in msgs)
+        {
+            if (groups.Count > 0 && groups[^1][0].Sender == msg.Sender)
+                groups[^1].Add(msg);
+            else
+                groups.Add(new System.Collections.Generic.List<ChatMessage> { msg });
+        }
+        return groups.Select(g => g.ToArray()).ToArray();
+    }
+
+    private static InlinePart[] RenderInlineCode(string text)
+    {
+        var parts = new System.Collections.Generic.List<InlinePart>();
+        var segments = System.Text.RegularExpressions.Regex.Split(text, @"(`[^`]+`)");
+        foreach (var seg in segments)
+        {
+            if (seg.StartsWith("`") && seg.EndsWith("`") && seg.Length > 1)
+                parts.Add(new InlinePart(seg[1..^1], true));
+            else
+                parts.Add(new InlinePart(seg, false));
+        }
+        return parts.ToArray();
+    }
+
+    private static HighlightToken[] HighlightCode(string code)
+    {
+        var keywordsPattern = @"\b(import|export|from|const|let|function|return|if|else|new|throw|typeof|void|async|await|default)\b";
+        var typesPattern    = @"\b(string|number|boolean|void|null|undefined|Promise|T)\b";
+        var stringsPattern  = @"([""'`])(?:(?!\1|\\).|\\.)*?\1";
+        var commentsPattern = @"(\/\/.*$)";
+
+        var tokens = new System.Collections.Generic.List<(int Start, int End, string ClassName)>();
+
+        void AddMatches(string pattern, string cls, System.Text.RegularExpressions.RegexOptions opts = System.Text.RegularExpressions.RegexOptions.None)
+        {
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(code, pattern, opts))
+                tokens.Add((m.Index, m.Index + m.Length, cls));
+        }
+
+        AddMatches(keywordsPattern, "text-purple-400");
+        AddMatches(typesPattern,    "text-cyan-400");
+        AddMatches(stringsPattern,  "text-emerald-400");
+        AddMatches(commentsPattern, "text-zinc-500", System.Text.RegularExpressions.RegexOptions.Multiline);
+
+        tokens.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+        var result = new System.Collections.Generic.List<HighlightToken>();
+        int lastEnd = 0;
+
+        foreach (var tok in tokens)
+        {
+            if (tok.Start < lastEnd) continue;
+            if (tok.Start > lastEnd)
+                result.Add(new HighlightToken(code[lastEnd..tok.Start], null));
+            result.Add(new HighlightToken(code[tok.Start..tok.End], tok.ClassName));
+            lastEnd = tok.End;
+        }
+        if (lastEnd < code.Length)
+            result.Add(new HighlightToken(code[lastEnd..], null));
+
+        return result.ToArray();
+    }
+
+    private async Task HandleCopy(string id, string code)
+    {
+        _copyCts?.Cancel();
+        _copyCts = new System.Threading.CancellationTokenSource();
+        var cts = _copyCts;
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", code);
+        _copied = id;
+        StateHasChanged();
+
+        await Task.Delay(2000);
+        if (!cts.IsCancellationRequested)
+        {
+            _copied = null;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

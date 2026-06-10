@@ -1,0 +1,206 @@
+@* ============================================================
+   Block: chat-split-inbox
+   Title: ChatSplitInbox
+   Description: React split-panel inbox chat interface for Next.js with a conversation list, unread badges, active chat messages, and message input using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-split-inbox.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="flex h-[700px] overflow-hidden rounded-lg border bg-card">
+        @* Left panel — conversation list *@
+        <div class="flex w-80 shrink-0 flex-col border-r">
+            <div class="flex items-center justify-between border-b px-4 py-3">
+                <span class="font-medium text-sm">Messages</span>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon"
+                          Class="size-7 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="plus" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+
+            @* Search *@
+            <div class="border-b px-3 py-2">
+                <div class="flex items-center gap-2 rounded-md bg-muted/50 px-2.5 py-1.5">
+                    <LucideIconCn Name="search" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                    <input value="@_search"
+                           @oninput="@((e) => _search = e.Value?.ToString() ?? "")"
+                           placeholder="Search conversations..."
+                           class="h-5 min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground" />
+                </div>
+            </div>
+
+            @* Conversation list *@
+            <div class="flex-1 overflow-y-auto">
+                @foreach (var conv in FilteredConversations)
+                {
+                    var convItem = conv;
+                    <button type="button"
+                            @onclick="@(() => _selectedId = convItem.Id)"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", convItem.Id == _selectedId ? "bg-accent" : "")">
+                        <div class="relative shrink-0">
+                            <AvatarCn Class="size-9">
+                                <AvatarFallbackCn Class="text-[10px]">@convItem.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            @if (convItem.Online)
+                            {
+                                <span class="absolute right-0 bottom-0 size-2 rounded-full border-2 border-card bg-emerald-500"></span>
+                            }
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="truncate font-medium text-sm">@convItem.Name</span>
+                                <span class="shrink-0 text-muted-foreground text-[10px]">@convItem.Timestamp</span>
+                            </div>
+                            <p class="mt-0.5 truncate text-muted-foreground text-xs">@convItem.LastMessage</p>
+                        </div>
+                        @if (convItem.Unread > 0)
+                        {
+                            <BadgeCn Class="size-5 shrink-0 justify-center rounded-full px-0 text-[10px]">@convItem.Unread</BadgeCn>
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Right panel — active chat with flat messages *@
+        <div class="flex min-w-0 flex-1 flex-col">
+            @* Chat header *@
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <div class="relative">
+                    <AvatarCn Class="size-8">
+                        <AvatarFallbackCn Class="text-[10px]">@Active.Initials</AvatarFallbackCn>
+                    </AvatarCn>
+                    @if (Active.Online)
+                    {
+                        <span class="absolute right-0 bottom-0 size-2 rounded-full border-2 border-card bg-emerald-500"></span>
+                    }
+                </div>
+                <div class="min-w-0 flex-1">
+                    <span class="font-medium text-sm">@Active.Name</span>
+                    <p class="text-muted-foreground text-xs">@(Active.Online ? "Online" : "Offline")</p>
+                </div>
+            </div>
+
+            @* Messages — flat layout *@
+            <div class="flex flex-1 flex-col overflow-y-auto py-2">
+                @for (int i = 0; i < Active.Messages.Length; i++)
+                {
+                    var msg = Active.Messages[i];
+                    var prev = i > 0 ? Active.Messages[i - 1] : null;
+                    var isFirstInGroup = prev == null || prev.Sender != msg.Sender;
+
+                    <div class="@Cn.Merge("group flex gap-2 px-4 py-0.5 hover:bg-accent/50", isFirstInGroup ? "mt-3" : "")">
+                        @* Avatar column *@
+                        <div class="flex w-8 shrink-0 items-start justify-center pt-0.5">
+                            @if (isFirstInGroup)
+                            {
+                                <AvatarCn Class="size-7">
+                                    <AvatarFallbackCn Class="text-[10px]">@(msg.Sender == "me" ? "You" : Active.Initials)</AvatarFallbackCn>
+                                </AvatarCn>
+                            }
+                            else
+                            {
+                                <span class="invisible text-muted-foreground text-[10px] group-hover:visible">@msg.Timestamp</span>
+                            }
+                        </div>
+
+                        @* Body *@
+                        <div class="min-w-0 flex-1">
+                            @if (isFirstInGroup)
+                            {
+                                <div class="mb-0.5 flex items-center gap-2">
+                                    <span class="font-medium text-sm">@(msg.Sender == "me" ? "You" : Active.Name)</span>
+                                    <span class="text-muted-foreground text-[10px]">@msg.Timestamp</span>
+                                </div>
+                            }
+                            <p class="text-sm leading-relaxed">@msg.Content</p>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Toolbar *@
+            <div class="border-t px-4 py-3">
+                <form @onsubmit="HandleSubmit"
+                      class="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-1.5">
+                    <input value="@_input"
+                           @oninput="@((e) => _input = e.Value?.ToString() ?? "")"
+                           placeholder="@($"Message {Active.Name}...")"
+                           class="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+                    <ButtonCn type="submit" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                              Disabled="@string.IsNullOrWhiteSpace(_input)"
+                              Class="size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="send" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Content, string Sender, string Timestamp);
+
+    private record Conversation(string Id, string Name, string Initials, string LastMessage, string Timestamp, int Unread, bool Online, ChatMessage[] Messages);
+
+    private static readonly Conversation[] _conversations =
+    [
+        new("1", "Priya Sharma", "PS", "I'll send the contract over by end of day", "2 min", 2, true,
+        [
+            new("1a", "Hi, did you get a chance to review the vendor agreement?", "them", "3:10 PM"),
+            new("1b", "Yes, I flagged two clauses in section 4. The liability cap needs adjustment.", "me", "3:14 PM"),
+            new("1c", "Good catch. I'll run it by legal. They should turn it around by tomorrow morning.", "them", "3:16 PM"),
+            new("1d", "Sounds good. Can you also confirm the payment terms? Net 30 or net 45?", "me", "3:18 PM"),
+            new("1e", "Net 30 as discussed. I'll add that explicitly to the scope section.", "them", "3:20 PM"),
+            new("1f", "I'll send the contract over by end of day", "them", "3:22 PM"),
+        ]),
+        new("2", "Marcus Webb", "MW", "The CI pipeline is green again", "18 min", 0, true,
+        [
+            new("2a", "CI is broken on main. The e2e tests are flaking on the auth flow.", "them", "1:40 PM"),
+            new("2b", "Which test? The login redirect or the session refresh?", "me", "1:42 PM"),
+            new("2c", "Session refresh. It's a timing issue with the token rotation.", "them", "1:44 PM"),
+            new("2d", "I'll add a retry with exponential backoff to that test. Give me 10 minutes.", "me", "1:46 PM"),
+            new("2e", "The CI pipeline is green again", "them", "2:05 PM"),
+        ]),
+        new("3", "Elena Torres", "ET", "Can we sync on the Q3 roadmap tomorrow?", "1 hr", 1, false,
+        [
+            new("3a", "Hey, I've been thinking about the Q3 priorities. We need to align on the feature list.", "them", "12:30 PM"),
+            new("3b", "Agreed. I've drafted a rough outline. Want me to share the doc?", "me", "12:35 PM"),
+            new("3c", "Yes please. I'll review it before our meeting.", "them", "12:37 PM"),
+            new("3d", "Can we sync on the Q3 roadmap tomorrow?", "them", "12:40 PM"),
+        ]),
+        new("4", "Kai Johansson", "KJ", "Merged the design system PR", "3 hr", 0, false,
+        [
+            new("4a", "The design system PR is ready for review. I updated all the color tokens.", "them", "10:15 AM"),
+            new("4b", "I'll take a look right now.", "me", "10:20 AM"),
+            new("4c", "Left a few comments on the spacing scale. Otherwise LGTM.", "me", "10:45 AM"),
+            new("4d", "Fixed those. Rebased and pushed.", "them", "11:00 AM"),
+            new("4e", "Merged the design system PR", "them", "11:05 AM"),
+        ]),
+        new("5", "Nadia Okafor", "NO", "The user research report is attached", "5 hr", 0, true,
+        [
+            new("5a", "Finished the user interviews for the onboarding flow.", "them", "8:00 AM"),
+            new("5b", "Great timing. What were the main pain points?", "me", "8:10 AM"),
+            new("5c", "Account setup friction and unclear pricing tiers. 7 out of 10 participants mentioned both.", "them", "8:15 AM"),
+            new("5d", "The user research report is attached", "them", "8:20 AM"),
+        ]),
+    ];
+
+    private string _selectedId = "1";
+    private string _input = "";
+    private string _search = "";
+
+    private Conversation Active => Array.Find(_conversations, c => c.Id == _selectedId) ?? _conversations[0];
+
+    private IEnumerable<Conversation> FilteredConversations =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _conversations
+            : _conversations.Where(c =>
+                c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                c.LastMessage.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

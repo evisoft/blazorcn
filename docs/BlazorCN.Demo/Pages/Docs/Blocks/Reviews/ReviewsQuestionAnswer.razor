@@ -1,0 +1,272 @@
+@* ============================================================
+   Block: reviews-question-answer
+   Title: ReviewsQuestionAnswer
+   Description: A React Q&A-style review block for Next.js with threaded questions, community and seller answers, upvoting, official answer badges, and search filtering using shadcn/ui Badge, Button, Input and Tailwind CSS
+   Source: original/blocks/reviews/reviews-question-answer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="message-square" Size="16" Class="size-4 text-muted-foreground" />
+                    <span class="text-sm font-medium">Questions &amp; Answers</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs tabular-nums text-muted-foreground">
+                        @_questions.Length questions
+                    </span>
+                    <span class="text-xs text-muted-foreground">@_totalAnswers answers</span>
+                </div>
+            </div>
+
+            @* Search + Sort *@
+            <div class="mt-2.5 flex items-center gap-2">
+                <div class="relative flex-1">
+                    <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <InputCn Placeholder="Search questions..." Value="@_searchQuery" ValueChanged="@((string v) => { _searchQuery = v; })" Class="h-8 pl-8 text-xs" />
+                </div>
+                <div class="flex rounded-md border">
+                    <button type="button" @onclick="@(() => _sortBy = "popular")"
+                        class="@Cn.Merge("px-2.5 py-1.5 text-xs transition-colors", _sortBy == "popular" ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")">
+                        Popular
+                    </button>
+                    <button type="button" @onclick="@(() => _sortBy = "recent")"
+                        class="@Cn.Merge("border-l px-2.5 py-1.5 text-xs transition-colors", _sortBy == "recent" ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")">
+                        Recent
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* Questions list *@
+        <div>
+            @{
+                var filtered = GetFilteredQuestions();
+            }
+            @if (filtered.Length == 0)
+            {
+                <div class="px-4 py-8 text-center">
+                    <span class="text-sm text-muted-foreground">No questions match your search</span>
+                </div>
+            }
+            else
+            {
+                @foreach (var question in filtered)
+                {
+                    var q = question;
+                    var isExpanded = _expandedQuestion == q.Id;
+                    var isLast = q.Id == filtered[filtered.Length - 1].Id;
+                    var officialAnswer = q.Answers.FirstOrDefault(a => a.IsOfficial);
+                    var sortedAnswers = q.Answers.OrderByDescending(a => a.IsOfficial).ThenByDescending(a => a.Upvotes).ToArray();
+
+                    <div class="@(isLast ? "" : "border-b")">
+                        @* Question row *@
+                        <button type="button" @onclick="@(() => _expandedQuestion = isExpanded ? "" : q.Id)"
+                            class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                            @* Answer count indicator *@
+                            <div class="flex shrink-0 flex-col items-center gap-0.5 pt-0.5">
+                                <span class="text-sm font-medium tabular-nums">@q.Answers.Length</span>
+                                <span class="text-[10px] text-muted-foreground">
+                                    @(q.Answers.Length == 1 ? "answer" : "answers")
+                                </span>
+                            </div>
+
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start gap-2">
+                                    <span class="text-sm font-medium leading-snug">@q.Title</span>
+                                    @if (officialAnswer != null)
+                                    {
+                                        <LucideIconCn Name="shield-check" Size="14" Class="mt-0.5 size-3.5 shrink-0 text-blue-500" />
+                                    }
+                                </div>
+                                <div class="mt-1 flex items-center gap-2">
+                                    <span class="text-xs text-muted-foreground">@q.Author</span>
+                                    <span class="text-xs text-muted-foreground">@q.Timestamp</span>
+                                    <span class="text-xs tabular-nums text-muted-foreground">@q.Views views</span>
+                                </div>
+                            </div>
+
+                            <LucideIconCn Name="chevron-down" Size="16" Class="@Cn.Merge("mt-1 size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-180" : "")" />
+                        </button>
+
+                        @* Expanded answers *@
+                        @if (isExpanded)
+                        {
+                            <div class="overflow-hidden">
+                                <div class="px-4 pb-3 pl-[60px]">
+                                    @* Question body *@
+                                    <p class="mb-3 text-sm leading-relaxed text-muted-foreground">@q.Body</p>
+
+                                    @* Answers *@
+                                    <div class="space-y-2">
+                                        @foreach (var answer in sortedAnswers)
+                                        {
+                                            var ans = answer;
+                                            var isUpvoted = _upvoted.Contains(ans.Id);
+                                            var displayUpvotes = ans.Upvotes + (isUpvoted ? 1 : 0);
+                                            var roleLabel = GetRoleLabel(ans.Role);
+                                            var roleCssClass = GetRoleBadgeStyle(ans.Role);
+
+                                            <div class="@Cn.Merge("rounded-md p-3", ans.IsOfficial ? "border border-blue-500/20 bg-blue-500/5" : "bg-muted/50")">
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="text-xs font-medium">@ans.Author</span>
+                                                        <span class="@Cn.Merge("flex items-center gap-0.5 text-[10px]", roleCssClass)">
+                                                            @if (ans.Role == "verified-buyer")
+                                                            {
+                                                                <LucideIconCn Name="check-circle-2" Size="10" Class="size-2.5" />
+                                                            }
+                                                            @roleLabel
+                                                        </span>
+                                                        <span class="text-xs text-muted-foreground">@ans.Timestamp</span>
+                                                    </div>
+                                                    <div @onclick:stopPropagation>
+                                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                            Class="@Cn.Merge("h-6 gap-1 px-2 text-xs", isUpvoted ? "text-foreground" : "text-muted-foreground")"
+                                                            @onclick="@(() => HandleUpvote(ans.Id))">
+                                                            <LucideIconCn Name="thumbs-up" Size="12" Class="@Cn.Merge("size-3", isUpvoted ? "fill-current" : "")" />
+                                                            <span class="tabular-nums">@displayUpvotes</span>
+                                                        </ButtonCn>
+                                                    </div>
+                                                </div>
+                                                <p class="mt-1.5 text-sm leading-relaxed">@ans.Body</p>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record AnswerData(
+        string Id,
+        string Author,
+        string Role,
+        string Body,
+        int Upvotes,
+        bool IsOfficial,
+        string Timestamp
+    );
+
+    private record QuestionData(
+        string Id,
+        string Author,
+        string Title,
+        string Body,
+        AnswerData[] Answers,
+        string Timestamp,
+        int Views
+    );
+
+    private string _expandedQuestion = "q1";
+    private HashSet<string> _upvoted = [];
+    private string _searchQuery = "";
+    private string _sortBy = "popular";
+
+    private static readonly QuestionData[] _questions =
+    [
+        new("q1", "Michael Torres",
+            "Does this work with USB-C to USB-A adapters?",
+            "I have an older MacBook with only USB-A ports. Will the included cable work with a simple adapter or do I need a powered hub?",
+            [
+                new("a1", "Product Team", "seller",
+                    "Yes, it works with passive USB-C to USB-A adapters. The device draws under 500mA so no powered hub is needed. We have tested with Apple, Anker, and generic adapters successfully.",
+                    24, true, "2 days ago"),
+                new("a2", "Sarah Mitchell", "verified-buyer",
+                    "I use a cheap Amazon adapter and it works perfectly. No issues at all after 3 months of daily use.",
+                    8, false, "1 day ago"),
+            ],
+            "2 days ago", 342),
+
+        new("q2", "Rachel Wong",
+            "What is the difference between the Pro and Standard version?",
+            "The product page mentions a Pro version but I cannot find a clear comparison. Is it worth the extra cost for home office use?",
+            [
+                new("a3", "Product Team", "seller",
+                    "The Pro model includes Bluetooth 5.3, a 4000mAh battery (vs 2000mAh), aluminum body, and programmable buttons. Full comparison available at our website under Products then Compare.",
+                    31, true, "4 days ago"),
+                new("a4", "David Kim", "verified-buyer",
+                    "Pro adds wireless connectivity, 2x battery life, and a metal chassis instead of plastic. I upgraded after a month and the wireless alone was worth it for desk-to-conference-room mobility.",
+                    15, false, "4 days ago"),
+                new("a5", "James Park", "community",
+                    "Standard is fine if you always use it at a desk. Pro is better if you move between workstations or travel frequently.",
+                    6, false, "3 days ago"),
+            ],
+            "5 days ago", 891),
+
+        new("q3", "Kevin Nguyen",
+            "How long does the warranty cover battery degradation?",
+            "I have read that rechargeable batteries lose capacity over time. Does the 2-year warranty cover significant battery degradation below a certain threshold?",
+            [
+                new("a6", "Product Team", "seller",
+                    "The warranty covers battery capacity dropping below 80% of original within the 2-year period. Contact support with a screenshot of the battery health reading from our app and we will arrange a replacement at no cost.",
+                    19, true, "1 week ago"),
+            ],
+            "1 week ago", 456),
+
+        new("q4", "Elena Vasquez",
+            "Can I use this with Linux? Which distros are supported?",
+            "I primarily run Ubuntu 22.04 and Fedora 38. The product page only mentions Windows and macOS. Has anyone gotten it working on Linux?",
+            [
+                new("a7", "Alex Petrov", "verified-buyer",
+                    "Works out of the box on Ubuntu 22.04 and 24.04. The kernel driver has been included since 5.15. No additional software needed for basic functionality.",
+                    12, false, "6 days ago"),
+                new("a8", "Product Team", "seller",
+                    "We officially support Ubuntu 22.04+, Fedora 37+, and Arch Linux. The programmable buttons require our companion app which has a Linux AppImage available on our downloads page.",
+                    18, true, "5 days ago"),
+            ],
+            "1 week ago", 234),
+    ];
+
+    private int _totalAnswers => _questions.Sum(q => q.Answers.Length);
+
+    private QuestionData[] GetFilteredQuestions()
+    {
+        var result = _questions.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            var query = _searchQuery.ToLowerInvariant();
+            result = result.Where(q =>
+                q.Title.ToLowerInvariant().Contains(query) ||
+                q.Body.ToLowerInvariant().Contains(query));
+        }
+        if (_sortBy == "popular")
+        {
+            result = result.OrderByDescending(q => q.Views);
+        }
+        return result.ToArray();
+    }
+
+    private void HandleUpvote(string answerId)
+    {
+        if (_upvoted.Contains(answerId))
+            _upvoted.Remove(answerId);
+        else
+            _upvoted.Add(answerId);
+    }
+
+    private static string GetRoleLabel(string role) => role switch
+    {
+        "seller" => "Official",
+        "verified-buyer" => "Verified Buyer",
+        _ => "Community",
+    };
+
+    private static string GetRoleBadgeStyle(string role) => role switch
+    {
+        "seller" => "text-blue-600",
+        "verified-buyer" => "text-emerald-600",
+        _ => "",
+    };
+}

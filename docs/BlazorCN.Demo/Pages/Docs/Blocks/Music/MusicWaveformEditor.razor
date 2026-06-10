@@ -1,0 +1,197 @@
+@* ============================================================
+   Block: music-waveform-editor
+   Title: MusicWaveformEditor
+   Description: A waveform editor UI block for React and Next.js with styled waveform bars, trim markers, zoom controls, selection region, playhead position, and export button built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-waveform-editor.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="scissors" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">@_trackName</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    WAV 48kHz
+                </BadgeCn>
+                <span class="font-mono text-muted-foreground text-xs">@FormatTime(_trackDuration)</span>
+            </div>
+        </div>
+
+        @* Waveform display *@
+        <div class="border-b px-4 py-4">
+            <div class="relative flex h-24 items-end gap-px"
+                 role="img"
+                 aria-label="Audio waveform">
+
+                @* Selection region highlight *@
+                <div class="pointer-events-none absolute bottom-0 top-0 bg-foreground/5"
+                     style="@($"left:{(_trimStart / (double)_totalBars) * 100}%;width:{((_trimEnd - _trimStart) / (double)_totalBars) * 100}%")">
+                </div>
+
+                @* Trim start marker *@
+                <div class="absolute bottom-0 top-0 z-10 w-0.5 bg-foreground"
+                     style="@($"left:{(_trimStart / (double)_totalBars) * 100}%")">
+                    <div class="absolute -left-1 -top-1 size-2 rounded-sm bg-foreground"></div>
+                    <div class="absolute -left-1 -bottom-1 size-2 rounded-sm bg-foreground"></div>
+                </div>
+
+                @* Trim end marker *@
+                <div class="absolute bottom-0 top-0 z-10 w-0.5 bg-foreground"
+                     style="@($"left:{(_trimEnd / (double)_totalBars) * 100}%")">
+                    <div class="absolute -right-1 -top-1 size-2 rounded-sm bg-foreground"></div>
+                    <div class="absolute -right-1 -bottom-1 size-2 rounded-sm bg-foreground"></div>
+                </div>
+
+                @* Playhead *@
+                <div class="absolute bottom-0 top-0 z-20 w-0.5 bg-red-500"
+                     style="@($"left:{(_playheadPosition / (double)_totalBars) * 100}%")">
+                    <div class="absolute -left-1 -top-1.5 size-0 border-4 border-transparent border-t-red-500"></div>
+                </div>
+
+                @* Waveform bars *@
+                @for (var i = 0; i < _waveformData.Length; i++)
+                {
+                    var index = i;
+                    var amplitude = _waveformData[i];
+                    var isInSelection = index >= _trimStart && index <= _trimEnd;
+                    var isAtPlayhead = index == _playheadPosition;
+                    var barClass = isAtPlayhead
+                        ? "flex-1 rounded-t-sm transition-colors bg-red-500"
+                        : isInSelection
+                            ? "flex-1 rounded-t-sm transition-colors bg-foreground/60"
+                            : "flex-1 rounded-t-sm transition-colors bg-muted-foreground/20";
+                    <button type="button"
+                            class="@barClass"
+                            style="@($"height:{amplitude * 100}%;min-height:2px")"
+                            @onclick="@(() => HandleWaveformClick(index))"
+                            aria-label="@($"Waveform bar {index + 1}")">
+                    </button>
+                }
+
+            </div>
+
+            @* Time markers *@
+            <div class="mt-2 flex items-center justify-between">
+                <span class="font-mono text-muted-foreground text-xs">@FormatTime(_trimStartTime)</span>
+                <span class="font-mono text-muted-foreground text-xs">@FormatTime(_playheadTime)</span>
+                <span class="font-mono text-muted-foreground text-xs">@FormatTime(_trimEndTime)</span>
+            </div>
+        </div>
+
+        @* Trim info *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                <span class="flex items-center gap-1.5">
+                    <span class="size-1.5 rounded-full bg-foreground"></span>
+                    Selection: @FormatTime(_selectionDuration)
+                </span>
+                <span>&middot;</span>
+                <span>@FormatTime(_trimStartTime) &ndash; @FormatTime(_trimEndTime)</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <ButtonCn Variant="ButtonVariant.Ghost"
+                          Size="ButtonSize.Sm"
+                          Class="size-7 p-0"
+                          OnClick="@(() => { _trimStart = Math.Max(0, _trimStart - 4); })"
+                          aria-label="Move trim start earlier">
+                    <LucideIconCn Name="skip-back" Size="12" Class="size-3" />
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost"
+                          Size="ButtonSize.Sm"
+                          Class="size-7 p-0"
+                          OnClick="@(() => { _trimEnd = Math.Min(_totalBars - 1, _trimEnd + 4); })"
+                          aria-label="Move trim end later">
+                    <LucideIconCn Name="skip-forward" Size="12" Class="size-3" />
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Controls toolbar *@
+        <div class="flex items-center justify-between px-4 py-3">
+            <div class="flex items-center gap-1">
+                <ButtonCn Variant="ButtonVariant.Outline"
+                          Size="ButtonSize.Sm"
+                          Class="size-7 p-0"
+                          OnClick="@(() => { _isPlaying = !_isPlaying; })"
+                          aria-label="@(_isPlaying ? "Pause" : "Play")">
+                    @if (_isPlaying)
+                    {
+                        <LucideIconCn Name="pause" Size="12" Class="size-3" />
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="play" Size="12" Class="size-3" />
+                    }
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost"
+                          Size="ButtonSize.Sm"
+                          Class="size-7 p-0"
+                          OnClick="@(() => { _zoom = Math.Max(1, _zoom - 1); })"
+                          aria-label="Zoom out">
+                    <LucideIconCn Name="zoom-out" Size="12" Class="size-3" />
+                </ButtonCn>
+                <span class="w-8 text-center font-mono text-muted-foreground text-xs">@(_zoom)x</span>
+                <ButtonCn Variant="ButtonVariant.Ghost"
+                          Size="ButtonSize.Sm"
+                          Class="size-7 p-0"
+                          OnClick="@(() => { _zoom = Math.Min(8, _zoom + 1); })"
+                          aria-label="Zoom in">
+                    <LucideIconCn Name="zoom-in" Size="12" Class="size-3" />
+                </ButtonCn>
+            </div>
+            <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                <LucideIconCn Name="download" Size="12" Class="size-3" />
+                Export Selection
+            </ButtonCn>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private const string _trackName = "Midnight Drive (Take 3)";
+    private const int _trackDuration = 214; // 3:34 in seconds
+
+    private static readonly double[] _waveformData =
+    [
+        0.12, 0.18, 0.25, 0.35, 0.42, 0.55, 0.48, 0.62, 0.71, 0.65, 0.78, 0.85, 0.92, 0.88, 0.75, 0.82,
+        0.68, 0.55, 0.45, 0.58, 0.72, 0.85, 0.95, 0.88, 0.78, 0.65, 0.52, 0.42, 0.55, 0.68, 0.75, 0.82,
+        0.78, 0.65, 0.55, 0.48, 0.38, 0.45, 0.58, 0.65, 0.72, 0.82, 0.88, 0.92, 0.85, 0.75, 0.62, 0.52,
+        0.42, 0.35, 0.45, 0.55, 0.68, 0.78, 0.85, 0.78, 0.65, 0.55, 0.42, 0.35, 0.28, 0.22, 0.32, 0.45,
+        0.55, 0.62, 0.72, 0.65, 0.55, 0.45, 0.38, 0.28, 0.35, 0.48, 0.58, 0.68, 0.75, 0.82, 0.78, 0.68,
+        0.58, 0.48, 0.38, 0.28, 0.22, 0.15, 0.25, 0.35, 0.45, 0.52, 0.42, 0.32, 0.25, 0.18, 0.12, 0.08,
+    ];
+
+    private static readonly int _totalBars = _waveformData.Length;
+
+    private bool _isPlaying = false;
+    private int _playheadPosition = 38;
+    private int _trimStart = 12;
+    private int _trimEnd = 82;
+    private int _zoom = 1;
+
+    private int _trimStartTime => (int)Math.Round((_trimStart / (double)_totalBars) * _trackDuration);
+    private int _trimEndTime => (int)Math.Round((_trimEnd / (double)_totalBars) * _trackDuration);
+    private int _selectionDuration => _trimEndTime - _trimStartTime;
+    private int _playheadTime => (int)Math.Round((_playheadPosition / (double)_totalBars) * _trackDuration);
+
+    private void HandleWaveformClick(int index)
+    {
+        if (index >= _trimStart && index <= _trimEnd)
+        {
+            _playheadPosition = index;
+        }
+    }
+
+    private static string FormatTime(int seconds)
+    {
+        var m = seconds / 60;
+        var s = seconds % 60;
+        return $"{m}:{s:D2}";
+    }
+}

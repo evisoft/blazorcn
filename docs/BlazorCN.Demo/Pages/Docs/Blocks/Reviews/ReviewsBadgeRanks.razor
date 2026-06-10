@@ -1,0 +1,300 @@
+@* ============================================================
+   Block: reviews-badge-ranks
+   Title: ReviewsBadgeRanks
+   Description: A gamification reviewer leaderboard block for React and Next.js with tiered rank badges, progress bars, helpfulness scores, and staggered animations built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-badge-ranks.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="award" Size="16" Class="size-4 text-muted-foreground" />
+                    <span class="text-sm font-medium">Reviewer Leaderboard</span>
+                </div>
+                <span class="text-xs text-muted-foreground tabular-nums">
+                    @_totalReviewsAll.ToString("N0") total reviews
+                </span>
+            </div>
+            <p class="mt-1 text-xs text-muted-foreground">
+                Earn points through reviews, helpful votes, and photo uploads
+            </p>
+        </div>
+
+        @* Rank tier legend *@
+        <div class="flex items-center gap-1 overflow-x-auto border-b px-4 py-2.5">
+            @foreach (var tier in _rankTiers)
+            {
+                <TooltipProviderCn>
+                    <TooltipCn>
+                        <TooltipTriggerCn AsChild="false">
+                            <div class="@Cn.Merge("flex items-center gap-1 rounded-md px-2 py-1", tier.BgColor)">
+                                <LucideIconCn Name="@GetRankIconName(tier.Tier)" Size="12" Class="@Cn.Merge("size-3", tier.Color)" />
+                                <span class="@Cn.Merge("text-[10px] font-medium", tier.Color)">@tier.Label</span>
+                            </div>
+                        </TooltipTriggerCn>
+                        <TooltipContentCn Class="text-xs">
+                            @tier.MinPoints.ToString("N0")+ points
+                        </TooltipContentCn>
+                    </TooltipCn>
+                </TooltipProviderCn>
+            }
+        </div>
+
+        @* Reviewer list *@
+        <div>
+            @for (var idx = 0; idx < _reviewers.Length; idx++)
+            {
+                var reviewer = _reviewers[idx];
+                var rankDef = GetRankDef(reviewer.Rank);
+                var progress = GetProgressToNext(reviewer.Points, reviewer.Rank);
+                var helpfulPercent = reviewer.Stats.TotalVotes > 0
+                    ? (int)Math.Round((double)reviewer.Stats.HelpfulVotes / reviewer.Stats.TotalVotes * 100)
+                    : 0;
+                var isExpanded = _expandedId == reviewer.Id;
+                var isLast = idx == _reviewers.Length - 1;
+                var revItem = reviewer;
+                var progressBarColor = rankDef.Tier == "bronze" ? "bg-amber-700"
+                    : rankDef.Tier == "silver" ? "bg-zinc-400"
+                    : rankDef.Tier == "gold" ? "bg-amber-500"
+                    : "bg-blue-500";
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", isExpanded ? "bg-muted/30" : "")"
+                            @onclick="@(() => ToggleExpand(revItem.Id, isExpanded))">
+                        @* Rank position *@
+                        <span class="w-5 shrink-0 text-center text-xs font-medium text-muted-foreground tabular-nums">
+                            @(idx + 1)
+                        </span>
+
+                        @* Avatar with rank border *@
+                        <div class="relative shrink-0">
+                            <AvatarCn Class="size-8">
+                                <AvatarFallbackCn Class="text-[10px]">@reviewer.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="@Cn.Merge("absolute -bottom-0.5 -right-0.5 rounded-full border border-card p-0.5", rankDef.BgColor)">
+                                <LucideIconCn Name="@GetRankIconName(reviewer.Rank)" Size="10" Class="@Cn.Merge("size-2.5", rankDef.Color)" />
+                            </div>
+                        </div>
+
+                        @* Info *@
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="truncate text-sm font-medium">@reviewer.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("text-[10px] font-normal", rankDef.Color)">
+                                    @rankDef.Label
+                                </BadgeCn>
+                                @if (reviewer.RecentBadge != null)
+                                {
+                                    <span class="hidden text-[10px] text-muted-foreground sm:inline">
+                                        @reviewer.RecentBadge
+                                    </span>
+                                }
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-3">
+                                <span class="text-xs text-muted-foreground tabular-nums">
+                                    @reviewer.Stats.TotalReviews reviews
+                                </span>
+                                <span class="flex items-center gap-0.5 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="thumbs-up" Size="10" Class="size-2.5" />
+                                    <span class="tabular-nums">@helpfulPercent%</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        @* Points *@
+                        <div class="shrink-0 text-right">
+                            <span class="text-sm font-semibold tabular-nums">
+                                @reviewer.Points.ToString("N0")
+                            </span>
+                            <span class="ml-1 text-[10px] text-muted-foreground">pts</span>
+                        </div>
+                    </button>
+
+                    @* Expanded details *@
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="px-4 pb-4 pt-1">
+                                <div class="ml-8 space-y-2">
+                                    @if (progress.NextTier != null)
+                                    {
+                                        <div>
+                                            <div class="flex items-center justify-between text-[10px] text-muted-foreground">
+                                                <span>Progress to @progress.NextTier</span>
+                                                <span class="tabular-nums">
+                                                    @progress.PointsNeeded.ToString("N0") pts to go
+                                                </span>
+                                            </div>
+                                            <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                                <div class="@Cn.Merge("h-full rounded-full", progressBarColor)"
+                                                     style="@($"width:{progress.Percent:F1}%")">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="flex items-center gap-1.5">
+                                            <LucideIconCn Name="diamond" Size="12" Class="size-3 text-emerald-500" />
+                                            <span class="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                Max rank achieved
+                                            </span>
+                                        </div>
+                                    }
+
+                                    @* Stats grid *@
+                                    <div class="mt-2 grid grid-cols-3 gap-3">
+                                        <div class="rounded-md bg-muted/50 px-2.5 py-2">
+                                            <span class="text-[10px] text-muted-foreground">Avg Rating</span>
+                                            <div class="mt-0.5 flex items-center gap-1">
+                                                <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-500 text-amber-500" />
+                                                <span class="text-sm font-medium tabular-nums">
+                                                    @reviewer.Stats.AverageRating
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="rounded-md bg-muted/50 px-2.5 py-2">
+                                            <span class="text-[10px] text-muted-foreground">Photos</span>
+                                            <p class="mt-0.5 text-sm font-medium tabular-nums">
+                                                @reviewer.Stats.PhotosUploaded
+                                            </p>
+                                        </div>
+                                        <div class="rounded-md bg-muted/50 px-2.5 py-2">
+                                            <span class="text-[10px] text-muted-foreground">Replies</span>
+                                            <p class="mt-0.5 text-sm font-medium tabular-nums">
+                                                @reviewer.Stats.RepliesReceived
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    @* Specialties *@
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-[10px] text-muted-foreground">Specialties:</span>
+                                        @foreach (var specialty in reviewer.Specialties)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                                @specialty
+                                            </BadgeCn>
+                                        }
+                                        <span class="text-[10px] text-muted-foreground">
+                                            Since @reviewer.JoinedDate
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private string? _expandedId = "rev-1";
+
+    private record ReviewerStats(
+        int TotalReviews,
+        int HelpfulVotes,
+        int TotalVotes,
+        double AverageRating,
+        int PhotosUploaded,
+        int RepliesReceived);
+
+    private record Reviewer(
+        string Id,
+        string Name,
+        string Initials,
+        string Rank,
+        int Points,
+        string JoinedDate,
+        string[] Specialties,
+        string? RecentBadge,
+        ReviewerStats Stats);
+
+    private record RankDefinition(
+        string Tier,
+        string Label,
+        int MinPoints,
+        int MaxPoints,
+        string Color,
+        string BgColor,
+        string BorderColor);
+
+    private record ProgressResult(double Percent, int PointsNeeded, string? NextTier);
+
+    private static readonly RankDefinition[] _rankTiers =
+    [
+        new("bronze",   "Bronze",   0,    500,   "text-amber-700",  "bg-amber-700/10",  "border-l-amber-700"),
+        new("silver",   "Silver",   500,  1500,  "text-zinc-400",   "bg-zinc-400/10",   "border-l-zinc-400"),
+        new("gold",     "Gold",     1500, 3500,  "text-amber-500",  "bg-amber-500/10",  "border-l-amber-500"),
+        new("platinum", "Platinum", 3500, 7000,  "text-blue-500",   "bg-blue-500/10",   "border-l-blue-500"),
+        new("diamond",  "Diamond",  7000, 15000, "text-emerald-500","bg-emerald-500/10","border-l-emerald-500"),
+    ];
+
+    private static readonly Reviewer[] _reviewers =
+    [
+        new("rev-1", "Sarah Chen",    "SC", "diamond",  12480, "Jan 2023", ["Electronics", "Smart Home"], "500 Reviews",
+            new(523, 4891, 5234, 4.2, 318, 1247)),
+        new("rev-2", "Marcus Webb",   "MW", "platinum",  5640, "Jun 2023", ["Audio", "Photography"],      "Top Helpful",
+            new(287, 2156, 2380, 4.5, 194, 612)),
+        new("rev-3", "Priya Sharma",  "PS", "gold",      2890, "Sep 2023", ["Kitchen", "Home Decor"],     "Photo Pro",
+            new(156, 1087, 1245, 4.7, 243, 389)),
+        new("rev-4", "Jordan Lee",    "JL", "silver",     920, "Feb 2024", ["Fitness", "Outdoors"],       null,
+            new(64,  312,  398,  4.3, 47,  98)),
+        new("rev-5", "Alex Turner",   "AT", "bronze",     340, "Nov 2024", ["Books", "Gaming"],           "First 25",
+            new(28,  89,   112,  4.1, 12,  34)),
+    ];
+
+    private int _totalReviewsAll = 0;
+
+    protected override void OnInitialized()
+    {
+        foreach (var r in _reviewers)
+            _totalReviewsAll += r.Stats.TotalReviews;
+    }
+
+    private RankDefinition GetRankDef(string tier)
+    {
+        foreach (var rd in _rankTiers)
+            if (rd.Tier == tier) return rd;
+        return _rankTiers[0];
+    }
+
+    private ProgressResult GetProgressToNext(int points, string tier)
+    {
+        var currentIdx = -1;
+        for (var i = 0; i < _rankTiers.Length; i++)
+        {
+            if (_rankTiers[i].Tier == tier) { currentIdx = i; break; }
+        }
+        var nextIdx = currentIdx + 1;
+        if (nextIdx >= _rankTiers.Length)
+            return new ProgressResult(100, 0, null);
+
+        var current = _rankTiers[currentIdx];
+        var next = _rankTiers[nextIdx];
+        var rawProgress = (double)(points - current.MinPoints) / (next.MinPoints - current.MinPoints) * 100;
+        var percent = Math.Min(Math.Max(rawProgress, 0), 100);
+        return new ProgressResult(percent, next.MinPoints - points, next.Label);
+    }
+
+    private static string GetRankIconName(string tier) => tier switch
+    {
+        "diamond"  => "diamond",
+        "platinum" => "crown",
+        "gold"     => "trophy",
+        "silver"   => "medal",
+        "bronze"   => "shield",
+        _          => "shield",
+    };
+
+    private void ToggleExpand(string id, bool isCurrentlyExpanded)
+    {
+        _expandedId = isCurrentlyExpanded ? null : id;
+    }
+}

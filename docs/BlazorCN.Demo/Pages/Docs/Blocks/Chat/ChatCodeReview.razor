@@ -1,0 +1,221 @@
+@* ============================================================
+   Block: chat-code-review
+   Title: ChatCodeReview
+   Description: React inline code review chat interface for Next.js with diff snippets, line comments, approval status badges, and threaded review discussions using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-code-review.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <div class="flex size-8 items-center justify-center rounded-full bg-muted">
+                <LucideIconCn Name="git-pull-request" Size="16" Class="size-4 text-muted-foreground" />
+            </div>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">PR #847 Review</span>
+                <p class="text-muted-foreground text-xs">Sarah Kim</p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary"
+                     Class="gap-1 bg-emerald-500/10 font-normal text-emerald-600 text-xs dark:text-emerald-400">
+                <LucideIconCn Name="check-circle-2" Size="12" Class="size-3" />
+                Approved
+            </BadgeCn>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="flex flex-col gap-3">
+                @for (int i = 0; i < _messages.Length; i++)
+                {
+                    var msg = _messages[i];
+                    var isMe = msg.Sender == "me";
+                    var showHeader = IsFirstInGroup(i);
+
+                    <div class="@Cn.Merge("flex flex-col", isMe ? "items-end" : "items-start")">
+                        @if (showHeader)
+                        {
+                            <div class="mb-0.5 flex items-center gap-1.5 px-1">
+                                <span class="font-medium text-xs">@msg.SenderName</span>
+                                <span class="text-muted-foreground text-[10px]">@msg.Timestamp</span>
+                            </div>
+                        }
+                        @if (msg.Type == "text" && msg.Content != null)
+                        {
+                            <div class="@Cn.Merge("max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed", isMe ? "bg-foreground text-background" : "bg-muted text-foreground")">
+                                @msg.Content
+                            </div>
+                        }
+                        @if (msg.Type == "review" && msg.Review != null)
+                        {
+                            var review = msg.Review;
+                            var cfg = _statusConfig[review.Status];
+                            <div class="mt-1.5 w-full max-w-md overflow-hidden rounded-md border">
+                                @* PR header *@
+                                <div class="flex items-center gap-2 border-b px-3 py-2">
+                                    <LucideIconCn Name="git-pull-request" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    <span class="min-w-0 flex-1 truncate font-medium text-sm">
+                                        #@review.PrNumber @review.PrTitle
+                                    </span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary"
+                                             Class="@Cn.Merge("shrink-0 gap-1 font-normal text-[10px]", cfg.Color)">
+                                        @if (cfg.Icon == "check")
+                                        {
+                                            <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5" />
+                                        }
+                                        else if (cfg.Icon == "alert")
+                                        {
+                                            <LucideIconCn Name="circle-alert" Size="14" Class="size-3.5" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="message-square" Size="14" Class="size-3.5" />
+                                        }
+                                        @cfg.Label
+                                    </BadgeCn>
+                                </div>
+
+                                @* Review comments *@
+                                @foreach (var rc in review.Comments)
+                                {
+                                    <div class="border-b last:border-b-0">
+                                        @* File path *@
+                                        <div class="flex items-center gap-1.5 bg-muted/30 px-3 py-1.5">
+                                            <LucideIconCn Name="file-code" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="font-mono text-muted-foreground text-xs">@rc.FilePath</span>
+                                            @if (rc.LineRef.HasValue)
+                                            {
+                                                <span class="font-mono text-muted-foreground/60 text-xs">L@rc.LineRef</span>
+                                            }
+                                        </div>
+
+                                        @* Diff *@
+                                        <div class="overflow-x-auto bg-zinc-950 px-3 py-2">
+                                            @foreach (var line in rc.Diff)
+                                            {
+                                                var lineStyle = _lineTypeStyle[line.Type];
+                                                var prefix = _linePrefix[line.Type];
+                                                <div class="@Cn.Merge("font-mono text-xs leading-5", lineStyle)">
+                                                    <span class="mr-2 inline-block w-4 text-right text-muted-foreground/50">@line.LineNumber</span>
+                                                    <span class="mr-1">@prefix</span>
+                                                    @line.Content
+                                                </div>
+                                            }
+                                        </div>
+
+                                        @* Comment *@
+                                        <div class="bg-muted/30 px-3 py-2">
+                                            <p class="text-sm leading-relaxed">@rc.Comment</p>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <form class="flex items-center gap-2" @onsubmit="HandleSubmit">
+                <InputCn @bind-Value="_input"
+                         Placeholder="Add a review comment..."
+                         Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DiffLine(string Type, int LineNumber, string Content);
+    private record ReviewComment(string FilePath, DiffLine[] Diff, string Comment, int? LineRef);
+    private record ReviewData(string Status, string PrTitle, int PrNumber, ReviewComment[] Comments);
+    private record ChatMessage(string Id, string Type, string Sender, string SenderName, string Initials, string Timestamp, string? Content, ReviewData? Review);
+    private record StatusCfg(string Label, string Color, string Icon);
+
+    private string _input = "";
+
+    private static readonly Dictionary<string, StatusCfg> _statusConfig = new()
+    {
+        ["approved"] = new StatusCfg("Approved", "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", "check"),
+        ["changes_requested"] = new StatusCfg("Changes requested", "bg-red-500/10 text-red-600 dark:text-red-400", "alert"),
+        ["commented"] = new StatusCfg("Commented", "bg-blue-500/10 text-blue-600 dark:text-blue-400", "comment"),
+    };
+
+    private static readonly Dictionary<string, string> _lineTypeStyle = new()
+    {
+        ["added"] = "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+        ["removed"] = "bg-red-500/10 text-red-800 dark:text-red-300",
+        ["context"] = "text-muted-foreground",
+    };
+
+    private static readonly Dictionary<string, string> _linePrefix = new()
+    {
+        ["added"] = "+",
+        ["removed"] = "-",
+        ["context"] = " ",
+    };
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("1", "text", "them", "Sarah Kim", "SK", "10:32 AM",
+            "Hey, I finished the auth middleware refactor. Can you take a look at the PR?", null),
+        new("2", "text", "me", "You", "YO", "10:34 AM",
+            "Sure, pulling it up now.", null),
+        new("3", "review", "me", "You", "YO", "10:48 AM", null,
+            new ReviewData("changes_requested", "Refactor auth middleware with rate limiting", 847,
+            [
+                new ReviewComment("src/middleware/auth.ts",
+                [
+                    new DiffLine("removed", 24, "  const token = req.headers.authorization"),
+                    new DiffLine("added", 24, "  const token = req.headers.get(\"authorization\")"),
+                    new DiffLine("added", 25, "  if (!token) return NextResponse.json({ error: \"Unauthorized\" }, { status: 401 })"),
+                ],
+                "This should handle the Bearer prefix. Split on space and take the second element, otherwise the JWT validation will fail with the full header value.",
+                24),
+                new ReviewComment("src/middleware/rate-limit.ts",
+                [
+                    new DiffLine("context", 11, "  const windowMs = 15 * 60 * 1000"),
+                    new DiffLine("added", 12, "  const maxRequests = 100"),
+                    new DiffLine("added", 13, "  const key = `rate:${ip}:${Math.floor(Date.now() / windowMs)}`"),
+                ],
+                "Using Date.now() in the key means rate limit windows drift with each request. Consider using a fixed window start timestamp from Redis instead.",
+                13),
+            ])),
+        new("4", "text", "them", "Sarah Kim", "SK", "10:52 AM",
+            "Good catches. I'll fix the Bearer prefix parsing and switch to Redis EXPIREAT for the window. Give me 20 minutes.", null),
+        new("5", "text", "them", "Sarah Kim", "SK", "11:14 AM",
+            "Pushed the fixes. Ready for another look.", null),
+        new("6", "review", "me", "You", "YO", "11:22 AM", null,
+            new ReviewData("approved", "Refactor auth middleware with rate limiting", 847,
+            [
+                new ReviewComment("src/middleware/auth.ts",
+                [
+                    new DiffLine("added", 24, "  const raw = req.headers.get(\"authorization\") ?? \"\""),
+                    new DiffLine("added", 25, "  const token = raw.startsWith(\"Bearer \") ? raw.slice(7) : raw"),
+                ],
+                "Clean fix. This handles both cases correctly.",
+                null),
+            ])),
+    ];
+
+    private bool IsFirstInGroup(int index)
+    {
+        if (index == 0) return true;
+        return _messages[index - 1].SenderName != _messages[index].SenderName;
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

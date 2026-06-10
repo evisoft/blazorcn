@@ -1,0 +1,188 @@
+@* ============================================================
+   Block: music-beat-maker
+   Title: MusicBeatMaker
+   Description: A beat maker drum machine block for React and Next.js with 4 instrument rows, 16-step grid, BPM control, play/stop, pattern save, and swing slider built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-beat-maker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">Beat Maker</span>
+                <span class="text-muted-foreground text-xs">@_activeCount hits</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs" OnClick="ClearAll">
+                    <LucideIconCn Name="rotate-ccw" Size="12" Class="size-3" />
+                    Clear
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="save" Size="12" Class="size-3" />
+                    Save
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Transport controls *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="size-8 p-0"
+                      OnClick="@(() => _playing = !_playing)"
+                      AriaLabel="@(_playing ? "Stop playback" : "Start playback")">
+                @if (_playing)
+                {
+                    <LucideIconCn Name="pause" Size="14" Class="size-3.5" />
+                }
+                else
+                {
+                    <LucideIconCn Name="play" Size="14" Class="size-3.5" />
+                }
+            </ButtonCn>
+
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-muted-foreground text-xs">BPM</span>
+                <div class="flex items-center gap-1">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="size-6 p-0 text-xs"
+                              OnClick="@(() => _bpm = Math.Max(60, _bpm - 5))"
+                              AriaLabel="Decrease BPM">
+                        -
+                    </ButtonCn>
+                    <span class="w-8 text-center font-mono text-sm tabular-nums">@_bpm</span>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="size-6 p-0 text-xs"
+                              OnClick="@(() => _bpm = Math.Min(200, _bpm + 5))"
+                              AriaLabel="Increase BPM">
+                        +
+                    </ButtonCn>
+                </div>
+            </div>
+
+            <div class="flex flex-1 items-center gap-2">
+                <span class="font-medium text-muted-foreground text-xs">Swing</span>
+                <SliderCn Value="@((double)_swing)"
+                          ValueChanged="@((double v) => { _swing = (int)v; })"
+                          Min="0"
+                          Max="100"
+                          Step="5"
+                          Class="flex-1" />
+                <span class="w-8 text-right font-mono text-muted-foreground text-xs tabular-nums">
+                    @_swing%
+                </span>
+            </div>
+        </div>
+
+        @* Step grid *@
+        <div class="border-b px-4 py-3">
+
+            @* Step numbers *@
+            <div class="mb-2 flex items-center gap-1">
+                <span class="w-12 shrink-0"></span>
+                @for (int si = 0; si < Steps; si++)
+                {
+                    var stepIdx = si;
+                    <span class="@Cn.Merge("flex size-6 items-center justify-center text-center font-mono text-muted-foreground text-xs", stepIdx % 4 == 0 ? "font-medium text-foreground" : "")">
+                        @(stepIdx + 1)
+                    </span>
+                }
+            </div>
+
+            @* Instrument rows *@
+            @foreach (var ins in _instruments)
+            {
+                var inst = ins;
+                <div class="mb-1 flex items-center gap-1">
+                    <span class="w-12 shrink-0 font-medium text-muted-foreground text-xs">@inst.Name</span>
+                    @for (int si = 0; si < Steps; si++)
+                    {
+                        var step = si;
+                        var isActive = _pattern[inst.Id][step];
+                        <button type="button"
+                                @onclick="@(() => ToggleCell(inst.Id, step))"
+                                class="@Cn.Merge("size-6 rounded-sm transition-colors", isActive ? inst.ActiveColor : "bg-muted/50 hover:bg-muted", step % 4 == 0 ? "ring-1 ring-border/30" : "")"
+                                aria-label="@($"{inst.Name} step {step + 1}, {(isActive ? "active" : "inactive")}")">
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Pattern slots *@
+        <div class="flex items-center gap-2 border-b px-4 py-2.5">
+            <span class="font-medium text-muted-foreground text-xs">Patterns</span>
+            <div class="flex items-center gap-1">
+                @foreach (var ptn in _savedPatterns)
+                {
+                    var pat = ptn;
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                              Class="@Cn.Merge("h-6 px-2 text-xs", _activePattern == pat.Id ? "ring-2 ring-foreground" : "")"
+                              OnClick="@(() => _activePattern = pat.Id)">
+                        @pat.Name
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                4 instruments · @Steps steps · Click cells to toggle
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private const int Steps = 16;
+
+    private record InstrumentDef(string Id, string Name, string Color, string ActiveColor);
+
+    private record SavedPatternDef(string Id, string Name);
+
+    private static readonly InstrumentDef[] _instruments =
+    [
+        new("kick",  "Kick",  "bg-red-500/20",     "bg-red-500"),
+        new("snare", "Snare", "bg-amber-500/20",   "bg-amber-500"),
+        new("hihat", "HiHat", "bg-blue-500/20",    "bg-blue-500"),
+        new("clap",  "Clap",  "bg-emerald-500/20", "bg-emerald-500"),
+    ];
+
+    private static readonly SavedPatternDef[] _savedPatterns =
+    [
+        new("p1", "Basic Rock"),
+        new("p2", "Boom Bap"),
+        new("p3", "Empty"),
+    ];
+
+    private Dictionary<string, bool[]> _pattern = new()
+    {
+        ["kick"]  = [true,  false, false, false, true,  false, false, false, true,  false, false, false, true,  false, false, false],
+        ["snare"] = [false, false, false, false, true,  false, false, false, false, false, false, false, true,  false, false, false],
+        ["hihat"] = [true,  false, true,  false, true,  false, true,  false, true,  false, true,  false, true,  false, true,  false],
+        ["clap"]  = [false, false, false, false, false, false, false, false, false, false, false, true,  false, false, false, false],
+    };
+
+    private bool _playing = false;
+    private int _bpm = 120;
+    private int _swing = 0;
+    private string _activePattern = "p1";
+
+    private int _activeCount =>
+        _pattern.Values.Sum(row => row.Count(b => b));
+
+    private void ToggleCell(string instrumentId, int step)
+    {
+        var row = (bool[])_pattern[instrumentId].Clone();
+        row[step] = !row[step];
+        _pattern[instrumentId] = row;
+    }
+
+    private void ClearAll()
+    {
+        foreach (var inst in _instruments)
+        {
+            _pattern[inst.Id] = new bool[Steps];
+        }
+    }
+}

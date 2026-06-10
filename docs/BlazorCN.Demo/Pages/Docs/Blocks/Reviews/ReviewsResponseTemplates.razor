@@ -1,0 +1,384 @@
+@* ============================================================
+   Block: reviews-response-templates
+   Title: ReviewsResponseTemplates
+   Description: A split-panel response template manager for React and Next.js with category sidebar, template preview, variable placeholders, copy-to-clipboard, and usage stats built with shadcn/ui Badge, Button, Input, and Textarea components and Tailwind CSS
+   Source: original/blocks/reviews/reviews-response-templates.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Response Templates</span>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    @(_templates.Length) templates across @(_categories.Length) categories
+                </p>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span class="tabular-nums">
+                    @(_templates.Sum(t => t.UsageCount).ToString("N0"))
+                </span>
+                <span>total uses</span>
+            </div>
+        </div>
+
+        <div class="grid md:grid-cols-[200px_1fr]">
+            @* Sidebar - Categories *@
+            <div class="border-b border-r-0 md:border-b-0 md:border-r">
+                <div class="p-2">
+                    @foreach (var cat in _categories)
+                    {
+                        var catId = cat.Id;
+                        var isActive = _activeCategory == cat.Id;
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectCategory(catId))"
+                            class="@Cn.Merge("flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors", isActive ? "bg-muted/80 font-medium" : "text-muted-foreground hover:bg-muted/40 hover:text-foreground")">
+                            <span class="@($"size-1.5 shrink-0 rounded-full {cat.Color}")" />
+                            <LucideIconCn Name="@cat.Icon" Size="14" Class="size-3.5 shrink-0" />
+                            <span class="flex-1 truncate">@cat.Label</span>
+                            <span class="tabular-nums text-xs text-muted-foreground">
+                                @cat.Count
+                            </span>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Main content *@
+            <div class="flex flex-col">
+                @* Search *@
+                <div class="border-b px-3 py-2">
+                    <div class="relative">
+                        <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <InputCn
+                            Placeholder="@($"Search {ActiveCategoryLabel} templates...")"
+                            Value="@_searchQuery"
+                            ValueChanged="@((string? v) => _searchQuery = v ?? "")"
+                            Class="h-8 border-0 bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0" />
+                    </div>
+                </div>
+
+                @* Template list or preview *@
+                @if (_selectedTemplate != null)
+                {
+                    <div class="flex flex-1 flex-col">
+                        @* Template preview header *@
+                        <div class="flex items-center justify-between border-b px-4 py-2.5">
+                            <div class="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    @onclick="HandleClear"
+                                    class="text-xs text-muted-foreground transition-colors hover:text-foreground">
+                                    Back
+                                </button>
+                                <span class="text-muted-foreground">/</span>
+                                <span class="text-sm font-medium">@_selectedTemplate.Title</span>
+                            </div>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal capitalize">
+                                <span class="@GetToneColor(_selectedTemplate.Tone)">
+                                    @_selectedTemplate.Tone
+                                </span>
+                            </BadgeCn>
+                        </div>
+
+                        @* Variables *@
+                        @if (_selectedTemplate.Variables.Length > 0)
+                        {
+                            <div class="border-b px-4 py-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">
+                                    Variables (@(_selectedTemplate.Variables.Length))
+                                </span>
+                                <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                    @foreach (var v in _selectedTemplate.Variables)
+                                    {
+                                        <span class="inline-flex items-center gap-1 rounded bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
+                                            <LucideIconCn Name="hash" Size="10" Class="size-2.5" />
+                                            @v.Label
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @* Editor *@
+                        <div class="flex-1 px-4 py-3">
+                            <TextareaCn
+                                Value="@_replyText"
+                                ValueChanged="@((string? v) => _replyText = v ?? "")"
+                                Class="resize-none text-sm leading-relaxed"
+                                rows="7" />
+                        </div>
+
+                        @* Actions *@
+                        <div class="flex items-center justify-between border-t px-4 py-2.5">
+                            <span class="text-xs text-muted-foreground">
+                                Used @_selectedTemplate.UsageCount times
+                                <span class="mx-1.5 text-muted-foreground/40">|</span>
+                                Last used @_selectedTemplate.LastUsed
+                            </span>
+                            <div class="flex items-center gap-1.5">
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 px-2.5 text-xs" @onclick="HandleCopy">
+                                    @if (_copied)
+                                    {
+                                        <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                        <span>Copied</span>
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                        <span>Copy</span>
+                                    }
+                                </ButtonCn>
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 px-2.5 text-xs">
+                                    <LucideIconCn Name="send" Size="12" Class="size-3" />
+                                    Send reply
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="divide-y">
+                        @{
+                            var filtered = Filtered;
+                        }
+                        @if (filtered.Length == 0)
+                        {
+                            <div class="px-4 py-8 text-center text-sm text-muted-foreground">
+                                No templates match your search
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var tmpl in filtered)
+                            {
+                                var item = tmpl;
+                                <button
+                                    type="button"
+                                    @onclick="@(() => HandleSelect(item))"
+                                    class="flex w-full flex-col gap-1.5 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm font-medium">@item.Title</span>
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal capitalize">
+                                                <span class="@GetToneColor(item.Tone)">@item.Tone</span>
+                                            </BadgeCn>
+                                        </div>
+                                        <span class="tabular-nums text-xs text-muted-foreground">
+                                            @item.UsageCount uses
+                                        </span>
+                                    </div>
+                                    <p class="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                                        @item.Body
+                                    </p>
+                                    @if (item.Variables.Length > 0)
+                                    {
+                                        <div class="flex items-center gap-1 pt-0.5">
+                                            @foreach (var v in item.Variables)
+                                            {
+                                                <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                                    @v.Token
+                                                </span>
+                                            }
+                                        </div>
+                                    }
+                                </button>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TemplateVariable(string Token, string Label, string Example);
+
+    private record Template(
+        string Id,
+        string CategoryId,
+        string Title,
+        string Body,
+        TemplateVariable[] Variables,
+        int UsageCount,
+        string LastUsed,
+        string Tone);
+
+    private record Category(string Id, string Label, string Icon, string Color, int Count);
+
+    private string _activeCategory = "positive";
+    private string? _selectedId = null;
+    private string _replyText = "";
+    private string _searchQuery = "";
+    private bool _copied = false;
+
+    private Template? _selectedTemplate => _templates.FirstOrDefault(t => t.Id == _selectedId);
+
+    private string ActiveCategoryLabel => _categories.FirstOrDefault(c => c.Id == _activeCategory)?.Label ?? "";
+
+    private Template[] Filtered => _templates
+        .Where(t => t.CategoryId == _activeCategory)
+        .Where(t => string.IsNullOrEmpty(_searchQuery)
+            || t.Title.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
+            || t.Body.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    private void SelectCategory(string catId)
+    {
+        _activeCategory = catId;
+        _selectedId = null;
+        _replyText = "";
+    }
+
+    private void HandleSelect(Template template)
+    {
+        _selectedId = template.Id;
+        _replyText = template.Body;
+    }
+
+    private async Task HandleCopy()
+    {
+        if (string.IsNullOrEmpty(_replyText)) return;
+        _copied = true;
+        await Task.Delay(2000);
+        _copied = false;
+    }
+
+    private void HandleClear()
+    {
+        _selectedId = null;
+        _replyText = "";
+    }
+
+    private static string GetToneColor(string tone) => tone switch
+    {
+        "warm" => "text-emerald-600 dark:text-emerald-400",
+        "formal" => "text-blue-600 dark:text-blue-400",
+        "empathetic" => "text-amber-600 dark:text-amber-400",
+        _ => "text-foreground",
+    };
+
+    private static readonly Category[] _categories =
+    [
+        new("positive", "Positive", "heart", "bg-emerald-500", 4),
+        new("negative", "Negative", "message-circle-warning", "bg-red-500", 3),
+        new("follow-up", "Follow-up", "refresh-cw", "bg-blue-500", 3),
+        new("feature", "Feature Req", "sparkles", "bg-amber-500", 2),
+        new("escalation", "Escalation", "zap", "bg-red-500", 2),
+    ];
+
+    private static readonly Template[] _templates =
+    [
+        new("t1", "positive", "5-star thank you",
+            "Hi {customer_name}, thank you so much for your wonderful 5-star review! We are thrilled that you loved {product_name}. Your kind words mean the world to our team and motivate us to keep delivering excellence. We look forward to serving you again soon!",
+            [
+                new("{customer_name}", "Customer name", "Sarah"),
+                new("{product_name}", "Product name", "Wireless Headphones Pro"),
+            ],
+            847, "2 hours ago", "warm"),
+        new("t2", "positive", "Repeat customer appreciation",
+            "Hi {customer_name}, we noticed this is your {order_count} order with us and we could not be more grateful for your loyalty! Thank you for the glowing review of {product_name}. As a valued repeat customer, keep an eye out for an exclusive offer heading your way.",
+            [
+                new("{customer_name}", "Customer name", "James"),
+                new("{order_count}", "Order number", "5th"),
+                new("{product_name}", "Product name", "Ergonomic Desk Chair"),
+            ],
+            312, "1 day ago", "warm"),
+        new("t3", "positive", "Photo review thank you",
+            "Hi {customer_name}, thank you for sharing those amazing photos with your review of {product_name}! Seeing our products in real customer setups is incredibly valuable and helps other shoppers make confident decisions. We have featured your review on our product page.",
+            [
+                new("{customer_name}", "Customer name", "Mia"),
+                new("{product_name}", "Product name", "Standing Desk Converter"),
+            ],
+            156, "3 days ago", "warm"),
+        new("t4", "positive", "Detailed feedback thanks",
+            "Hi {customer_name}, we really appreciate you taking the time to write such a detailed review. Your specific insights about {product_name} help our product team understand exactly what customers value. We have shared your feedback with the team directly.",
+            [
+                new("{customer_name}", "Customer name", "Alex"),
+                new("{product_name}", "Product name", "Mechanical Keyboard"),
+            ],
+            201, "5 hours ago", "warm"),
+        new("t5", "negative", "Shipping delay apology",
+            "Hi {customer_name}, we sincerely apologize for the shipping delay on order #{order_id}. This is not the experience we want for our customers. Our logistics team has identified the issue and your package is now on its way. As a gesture of goodwill, we have applied a {discount_amount} credit to your account.",
+            [
+                new("{customer_name}", "Customer name", "David"),
+                new("{order_id}", "Order ID", "WH-29841"),
+                new("{discount_amount}", "Discount", "15%"),
+            ],
+            523, "4 hours ago", "empathetic"),
+        new("t6", "negative", "Product quality issue",
+            "Hi {customer_name}, thank you for bringing this to our attention. We are sorry about the quality issue with {product_name}. Our QA team has been notified and we would like to make this right immediately. Please reach out to {support_email} and we will arrange a replacement or full refund at your preference.",
+            [
+                new("{customer_name}", "Customer name", "Rachel"),
+                new("{product_name}", "Product name", "Bluetooth Speaker"),
+                new("{support_email}", "Support email", "support@store.com"),
+            ],
+            411, "6 hours ago", "empathetic"),
+        new("t7", "negative", "Wrong item received",
+            "Hi {customer_name}, we deeply apologize for sending the incorrect item. This is a fulfillment error on our end and we take full responsibility. A prepaid return label and the correct {product_name} are being shipped to you today via express delivery at no additional cost.",
+            [
+                new("{customer_name}", "Customer name", "Tom"),
+                new("{product_name}", "Product name", "USB-C Hub"),
+            ],
+            189, "2 days ago", "empathetic"),
+        new("t8", "follow-up", "Resolution check-in",
+            "Hi {customer_name}, we wanted to follow up on the issue you reported with {product_name}. Has everything been resolved to your satisfaction? If there is anything else we can help with, please do not hesitate to reach out. Your experience matters to us.",
+            [
+                new("{customer_name}", "Customer name", "Lisa"),
+                new("{product_name}", "Product name", "Monitor Arm"),
+            ],
+            267, "1 day ago", "formal"),
+        new("t9", "follow-up", "Updated review request",
+            "Hi {customer_name}, since your initial review we have made several improvements to {product_name} based on feedback like yours. If you have a moment, we would love to hear if your experience has improved. Thank you for helping us build better products.",
+            [
+                new("{customer_name}", "Customer name", "Kevin"),
+                new("{product_name}", "Product name", "Webcam HD"),
+            ],
+            98, "1 week ago", "formal"),
+        new("t10", "follow-up", "Replacement satisfaction check",
+            "Hi {customer_name}, your replacement {product_name} was delivered on {delivery_date}. We wanted to check in and make sure everything is working perfectly this time. If you are happy with it, we would appreciate an updated review to help other customers.",
+            [
+                new("{customer_name}", "Customer name", "Nina"),
+                new("{product_name}", "Product name", "Wireless Mouse"),
+                new("{delivery_date}", "Delivery date", "March 28"),
+            ],
+            74, "4 days ago", "formal"),
+        new("t11", "feature", "Feature request acknowledged",
+            "Hi {customer_name}, great suggestion about {feature_description}! We have added this to our product roadmap for {product_name}. While we cannot guarantee a specific timeline, feature requests from customers like you directly influence our development priorities. Stay tuned for updates.",
+            [
+                new("{customer_name}", "Customer name", "Pat"),
+                new("{feature_description}", "Feature", "USB-C passthrough charging"),
+                new("{product_name}", "Product name", "Docking Station"),
+            ],
+            145, "3 days ago", "direct"),
+        new("t12", "feature", "Feature already planned",
+            "Hi {customer_name}, you will be happy to know that {feature_description} is already in active development for {product_name}. We expect to release it in {timeline}. Your feedback confirms we are building the right things. Thank you for taking the time to share your ideas!",
+            [
+                new("{customer_name}", "Customer name", "Jordan"),
+                new("{feature_description}", "Feature", "dark mode support"),
+                new("{product_name}", "Product name", "Desktop App"),
+                new("{timeline}", "Timeline", "Q2 2026"),
+            ],
+            88, "5 days ago", "direct"),
+        new("t13", "escalation", "Manager escalation",
+            "Hi {customer_name}, I am {manager_name}, the Customer Experience Manager. I have personally reviewed your case regarding {product_name} and I want to assure you this is being treated as a priority. I will be your direct point of contact until this is fully resolved. Please expect a follow-up from me within 24 hours.",
+            [
+                new("{customer_name}", "Customer name", "Chris"),
+                new("{manager_name}", "Manager name", "Sarah Mitchell"),
+                new("{product_name}", "Product name", "Premium Headset"),
+            ],
+            67, "2 days ago", "formal"),
+        new("t14", "escalation", "Compensation offer",
+            "Hi {customer_name}, after reviewing your experience with {product_name}, we would like to offer you {compensation} as a sincere apology. We have also implemented process changes to prevent this from happening again. We value your business and hope to earn back your trust.",
+            [
+                new("{customer_name}", "Customer name", "Morgan"),
+                new("{product_name}", "Product name", "Smart Watch"),
+                new("{compensation}", "Compensation", "a full refund plus a $25 store credit"),
+            ],
+            43, "1 week ago", "empathetic"),
+    ];
+}

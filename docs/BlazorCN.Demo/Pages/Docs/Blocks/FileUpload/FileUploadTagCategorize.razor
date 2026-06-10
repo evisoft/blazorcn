@@ -1,0 +1,294 @@
+@* ============================================================
+   Block: file-upload-tag-categorize
+   Title: FileUploadTagCategorize
+   Description: React file upload block for Next.js with tagging and categorization, tag input with suggestions, tag count badges, color-coded tag pills, filter by tag, and category management built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-tag-categorize.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Tag &amp; Categorize</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Organize uploaded files with tags
+                </p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                <LucideIconCn Name="upload" Size="12" Class="size-3" />
+                Upload
+            </ButtonCn>
+        </div>
+
+        @* Tag summary / filter bar *@
+        <div class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2.5">
+            <LucideIconCn Name="filter" Size="12" Class="size-3 text-muted-foreground" />
+            <button
+                type="button"
+                @onclick="@(() => _activeFilter = null)"
+                class="@Cn.Merge("rounded-full px-2 py-0.5 text-xs transition-colors", _activeFilter == null ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:text-foreground")">
+                All
+                <span class="ml-1 tabular-nums">@_files.Count</span>
+            </button>
+            @foreach (var tag in GetTagCounts())
+            {
+                var tagItem = tag;
+                <button
+                    type="button"
+                    @onclick="@(() => _activeFilter = _activeFilter == tagItem.Id ? null : tagItem.Id)"
+                    class="@Cn.Merge("rounded-full px-2 py-0.5 text-xs transition-colors", _activeFilter == tagItem.Id ? $"{tagItem.BgColor} {tagItem.Color}" : "bg-muted/50 text-muted-foreground hover:text-foreground")">
+                    @tagItem.Name
+                    <span class="ml-1 tabular-nums">@tagItem.Count</span>
+                </button>
+            }
+        </div>
+
+        @* File count *@
+        @{ var filteredFiles = GetFilteredFiles(); }
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <LucideIconCn Name="file" Size="12" Class="size-3 text-muted-foreground" />
+            <span class="text-muted-foreground text-xs">
+                <span class="tabular-nums">@filteredFiles.Count</span>
+                @(filteredFiles.Count == 1 ? " file" : " files")
+                @if (_activeFilter != null)
+                {
+                    @* tagged *@
+                    <text> tagged </text>
+                    var activeTagName = GetTagById(_activeFilter)?.Name;
+                    <span class="font-medium text-foreground">@activeTagName</span>
+                }
+            </span>
+        </div>
+
+        @* File list *@
+        <div>
+            @for (int i = 0; i < filteredFiles.Count; i++)
+            {
+                var file = filteredFiles[i];
+                var isLast = i == filteredFiles.Count - 1;
+                var isEditing = _editingFileId == file.Id;
+                <div class="@Cn.Merge("", isLast ? "" : "border-b")">
+                    <div class="px-4 py-3">
+                        <div class="flex items-start gap-3">
+                            <div class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
+                                <LucideIconCn Name="file" Size="16" Class="size-4 text-muted-foreground" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between">
+                                    <span class="truncate font-medium text-sm">@file.Name</span>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-muted-foreground text-xs">@file.Size</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-mono font-normal text-xs">
+                                            @file.Type
+                                        </BadgeCn>
+                                    </div>
+                                </div>
+
+                                @* Tags row *@
+                                <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                                    @foreach (var tagId in file.Tags)
+                                    {
+                                        var tid = tagId;
+                                        var fileId1 = file.Id;
+                                        var tagInfo = GetTagById(tid);
+                                        @if (tagInfo != null)
+                                        {
+                                            <span class="@($"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs {tagInfo.BgColor} {tagInfo.Color}")">
+                                                @tagInfo.Name
+                                                <button
+                                                    type="button"
+                                                    @onclick="@(() => RemoveTag(fileId1, tid))"
+                                                    class="transition-opacity hover:opacity-70">
+                                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                                </button>
+                                            </span>
+                                        }
+                                    }
+                                    @{ var fileIdAdd = file.Id; var isEditingLocal = isEditing; }
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => _editingFileId = isEditingLocal ? null : fileIdAdd)"
+                                        class="flex items-center gap-1 rounded-full bg-muted/50 px-2 py-0.5 text-muted-foreground text-xs transition-colors hover:text-foreground">
+                                        <LucideIconCn Name="tag" Size="12" Class="size-3" />
+                                        Add tag
+                                    </button>
+                                </div>
+
+                                @* Tag input with suggestions *@
+                                @if (isEditing)
+                                {
+                                    var fileIdEdit = file.Id;
+                                    <div class="relative mt-2">
+                                        <InputCn @bind-Value="_tagInput"
+                                                 Placeholder="Type to search tags..."
+                                                 Class="h-7 text-xs" />
+                                        @{ var suggestions = GetSuggestions(); }
+                                        @if (suggestions.Count > 0)
+                                        {
+                                            <div class="absolute z-10 mt-1 w-full rounded-md border bg-card p-1 shadow-sm">
+                                                @foreach (var suggestion in suggestions)
+                                                {
+                                                    var sTag = suggestion;
+                                                    var fid = fileIdEdit;
+                                                    <button
+                                                        type="button"
+                                                        @onclick="@(() => AddTag(fid, sTag.Id))"
+                                                        class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/50">
+                                                        <span class="@($"size-2 rounded-full {sTag.BgColor.Replace("/10", "")}")" />
+                                                        @sTag.Name
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                        @if (_tagInput.Length == 0)
+                                        {
+                                            <div class="absolute z-10 mt-1 w-full rounded-md border bg-card p-1 shadow-sm">
+                                                @foreach (var availTag in _availableTags)
+                                                {
+                                                    @if (!file.Tags.Contains(availTag.Id))
+                                                    {
+                                                        var aTag = availTag;
+                                                        var fid2 = fileIdEdit;
+                                                        <button
+                                                            type="button"
+                                                            @onclick="@(() => AddTag(fid2, aTag.Id))"
+                                                            class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/50">
+                                                            <span class="@($"size-2 rounded-full {aTag.BgColor.Replace("/10", "")}")" />
+                                                            @aTag.Name
+                                                        </button>
+                                                    }
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center justify-between">
+                <p class="text-muted-foreground text-xs">
+                    @_availableTags.Length tags available · @GetTotalAssignments() assignments total
+                </p>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                    <LucideIconCn Name="tag" Size="12" Class="size-3" />
+                    Manage tags
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TagInfo(string Id, string Name, string Color, string BgColor);
+    private record TagInfoWithCount(string Id, string Name, string Color, string BgColor, int Count);
+
+    private class TaggedFile
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Size { get; set; } = "";
+        public string Type { get; set; } = "";
+        public List<string> Tags { get; set; } = [];
+    }
+
+    private static readonly TagInfo[] _availableTags =
+    [
+        new("t1", "Marketing",     "text-blue-600 dark:text-blue-400",    "bg-blue-500/10"),
+        new("t2", "Product",       "text-purple-600 dark:text-purple-400","bg-purple-500/10"),
+        new("t3", "Design",        "text-pink-600 dark:text-pink-400",    "bg-pink-500/10"),
+        new("t4", "Documentation", "text-amber-600 dark:text-amber-400",  "bg-amber-500/10"),
+        new("t5", "Engineering",   "text-emerald-600 dark:text-emerald-400","bg-emerald-500/10"),
+        new("t6", "Legal",         "text-red-600 dark:text-red-400",      "bg-red-500/10"),
+        new("t7", "Finance",       "text-cyan-600 dark:text-cyan-400",    "bg-cyan-500/10"),
+    ];
+
+    private List<TaggedFile> _files =
+    [
+        new() { Id = "f1", Name = "brand-guidelines-v3.pdf",    Size = "4.8 MB",  Type = "PDF",         Tags = ["t1", "t3"] },
+        new() { Id = "f2", Name = "api-reference.md",           Size = "128 KB",  Type = "Markdown",    Tags = ["t4", "t5"] },
+        new() { Id = "f3", Name = "product-roadmap-q2.xlsx",    Size = "892 KB",  Type = "Spreadsheet", Tags = ["t2"] },
+        new() { Id = "f4", Name = "homepage-hero-mockup.fig",   Size = "12.4 MB", Type = "Figma",       Tags = ["t3", "t1"] },
+        new() { Id = "f5", Name = "terms-of-service-draft.docx",Size = "245 KB",  Type = "Document",    Tags = ["t6"] },
+        new() { Id = "f6", Name = "quarterly-expenses.csv",     Size = "1.2 MB",  Type = "CSV",         Tags = ["t7", "t4"] },
+        new() { Id = "f7", Name = "onboarding-flow-spec.md",    Size = "56 KB",   Type = "Markdown",    Tags = ["t2", "t5"] },
+    ];
+
+    private string? _activeFilter = null;
+    private string _tagInput = "";
+    private string? _editingFileId = null;
+
+    private TagInfo? GetTagById(string tagId)
+        => System.Array.Find(_availableTags, t => t.Id == tagId);
+
+    private List<TagInfoWithCount> GetTagCounts()
+    {
+        var counts = new List<TagInfoWithCount>();
+        foreach (var tag in _availableTags)
+        {
+            var count = 0;
+            foreach (var f in _files)
+                if (f.Tags.Contains(tag.Id)) count++;
+            if (count > 0)
+                counts.Add(new TagInfoWithCount(tag.Id, tag.Name, tag.Color, tag.BgColor, count));
+        }
+        counts.Sort((a, b) => b.Count.CompareTo(a.Count));
+        return counts;
+    }
+
+    private List<TaggedFile> GetFilteredFiles()
+    {
+        if (_activeFilter == null) return _files;
+        var result = new List<TaggedFile>();
+        foreach (var f in _files)
+            if (f.Tags.Contains(_activeFilter)) result.Add(f);
+        return result;
+    }
+
+    private List<TagInfo> GetSuggestions()
+    {
+        if (_tagInput.Length == 0) return [];
+        var result = new List<TagInfo>();
+        foreach (var t in _availableTags)
+            if (t.Name.ToLower().StartsWith(_tagInput.ToLower())) result.Add(t);
+        return result;
+    }
+
+    private void AddTag(string fileId, string tagId)
+    {
+        foreach (var f in _files)
+        {
+            if (f.Id == fileId && !f.Tags.Contains(tagId))
+            {
+                f.Tags.Add(tagId);
+                break;
+            }
+        }
+        _tagInput = "";
+    }
+
+    private void RemoveTag(string fileId, string tagId)
+    {
+        foreach (var f in _files)
+        {
+            if (f.Id == fileId)
+            {
+                f.Tags.Remove(tagId);
+                break;
+            }
+        }
+    }
+
+    private int GetTotalAssignments()
+    {
+        var total = 0;
+        foreach (var f in _files) total += f.Tags.Count;
+        return total;
+    }
+}

@@ -1,0 +1,141 @@
+@* ============================================================
+   Block: monitoring-api-latency
+   Title: MonitoringApiLatency
+   Description: API performance monitoring block featuring response time percentiles (P50, P95, P99) and endpoint-specific latency tracking with Recharts and shadcn/ui.
+   Source: original/blocks/monitoring/monitoring-api-latency.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="zap" Size="16" Class="size-4 text-foreground" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">Global API Latency</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">Avg. Response Time: 142ms</p>
+                </div>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Outline" Class="font-mono text-[10px] uppercase tracking-wider">
+                Real-time
+            </BadgeCn>
+        </div>
+
+        <div class="p-4">
+            <div class="mb-6 grid grid-cols-3 gap-4">
+                @foreach (var stat in _stats)
+                {
+                    var s = stat;
+                    <div>
+                        <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">
+                            @s.Label
+                        </p>
+                        <div class="flex items-baseline gap-1">
+                            <span class="@($"text-xl font-bold tabular-nums {s.Color}")">
+                                @s.Value
+                            </span>
+                            <span class="text-[10px] font-medium text-muted-foreground">@s.Unit</span>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="h-[180px] w-full">
+                @{
+                    var data = _latencyData;
+                    var count = data.Length;
+                    var chartW = 400;
+                    var chartH = 180;
+                    var allVals = data.SelectMany(d => new[] { d.P50, d.P99 }).ToArray();
+                    var minVal = allVals.Min() - 50;
+                    var maxVal = allVals.Max() + 50;
+                    var valRange = maxVal - minVal == 0 ? 1 : maxVal - minVal;
+                    double StepX(int i) => count <= 1 ? 0 : (double)chartW / (count - 1) * i;
+                    double StepY(int v) => chartH - (double)(v - minVal) / valRange * chartH;
+
+                    var p50Points = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{StepY(data[i].P50):F1}"));
+                    var p99Points = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{StepY(data[i].P99):F1}"));
+                    var p50FillPoints = $"0,{chartH} " + p50Points + $" {chartW},{chartH}";
+                }
+                <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="var(--primary)" stop-opacity="0.1" />
+                            <stop offset="95%" stop-color="var(--primary)" stop-opacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <polygon points="@p50FillPoints" fill="url(#latencyGradient)" />
+                    <polyline points="@p50Points" fill="none" stroke="var(--primary)" stroke-width="2" />
+                    <polyline points="@p99Points" fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 4" />
+                </svg>
+            </div>
+        </div>
+
+        <div class="border-t">
+            @for (int idx = 0; idx < _endpoints.Length; idx++)
+            {
+                var ep = _endpoints[idx];
+                var isLast = idx == _endpoints.Length - 1;
+                <div class="@($"flex items-center justify-between px-4 py-2.5{(isLast ? "" : " border-b")}")">
+                    <div class="flex items-center gap-2.5">
+                        <div class="@($"size-1.5 rounded-full {(ep.Status == "warning" ? "bg-amber-500" : "bg-emerald-500")}")"></div>
+                        <span class="font-mono text-[11px] text-foreground">@ep.Path</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="@($"text-[11px] font-bold tabular-nums {(ep.Status == "warning" ? "text-amber-600" : "text-muted-foreground")}")">
+                            @(ep.Latency)ms
+                        </span>
+                        <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground/50" />
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="px-4 py-2 bg-muted/30 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <span class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <LucideIconCn Name="globe" Size="12" Class="size-3" />5 Regions
+                </span>
+                <span class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <LucideIconCn Name="bar-chart-3" Size="12" Class="size-3" />
+                    1.2M Req/min
+                </span>
+            </div>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                Regional Breakdown →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record LatencyPoint(string Time, int P50, int P95, int P99);
+    private record EndpointItem(string Path, int Latency, string Status);
+    private record StatItem(string Label, int Value, string Unit, string Color);
+
+    private static readonly LatencyPoint[] _latencyData =
+    [
+        new("10:00", 120, 210, 450),
+        new("10:05", 132, 240, 480),
+        new("10:10", 115, 225, 410),
+        new("10:15", 145, 310, 620),
+        new("10:20", 128, 260, 510),
+        new("10:25", 110, 195, 380),
+        new("10:30", 125, 215, 430),
+    ];
+
+    private static readonly EndpointItem[] _endpoints =
+    [
+        new("GET /api/v1/users", 124, "stable"),
+        new("POST /api/v1/orders", 452, "warning"),
+        new("GET /api/v1/products", 89, "stable"),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("P50 (Median)", 124, "ms", "text-foreground"),
+        new("P95", 245, "ms", "text-amber-600"),
+        new("P99 (Tail)", 512, "ms", "text-red-600"),
+    ];
+}

@@ -1,0 +1,258 @@
+@* ============================================================
+   Block: chat-threaded-replies
+   Title: ChatThreadedReplies
+   Description: React chat block with threaded reply panel for Next.js featuring a two-panel layout with main chat and side thread view, clickable reply counts, parent message context, and reply chain using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-threaded-replies.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="flex h-[700px] overflow-hidden rounded-lg border bg-card">
+
+        @* Main chat panel *@
+        <div class="@Cn.Merge("flex flex-1 flex-col", _activeThread != null ? "border-r" : "")">
+
+            @* Header *@
+            <div class="flex items-center gap-2 border-b px-4 py-3">
+                <span class="font-medium text-sm">#engineering</span>
+                <span class="text-muted-foreground text-xs">4 members</span>
+            </div>
+
+            @* Messages *@
+            <div class="flex-1 overflow-y-auto py-2">
+                @foreach (var grp in _grouped)
+                {
+                    var firstMsg = grp.Msgs[0];
+                    var firstId = firstMsg.Id;
+                    <div class="px-2">
+                        @* Primary message *@
+                        <div class="flex gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent">
+                            <AvatarCn Class="mt-0.5 size-8 shrink-0">
+                                <AvatarFallbackCn Class="text-xs">@grp.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-baseline gap-2">
+                                    <span class="font-medium text-sm">@grp.Sender</span>
+                                    <span class="text-muted-foreground text-xs">@firstMsg.Time</span>
+                                </div>
+                                <p class="text-sm leading-relaxed">@firstMsg.Content</p>
+                                @if (firstMsg.ReplyCount > 0)
+                                {
+                                    var btnClass = Cn.Merge("mt-1 flex items-center gap-1.5 text-xs transition-colors hover:text-foreground", _activeThread == firstId ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground");
+                                    <button type="button"
+                                            @onclick="@(() => ToggleThread(firstId))"
+                                            class="@btnClass">
+                                        <LucideIconCn Name="message-square" Size="12" Class="size-3" />
+                                        @firstMsg.ReplyCount @(firstMsg.ReplyCount == 1 ? "reply" : "replies")
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        @* Additional messages in the same group *@
+                        @foreach (var msg in grp.Msgs.Skip(1))
+                        {
+                            var msgId = msg.Id;
+                            <div class="group flex gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent">
+                                <div class="flex w-8 shrink-0 items-start justify-center">
+                                    <span class="hidden pt-1 text-muted-foreground text-[10px] group-hover:block">@msg.Time</span>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm leading-relaxed">@msg.Content</p>
+                                    @if (msg.ReplyCount > 0)
+                                    {
+                                        var extraBtnClass = Cn.Merge("mt-1 flex items-center gap-1.5 text-xs transition-colors hover:text-foreground", _activeThread == msgId ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground");
+                                        <button type="button"
+                                                @onclick="@(() => ToggleThread(msgId))"
+                                                class="@extraBtnClass">
+                                            <LucideIconCn Name="message-square" Size="12" Class="size-3" />
+                                            @msg.ReplyCount @(msg.ReplyCount == 1 ? "reply" : "replies")
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* Main toolbar *@
+            <div class="border-t px-4 py-3">
+                <form @onsubmit="HandleSubmit" class="flex items-center gap-2 rounded-md border bg-muted/30 px-3">
+                    <input @bind="_input" @bind:event="oninput"
+                           placeholder="Message #engineering..."
+                           class="h-9 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50" />
+                    <ButtonCn type="submit"
+                              Size="ButtonSize.Icon"
+                              Variant="ButtonVariant.Ghost"
+                              Disabled="@string.IsNullOrWhiteSpace(_input)"
+                              Class="size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </form>
+            </div>
+        </div>
+
+        @* Thread panel *@
+        @if (_activeThread != null && _parentMessage != null)
+        {
+            var activeReplies = GetReplies(_activeThread);
+            <div class="flex w-80 shrink-0 flex-col">
+
+                @* Thread header *@
+                <div class="flex items-center gap-2 border-b px-4 py-3">
+                    <LucideIconCn Name="message-square" Size="16" Class="size-4 text-muted-foreground" />
+                    <span class="font-medium text-sm">Thread</span>
+                    <span class="text-muted-foreground text-xs">
+                        @activeReplies.Count @(activeReplies.Count == 1 ? "reply" : "replies")
+                    </span>
+                    <ButtonCn Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Icon"
+                              Class="ml-auto size-7 text-muted-foreground hover:text-foreground"
+                              OnClick="@(() => _activeThread = null)">
+                        <LucideIconCn Name="x" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+
+                @* Thread messages *@
+                <div class="flex-1 overflow-y-auto py-2">
+
+                    @* Parent message *@
+                    <div class="border-b px-2 pb-2">
+                        <div class="flex gap-2 rounded-md px-2 py-1">
+                            <AvatarCn Class="mt-0.5 size-8 shrink-0">
+                                <AvatarFallbackCn Class="text-xs">@_parentMessage.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-baseline gap-2">
+                                    <span class="font-medium text-sm">@_parentMessage.Sender</span>
+                                    <span class="text-muted-foreground text-xs">@_parentMessage.Time</span>
+                                </div>
+                                <p class="text-sm leading-relaxed">@_parentMessage.Content</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Replies divider *@
+                    <div class="flex items-center gap-2 px-4 py-2">
+                        <div class="h-px flex-1 bg-border"></div>
+                        <span class="text-muted-foreground text-xs">
+                            @activeReplies.Count @(activeReplies.Count == 1 ? "reply" : "replies")
+                        </span>
+                        <div class="h-px flex-1 bg-border"></div>
+                    </div>
+
+                    @* Reply messages *@
+                    @foreach (var reply in activeReplies)
+                    {
+                        <div class="px-2">
+                            <div class="flex gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent">
+                                <AvatarCn Class="mt-0.5 size-8 shrink-0">
+                                    <AvatarFallbackCn Class="text-xs">@reply.Initials</AvatarFallbackCn>
+                                </AvatarCn>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-baseline gap-2">
+                                        <span class="font-medium text-sm">@reply.Sender</span>
+                                        <span class="text-muted-foreground text-xs">@reply.Time</span>
+                                    </div>
+                                    <p class="text-sm leading-relaxed">@reply.Content</p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @* Thread toolbar *@
+                <div class="border-t px-4 py-3">
+                    <form @onsubmit="HandleThreadSubmit" class="flex items-center gap-2 rounded-md border bg-muted/30 px-3">
+                        <input @bind="_threadInput" @bind:event="oninput"
+                               placeholder="Reply in thread..."
+                               class="h-9 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50" />
+                        <ButtonCn type="submit"
+                                  Size="ButtonSize.Icon"
+                                  Variant="ButtonVariant.Ghost"
+                                  Disabled="@string.IsNullOrWhiteSpace(_threadInput)"
+                                  Class="size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                            <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                        </ButtonCn>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Sender, string Initials, string Content, string Time, string? ParentId = null);
+
+    private record GroupedMessage(string Sender, string Initials, List<MessageWithReplyCount> Msgs);
+
+    private record MessageWithReplyCount(string Id, string Sender, string Initials, string Content, string Time, string? ParentId, int ReplyCount);
+
+    private static readonly ChatMessage[] _allMessages =
+    [
+        new("1",    "Maya Lin",  "ML", "Team standup: what's everyone working on today?",                                                                                          "9:00 AM"),
+        new("1-r1", "Dev Patel", "DP", "Finishing the API rate limiter. Should have a PR up by noon.",                                                                             "9:02 AM",  "1"),
+        new("1-r2", "Kim Sato",  "KS", "Working on the onboarding flow redesign. Got the Figma approved yesterday.",                                                               "9:03 AM",  "1"),
+        new("1-r3", "You",       "ME", "Tackling the search indexing performance issue. Down to a 200ms p99 but targeting 100ms.",                                                 "9:05 AM",  "1"),
+        new("2",    "Dev Patel", "DP", "Question for the team: should we use a sliding window or token bucket algorithm for the rate limiter?",                                    "9:15 AM"),
+        new("2-r1", "You",       "ME", "Token bucket is simpler and handles bursts better. Sliding window is more precise but more expensive to compute per request.",             "9:18 AM",  "2"),
+        new("2-r2", "Maya Lin",  "ML", "Go with token bucket for now. We can always switch to sliding window later if we need stricter rate control.",                             "9:20 AM",  "2"),
+        new("3",    "Kim Sato",  "KS", "Just shared the onboarding mockups in the design channel. Would love feedback before I start building.",                                   "9:30 AM"),
+        new("4",    "Maya Lin",  "ML", "Reminder: we have the architecture review at 2 PM. Please review the RFC doc I shared yesterday so we can have a productive discussion.",  "9:45 AM"),
+        new("4-r1", "Dev Patel", "DP", "Read through it. I have some concerns about the caching strategy in section 3. Will bring it up.",                                         "9:50 AM",  "4"),
+        new("4-r2", "Kim Sato",  "KS", "I'll review it over lunch. The database migration section looked solid from a quick skim.",                                                "9:55 AM",  "4"),
+        new("4-r3", "You",       "ME", "Already reviewed. Left comments on the search architecture section — think we can simplify the indexing pipeline.",                   "10:00 AM", "4"),
+        new("5",    "You",       "ME", "Found the bottleneck in the search indexer. It was re-computing embeddings for unchanged documents. Adding a content hash check should fix it.", "10:30 AM"),
+        new("5-r1", "Dev Patel", "DP", "Nice catch. Are you using SHA-256 for the hash or something lighter?",                                                                     "10:35 AM", "5"),
+        new("5-r2", "You",       "ME", "xxHash — it's non-cryptographic but extremely fast. We don't need collision resistance here, just change detection.",                 "10:38 AM", "5"),
+    ];
+
+    private string? _activeThread = "4";
+    private string _input = "";
+    private string _threadInput = "";
+
+    private ChatMessage? _parentMessage => _activeThread != null
+        ? Array.Find(_allMessages, m => m.Id == _activeThread)
+        : null;
+
+    private List<ChatMessage> GetReplies(string parentId) =>
+        _allMessages.Where(m => m.ParentId == parentId).ToList();
+
+    private int GetReplyCount(string id) =>
+        _allMessages.Count(m => m.ParentId == id);
+
+    private List<GroupedMessage> _grouped => BuildGrouped();
+
+    private List<GroupedMessage> BuildGrouped()
+    {
+        var topLevel = _allMessages.Where(m => m.ParentId == null).ToList();
+        var result = new List<GroupedMessage>();
+        foreach (var msg in topLevel)
+        {
+            var withCount = new MessageWithReplyCount(msg.Id, msg.Sender, msg.Initials, msg.Content, msg.Time, msg.ParentId, GetReplyCount(msg.Id));
+            var last = result.Count > 0 ? result[result.Count - 1] : null;
+            if (last != null && last.Sender == msg.Sender)
+                last.Msgs.Add(withCount);
+            else
+                result.Add(new GroupedMessage(msg.Sender, msg.Initials, new List<MessageWithReplyCount> { withCount }));
+        }
+        return result;
+    }
+
+    private void ToggleThread(string id)
+    {
+        _activeThread = _activeThread == id ? null : id;
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+
+    private void HandleThreadSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_threadInput))
+            _threadInput = "";
+    }
+}

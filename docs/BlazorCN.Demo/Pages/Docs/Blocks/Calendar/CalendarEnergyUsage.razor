@@ -1,0 +1,137 @@
+@* ============================================================
+   Block: calendar-energy-usage
+   Title: CalendarEnergyUsage
+   Description: An energy usage schedule block for Next.js with hourly consumption tracking, peak/off-peak indicators, and cost estimates using shadcn/ui and Tailwind CSS
+   Source: original/blocks/calendar/calendar-energy-usage.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h2 class="font-medium text-sm">Energy Usage</h2>
+                <p class="text-muted-foreground text-xs">Tuesday, Mar 18, 2026</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <LucideZapCn Size="14" class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-sm tabular-nums">@(_totalKWh.ToString("F1"))</span>
+                <span class="text-muted-foreground text-xs">kWh</span>
+            </div>
+        </div>
+
+        @* Stats *@
+        <div class="flex items-center gap-4 border-b px-4 py-2.5">
+            <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <LucideBoltCn Size="14" class="size-3.5" />
+                <span class="font-semibold text-foreground text-sm tabular-nums">
+                    $@(_totalCost.ToString("F2"))
+                </span>
+                est. cost
+            </div>
+            <span class="text-muted-foreground text-xs">·</span>
+            <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <LucideTrendingUpCn Size="14" class="size-3.5" />
+                <span class="font-medium text-foreground tabular-nums">@_peakHours</span>
+                peak hours
+            </div>
+        </div>
+
+        @* Period filter *@
+        <div class="flex flex-wrap gap-2 border-b px-4 py-2.5">
+            <button
+                type="button"
+                @onclick="@(() => SelectPeriod("all"))"
+                class="@Cn.Merge("rounded-md px-2 py-1 text-xs transition-colors", _selectedPeriod == "all" ? "bg-muted/50 text-foreground" : "text-muted-foreground")">
+                All
+            </button>
+            @foreach (var kvp in _periodConfig)
+            {
+                var key = kvp.Key;
+                var config = kvp.Value;
+                <button
+                    type="button"
+                    @onclick="@(() => SelectPeriod(key))"
+                    class="@Cn.Merge("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", _selectedPeriod == key ? "bg-muted/50 text-foreground" : "text-muted-foreground")">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", config.Dot)"></span>
+                    @config.Label
+                </button>
+            }
+        </div>
+
+        @* Hourly rows *@
+        <div>
+            @for (var i = 0; i < _filtered.Length; i++)
+            {
+                var idx = i;
+                var hour = _filtered[idx];
+                var pct = (int)Math.Round(hour.KWh / _maxKWh * 100);
+                var cfg = _periodConfig[hour.Period];
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2", idx < _filtered.Length - 1 ? "border-b" : "")">
+                    <span class="w-14 shrink-0 font-mono text-muted-foreground text-xs tabular-nums">
+                        @hour.Hour
+                    </span>
+                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", cfg.Dot)"></span>
+                    <div class="flex-1">
+                        <div class="h-2 w-full rounded-full bg-muted">
+                            <div
+                                class="@Cn.Merge("h-2 rounded-full transition-all", cfg.Bg)"
+                                style="@($"width:{pct}%;opacity:0.6")">
+                            </div>
+                        </div>
+                    </div>
+                    <span class="w-12 text-right font-medium text-xs tabular-nums">
+                        @hour.KWh kWh
+                    </span>
+                    <span class="w-12 text-right text-muted-foreground text-xs tabular-nums">
+                        $@(hour.Cost.ToString("F2"))
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record HourUsage(string Hour, double KWh, string Period, double Cost);
+    private record PeriodCfg(string Label, string Dot, string Bg);
+
+    private static readonly HourUsage[] _hourlyData =
+    [
+        new("12 AM", 0.8, "off-peak", 0.06),
+        new("2 AM",  0.6, "off-peak", 0.05),
+        new("4 AM",  0.5, "off-peak", 0.04),
+        new("6 AM",  1.2, "mid-peak", 0.14),
+        new("8 AM",  2.4, "peak",     0.36),
+        new("10 AM", 3.1, "peak",     0.47),
+        new("12 PM", 2.8, "peak",     0.42),
+        new("2 PM",  3.5, "peak",     0.53),
+        new("4 PM",  2.9, "peak",     0.44),
+        new("6 PM",  3.8, "peak",     0.57),
+        new("8 PM",  2.2, "mid-peak", 0.26),
+        new("10 PM", 1.1, "off-peak", 0.09),
+    ];
+
+    private static readonly Dictionary<string, PeriodCfg> _periodConfig = new()
+    {
+        ["off-peak"] = new("Off-Peak", "bg-emerald-500", "bg-emerald-500"),
+        ["mid-peak"] = new("Mid-Peak", "bg-amber-500",   "bg-amber-500"),
+        ["peak"]     = new("Peak",     "bg-red-500",      "bg-red-500"),
+    };
+
+    private string _selectedPeriod = "all";
+    private HourUsage[] _filtered = _hourlyData;
+
+    private double _totalKWh => _hourlyData.Sum(h => h.KWh);
+    private double _totalCost => _hourlyData.Sum(h => h.Cost);
+    private double _maxKWh => _hourlyData.Max(h => h.KWh);
+    private int _peakHours => _hourlyData.Count(h => h.Period == "peak");
+
+    private void SelectPeriod(string period)
+    {
+        _selectedPeriod = period;
+        _filtered = period == "all"
+            ? _hourlyData
+            : _hourlyData.Where(h => h.Period == period).ToArray();
+    }
+}

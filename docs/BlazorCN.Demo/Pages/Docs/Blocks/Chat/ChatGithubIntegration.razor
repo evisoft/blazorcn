@@ -1,0 +1,225 @@
+@* ============================================================
+   Block: chat-github-integration
+   Title: ChatGithubIntegration
+   Description: A GitHub integration chat block for React and Next.js with PR notifications, commit references, issue linking, and inline code diffs built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-github-integration.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="git-branch" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">#dev-feed</span>
+            <span class="text-muted-foreground text-xs">· GitHub notifications</span>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="space-y-4">
+                @foreach (var msg in _messages)
+                {
+                    <div class="flex gap-3">
+                        <AvatarCn Class="mt-0.5 size-7 shrink-0">
+                            <AvatarFallbackCn Class="@Cn.Merge("text-[10px]", msg.Sender == "GitHub Bot" ? "bg-foreground text-background" : "bg-muted text-muted-foreground")">
+                                @msg.Initials
+                            </AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-baseline gap-2">
+                                <span class="font-medium text-sm">@msg.Sender</span>
+                                <span class="text-muted-foreground text-[10px]">@msg.Timestamp</span>
+                            </div>
+
+                            @* Text message *@
+                            @if (msg.Type == "text")
+                            {
+                                <p class="mt-0.5 text-sm leading-relaxed">@msg.Content</p>
+                            }
+
+                            @* PR card *@
+                            @if (msg.Type == "pr" && msg.Pr != null)
+                            {
+                                var prConfig = GetPrStatusConfig(msg.Pr.Status);
+                                <div class="mt-1.5 rounded-md border bg-muted/30 p-3">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="git-pull-request" Size="16" Class="@Cn.Merge("size-4", prConfig.Color)" />
+                                        <span class="font-medium text-sm">@msg.Pr.Title</span>
+                                    </div>
+                                    <div class="mt-1.5 flex items-center gap-2">
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("text-[10px] font-normal capitalize", prConfig.Badge)">
+                                            @msg.Pr.Status
+                                        </BadgeCn>
+                                        <span class="text-muted-foreground text-xs">#@msg.Pr.Number by @msg.Pr.Author</span>
+                                    </div>
+                                    <div class="mt-2 flex items-center gap-3 text-xs">
+                                        <span class="text-emerald-600 dark:text-emerald-400">+@msg.Pr.Additions</span>
+                                        <span class="text-red-600 dark:text-red-400">-@msg.Pr.Deletions</span>
+                                        <span class="text-muted-foreground">Reviewers: @string.Join(", ", msg.Pr.Reviewers)</span>
+                                    </div>
+                                </div>
+                            }
+
+                            @* Commit reference *@
+                            @if (msg.Type == "commit" && msg.Commit != null)
+                            {
+                                <div class="mt-1.5 rounded-md border bg-muted/30 p-3">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="git-commit-horizontal" Size="16" Class="size-4 text-muted-foreground" />
+                                        <span class="font-mono text-xs text-muted-foreground">@msg.Commit.Sha</span>
+                                    </div>
+                                    <p class="mt-1 text-sm">@msg.Commit.Message</p>
+                                    <p class="mt-1 text-muted-foreground text-xs">@msg.Commit.Author · @msg.Commit.FilesChanged files changed</p>
+                                </div>
+                            }
+
+                            @* Issue reference *@
+                            @if (msg.Type == "issue" && msg.Issue != null)
+                            {
+                                <div class="mt-1.5 rounded-md border bg-muted/30 p-3">
+                                    <div class="flex items-center gap-2">
+                                        @if (msg.Issue.Status == "open")
+                                        {
+                                            <LucideIconCn Name="circle-dot" Size="16" Class="size-4 text-emerald-600 dark:text-emerald-400" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="check-circle" Size="16" Class="size-4 text-violet-600 dark:text-violet-400" />
+                                        }
+                                        <span class="font-medium text-sm">@msg.Issue.Title</span>
+                                    </div>
+                                    <div class="mt-1.5 flex items-center gap-2">
+                                        <span class="text-muted-foreground text-xs">#@msg.Issue.Number</span>
+                                        @foreach (var label in msg.Issue.Labels)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                                @label
+                                            </BadgeCn>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="message-square" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <InputCn @bind-Value="_input" Placeholder="Comment on this feed..." Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn Type="button" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Disabled="@(string.IsNullOrWhiteSpace(_input))" Class="size-8 shrink-0 text-muted-foreground hover:text-foreground" OnClick="@HandleSubmit">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _input = "";
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+
+    private record PrData(int Number, string Title, string Status, string Author, int Additions, int Deletions, string[] Reviewers);
+    private record CommitData(string Sha, string Message, string Author, int FilesChanged);
+    private record IssueData(int Number, string Title, string Status, string[] Labels);
+
+    private record ChatMessage(
+        string Id,
+        string Sender,
+        string Initials,
+        string Timestamp,
+        string Type,
+        string? Content = null,
+        PrData? Pr = null,
+        CommitData? Commit = null,
+        IssueData? Issue = null
+    );
+
+    private record PrStatusConfig(string Color, string Badge);
+
+    private static PrStatusConfig GetPrStatusConfig(string status) => status switch
+    {
+        "open"   => new("text-emerald-600 dark:text-emerald-400", "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-0"),
+        "merged" => new("text-violet-600 dark:text-violet-400",   "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-0"),
+        "draft"  => new("text-muted-foreground",                  "bg-muted text-muted-foreground border-0"),
+        _        => new("text-muted-foreground",                  "bg-muted text-muted-foreground border-0"),
+    };
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new(
+            Id: "m1",
+            Sender: "GitHub Bot",
+            Initials: "GH",
+            Timestamp: "3:02 PM",
+            Type: "pr",
+            Pr: new(
+                Number: 847,
+                Title: "feat: add real-time collaboration cursors",
+                Status: "open",
+                Author: "elena-r",
+                Additions: 342,
+                Deletions: 28,
+                Reviewers: ["kai-n", "sara-a"]
+            )
+        ),
+        new(
+            Id: "m2",
+            Sender: "Elena Rivera",
+            Initials: "ER",
+            Timestamp: "3:04 PM",
+            Type: "text",
+            Content: "This PR adds multiplayer cursors to the canvas editor. I used Y.js for CRDT sync. Ready for review!"
+        ),
+        new(
+            Id: "m3",
+            Sender: "GitHub Bot",
+            Initials: "GH",
+            Timestamp: "3:12 PM",
+            Type: "commit",
+            Commit: new(
+                Sha: "a4f2c89",
+                Message: "fix: resolve cursor flicker on fast mouse movement",
+                Author: "elena-r",
+                FilesChanged: 3
+            )
+        ),
+        new(
+            Id: "m4",
+            Sender: "Kai Nakamura",
+            Initials: "KN",
+            Timestamp: "3:15 PM",
+            Type: "text",
+            Content: "Nice work. I noticed the cursor position broadcasts at 60fps — should we throttle to 30fps to reduce WebSocket traffic?"
+        ),
+        new(
+            Id: "m5",
+            Sender: "GitHub Bot",
+            Initials: "GH",
+            Timestamp: "3:18 PM",
+            Type: "issue",
+            Issue: new(
+                Number: 312,
+                Title: "Cursor sync breaks when user has multiple tabs open",
+                Status: "open",
+                Labels: ["bug", "p2", "collab"]
+            )
+        ),
+        new(
+            Id: "m6",
+            Sender: "Elena Rivera",
+            Initials: "ER",
+            Timestamp: "3:20 PM",
+            Type: "text",
+            Content: "Good catch, I'll add tab-level session IDs to deduplicate. Filed #312 to track it."
+        ),
+    ];
+}

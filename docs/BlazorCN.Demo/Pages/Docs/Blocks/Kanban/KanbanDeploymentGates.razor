@@ -1,0 +1,172 @@
+@* ============================================================
+   Block: kanban-deployment-gates
+   Title: KanbanDeploymentGates
+   Description: React deployment gates kanban board for Next.js with gate pass/fail progress bars, security scan tracking, and blocked count using shadcn/ui Progress and Tailwind CSS
+   Source: original/blocks/kanban/kanban-deployment-gates.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Board header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Deployment Gates</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_deployItems.Length items
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", _passRate >= 70 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")">
+                    <LucideIconCn Name="check-circle-2" Size="12" Class="size-3" />
+                    @_passRate% pass rate
+                </span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", _totalFailed > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                    <LucideIconCn Name="shield-alert" Size="12" Class="size-3" />
+                    @_totalFailed blocked
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4">
+            @foreach (var col in _columns)
+            {
+                var colId = col.Id;
+                var colItems = _deployItems.Where(d => d.Gate == colId).ToArray();
+                var count = colItems.Length;
+                var ratio = (double)count / col.Capacity;
+                var percent = Math.Min(ratio * 100, 100);
+                var colPassed = colItems.Count(d => d.GateStatus == "passed");
+                var colFailed = colItems.Count(d => d.GateStatus == "failed");
+                var isLast = col.Id == _columns[_columns.Length - 1].Id;
+                var progressColor = GetProgressColor(ratio);
+                var progressTextColor = GetProgressTextColor(ratio);
+                <div class="@Cn.Merge(!isLast ? "border-r" : "")">
+                    @* Column header with progress *@
+                    <div class="border-b px-3 py-3">
+                        <div class="mb-2 flex items-center justify-between">
+                            <span class="font-medium text-sm">@col.Label</span>
+                            <span class="@Cn.Merge("font-mono text-xs tabular-nums", progressTextColor)">
+                                @count/@col.Capacity
+                            </span>
+                        </div>
+                        <div class="cn-progress relative flex h-2 w-full items-center overflow-x-hidden rounded-full bg-primary/20" role="progressbar" aria-valuenow="@((int)Math.Round(percent))" aria-valuemin="0" aria-valuemax="100">
+                            <div class="@Cn.Merge("h-full transition-all duration-700", progressColor)" style="@($"width:{Math.Clamp(percent, 0, 100)}%")"></div>
+                        </div>
+                        <div class="mt-1.5 flex items-center gap-2">
+                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                @colPassed
+                            </span>
+                            @if (colFailed > 0)
+                            {
+                                <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                                    @colFailed
+                                </span>
+                            }
+                            @if (ratio > 1)
+                            {
+                                <span class="ml-auto font-medium text-red-600 text-xs dark:text-red-400">
+                                    Over limit!
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    @* Deploy item cards *@
+                    <div class="flex flex-col gap-1 p-2">
+                        @foreach (var item in colItems)
+                        {
+                            var dotClass = _gateStatusDot[item.GateStatus];
+                            <div class="flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors hover:bg-muted/50">
+                                <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", dotClass)"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="line-clamp-1 text-xs">@item.Name</span>
+                                </div>
+                                <span class="font-mono text-muted-foreground/60 text-[10px]">@item.Version</span>
+                                @if (item.GateStatus == "failed")
+                                {
+                                    <LucideIconCn Name="x-circle" Size="12" Class="size-3 shrink-0 text-red-500" />
+                                }
+                                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium">
+                                    @item.Owner
+                                </span>
+                            </div>
+                        }
+                        @if (colItems.Length == 0)
+                        {
+                            <div class="rounded-md border border-dashed border-muted-foreground/20 px-2 py-3 text-center text-muted-foreground/40 text-xs">
+                                No items
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                4 gates · @_totalPassed passed · @_totalFailed blocked
+            </span>
+            <span class="font-mono text-muted-foreground/60 text-xs">
+                @(_deployItems.Count(d => d.Gate == "production")) in production
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DeployItem(string Id, string Name, string Version, string Gate, string GateStatus, string Owner);
+    private record Column(string Id, string Label, int Capacity);
+
+    private static readonly Column[] _columns =
+    [
+        new("build",      "Build",         4),
+        new("security",   "Security Scan", 3),
+        new("staging",    "Staging",       3),
+        new("production", "Production",    2),
+    ];
+
+    private static readonly DeployItem[] _deployItems =
+    [
+        new("d1",  "Auth microservice",     "v3.1.0", "build",      "pending", "SC"),
+        new("d2",  "Billing API",           "v2.0.4", "build",      "passed",  "MR"),
+        new("d3",  "Notification worker",   "v1.7.2", "security",   "passed",  "PP"),
+        new("d4",  "Search service",        "v4.0.0", "security",   "failed",  "JO"),
+        new("d5",  "CDN proxy",             "v1.2.1", "security",   "passed",  "SC"),
+        new("d6",  "Analytics collector",   "v2.3.0", "staging",    "passed",  "MR"),
+        new("d7",  "Rate limiter",          "v1.1.0", "staging",    "pending", "PP"),
+        new("d8",  "Image optimizer",       "v3.2.1", "staging",    "failed",  "JO"),
+        new("d9",  "Core API gateway",      "v6.0.0", "production", "passed",  "SC"),
+        new("d10", "Event bus",             "v2.1.0", "production", "passed",  "MR"),
+    ];
+
+    private static readonly Dictionary<string, string> _gateStatusDot = new()
+    {
+        ["passed"]  = "bg-emerald-500",
+        ["failed"]  = "bg-red-500",
+        ["pending"] = "bg-amber-500",
+    };
+
+    private static int _totalPassed => _deployItems.Count(d => d.GateStatus == "passed");
+    private static int _totalFailed => _deployItems.Count(d => d.GateStatus == "failed");
+    private static int _passRate    => (int)Math.Round((double)_totalPassed / _deployItems.Length * 100);
+
+    private static string GetProgressColor(double ratio)
+    {
+        if (ratio > 1) return "bg-red-500";
+        if (ratio >= 0.7) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    private static string GetProgressTextColor(double ratio)
+    {
+        if (ratio > 1) return "text-red-600 dark:text-red-400";
+        if (ratio >= 0.7) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+}

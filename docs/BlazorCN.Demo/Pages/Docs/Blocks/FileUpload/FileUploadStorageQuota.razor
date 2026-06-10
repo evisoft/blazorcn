@@ -1,0 +1,164 @@
+@* ============================================================
+   Block: file-upload-storage-quota
+   Title: FileUploadStorageQuota
+   Description: File upload with storage quota tracking block for React and Next.js with usage bar, file sizes, type breakdown, and upgrade prompt using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-storage-quota.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">Storage</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">Manage your file storage and usage</p>
+        </div>
+
+        @* Usage summary *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2 flex items-baseline gap-1">
+                <span class="font-semibold text-2xl tabular-nums">@_usedGB</span>
+                <span class="text-muted-foreground text-xs">GB of @_totalStorageGB GB used</span>
+            </div>
+            <ProgressCn Value="@_percentage" Class="h-2" />
+            <div class="mt-1.5 flex items-center justify-between">
+                <span class="text-muted-foreground text-xs tabular-nums">@_percentage%</span>
+                <span class="text-muted-foreground text-xs">@_remainingGB GB remaining</span>
+            </div>
+        </div>
+
+        @* Near limit warning *@
+        @if (_isNearLimit)
+        {
+            <div class="flex items-center gap-2 border-b px-4 py-3">
+                <LucideIconCn Name="triangle-alert" Size="14" Class="size-3.5 shrink-0 text-amber-500" />
+                <span class="flex-1 text-muted-foreground text-xs">
+                    You are using over @_percentage% of your storage. Upgrade for more space.
+                </span>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 shrink-0 gap-1 px-2 text-xs">
+                    Upgrade
+                    <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3" />
+                </ButtonCn>
+            </div>
+        }
+
+        @* Storage breakdown by type *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2.5 block font-medium text-muted-foreground text-xs">
+                Breakdown by type
+            </span>
+            <div class="mb-3 flex h-2 overflow-hidden rounded-full bg-muted">
+                @foreach (var item in _breakdownData)
+                {
+                    var widthPct = ((double)item.SizeMB / _totalStorageMB * 100).ToString("F1");
+                    <div
+                        class="@Cn.Merge(item.Color, "transition-all")"
+                        style="@($"width:{widthPct}%")">
+                    </div>
+                }
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                @foreach (var item in _breakdownData)
+                {
+                    <div class="flex items-center gap-2">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", item.Color)"></span>
+                        <LucideIconCn Name="@item.IconName" Size="12" Class="size-3 text-muted-foreground" />
+                        <span class="text-muted-foreground text-xs">@item.Type</span>
+                        <span class="ml-auto font-medium text-xs tabular-nums">@item.Label</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* File list *@
+        <div>
+            <div class="border-b px-4 py-2">
+                <span class="text-muted-foreground text-xs">
+                    @_files.Length files · Sorted by size
+                </span>
+            </div>
+            @for (int i = 0; i < _displayedFiles.Length; i++)
+            {
+                var file = _displayedFiles[i];
+                var isLargest = file.SizeMB == _maxFileSizeMB;
+                var isLast = i == _displayedFiles.Length - 1 && !(!_showAll && _files.Length > 5);
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5", isLast ? "" : "border-b")">
+                    <LucideIconCn Name="@GetTypeIconName(file.Type)" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                    <div class="min-w-0 flex-1">
+                        <span class="block truncate font-medium text-sm">@file.Name</span>
+                        <span class="text-muted-foreground text-xs">@file.UploadedAt</span>
+                    </div>
+                    @if (isLargest)
+                    {
+                        <span class="shrink-0 rounded bg-muted/50 px-1.5 py-0.5 text-muted-foreground text-xs">
+                            Largest
+                        </span>
+                    }
+                    <span class="shrink-0 font-medium text-xs tabular-nums">@file.SizeLabel</span>
+                </div>
+            }
+            @if (!_showAll && _files.Length > 5)
+            {
+                <div class="px-4 py-2.5">
+                    <button
+                        type="button"
+                        @onclick="@(() => _showAll = true)"
+                        class="text-muted-foreground text-xs transition-colors hover:text-foreground">
+                        Show @(_files.Length - 5) more files
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StorageFile(string Id, string Name, int SizeMB, string SizeLabel, string Type, string UploadedAt);
+    private record BreakdownItem(string Type, string IconName, int SizeMB, string Label, string Color);
+
+    private const int _totalStorageGB = 5;
+    private const int _totalStorageMB = _totalStorageGB * 1024;
+
+    private static readonly StorageFile[] _files =
+    [
+        new("1", "product-demo-walkthrough.mp4",  892, "892 MB",  "video",       "Mar 12"),
+        new("2", "team-retreat-photos.zip",        645, "645 MB",  "image",       "Mar 15"),
+        new("3", "annual-report-2025.pdf",         428, "428 MB",  "document",    "Mar 18"),
+        new("4", "design-system-assets.fig",       384, "384 MB",  "image",       "Mar 19"),
+        new("5", "revenue-data-q4.xlsx",           312, "312 MB",  "spreadsheet", "Mar 20"),
+        new("6", "onboarding-video-v2.mp4",        276, "276 MB",  "video",       "Mar 21"),
+        new("7", "api-documentation.pdf",          156, "156 MB",  "document",    "Mar 22"),
+        new("8", "customer-feedback.csv",           89,  "89 MB",  "spreadsheet", "Mar 23"),
+        new("9", "logo-variants.png",               42,  "42 MB",  "image",       "Mar 24"),
+    ];
+
+    private static int FileSumByType(string type) =>
+        _files.Where(f => f.Type == type).Sum(f => f.SizeMB);
+
+    private static readonly BreakdownItem[] _breakdownData =
+    [
+        new("Video",       "video",            FileSumByType("video"),       $"{(FileSumByType("video") / 1024.0):F1} GB", "bg-foreground"),
+        new("Images",      "image",            FileSumByType("image"),       $"{FileSumByType("image")} MB",              "bg-foreground/60"),
+        new("Documents",   "file-text",        FileSumByType("document"),    $"{FileSumByType("document")} MB",           "bg-foreground/40"),
+        new("Spreadsheets","file-spreadsheet", FileSumByType("spreadsheet"), $"{FileSumByType("spreadsheet")} MB",        "bg-foreground/20"),
+    ];
+
+    private static readonly int _usedMB = _files.Sum(f => f.SizeMB);
+    private static readonly string _usedGB = (_usedMB / 1024.0).ToString("F1");
+    private static readonly int _percentage = (int)Math.Round((double)_usedMB / _totalStorageMB * 100);
+    private static readonly bool _isNearLimit = _percentage >= 60;
+    private static readonly string _remainingGB = ((_totalStorageMB - _usedMB) / 1024.0).ToString("F1");
+    private static readonly int _maxFileSizeMB = _files.Max(f => f.SizeMB);
+
+    private bool _showAll = false;
+
+    private StorageFile[] _displayedFiles => _showAll ? _files : _files.Take(5).ToArray();
+
+    private static string GetTypeIconName(string type) => type switch
+    {
+        "document"    => "file-text",
+        "image"       => "image",
+        "video"       => "video",
+        "spreadsheet" => "file-spreadsheet",
+        _             => "file",
+    };
+}

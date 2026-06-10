@@ -1,0 +1,167 @@
+@* ============================================================
+   Block: stats-area-chart-dual-series
+   Title: StatsAreaChartDualSeries
+   Description: A dual-series area chart stats card for React and Next.js with overlapping var(--chart-1) and var(--chart-2) gradient fills, ChartLegend pills, ChartTooltipContent with line indicator, and a 200px fixed-height chart body built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-area-chart-dual-series.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Signups vs churn</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Last 14 days</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right">
+                    <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                        Signups
+                    </p>
+                    <p class="text-sm font-semibold tabular-nums">@_totalSignups.ToString("N0")</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                        Churn
+                    </p>
+                    <p class="text-sm font-semibold tabular-nums">@_totalChurn.ToString("N0")</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-4 py-4">
+            <div class="h-[200px] w-full">
+                @((MarkupString)RenderChart())
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DataPoint(string Day, int Signups, int Churn);
+
+    private static readonly DataPoint[] _chartData =
+    [
+        new("Mon", 248, 62),
+        new("Tue", 312, 71),
+        new("Wed", 286, 58),
+        new("Thu", 374, 84),
+        new("Fri", 421, 73),
+        new("Sat", 189, 41),
+        new("Sun", 162, 38),
+        new("Mon", 298, 67),
+        new("Tue", 347, 75),
+        new("Wed", 402, 81),
+        new("Thu", 458, 79),
+        new("Fri", 489, 86),
+        new("Sat", 221, 44),
+        new("Sun", 194, 39),
+    ];
+
+    private static readonly int _totalSignups = 0 + 248 + 312 + 286 + 374 + 421 + 189 + 162 + 298 + 347 + 402 + 458 + 489 + 221 + 194;
+    private static readonly int _totalChurn = 0 + 62 + 71 + 58 + 84 + 73 + 41 + 38 + 67 + 75 + 81 + 79 + 86 + 44 + 39;
+
+    private static string RenderChart()
+    {
+        // Chart dimensions
+        const int svgWidth = 600;
+        const int svgHeight = 200;
+        const int marginLeft = 0;
+        const int marginRight = 0;
+        const int marginTop = 4;
+        const int marginBottom = 30; // space for x-axis labels + legend
+
+        int chartWidth = svgWidth - marginLeft - marginRight;
+        int chartHeight = svgHeight - marginTop - marginBottom;
+
+        int n = _chartData.Length;
+        int maxVal = 500; // slightly above max 489
+        double xStep = (double)chartWidth / (n - 1);
+
+        // Build coordinate points for signups and churn
+        var signupsPts = new (double x, double y)[n];
+        var churnPts = new (double x, double y)[n];
+        for (int i = 0; i < n; i++)
+        {
+            double x = marginLeft + i * xStep;
+            signupsPts[i] = (x, marginTop + chartHeight - (_chartData[i].Signups / (double)maxVal) * chartHeight);
+            churnPts[i] = (x, marginTop + chartHeight - (_chartData[i].Churn / (double)maxVal) * chartHeight);
+        }
+
+        // Build SVG path (monotone-like — using straight lines as approximation)
+        string SignupsLine()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"M {signupsPts[0].x:F1},{signupsPts[0].y:F1}");
+            for (int i = 1; i < n; i++)
+                sb.Append($" L {signupsPts[i].x:F1},{signupsPts[i].y:F1}");
+            return sb.ToString();
+        }
+
+        string ChurnLine()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"M {churnPts[0].x:F1},{churnPts[0].y:F1}");
+            for (int i = 1; i < n; i++)
+                sb.Append($" L {churnPts[i].x:F1},{churnPts[i].y:F1}");
+            return sb.ToString();
+        }
+
+        string SignupsArea()
+        {
+            double baseY = marginTop + chartHeight;
+            return SignupsLine() + $" L {signupsPts[n - 1].x:F1},{baseY:F1} L {signupsPts[0].x:F1},{baseY:F1} Z";
+        }
+
+        string ChurnArea()
+        {
+            double baseY = marginTop + chartHeight;
+            return ChurnLine() + $" L {churnPts[n - 1].x:F1},{baseY:F1} L {churnPts[0].x:F1},{baseY:F1} Z";
+        }
+
+        // X-axis labels — show every other day label
+        var xLabels = new System.Text.StringBuilder();
+        for (int i = 0; i < n; i += 2)
+        {
+            double x = marginLeft + i * xStep;
+            double labelY = marginTop + chartHeight + 16;
+            xLabels.Append($"<text x=\"{x:F1}\" y=\"{labelY:F1}\" text-anchor=\"middle\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.5\">{_chartData[i].Day}</text>");
+        }
+
+        // Horizontal grid lines (3 lines)
+        var gridLines = new System.Text.StringBuilder();
+        for (int g = 1; g <= 3; g++)
+        {
+            double gy = marginTop + (chartHeight / 4.0) * g;
+            gridLines.Append($"<line x1=\"{marginLeft}\" y1=\"{gy:F1}\" x2=\"{svgWidth}\" y2=\"{gy:F1}\" stroke=\"currentColor\" stroke-opacity=\"0.1\" stroke-dasharray=\"3 3\" />");
+        }
+
+        // Legend
+        double legendY = svgHeight - 6;
+        double legendCenterX = svgWidth / 2.0;
+        string legend =
+            $"<rect x=\"{legendCenterX - 90:F1}\" y=\"{legendY - 7:F1}\" width=\"10\" height=\"10\" rx=\"2\" fill=\"oklch(0.646 0.222 41.116)\" opacity=\"0.8\" />" +
+            $"<text x=\"{legendCenterX - 76:F1}\" y=\"{legendY + 1:F1}\" font-size=\"11\" fill=\"currentColor\" opacity=\"0.7\">Signups</text>" +
+            $"<rect x=\"{legendCenterX + 10:F1}\" y=\"{legendY - 7:F1}\" width=\"10\" height=\"10\" rx=\"2\" fill=\"oklch(0.6 0.118 184.704)\" opacity=\"0.8\" />" +
+            $"<text x=\"{legendCenterX + 24:F1}\" y=\"{legendY + 1:F1}\" font-size=\"11\" fill=\"currentColor\" opacity=\"0.7\">Churn</text>";
+
+        return $@"<svg viewBox=""0 0 {svgWidth} {svgHeight}"" width=""100%"" height=""100%"" xmlns=""http://www.w3.org/2000/svg"">
+  <defs>
+    <linearGradient id=""fill-signups-ds"" x1=""0"" x2=""0"" y1=""0"" y2=""1"">
+      <stop offset=""0%"" stop-color=""oklch(0.646 0.222 41.116)"" stop-opacity=""0.35"" />
+      <stop offset=""100%"" stop-color=""oklch(0.646 0.222 41.116)"" stop-opacity=""0"" />
+    </linearGradient>
+    <linearGradient id=""fill-churn-ds"" x1=""0"" x2=""0"" y1=""0"" y2=""1"">
+      <stop offset=""0%"" stop-color=""oklch(0.6 0.118 184.704)"" stop-opacity=""0.3"" />
+      <stop offset=""100%"" stop-color=""oklch(0.6 0.118 184.704)"" stop-opacity=""0"" />
+    </linearGradient>
+  </defs>
+  {gridLines}
+  <path d=""{SignupsArea()}"" fill=""url(#fill-signups-ds)"" />
+  <path d=""{ChurnArea()}"" fill=""url(#fill-churn-ds)"" />
+  <path d=""{SignupsLine()}"" fill=""none"" stroke=""oklch(0.646 0.222 41.116)"" stroke-width=""2"" />
+  <path d=""{ChurnLine()}"" fill=""none"" stroke=""oklch(0.6 0.118 184.704)"" stroke-width=""2"" />
+  {xLabels}
+  {legend}
+</svg>";
+    }
+}

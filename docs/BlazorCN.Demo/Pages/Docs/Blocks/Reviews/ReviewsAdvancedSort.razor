@@ -1,0 +1,326 @@
+@* ============================================================
+   Block: reviews-advanced-sort
+   Title: ReviewsAdvancedSort
+   Description: A premium review sort and filter panel for React and Next.js with multi-column sort controls, star rating pill filters, verified purchase toggle, date range presets, animated list transitions on reorder, and active filter badge management. Built with shadcn/ui and Tailwind CSS.
+   Source: original/blocks/reviews/reviews-advanced-sort.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="arrow-down-up" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="text-sm font-medium">Reviews</span>
+                <span class="text-xs tabular-nums text-muted-foreground">
+                    @_filtered.Count of @_reviews.Length
+                </span>
+            </div>
+            <button type="button"
+                    @onclick="@(() => _filtersVisible = !_filtersVisible)"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+                <LucideIconCn Name="filter" Size="12" Class="size-3" />
+                @(_filtersVisible ? "Hide" : "Filters")
+            </button>
+        </div>
+
+        @* Filter Panel *@
+        @if (_filtersVisible)
+        {
+            <div class="overflow-hidden">
+                @* Sort *@
+                <div class="border-b px-4 py-3">
+                    <span class="mb-2 block text-xs font-medium text-muted-foreground">Sort by</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        @foreach (var opt in _sortOptions)
+                        {
+                            var option = opt;
+                            <button type="button"
+                                    @onclick="@(() => SetSort(option.Key))"
+                                    class="@Cn.Merge("inline-flex h-7 items-center rounded-md px-2.5 text-xs transition-colors", _sort == option.Key ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground")">
+                                @option.Label
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @* Rating filter *@
+                <div class="border-b px-4 py-3">
+                    <span class="mb-2 block text-xs font-medium text-muted-foreground">Rating</span>
+                    <div class="flex gap-1.5">
+                        @foreach (var s in new[] { 5, 4, 3, 2, 1 })
+                        {
+                            var star = s;
+                            <button type="button"
+                                    @onclick="@(() => ToggleRatingFilter(star))"
+                                    class="@Cn.Merge("inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs transition-colors", _ratingFilter == star ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground")">
+                                @star
+                                <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", _ratingFilter == star ? "fill-current" : "")" />
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @* Date + Verified row *@
+                <div class="flex items-start gap-6 border-b px-4 py-3">
+                    <div class="flex-1">
+                        <span class="mb-2 block text-xs font-medium text-muted-foreground">Date range</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var dr in _dateRanges)
+                            {
+                                var range = dr;
+                                <button type="button"
+                                        @onclick="@(() => ToggleDateRange(range.Key))"
+                                        class="@Cn.Merge("inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-xs transition-colors", _dateRange == range.Key ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground")">
+                                    <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                                    @range.Label
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-1.5 pt-5">
+                        <span class="flex items-center gap-2">
+                            <SwitchCn Checked="@_verifiedOnly" CheckedChanged="@((bool v) => { _verifiedOnly = v; UpdateFiltered(); })" />
+                            <LucideIconCn Name="shield-check" Size="14" Class="@Cn.Merge("size-3.5", _verifiedOnly ? "text-foreground" : "text-muted-foreground/40")" />
+                        </span>
+                        <span class="text-[10px] text-muted-foreground">Verified</span>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Active filter badges *@
+        @if (_activeFilters.Count > 0)
+        {
+            <div class="overflow-hidden border-b">
+                <div class="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
+                    <span class="text-xs text-muted-foreground">Active:</span>
+                    @foreach (var filter in _activeFilters)
+                    {
+                        var f = filter;
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 pr-1 text-xs">
+                            @f.Label
+                            <button type="button"
+                                    @onclick="@(() => RemoveFilter(f.Key))"
+                                    class="ml-0.5 rounded-sm p-0.5 transition-colors hover:bg-muted">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </BadgeCn>
+                    }
+                    <button type="button"
+                            @onclick="ClearAll"
+                            class="text-xs text-muted-foreground transition-colors hover:text-foreground">
+                        Clear all
+                    </button>
+                </div>
+            </div>
+        }
+
+        @* Reviews list *@
+        <div>
+            @if (_filtered.Count == 0)
+            {
+                <div class="px-4 py-10 text-center">
+                    <p class="text-sm text-muted-foreground">No reviews match the current filters</p>
+                    <button type="button"
+                            @onclick="ClearAll"
+                            class="mt-2 text-xs text-muted-foreground underline transition-colors hover:text-foreground">
+                        Clear all filters
+                    </button>
+                </div>
+            }
+            else
+            {
+                @for (var i = 0; i < _filtered.Count; i++)
+                {
+                    var review = _filtered[i];
+                    var isLast = i == _filtered.Count - 1;
+                    <div class="@Cn.Merge("", isLast ? "" : "border-b")">
+                        <div class="px-4 py-3">
+                            @* Row 1: Rating + Author + Meta *@
+                            <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-0.5">
+                                    @for (var si = 0; si < 5; si++)
+                                    {
+                                        var starIndex = si;
+                                        <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("size-3", starIndex < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                    }
+                                </div>
+                                <span class="text-xs font-medium">@review.Author.Name</span>
+                                @if (review.Author.Verified)
+                                {
+                                    <span class="flex items-center gap-0.5 text-xs text-muted-foreground">
+                                        <LucideIconCn Name="check" Size="12" Class="size-3 text-emerald-500" />
+                                        Verified
+                                    </span>
+                                }
+                                <span class="text-xs text-muted-foreground">@review.Date</span>
+                                <span class="ml-auto text-xs tabular-nums text-muted-foreground">@review.Helpful helpful</span>
+                            </div>
+
+                            @* Row 2: Title *@
+                            <p class="mt-1.5 text-sm font-medium">@review.Title</p>
+
+                            @* Row 3: Body *@
+                            <p class="mt-1 text-sm leading-relaxed text-muted-foreground">@review.Body</p>
+
+                            @* Row 4: Meta tags *@
+                            <div class="mt-2 flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                    @review.Product
+                                </BadgeCn>
+                                <span class="text-[10px] text-muted-foreground">@review.Author.ReviewCount reviews by this author</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t bg-muted/30 px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">Showing @_filtered.Count of @_reviews.Length reviews</span>
+            <span class="text-xs text-muted-foreground">Sorted by @GetSortLabel(_sort).ToLower()</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ReviewAuthor(string Name, bool Verified, int ReviewCount);
+    private record Review(string Id, ReviewAuthor Author, int Rating, string Date, int SortDate, string Title, string Body, int Helpful, string Product);
+    private record SortOptionItem(string Key, string Label);
+    private record DateRangeItem(string Key, string Label);
+    private record ActiveFilter(string Key, string Label);
+
+    private static readonly Review[] _reviews =
+    [
+        new("r1", new("Sarah Chen", true, 12), 5, "2 days ago", 6,
+            "Exceptional quality and clean code architecture",
+            "Every component follows consistent patterns. The TypeScript types are thorough and the Tailwind integration is seamless. Shipped our dashboard in half the expected time with zero regressions.",
+            42, "Pro Plan"),
+        new("r2", new("Marcus Johnson", true, 5), 4, "1 week ago", 5,
+            "Great library with minor documentation gaps",
+            "The components are production-ready out of the box. A few advanced patterns like virtualized tables and complex forms could use more examples in the docs, but the code itself is self-explanatory.",
+            28, "Team Plan"),
+        new("r3", new("Elena Rodriguez", false, 2), 5, "2 weeks ago", 4,
+            "Best component library for React projects",
+            "We migrated from a custom design system and the transition was surprisingly smooth. Accessibility is handled well out of the box and theming is flexible enough for our multi-brand setup.",
+            35, "Organization Plan"),
+        new("r4", new("David Kim", true, 8), 3, "3 weeks ago", 3,
+            "Solid but needs more data table options",
+            "Works well for standard layouts and marketing pages. Would love to see more complex data table variations with sorting, filtering, column pinning, and row expansion built in natively.",
+            14, "Pro Plan"),
+        new("r5", new("Priya Patel", true, 1), 2, "1 month ago", 2,
+            "Good foundations but steep learning curve initially",
+            "The copy-paste model takes getting used to if you come from traditional package-based libraries. Once you understand the patterns it clicks, but initial setup and configuration took our team longer than expected.",
+            9, "Starter Plan"),
+        new("r6", new("James O'Brien", true, 20), 5, "2 months ago", 1,
+            "Saved our team weeks of frontend development",
+            "The block quality is outstanding. We combined several blocks and had a complete SaaS dashboard running in production within two days. Zero cleanup needed on any of the components we used.",
+            51, "Pro Plan"),
+    ];
+
+    private static readonly SortOptionItem[] _sortOptions =
+    [
+        new("newest", "Newest"),
+        new("oldest", "Oldest"),
+        new("highest", "Highest"),
+        new("lowest", "Lowest"),
+        new("helpful", "Most helpful"),
+    ];
+
+    private static readonly DateRangeItem[] _dateRanges =
+    [
+        new("week", "Last week"),
+        new("month", "Last month"),
+        new("3months", "Last 3 months"),
+        new("year", "Last year"),
+    ];
+
+    private string _sort = "newest";
+    private int? _ratingFilter = null;
+    private bool _verifiedOnly = false;
+    private string? _dateRange = null;
+    private bool _filtersVisible = true;
+    private List<Review> _filtered = new();
+    private List<ActiveFilter> _activeFilters = new();
+
+    protected override void OnInitialized()
+    {
+        UpdateFiltered();
+    }
+
+    private void SetSort(string sort)
+    {
+        _sort = sort;
+        UpdateFiltered();
+    }
+
+    private void ToggleRatingFilter(int star)
+    {
+        _ratingFilter = _ratingFilter == star ? null : star;
+        UpdateFiltered();
+    }
+
+    private void ToggleDateRange(string range)
+    {
+        _dateRange = _dateRange == range ? null : range;
+        UpdateFiltered();
+    }
+
+    private void UpdateFiltered()
+    {
+        var result = _reviews.Where(r =>
+        {
+            if (_ratingFilter.HasValue && r.Rating != _ratingFilter.Value) return false;
+            if (_verifiedOnly && !r.Author.Verified) return false;
+            return true;
+        }).ToList();
+
+        result = _sort switch
+        {
+            "newest" => result.OrderByDescending(r => r.SortDate).ToList(),
+            "oldest" => result.OrderBy(r => r.SortDate).ToList(),
+            "highest" => result.OrderByDescending(r => r.Rating).ToList(),
+            "lowest" => result.OrderBy(r => r.Rating).ToList(),
+            "helpful" => result.OrderByDescending(r => r.Helpful).ToList(),
+            _ => result,
+        };
+
+        _filtered = result;
+
+        _activeFilters = new List<ActiveFilter>();
+        if (_ratingFilter.HasValue)
+            _activeFilters.Add(new("rating", $"{_ratingFilter.Value} stars"));
+        if (_verifiedOnly)
+            _activeFilters.Add(new("verified", "Verified only"));
+        if (_dateRange != null)
+        {
+            var label = _dateRanges.FirstOrDefault(d => d.Key == _dateRange)?.Label ?? _dateRange;
+            _activeFilters.Add(new("date", label));
+        }
+        if (_sort != "newest")
+            _activeFilters.Add(new("sort", GetSortLabel(_sort)));
+    }
+
+    private void RemoveFilter(string key)
+    {
+        if (key == "rating") _ratingFilter = null;
+        if (key == "verified") _verifiedOnly = false;
+        if (key == "date") _dateRange = null;
+        if (key == "sort") _sort = "newest";
+        UpdateFiltered();
+    }
+
+    private void ClearAll()
+    {
+        _ratingFilter = null;
+        _verifiedOnly = false;
+        _dateRange = null;
+        _sort = "newest";
+        UpdateFiltered();
+    }
+
+    private string GetSortLabel(string sort) =>
+        _sortOptions.FirstOrDefault(o => o.Key == sort)?.Label ?? sort;
+}

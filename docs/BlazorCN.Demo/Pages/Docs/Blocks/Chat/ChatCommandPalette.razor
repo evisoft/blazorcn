@@ -1,0 +1,195 @@
+@* ============================================================
+   Block: chat-command-palette
+   Title: ChatCommandPalette
+   Description: A command palette chat block for React and Next.js with slash commands, inline autocomplete, keyboard navigation, and command categories built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-command-palette.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="hash" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">project-alpha</span>
+            <span class="text-muted-foreground text-xs">· Type / for commands</span>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="space-y-3">
+                @foreach (var msg in _messages)
+                {
+                    if (msg.IsSystem)
+                    {
+                        <div class="flex items-center gap-2 py-1">
+                            <div class="h-px flex-1 bg-border"></div>
+                            <span class="shrink-0 text-muted-foreground text-[10px]">@msg.Content</span>
+                            <div class="h-px flex-1 bg-border"></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex gap-3">
+                            <AvatarCn Class="mt-0.5 size-7 shrink-0">
+                                <AvatarFallbackCn Class="bg-muted text-[10px] text-muted-foreground">@msg.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-baseline gap-2">
+                                    <span class="font-medium text-sm">@msg.Sender</span>
+                                    <span class="text-muted-foreground text-[10px]">@msg.Timestamp</span>
+                                </div>
+                                <p class="mt-0.5 text-sm leading-relaxed">@msg.Content</p>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        @* Command palette overlay *@
+        <div class="relative">
+            @if (_showPalette && _filteredCommands.Count > 0)
+            {
+                <div class="absolute bottom-0 left-0 right-0 mx-4 mb-1 max-h-[240px] overflow-y-auto rounded-lg border bg-card shadow-lg">
+                    @{
+                        int flatIndex = -1;
+                    }
+                    @foreach (var category in _groupedCommands.Keys)
+                    {
+                        var cmds = _groupedCommands[category];
+                        <div>
+                            <div class="px-3 pt-2 pb-1">
+                                <span class="font-medium text-muted-foreground text-[10px] uppercase tracking-wider">@category</span>
+                            </div>
+                            @foreach (var cmd in cmds)
+                            {
+                                flatIndex++;
+                                var currentIndex = flatIndex;
+                                var isSelected = currentIndex == _selectedIndex;
+                                var cmdCopy = cmd;
+                                <button
+                                    type="button"
+                                    class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2 text-left transition-colors", isSelected ? "bg-muted/50" : "hover:bg-muted/30")"
+                                    @onclick="@(() => SelectCommand(cmdCopy.Name))">
+                                    <LucideIconCn Name="@cmdCopy.IconName" Size="16" Class="size-4 text-muted-foreground" />
+                                    <div class="min-w-0 flex-1">
+                                        <span class="font-mono text-sm">/@cmdCopy.Name</span>
+                                        <p class="text-muted-foreground text-xs">@cmdCopy.Description</p>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="flex items-center gap-2">
+                <InputCn
+                    @bind-Value="_input"
+                    @bind-Value:event="oninput"
+                    @onkeydown="HandleKeyDown"
+                    Placeholder="Message or type / for commands..."
+                    Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn
+                    Type="submit"
+                    Size="ButtonSize.Icon"
+                    Variant="ButtonVariant.Ghost"
+                    Disabled="@(string.IsNullOrWhiteSpace(_input) || _showPalette)"
+                    Class="size-8 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SlashCommand(string Name, string Description, string IconName, string Category);
+
+    private record ChatMessage(string Id, string Sender, string Initials, string Content, string Timestamp, bool IsSystem = false);
+
+    private static readonly SlashCommand[] _commands =
+    [
+        new("assign", "Assign to a team member", "at-sign", "Actions"),
+        new("due", "Set a due date", "calendar", "Actions"),
+        new("priority", "Set priority level", "tag", "Actions"),
+        new("todo", "Create a checklist", "list-todo", "Insert"),
+        new("file", "Attach a file", "file-text", "Insert"),
+        new("image", "Insert an image", "image", "Insert"),
+        new("link", "Add a link preview", "link", "Insert"),
+        new("channel", "Link a channel", "hash", "Insert"),
+    ];
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("m1", "Ana Torres", "AT", "I've pushed the initial PR for the notification system. Can someone review?", "2:14 PM"),
+        new("m2", "System", "S", "Ana Torres assigned this to Kai Nakamura", "2:15 PM", IsSystem: true),
+        new("m3", "Kai Nakamura", "KN", "I'll take a look this afternoon. What's the priority on this — should it block the release?", "2:18 PM"),
+        new("m4", "Ana Torres", "AT", "It's P1. We need it for the Wednesday deploy.", "2:19 PM"),
+        new("m5", "System", "S", "Priority set to P1 — Critical", "2:19 PM", IsSystem: true),
+    ];
+
+    private string _input = "";
+    private int _selectedIndex = 0;
+
+    private bool _showPalette => _input.StartsWith("/");
+    private string _searchTerm => _input.Length > 1 ? _input[1..].ToLowerInvariant() : "";
+
+    private List<SlashCommand> _filteredCommands =>
+        !_showPalette
+            ? []
+            : _commands.Where(cmd =>
+                cmd.Name.Contains(_searchTerm) ||
+                cmd.Description.ToLowerInvariant().Contains(_searchTerm)).ToList();
+
+    private Dictionary<string, List<SlashCommand>> _groupedCommands
+    {
+        get
+        {
+            var groups = new Dictionary<string, List<SlashCommand>>();
+            foreach (var cmd in _filteredCommands)
+            {
+                if (!groups.ContainsKey(cmd.Category))
+                    groups[cmd.Category] = [];
+                groups[cmd.Category].Add(cmd);
+            }
+            return groups;
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (!_showPalette || _filteredCommands.Count == 0) return;
+        if (e.Key == "ArrowDown")
+        {
+            _selectedIndex = (_selectedIndex + 1) % _filteredCommands.Count;
+        }
+        else if (e.Key == "ArrowUp")
+        {
+            _selectedIndex = (_selectedIndex - 1 + _filteredCommands.Count) % _filteredCommands.Count;
+        }
+        else if (e.Key == "Enter" && _showPalette)
+        {
+            _input = $"/{_filteredCommands[_selectedIndex].Name} ";
+        }
+        else if (e.Key == "Escape")
+        {
+            _input = "";
+        }
+    }
+
+    private void SelectCommand(string name)
+    {
+        _input = $"/{name} ";
+        _selectedIndex = 0;
+    }
+}

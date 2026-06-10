@@ -1,0 +1,176 @@
+@* ============================================================
+   Block: chat-context-menu
+   Title: ChatContextMenu
+   Description: A context menu chat block for React and Next.js with right-click message actions, reply, edit, pin, and delete options built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-context-menu.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="hash" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">infra-ops</span>
+            <span class="text-muted-foreground text-xs">· Right-click any message</span>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto">
+            @foreach (var msg in _messages)
+            {
+                var msgCopy = msg;
+                <div
+                    class="relative px-4 py-2 transition-colors hover:bg-muted/30"
+                    @oncontextmenu="@((e) => OpenMenu(e, msgCopy.Id))"
+                    @oncontextmenu:preventDefault="true">
+                    <div class="flex gap-3">
+                        <AvatarCn Class="mt-0.5 size-8 shrink-0">
+                            <AvatarFallbackCn Class="@Cn.Merge("text-[10px]", msgCopy.Color)">@msgCopy.Initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-baseline gap-2">
+                                <span class="font-medium text-sm">@msgCopy.Sender</span>
+                                <span class="text-muted-foreground text-[10px]">@msgCopy.Timestamp</span>
+                                @if (msgCopy.IsPinned)
+                                {
+                                    <LucideIconCn Name="pin" Size="12" Class="size-3 text-muted-foreground" />
+                                }
+                            </div>
+                            <p class="mt-0.5 text-sm leading-relaxed">@msgCopy.Content</p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="flex items-center gap-2">
+                <InputCn
+                    @bind-Value="_input"
+                    @bind-Value:event="oninput"
+                    Placeholder="Message #infra-ops..."
+                    Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn
+                    Type="submit"
+                    Size="ButtonSize.Icon"
+                    Variant="ButtonVariant.Ghost"
+                    Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                    Class="size-8 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@* Context menu overlay *@
+@if (_openMenuId is not null)
+{
+    @* Backdrop to close menu on outside click *@
+    <div
+        class="fixed inset-0 z-40"
+        @onclick="CloseMenu"
+        @oncontextmenu="CloseMenu"
+        @oncontextmenu:preventDefault="true">
+    </div>
+
+    <div
+        class="fixed z-50 w-56 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        style="@($"top:{_menuY}px;left:{_menuX}px")">
+        <button type="button" class="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground" @onclick="CloseMenu">
+            <LucideIconCn Name="reply" Size="16" Class="size-4" />
+            Reply
+            <span class="ml-auto text-xs tracking-widest text-muted-foreground">R</span>
+        </button>
+        <button type="button" class="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground" @onclick="CloseMenu">
+            <LucideIconCn Name="pencil" Size="16" Class="size-4" />
+            Edit message
+            <span class="ml-auto text-xs tracking-widest text-muted-foreground">E</span>
+        </button>
+        <button type="button" class="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground" @onclick="CloseMenu">
+            <LucideIconCn Name="copy" Size="16" Class="size-4" />
+            Copy text
+            <span class="ml-auto text-xs tracking-widest text-muted-foreground">C</span>
+        </button>
+        <div role="separator" class="-mx-1 my-1 h-px bg-border"></div>
+        <button type="button" class="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground" @onclick="TogglePin">
+            <LucideIconCn Name="pin" Size="16" Class="size-4" />
+            @(_activeMessage?.IsPinned == true ? "Unpin message" : "Pin message")
+            <span class="ml-auto text-xs tracking-widest text-muted-foreground">P</span>
+        </button>
+        <div role="separator" class="-mx-1 my-1 h-px bg-border"></div>
+        <button type="button" class="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400" @onclick="CloseMenu">
+            <LucideIconCn Name="trash" Size="16" Class="size-4" />
+            Delete message
+            <span class="ml-auto text-xs tracking-widest text-muted-foreground">Del</span>
+        </button>
+    </div>
+}
+
+@code {
+    private record ChatMessage(string Id, string Sender, string Initials, string Color, string Content, string Timestamp, bool IsPinned = false)
+    {
+        public bool IsPinned { get; set; } = IsPinned;
+    }
+
+    private List<ChatMessage> _messages =
+    [
+        new("m1", "Lena Schmidt", "LS", "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+            "The new deployment pipeline is ready for testing. I've set up staging with the latest config.",
+            "4:02 PM", IsPinned: true),
+        new("m2", "Omar Patel", "OP", "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+            "Looks good. I'll run the integration test suite against staging after lunch.",
+            "4:05 PM"),
+        new("m3", "Lena Schmidt", "LS", "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+            "Perfect. Make sure to test the webhook retry logic — that was the main change in this release.",
+            "4:06 PM"),
+        new("m4", "Yuki Tanaka", "YT", "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+            "I noticed the retry backoff caps at 5 minutes. Should we increase that to 30 for webhook failures? Some third-party APIs take longer to recover.",
+            "4:10 PM"),
+        new("m5", "Omar Patel", "OP", "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+            "30 minutes makes sense for payment webhooks. I'll update the config and open a PR.",
+            "4:12 PM"),
+        new("m6", "Lena Schmidt", "LS", "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+            "Agreed. Let's also add a dead letter queue for webhooks that fail after all retries. We can't lose payment events.",
+            "4:14 PM"),
+        new("m7", "Yuki Tanaka", "YT", "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+            "I can handle the DLQ implementation. Already have a pattern from the notification service we can reuse.",
+            "4:16 PM"),
+    ];
+
+    private string _input = "";
+    private string? _openMenuId = null;
+    private double _menuX = 0;
+    private double _menuY = 0;
+
+    private ChatMessage? _activeMessage => _openMenuId is null ? null : _messages.Find(m => m.Id == _openMenuId);
+
+    private void OpenMenu(MouseEventArgs e, string messageId)
+    {
+        _openMenuId = messageId;
+        _menuX = e.ClientX;
+        _menuY = e.ClientY;
+    }
+
+    private void CloseMenu()
+    {
+        _openMenuId = null;
+    }
+
+    private void TogglePin()
+    {
+        var msg = _activeMessage;
+        if (msg is not null)
+        {
+            msg.IsPinned = !msg.IsPinned;
+        }
+        CloseMenu();
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

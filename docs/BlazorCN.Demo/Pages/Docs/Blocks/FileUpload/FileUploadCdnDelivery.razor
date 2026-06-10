@@ -1,0 +1,148 @@
+@* ============================================================
+   Block: file-upload-cdn-delivery
+   Title: FileUploadCdnDelivery
+   Description: File upload block with CDN delivery info for React and Next.js showing CDN URL, cache status badge, edge locations, bandwidth saved, copy URL button, and purge cache option using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-cdn-delivery.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">CDN Delivery</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_assets.Count assets &middot; @_cachedCount cached across @_totalEdge edge locations
+                </p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                <LucideIconCn Name="cloud-upload" Size="14" Class="size-3.5" />
+                Upload
+            </ButtonCn>
+        </div>
+
+        @* Asset list *@
+        <div>
+            @foreach (var assetEntry in _assets)
+            {
+                var asset = assetEntry;
+                var isLast = asset.Id == _assets[_assets.Count - 1].Id;
+                var statusInfo = GetStatusInfo(asset.CacheStatus);
+                var isCopied = _copied == asset.Id;
+                var isPurging = _purging == asset.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="px-4 py-3">
+                        @* Top row: name, size, remove *@
+                        <div class="flex items-center gap-3">
+                            <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0 flex-1">
+                                <span class="truncate font-medium text-sm">@asset.Name</span>
+                                <span class="ml-2 text-muted-foreground text-xs">@asset.Size</span>
+                            </div>
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="shrink-0 text-muted-foreground hover:text-foreground" @onclick="@(() => RemoveAsset(asset.Id))">
+                                <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                            </ButtonCn>
+                        </div>
+
+                        @* CDN URL row *@
+                        <div class="mt-2 flex items-center gap-2">
+                            <span class="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
+                                @asset.CdnUrl
+                            </span>
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 shrink-0 px-2 text-xs" @onclick="@(() => CopyUrl(asset.Id, asset.CdnUrl))">
+                                @if (isCopied)
+                                {
+                                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                    <text>Copied</text>
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                    <text>Copy</text>
+                                }
+                            </ButtonCn>
+                        </div>
+
+                        @* Stats row *@
+                        <div class="mt-2 flex items-center gap-3">
+                            <BadgeCn Variant="@statusInfo.Variant" Class="font-normal text-xs">
+                                @statusInfo.Label
+                            </BadgeCn>
+                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                <LucideIconCn Name="globe" Size="12" Class="size-3" />
+                                @asset.EdgeLocations edges
+                            </span>
+                            <span class="text-muted-foreground text-xs">
+                                @asset.BandwidthSaved bandwidth saved
+                            </span>
+                            <div class="ml-auto">
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs text-muted-foreground" @onclick="@(() => PurgeCache(asset.Id))" Disabled="@isPurging">
+                                    <LucideIconCn Name="refresh-cw" Size="12" Class="@Cn.Merge("size-3", isPurging ? "animate-spin" : "")" />
+                                    @(isPurging ? "Purging..." : "Purge cache")
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Empty state *@
+        @if (_assets.Count == 0)
+        {
+            <div class="px-4 py-8 text-center">
+                <span class="text-muted-foreground text-xs">No assets uploaded to CDN</span>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record UploadedAsset(string Id, string Name, string Size, string CdnUrl, string CacheStatus, int EdgeLocations, string BandwidthSaved);
+    private record StatusInfo(string Label, BadgeVariant Variant);
+
+    private List<UploadedAsset> _assets =
+    [
+        new("1", "hero-banner.webp",    "284 KB",  "https://cdn.acme.com/assets/hero-banner.webp",    "hit",     218, "94%"),
+        new("2", "product-demo.mp4",    "12.4 MB", "https://cdn.acme.com/assets/product-demo.mp4",    "hit",     185, "89%"),
+        new("3", "documentation.pdf",   "1.8 MB",  "https://cdn.acme.com/assets/documentation.pdf",   "expired",  42, "67%"),
+    ];
+
+    private string? _copied = null;
+    private string? _purging = null;
+
+    private int _totalEdge => _assets.Sum(a => a.EdgeLocations);
+    private int _cachedCount => _assets.Count(a => a.CacheStatus == "hit");
+
+    private static StatusInfo GetStatusInfo(string cacheStatus) => cacheStatus switch
+    {
+        "hit"     => new("Cached",     BadgeVariant.Secondary),
+        "miss"    => new("Not cached", BadgeVariant.Outline),
+        "expired" => new("Expired",    BadgeVariant.Outline),
+        _         => new("Unknown",    BadgeVariant.Outline),
+    };
+
+    private async Task CopyUrl(string id, string url)
+    {
+        _copied = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = null;
+    }
+
+    private async Task PurgeCache(string id)
+    {
+        _purging = id;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _assets = _assets
+            .Select(a => a.Id == id ? a with { CacheStatus = "miss", EdgeLocations = 0 } : a)
+            .ToList();
+        _purging = null;
+    }
+
+    private void RemoveAsset(string id)
+    {
+        _assets = _assets.Where(a => a.Id != id).ToList();
+    }
+}

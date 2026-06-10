@@ -1,0 +1,139 @@
+@* ============================================================
+   Block: stats-goal-ring-tiles
+   Title: StatsGoalRingTiles
+   Description: A goal ring tile grid stats card for React and Next.js with 4 radial PieChart rings via ChartContainer, center percentage labels, semantic status dots, and tabular-nums value displays built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-goal-ring-tiles.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Quarterly goals</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Q2 2026 progress</p>
+            </div>
+            <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                4 goals
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+            @foreach (var goal in _goals)
+            {
+                var rawPct = (goal.Target == 0) ? 0.0 : (goal.Current / goal.Target) * 100.0;
+                var pct = Math.Max(0.0, Math.Min(100.0, rawPct));
+                var status = _statusConfig[goal.Status];
+                var ringPath = BuildRingPath(pct, 52, 32, 46);
+                var trackPath = BuildRingPath(100, 52, 32, 46);
+
+                <div class="bg-card px-4 py-4">
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm font-medium">@goal.Label</p>
+                        <span aria-label="@status.Label"
+                              class="@Cn.Merge("size-1.5 rounded-full", status.DotClass)"
+                              role="img"></span>
+                    </div>
+
+                    <div aria-label="@($"{goal.Label}: {pct:F0} percent complete")"
+                         class="relative mx-auto mt-3 aspect-square max-h-[104px]"
+                         role="img">
+                        <svg class="mx-auto aspect-square max-h-[104px] w-full" viewBox="0 0 104 104">
+                            <path d="@trackPath" fill="var(--muted)" />
+                            <path d="@ringPath" fill="@status.ColorVar" />
+                        </svg>
+                        <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <span class="@Cn.Merge("text-base font-semibold tabular-nums", status.TextClass)">
+                                @($"{pct:F0}")%
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-center">
+                        <p class="text-sm font-semibold tabular-nums">@FormatValue(goal)</p>
+                        <p class="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                            of @FormatTarget(goal)
+                        </p>
+                    </div>
+
+                    <div class="@Cn.Merge("mt-3 inline-flex w-full items-center justify-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", status.BgClass, status.TextClass)">
+                        @status.Label
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Goal(string Id, string Label, double Current, double Target, string Unit, string Status);
+
+    private record StatusInfo(string Label, string ColorVar, string TextClass, string DotClass, string BgClass);
+
+    private static readonly Goal[] _goals =
+    [
+        new("arr",     "ARR target",      8_420_000, 10_000_000, "USD",   "observe"),
+        new("nps",     "NPS score",       62,        55,         "pts",   "within"),
+        new("uptime",  "Platform uptime", 99.82,     99.95,      "%",     "critical"),
+        new("hiring",  "Hiring plan",     18,        24,         "hires", "observe"),
+    ];
+
+    private static readonly Dictionary<string, StatusInfo> _statusConfig = new()
+    {
+        ["within"]   = new("On track", "oklch(0.6 0.118 184.704)",  "text-emerald-600 dark:text-emerald-400", "bg-emerald-500", "bg-emerald-500/10"),
+        ["observe"]  = new("Observe",  "oklch(0.828 0.189 84.429)", "text-amber-600 dark:text-amber-400",     "bg-amber-500",   "bg-amber-500/10"),
+        ["critical"] = new("Critical", "oklch(0.646 0.222 41.116)", "text-red-600 dark:text-red-400",         "bg-red-500",     "bg-red-500/10"),
+    };
+
+    private static string FormatValue(Goal goal)
+    {
+        if (goal.Unit == "USD")
+            return $"${(goal.Current / 1_000_000.0):F2}M";
+        if (goal.Unit == "%")
+            return $"{goal.Current:F2}%";
+        return goal.Current.ToString("N0");
+    }
+
+    private static string FormatTarget(Goal goal)
+    {
+        if (goal.Unit == "USD")
+            return $"${(goal.Target / 1_000_000.0):F0}M";
+        if (goal.Unit == "%")
+            return $"{goal.Target:F2}%";
+        return $"{goal.Target:N0} {goal.Unit}";
+    }
+
+    // Builds an SVG donut arc path for a given percentage.
+    // cx/cy = center, innerR/outerR = inner and outer radius of the ring.
+    // The SVG viewBox is 0 0 104 104 so center is 52,52.
+    private static string BuildRingPath(double pct, double center, double innerR, double outerR)
+    {
+        // clamp so a full 100% ring closes correctly
+        var clampedPct = Math.Min(pct, 99.9999);
+        var angle = clampedPct / 100.0 * 360.0;
+        var rad = angle * Math.PI / 180.0;
+
+        // start at top (12 o'clock = -90 deg)
+        var startAngle = -Math.PI / 2;
+        var endAngle = startAngle + rad;
+
+        var sinStart = Math.Sin(startAngle);
+        var cosStart = Math.Cos(startAngle);
+        var sinEnd = Math.Sin(endAngle);
+        var cosEnd = Math.Cos(endAngle);
+
+        var ox1 = center + outerR * cosStart;
+        var oy1 = center + outerR * sinStart;
+        var ox2 = center + outerR * cosEnd;
+        var oy2 = center + outerR * sinEnd;
+        var ix1 = center + innerR * cosEnd;
+        var iy1 = center + innerR * sinEnd;
+        var ix2 = center + innerR * cosStart;
+        var iy2 = center + innerR * sinStart;
+
+        var largeArc = angle > 180 ? 1 : 0;
+
+        return $"M {F(ox1)} {F(oy1)} A {F(outerR)} {F(outerR)} 0 {largeArc} 1 {F(ox2)} {F(oy2)} L {F(ix1)} {F(iy1)} A {F(innerR)} {F(innerR)} 0 {largeArc} 0 {F(ix2)} {F(iy2)} Z";
+    }
+
+    private static string F(double v) => v.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
+}

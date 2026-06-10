@@ -1,0 +1,201 @@
+@* ============================================================
+   Block: todo-list-home-renovation
+   Title: TodoListHomeRenovation
+   Description: A home renovation tracker block for React and Next.js with room-based sections, contractor assignments, estimated costs, budget progress, permit checkboxes, and task status indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-home-renovation.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="hammer" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Home Renovation</span>
+            </div>
+            <span class="text-muted-foreground text-xs">6-week project</span>
+        </div>
+
+        @* Budget overview *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-1.5 flex items-center justify-between">
+                <span class="text-muted-foreground text-xs">Budget</span>
+                <div class="flex items-center gap-2">
+                    <span class="font-mono text-xs tabular-nums">
+                        $@(TotalSpent.ToString("N0")) spent
+                    </span>
+                    <span class="text-muted-foreground/40 text-xs">·</span>
+                    <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                        $@(TotalEstimated.ToString("N0")) estimated
+                    </span>
+                    <span class="text-muted-foreground/40 text-xs">·</span>
+                    <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                        $@(_totalBudget.ToString("N0")) total
+                    </span>
+                </div>
+            </div>
+            <ProgressCn Value="@((double)OverallPercent)" Class="h-1.5" />
+        </div>
+
+        @* Rooms *@
+        @for (var roomIdx = 0; roomIdx < _rooms.Length; roomIdx++)
+        {
+            var room = _rooms[roomIdx];
+            var roomTasks = _tasks.Where(t => t.Room == room).ToList();
+            if (roomTasks.Count == 0) { continue; }
+            var isCollapsed = _collapsed.Contains(room);
+            var roomCompleted = roomTasks.Count(t => t.Completed);
+            var roomSpent = roomTasks.Where(t => t.Completed).Sum(t => t.EstimatedCost);
+            var roomBudgetEntry = _roomBudgets.FirstOrDefault(r => r.Name == room);
+            var roomBudget = roomBudgetEntry?.Budget ?? 0;
+            var roomPercent = roomBudget > 0 ? (int)Math.Round((double)roomSpent / roomBudget * 100) : 0;
+            var capturedRoom = room;
+            var capturedRoomIdx = roomIdx;
+
+            <div>
+                <button type="button" @onclick="@(() => ToggleRoom(capturedRoom))"
+                    class="flex w-full items-center gap-2 border-b bg-muted/30 px-4 py-2 text-left transition-colors hover:bg-muted/50">
+                    <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground/60 transition-transform duration-200", isCollapsed ? "" : "rotate-90")" />
+                    <span class="font-medium text-xs">@room</span>
+                    <span class="text-muted-foreground text-xs tabular-nums">
+                        @roomCompleted/@roomTasks.Count
+                    </span>
+                    <span class="ml-auto font-mono text-muted-foreground text-xs tabular-nums">
+                        $@(roomSpent.ToString("N0")) / $@(roomBudget.ToString("N0"))
+                    </span>
+                    <span class="text-muted-foreground text-xs tabular-nums">@roomPercent%</span>
+                </button>
+
+                @if (!isCollapsed)
+                {
+                    @for (var taskIdx = 0; taskIdx < roomTasks.Count; taskIdx++)
+                    {
+                        var task = roomTasks[taskIdx];
+                        var isLastInRoom = taskIdx == roomTasks.Count - 1;
+                        var isLastRoom = capturedRoomIdx == _rooms.Length - 1;
+                        var showBorder = !(isLastInRoom && isLastRoom);
+                        var capturedTaskId = task.Id;
+
+                        <div class="@Cn.Merge("group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", showBorder ? "border-b" : "")">
+                            <CheckboxCn id="@($"reno-{task.Id}")"
+                                Checked="@task.Completed"
+                                CheckedChanged="@((bool v) => ToggleTask(capturedTaskId))" />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="@Cn.Merge("font-medium text-sm", task.Completed ? "text-muted-foreground line-through" : "")">
+                                        @task.Name
+                                    </span>
+                                    @if (task.PermitRequired)
+                                    {
+                                        <LucideIconCn Name="shield-check" Size="14" Class="size-3.5 shrink-0 text-blue-500" />
+                                    }
+                                </div>
+                                <p class="mt-0.5 text-muted-foreground text-xs">
+                                    @task.Contractor
+                                    <span class="mx-1">·</span>
+                                    @task.Timeline
+                                </p>
+                            </div>
+                            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                $@(task.EstimatedCost.ToString("N0"))
+                            </span>
+                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", GetStatusDot(task.Status))"></span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs">
+                                @GetStatusText(task.Status)
+                            </BadgeCn>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private enum RenovationStatus { Done, InProgress, NotStarted, Blocked }
+
+    private record RenovationTask(
+        string Id,
+        string Name,
+        string Room,
+        string Contractor,
+        int EstimatedCost,
+        string Timeline,
+        RenovationStatus Status,
+        bool PermitRequired,
+        bool Completed
+    );
+
+    private record RoomBudgetEntry(string Name, int Budget);
+
+    private static readonly RoomBudgetEntry[] _roomBudgets =
+    [
+        new("Kitchen", 25000),
+        new("Bathroom", 15000),
+        new("Living Room", 8000),
+    ];
+
+    private static readonly string[] _rooms = ["Kitchen", "Bathroom", "Living Room"];
+
+    private static readonly int _totalBudget = _roomBudgets.Sum(r => r.Budget);
+
+    private List<RenovationTask> _tasks =
+    [
+        new("1",  "Remove old countertops",           "Kitchen",     "DemoTeam Pro",           1200, "Week 1",   RenovationStatus.Done,       false, true),
+        new("2",  "Install quartz countertops",        "Kitchen",     "StoneWorks Inc.",         4800, "Week 2-3", RenovationStatus.InProgress, false, false),
+        new("3",  "Replace cabinet doors",             "Kitchen",     "CabinetCraft",            3200, "Week 2",   RenovationStatus.InProgress, false, false),
+        new("4",  "New backsplash tile",               "Kitchen",     "TileMaster",              2400, "Week 3",   RenovationStatus.NotStarted, false, false),
+        new("5",  "Rewire under-cabinet lighting",     "Kitchen",     "BrightSpark Electric",    1800, "Week 3-4", RenovationStatus.NotStarted, true,  false),
+        new("6",  "Replace faucet and sink",           "Kitchen",     "FlowRight Plumbing",       950, "Week 4",   RenovationStatus.NotStarted, false, false),
+        new("7",  "Gut existing bathroom",             "Bathroom",    "DemoTeam Pro",            2000, "Week 1",   RenovationStatus.Done,       false, true),
+        new("8",  "Re-route plumbing for new layout",  "Bathroom",    "FlowRight Plumbing",      3500, "Week 2",   RenovationStatus.Done,       true,  true),
+        new("9",  "Install walk-in shower",            "Bathroom",    "TileMaster",              4200, "Week 3-4", RenovationStatus.InProgress, false, false),
+        new("10", "Vanity and mirror install",         "Bathroom",    "CabinetCraft",            1800, "Week 4",   RenovationStatus.NotStarted, false, false),
+        new("11", "Bathroom exhaust fan",              "Bathroom",    "BrightSpark Electric",     600, "Week 4",   RenovationStatus.Blocked,    true,  false),
+        new("12", "Refinish hardwood floors",          "Living Room", "FloorCraft Co.",          3200, "Week 5",   RenovationStatus.NotStarted, false, false),
+        new("13", "Install built-in shelving",         "Living Room", "CabinetCraft",            2800, "Week 5-6", RenovationStatus.NotStarted, false, false),
+        new("14", "Paint accent wall",                 "Living Room", "Self",                     250, "Week 6",   RenovationStatus.NotStarted, false, false),
+        new("15", "Install recessed lighting",         "Living Room", "BrightSpark Electric",    1600, "Week 6",   RenovationStatus.NotStarted, true,  false),
+    ];
+
+    private readonly HashSet<string> _collapsed = new();
+
+    private int TotalEstimated => _tasks.Sum(t => t.EstimatedCost);
+    private int TotalSpent => _tasks.Where(t => t.Completed).Sum(t => t.EstimatedCost);
+    private int OverallPercent => _totalBudget > 0 ? (int)Math.Round((double)TotalSpent / _totalBudget * 100) : 0;
+
+    private static string GetStatusDot(RenovationStatus status) => status switch
+    {
+        RenovationStatus.Done => "bg-emerald-500",
+        RenovationStatus.InProgress => "bg-amber-500",
+        RenovationStatus.NotStarted => "bg-muted-foreground/40",
+        RenovationStatus.Blocked => "bg-red-500",
+        _ => ""
+    };
+
+    private static string GetStatusText(RenovationStatus status) => status switch
+    {
+        RenovationStatus.Done => "Done",
+        RenovationStatus.InProgress => "In Progress",
+        RenovationStatus.NotStarted => "Not Started",
+        RenovationStatus.Blocked => "Blocked",
+        _ => ""
+    };
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+        {
+            _tasks[idx] = _tasks[idx] with { Completed = !_tasks[idx].Completed };
+        }
+    }
+
+    private void ToggleRoom(string room)
+    {
+        if (_collapsed.Contains(room))
+            _collapsed.Remove(room);
+        else
+            _collapsed.Add(room);
+    }
+}

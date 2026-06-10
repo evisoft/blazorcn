@@ -1,0 +1,274 @@
+@* ============================================================
+   Block: account-trusted-devices
+   Title: AccountTrustedDevices
+   Description: A trusted device management card for React and Next.js with device trust levels, expiry countdowns, auto-expire settings, current device detection, and trust limit indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-trusted-devices.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header with trust capacity *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Trusted Devices</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Devices that bypass two-factor verification
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    @if (ExpiringSoon > 0)
+                    {
+                        <span class="text-[10px] text-amber-600">@ExpiringSoon expiring soon</span>
+                    }
+                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px]">
+                        @TrustUsage/@MaxTrustedDevices
+                    </BadgeCn>
+                </div>
+            </div>
+            <div class="mt-2.5 flex items-center gap-2">
+                <ProgressCn Value="@TrustUsagePercent" Class="h-1.5 flex-1" />
+                <span class="text-[10px] text-muted-foreground">
+                    @SlotsRemaining slot@(SlotsRemaining != 1 ? "s" : "") available
+                </span>
+            </div>
+        </div>
+
+        @* Current device trust toggle *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/10">
+                        <LucideIconCn Name="shield-check" Size="16" Class="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium">Trust this device</p>
+                        <p class="text-xs text-muted-foreground">
+                            Skip 2FA on future logins from this browser
+                        </p>
+                    </div>
+                </div>
+                <SwitchCn Checked="@_currentDeviceTrusted"
+                           CheckedChanged="@HandleToggleCurrentTrust"
+                           Disabled="@(!_currentDeviceTrusted && TrustUsage >= MaxTrustedDevices)" />
+            </div>
+        </div>
+
+        @* Auto-expire setting *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium">Auto-expire trust after</p>
+                    <p class="text-xs text-muted-foreground">
+                        Devices must re-verify with 2FA after this period
+                    </p>
+                </div>
+                <SelectCn Value="@_autoExpireDays" ValueChanged="@((string v) => _autoExpireDays = v)">
+                    <SelectTriggerCn Class="h-8 w-[100px] text-xs">
+                        <SelectValueCn />
+                    </SelectTriggerCn>
+                    <SelectContentCn>
+                        @foreach (var opt in _autoExpireOptions)
+                        {
+                            <SelectItemCn Value="@opt.Value">@opt.Label</SelectItemCn>
+                        }
+                    </SelectContentCn>
+                </SelectCn>
+            </div>
+        </div>
+
+        @* Device list *@
+        @if (!_devices.Any())
+        {
+            <div class="px-4 py-10 text-center">
+                <LucideIconCn Name="shield" Size="32" Class="mx-auto h-8 w-8 text-muted-foreground/30" />
+                <p class="mt-2 text-sm text-muted-foreground">No trusted devices</p>
+                <p class="text-xs text-muted-foreground">
+                    Enable &quot;Trust this device&quot; during your next 2FA login
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="divide-y">
+                @foreach (var device in _devices)
+                {
+                    var isConfirming = _confirmRemoveId == device.Id;
+                    var expiryColor = GetExpiryColor(device.DaysRemaining);
+                    <div class="@Cn.Merge("px-4 py-3 transition-colors", device.IsCurrent ? "bg-muted/30" : "")">
+                        <div class="flex items-start gap-3">
+
+                            @* Device icon *@
+                            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                                <LucideIconCn Name="@GetDeviceIconName(device.Type)" Size="16" Class="h-4 w-4" />
+                            </div>
+
+                            @* Device info *@
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@device.Name</span>
+                                    @if (device.IsCurrent)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 px-1.5 text-[10px] text-emerald-600 border-emerald-200 bg-emerald-500/5">
+                                            Current
+                                        </BadgeCn>
+                                    }
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("h-4 px-1.5 text-[10px]", GetTrustLevelClass(device.TrustLevel))">
+                                        @GetTrustLevelLabel(device.TrustLevel)
+                                    </BadgeCn>
+                                </div>
+                                <p class="text-xs text-muted-foreground">@device.Os &middot; @device.Browser</p>
+                                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+                                    <span>Trusted @device.TrustedDate</span>
+                                    <span class="@expiryColor">
+                                        Expires @device.ExpiryDate (@(device.DaysRemaining)d left)
+                                    </span>
+                                    <span>@device.Location</span>
+                                </div>
+                            </div>
+
+                            @* Remove action *@
+                            <div class="flex shrink-0 items-center">
+                                @if (isConfirming)
+                                {
+                                    <div class="flex items-center gap-1">
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="h-7 w-7 p-0 text-muted-foreground"
+                                                  OnClick="@(() => _confirmRemoveId = null)">
+                                            <LucideIconCn Name="x" Size="14" Class="h-3.5 w-3.5" />
+                                        </ButtonCn>
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                                  Class="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                                                  OnClick="@(() => HandleRemoveTrust(device.Id))">
+                                            <LucideIconCn Name="check" Size="12" Class="h-3 w-3" />
+                                            Confirm
+                                        </ButtonCn>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-7 gap-1 text-xs text-muted-foreground hover:text-destructive"
+                                              OnClick="@(() => _confirmRemoveId = device.Id)">
+                                        <LucideIconCn Name="trash-2" Size="12" Class="h-3 w-3" />
+                                        Remove
+                                    </ButtonCn>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Footer *@
+        @if (_devices.Any())
+        {
+            <div class="border-t px-4 py-2.5">
+                <div class="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <div class="flex items-center gap-3">
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                            @_devices.Count(d => d.TrustLevel == "full") full trust
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-blue-500"></span>
+                            @_devices.Count(d => d.TrustLevel == "limited") limited
+                        </span>
+                    </div>
+                    @if (ExpiringSoon > 0)
+                    {
+                        <span class="text-amber-600">@ExpiringSoon expiring within 14 days</span>
+                    }
+                </div>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private class TrustedDevice
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Os { get; set; } = "";
+        public string Browser { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string TrustLevel { get; set; } = "";
+        public string TrustedDate { get; set; } = "";
+        public string ExpiryDate { get; set; } = "";
+        public int DaysRemaining { get; set; }
+        public bool IsCurrent { get; set; }
+        public string IpAddress { get; set; } = "";
+        public string Location { get; set; } = "";
+    }
+
+    private record AutoExpireOption(string Value, string Label);
+
+    private const int MaxTrustedDevices = 5;
+
+    private bool _currentDeviceTrusted = true;
+    private string _autoExpireDays = "90";
+    private string? _confirmRemoveId;
+
+    private int TrustUsage => _devices.Count;
+    private int TrustUsagePercent => (int)Math.Round((double)TrustUsage / MaxTrustedDevices * 100);
+    private int SlotsRemaining => MaxTrustedDevices - TrustUsage;
+    private int ExpiringSoon => _devices.Count(d => d.DaysRemaining <= 14);
+
+    private static readonly AutoExpireOption[] _autoExpireOptions =
+    [
+        new("7", "7 days"),
+        new("14", "14 days"),
+        new("30", "30 days"),
+        new("60", "60 days"),
+        new("90", "90 days"),
+    ];
+
+    private List<TrustedDevice> _devices =
+    [
+        new() { Id = "dev-1", Name = "MacBook Pro 16-inch", Os = "macOS Sequoia 15.4", Browser = "Chrome 124", Type = "laptop", TrustLevel = "full", TrustedDate = "Feb 14, 2026", ExpiryDate = "May 14, 2026", DaysRemaining = 39, IsCurrent = true, IpAddress = "73.162.xxx.xxx", Location = "San Francisco, CA" },
+        new() { Id = "dev-2", Name = "iPhone 16 Pro", Os = "iOS 19.3", Browser = "Safari Mobile", Type = "smartphone", TrustLevel = "full", TrustedDate = "Mar 1, 2026", ExpiryDate = "May 30, 2026", DaysRemaining = 55, IsCurrent = false, IpAddress = "73.162.xxx.xxx", Location = "San Francisco, CA" },
+        new() { Id = "dev-3", Name = "Windows Workstation", Os = "Windows 11 Pro", Browser = "Firefox 135", Type = "desktop", TrustLevel = "limited", TrustedDate = "Jan 20, 2026", ExpiryDate = "Apr 20, 2026", DaysRemaining = 15, IsCurrent = false, IpAddress = "208.91.xxx.xxx", Location = "Austin, TX" },
+        new() { Id = "dev-4", Name = "iPad Air M3", Os = "iPadOS 19.3", Browser = "Safari", Type = "tablet", TrustLevel = "limited", TrustedDate = "Mar 20, 2026", ExpiryDate = "Apr 19, 2026", DaysRemaining = 14, IsCurrent = false, IpAddress = "73.162.xxx.xxx", Location = "San Francisco, CA" },
+    ];
+
+    private void HandleRemoveTrust(string id)
+    {
+        _devices.RemoveAll(d => d.Id == id);
+        _confirmRemoveId = null;
+    }
+
+    private void HandleToggleCurrentTrust(bool value)
+    {
+        _currentDeviceTrusted = value;
+        if (!value)
+            _devices.RemoveAll(d => d.IsCurrent);
+    }
+
+    private static string GetExpiryColor(int daysRemaining)
+    {
+        if (daysRemaining <= 7) return "text-red-600";
+        if (daysRemaining <= 14) return "text-amber-600";
+        return "text-muted-foreground";
+    }
+
+    private static string GetDeviceIconName(string type) => type switch
+    {
+        "desktop" => "monitor",
+        "laptop" => "laptop",
+        "smartphone" => "smartphone",
+        "tablet" => "tablet",
+        _ => "monitor",
+    };
+
+    private static string GetTrustLevelLabel(string level) =>
+        level == "full" ? "Full Trust" : "Limited";
+
+    private static string GetTrustLevelClass(string level) =>
+        level == "full"
+            ? "text-emerald-600 border-emerald-200 bg-emerald-500/5"
+            : "text-blue-600 border-blue-200 bg-blue-500/5";
+}

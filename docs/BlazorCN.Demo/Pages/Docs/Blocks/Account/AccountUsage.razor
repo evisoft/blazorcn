@@ -1,0 +1,244 @@
+@* ============================================================
+   Block: account-usage
+   Title: AccountUsage
+   Description: A usage breakdown card block for React and Next.js with resource meters, cost estimation, daily averages, projected totals, and usage alert thresholds built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-usage.tsx
+   ============================================================ *@
+
+@{
+    var warnings = WarningResources.ToList();
+}
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header with aggregate meter *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Usage Breakdown</h2>
+                    <p class="text-xs text-muted-foreground">
+                        @_billingPeriod.Start - @_billingPeriod.End (@_billingPeriod.DaysElapsed of @_billingPeriod.TotalDays days)
+                    </p>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                    Class="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                    @onclick="@(() => _showAlerts = !_showAlerts)">
+                    @if (_showAlerts)
+                    {
+                        <LucideBellOffCn Size="14" Class="h-3.5 w-3.5" />
+                        <span>Hide Alerts</span>
+                    }
+                    else
+                    {
+                        <LucideBellCn Size="14" Class="h-3.5 w-3.5" />
+                        <span>Set Alerts</span>
+                    }
+                </ButtonCn>
+            </div>
+
+            @* Large aggregate meter *@
+            <div class="mt-4">
+                <div class="flex items-end justify-between">
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-2xl font-semibold tabular-nums">@(AggregateUsage)%</span>
+                        <span class="text-xs text-muted-foreground">average utilization</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-muted-foreground">Est. cost</span>
+                        <p class="text-sm font-medium tabular-nums">@FormatCurrency(TotalCost)</p>
+                    </div>
+                </div>
+                <div class="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div class="@($"h-full rounded-full {AggregateBarColor}")"
+                        style="@($"width:{AggregateUsage}%")">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Warning banner *@
+        @if (warnings.Count > 0)
+        {
+            <div class="border-b px-4 py-2.5">
+                <div class="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                    <LucideAlertTriangleCn Size="14" Class="h-3.5 w-3.5 shrink-0" />
+                    <span class="text-[10px]">
+                        @string.Join(", ", warnings.Select(r => r.Name)) approaching @(warnings.Count == 1 ? "its" : "their") limit
+                    </span>
+                </div>
+            </div>
+        }
+
+        @* Resource Breakdown *@
+        <div class="divide-y">
+            @foreach (var resource in _resources)
+            {
+                var pct = (int)Math.Round((resource.Current / resource.Limit) * 100);
+                var dailyAvg = resource.Current / _billingPeriod.DaysElapsed;
+                var projected = dailyAvg * _billingPeriod.TotalDays;
+                var projectedPct = (int)Math.Round((projected / resource.Limit) * 100);
+                var barColor = pct >= 90 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-foreground/20";
+                var resourceCost = resource.Unit == "requests"
+                    ? (resource.Current / 1000) * resource.CostPerUnit
+                    : resource.Current * resource.CostPerUnit;
+                var badgeClass = pct >= 90
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                    : pct >= 80
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        : "";
+
+                <div class="px-4 py-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium">@resource.Name</span>
+                        <div class="flex items-center gap-3">
+                            <span class="font-mono text-xs tabular-nums text-muted-foreground">
+                                @FormatUsage(resource.Current) / @FormatUsage(resource.Limit) @resource.Unit
+                            </span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"h-4 px-1.5 text-[10px] tabular-nums {badgeClass}")">
+                                @(pct)%
+                            </BadgeCn>
+                        </div>
+                    </div>
+
+                    @* Progress bar *@
+                    <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div class="@($"h-full rounded-full transition-all {barColor}")"
+                            style="@($"width:{Math.Min(pct, 100)}%")">
+                        </div>
+                    </div>
+
+                    @* Details row *@
+                    <div class="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                        <div class="flex items-center gap-3">
+                            <span class="flex items-center gap-1">
+                                <LucideDollarSignCn Size="10" Class="h-2.5 w-2.5" />
+                                @FormatCurrency(resourceCost)
+                                <span class="hidden sm:inline">(@resource.CostUnit)</span>
+                            </span>
+                            <span>Avg: @FormatUsage(dailyAvg)/day</span>
+                        </div>
+                        <span class="flex items-center gap-1">
+                            <LucideTrendingUpCn Size="10" Class="h-2.5 w-2.5" />
+                            Projected: @FormatUsage(projected) (@(projectedPct)%)
+                        </span>
+                    </div>
+
+                    @* Alert threshold (shown when _showAlerts is true) *@
+                    @if (_showAlerts)
+                    {
+                        <div class="mt-2.5 flex items-center gap-3 rounded-md bg-muted/50 px-3 py-2">
+                            <SwitchCn Checked="@resource.AlertEnabled"
+                                CheckedChanged="@(_ => ToggleAlert(resource.Id))"
+                                Class="scale-75" />
+                            <span class="text-[10px] text-muted-foreground">Alert at</span>
+                            <input type="number"
+                                class="h-6 w-14 rounded-md border border-input bg-transparent px-1.5 text-center font-mono text-[10px] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                value="@resource.AlertThreshold"
+                                @onchange="@(e => UpdateThreshold(resource.Id, e.Value?.ToString() ?? ""))"
+                                min="1" max="100"
+                                disabled="@(!resource.AlertEnabled)" />
+                            <span class="text-[10px] text-muted-foreground">% of limit</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Summary Footer *@
+        <div class="border-t bg-muted/30 px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div>
+                        <span class="text-[10px] text-muted-foreground">Daily Avg</span>
+                        <p class="text-sm font-medium tabular-nums">@FormatCurrency(DailyAvgCost)</p>
+                    </div>
+                    <div class="h-6 w-px bg-border"></div>
+                    <div>
+                        <span class="text-[10px] text-muted-foreground">Projected Total</span>
+                        <p class="text-sm font-medium tabular-nums">@FormatCurrency(ProjectedCost)</p>
+                    </div>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    View Invoice
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private class ResourceUsage
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public double Current { get; set; }
+        public double Limit { get; set; }
+        public string Unit { get; set; } = "";
+        public double CostPerUnit { get; set; }
+        public string CostUnit { get; set; } = "";
+        public int AlertThreshold { get; set; }
+        public bool AlertEnabled { get; set; }
+    }
+
+    private record BillingPeriodData(string Start, string End, int DaysElapsed, int TotalDays);
+
+    private static readonly BillingPeriodData _billingPeriod = new("Mar 1, 2026", "Mar 31, 2026", 19, 31);
+
+    private readonly List<ResourceUsage> _resources =
+    [
+        new() { Id = "api-calls",  Name = "API Calls",             Current = 847200,   Limit = 1000000,  Unit = "requests",    CostPerUnit = 0.0001,    CostUnit = "per 1K requests",  AlertThreshold = 80, AlertEnabled = true  },
+        new() { Id = "bandwidth",  Name = "Bandwidth",             Current = 78.4,     Limit = 100,      Unit = "GB",          CostPerUnit = 0.12,      CostUnit = "per GB",           AlertThreshold = 90, AlertEnabled = true  },
+        new() { Id = "storage",    Name = "Storage",               Current = 7.2,      Limit = 10,       Unit = "GB",          CostPerUnit = 0.023,     CostUnit = "per GB/mo",        AlertThreshold = 80, AlertEnabled = false },
+        new() { Id = "compute",    Name = "Compute Hours",         Current = 312,      Limit = 500,      Unit = "hours",       CostPerUnit = 0.045,     CostUnit = "per hour",         AlertThreshold = 75, AlertEnabled = true  },
+        new() { Id = "functions",  Name = "Function Invocations",  Current = 2340000,  Limit = 5000000,  Unit = "invocations", CostPerUnit = 0.0000002, CostUnit = "per invocation",   AlertThreshold = 80, AlertEnabled = false },
+    ];
+
+    private bool _showAlerts;
+
+    private double TotalCost => _resources.Sum(r =>
+        r.Unit == "requests" ? (r.Current / 1000) * r.CostPerUnit : r.Current * r.CostPerUnit);
+
+    private double ProjectedMultiplier => (double)_billingPeriod.TotalDays / _billingPeriod.DaysElapsed;
+    private double ProjectedCost => TotalCost * ProjectedMultiplier;
+    private double DailyAvgCost => TotalCost / _billingPeriod.DaysElapsed;
+
+    private int AggregateUsage => (int)Math.Round(
+        _resources.Average(r => (r.Current / r.Limit) * 100));
+
+    private string AggregateBarColor => AggregateUsage >= 90 ? "bg-red-500"
+        : AggregateUsage >= 75 ? "bg-amber-500"
+        : "bg-emerald-500";
+
+    private IEnumerable<ResourceUsage> WarningResources =>
+        _resources.Where(r => (int)Math.Round((r.Current / r.Limit) * 100) >= 80);
+
+    private static string FormatUsage(double num)
+    {
+        if (num >= 1_000_000) return $"{num / 1_000_000:F1}M";
+        if (num >= 1_000) return $"{num / 1_000:F1}K";
+        if (num < 1) return $"{num:F2}";
+        if (num < 100) return $"{num:F1}";
+        return ((long)Math.Round(num)).ToString();
+    }
+
+    private static string FormatCurrency(double amount)
+    {
+        if (amount < 0.01) return "<$0.01";
+        return $"${amount:F2}";
+    }
+
+    private void ToggleAlert(string id)
+    {
+        var r = _resources.FirstOrDefault(x => x.Id == id);
+        if (r is not null) r.AlertEnabled = !r.AlertEnabled;
+    }
+
+    private void UpdateThreshold(string id, string value)
+    {
+        if (!int.TryParse(value, out var num) || num < 1 || num > 100) return;
+        var r = _resources.FirstOrDefault(x => x.Id == id);
+        if (r is not null) r.AlertThreshold = num;
+    }
+}

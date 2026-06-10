@@ -1,0 +1,485 @@
+@* ============================================================
+   Block: account-account-merging
+   Title: AccountAccountMerging
+   Description: A visual account merging wizard for React and Next.js with side-by-side account comparison, animated data transfer preview, conflict resolution UI, and step progress indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-account-merging.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-6 py-4">
+            <div class="flex items-center gap-3">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="git-merge" Size="16" Class="size-4 text-muted-foreground" />
+                </div>
+                <div>
+                    <h2 class="text-sm font-medium">Merge Accounts</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Combine a secondary account into your primary account
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @* Step Indicator *@
+        <div class="border-b py-3">
+            <div class="flex items-center justify-between px-6">
+                @for (int si = 0; si < _steps.Length; si++)
+                {
+                    var step = _steps[si];
+                    var isCompleted = si < CurrentStepIndex;
+                    var isActive = step.Id == _step;
+                    var isLastStep = si == _steps.Length - 1;
+                    <div class="flex flex-1 items-center">
+                        <div class="flex items-center gap-2">
+                            <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full text-xs font-medium transition-colors", isCompleted ? "bg-emerald-500 text-white" : isActive ? "bg-foreground text-background" : "bg-muted text-muted-foreground")">
+                                @if (isCompleted)
+                                {
+                                    <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5" />
+                                }
+                                else
+                                {
+                                    @step.Number
+                                }
+                            </div>
+                            <span class="@Cn.Merge("text-xs whitespace-nowrap", isActive ? "font-medium" : "text-muted-foreground")">
+                                @step.Label
+                            </span>
+                        </div>
+                        @if (!isLastStep)
+                        {
+                            <div class="mx-3 h-px flex-1 min-w-8">
+                                <div class="@Cn.Merge("h-full rounded-full", isCompleted ? "bg-emerald-500" : "bg-muted")"></div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── SEARCH STEP ── *@
+        @if (_step == "search")
+        {
+            <div class="px-6 py-5">
+                <span class="text-xs font-medium text-muted-foreground">
+                    FIND ACCOUNT TO MERGE
+                </span>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Enter the email address of the account you want to merge into your primary account.
+                    All data will be transferred.
+                </p>
+
+                <div class="mt-4 flex gap-2">
+                    <div class="relative flex-1">
+                        <LucideIconCn Name="search" Size="16" Class="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <InputCn @bind-Value="_searchEmail" Placeholder="emma.old@gmail.com" Class="pl-9 text-sm" @onkeydown="HandleSearchKeyDown" />
+                    </div>
+                    <ButtonCn Size="ButtonSize.Sm" Disabled="@(string.IsNullOrEmpty(_searchEmail) || _isSearching)" @onclick="HandleSearch">
+                        @if (_isSearching)
+                        {
+                            <LucideIconCn Name="loader-2" Size="14" Class="size-3.5 animate-spin" />
+                        }
+                        else
+                        {
+                            <span>Search</span>
+                        }
+                    </ButtonCn>
+                </div>
+
+                @* Loading skeleton *@
+                @if (_isSearching)
+                {
+                    <div class="mt-4 overflow-hidden">
+                        <div class="rounded-lg border p-4">
+                            <div class="flex items-center gap-3">
+                                <div class="size-10 animate-pulse rounded-full bg-muted"></div>
+                                <div class="flex-1 space-y-2">
+                                    <div class="h-3 w-40 animate-pulse rounded bg-muted"></div>
+                                    <div class="h-2.5 w-24 animate-pulse rounded bg-muted"></div>
+                                </div>
+                            </div>
+                            <div class="mt-3 grid grid-cols-2 gap-2">
+                                <div class="h-12 animate-pulse rounded-md bg-muted/50"></div>
+                                <div class="h-12 animate-pulse rounded-md bg-muted/50"></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* Warning *@
+                <div class="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                    <div class="flex items-start gap-2.5">
+                        <LucideIconCn Name="alert-triangle" Size="16" Class="mt-0.5 size-4 shrink-0 text-amber-500" />
+                        <div>
+                            <span class="text-xs font-medium">This action is irreversible</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                The secondary account will be permanently deactivated after merging. A backup
+                                is created automatically, but the merge cannot be undone after the 30-day
+                                grace period.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ── REVIEW STEP ── *@
+        @if (_step == "review")
+        {
+            <div>
+                @* Side-by-side account comparison *@
+                <div class="border-b px-6 py-5">
+                    <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+                        @* Primary account card *@
+                        <div class="flex-1 rounded-lg border bg-card p-4">
+                            <div class="mb-3 flex items-center justify-between">
+                                <span class="text-[10px] font-medium uppercase tracking-wider text-emerald-600">Primary</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("text-[10px]", _primaryAccount.Plan == "Pro" ? "border-blue-500/30 text-blue-600" : _primaryAccount.Plan == "Enterprise" ? "border-purple-500/30 text-purple-600" : "text-muted-foreground")">
+                                    @_primaryAccount.Plan
+                                </BadgeCn>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="flex size-10 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                                    @_primaryAccount.Initials
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-sm font-medium">@_primaryAccount.Email</p>
+                                    <p class="text-xs text-muted-foreground">Since @_primaryAccount.MemberSince</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 grid grid-cols-2 gap-2">
+                                <div class="rounded-md bg-muted/50 px-2.5 py-1.5">
+                                    <p class="text-xs text-muted-foreground">Projects</p>
+                                    <p class="text-sm font-medium tabular-nums">@_primaryAccount.Projects</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 px-2.5 py-1.5">
+                                    <p class="text-xs text-muted-foreground">Storage</p>
+                                    <p class="text-sm font-medium tabular-nums">@_primaryAccount.Storage</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        @* Merge icon *@
+                        <div class="flex flex-col items-center gap-1">
+                            <LucideIconCn Name="git-merge" Size="20" Class="size-5 text-muted-foreground" />
+                            <span class="text-[10px] text-muted-foreground">merge</span>
+                        </div>
+
+                        @* Secondary account card *@
+                        <div class="flex-1 rounded-lg border bg-card p-4">
+                            <div class="mb-3 flex items-center justify-between">
+                                <span class="text-[10px] font-medium uppercase tracking-wider text-amber-600">Merging</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("text-[10px]", _secondaryAccount.Plan == "Pro" ? "border-blue-500/30 text-blue-600" : _secondaryAccount.Plan == "Enterprise" ? "border-purple-500/30 text-purple-600" : "text-muted-foreground")">
+                                    @_secondaryAccount.Plan
+                                </BadgeCn>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="flex size-10 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                                    @_secondaryAccount.Initials
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-sm font-medium">@_secondaryAccount.Email</p>
+                                    <p class="text-xs text-muted-foreground">Since @_secondaryAccount.MemberSince</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 grid grid-cols-2 gap-2">
+                                <div class="rounded-md bg-muted/50 px-2.5 py-1.5">
+                                    <p class="text-xs text-muted-foreground">Projects</p>
+                                    <p class="text-sm font-medium tabular-nums">@_secondaryAccount.Projects</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 px-2.5 py-1.5">
+                                    <p class="text-xs text-muted-foreground">Storage</p>
+                                    <p class="text-sm font-medium tabular-nums">@_secondaryAccount.Storage</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* Data Transfer Preview *@
+                <div class="border-b px-6 py-4">
+                    <div class="mb-3 flex items-center justify-between">
+                        <span class="text-xs font-medium text-muted-foreground">
+                            DATA TRANSFER PREVIEW
+                        </span>
+                        @if (TotalConflicts > 0)
+                        {
+                            <div class="flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="h-5 px-1.5 text-[10px] text-amber-600 border-amber-500/30">
+                                    @ResolvedConflicts/@ConflictCategoryCount resolved
+                                </BadgeCn>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="rounded-lg border">
+                        @* Table header *@
+                        <div class="grid grid-cols-[1fr_80px_32px_80px_32px_80px_64px] items-center gap-0 border-b bg-muted/30 px-3 py-2 text-[10px] font-medium text-muted-foreground">
+                            <span>Category</span>
+                            <span class="text-right">Primary</span>
+                            <span></span>
+                            <span class="text-right">Secondary</span>
+                            <span></span>
+                            <span class="text-right">Merged</span>
+                            <span class="text-center">Status</span>
+                        </div>
+
+                        @* Table rows *@
+                        @for (int ri = 0; ri < _categories.Count; ri++)
+                        {
+                            var cat = _categories[ri];
+                            var hasConflict = cat.Conflicts > 0;
+                            var isExpanded = _expandedConflict == cat.Id;
+                            var isResolved = hasConflict && cat.Resolution != null;
+                            var isLastRow = ri == _categories.Count - 1;
+
+                            <div>
+                                <div class="@Cn.Merge("grid grid-cols-[1fr_80px_32px_80px_32px_80px_64px] items-center gap-0 px-3 py-2.5", hasConflict ? "cursor-pointer hover:bg-muted/30" : "", !isLastRow && !isExpanded ? "border-b" : "", isExpanded ? "border-b bg-muted/20" : "")"
+                                     role="@(hasConflict ? "button" : null)"
+                                     tabindex="@(hasConflict ? "0" : null)"
+                                     @onclick="@(() => { if (hasConflict) ToggleConflict(cat.Id); })"
+                                     @onkeydown="@((KeyboardEventArgs e) => { if (hasConflict && (e.Key == "Enter" || e.Key == " ")) ToggleConflict(cat.Id); })">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="@cat.IconName" Size="14" Class="size-3.5 text-muted-foreground" />
+                                        <span class="text-sm">@cat.Category</span>
+                                    </div>
+                                    <span class="text-right text-xs tabular-nums text-muted-foreground">@cat.PrimaryCount</span>
+                                    <span class="text-center text-xs text-muted-foreground/50">+</span>
+                                    <span class="text-right text-xs tabular-nums text-muted-foreground">@cat.SecondaryCount</span>
+                                    <span class="text-center text-xs text-muted-foreground/50">=</span>
+                                    <span class="text-right text-sm font-medium tabular-nums">@cat.MergedCount</span>
+                                    <div class="flex items-center justify-center gap-1">
+                                        @if (hasConflict)
+                                        {
+                                            <span class="@Cn.Merge("size-1.5 rounded-full", isResolved ? "bg-emerald-500" : "bg-amber-500")"></span>
+                                            <span class="@Cn.Merge("text-[10px]", isResolved ? "text-emerald-600" : "text-amber-600")">@cat.Conflicts</span>
+                                            <LucideIconCn Name="chevron-down" Size="12" Class="@Cn.Merge("size-3 text-muted-foreground transition-transform", isExpanded ? "rotate-180" : "")" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5 text-emerald-500/60" />
+                                        }
+                                    </div>
+                                </div>
+
+                                @* Conflict resolution expandable *@
+                                @if (isExpanded && hasConflict)
+                                {
+                                    <div class="overflow-hidden border-b">
+                                        <div class="bg-muted/10 px-4 py-3">
+                                            <p class="mb-3 text-xs text-muted-foreground">
+                                                @(_conflictDetails.GetValueOrDefault(cat.Id, ""))
+                                            </p>
+                                            <div class="flex items-center gap-2">
+                                                <button type="button"
+                                                        @onclick:stopPropagation="true"
+                                                        @onclick="@(() => HandleResolve(cat.Id, "primary"))"
+                                                        class="@Cn.Merge("flex-1 rounded-md border px-3 py-2 text-left transition-colors", cat.Resolution == "primary" ? "border-foreground bg-foreground/5" : "hover:bg-muted/50")">
+                                                    <span class="text-[10px] font-medium text-muted-foreground">KEEP PRIMARY</span>
+                                                    <p class="mt-0.5 text-xs">@_primaryAccount.Email</p>
+                                                </button>
+                                                <button type="button"
+                                                        @onclick:stopPropagation="true"
+                                                        @onclick="@(() => HandleResolve(cat.Id, "secondary"))"
+                                                        class="@Cn.Merge("flex-1 rounded-md border px-3 py-2 text-left transition-colors", cat.Resolution == "secondary" ? "border-foreground bg-foreground/5" : "hover:bg-muted/50")">
+                                                    <span class="text-[10px] font-medium text-muted-foreground">KEEP SECONDARY</span>
+                                                    <p class="mt-0.5 text-xs">@_secondaryAccount.Email</p>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @* Footer actions *@
+                <div class="flex items-center justify-between px-6 py-3">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="text-xs" @onclick="GoBack">
+                        Back
+                    </ButtonCn>
+                    <div class="flex items-center gap-3">
+                        @if (!AllConflictsResolved && TotalConflicts > 0)
+                        {
+                            <span class="text-xs text-muted-foreground">Resolve all conflicts to continue</span>
+                        }
+                        <ButtonCn Size="ButtonSize.Sm" Disabled="@(_isMerging || (TotalConflicts > 0 && !AllConflictsResolved))" Class="gap-1.5" @onclick="HandleMerge">
+                            @if (_isMerging)
+                            {
+                                <LucideIconCn Name="loader-2" Size="14" Class="size-3.5 animate-spin" />
+                                <span>Merging...</span>
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="git-merge" Size="14" Class="size-3.5" />
+                                <span>Merge Accounts</span>
+                            }
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ── COMPLETE STEP ── *@
+        @if (_step == "complete")
+        {
+            <div class="px-6 py-10 text-center">
+                <div class="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-emerald-500/10">
+                    <LucideIconCn Name="check-circle-2" Size="24" Class="size-6 text-emerald-500" />
+                </div>
+
+                <p class="text-sm font-medium">Accounts merged successfully</p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    All data from @_secondaryAccount.Email has been transferred to @_primaryAccount.Email
+                </p>
+
+                @* Merge summary *@
+                <div class="mx-auto mt-6 max-w-sm rounded-lg border bg-muted/20 p-4">
+                    <span class="text-[10px] font-medium text-muted-foreground">MERGE SUMMARY</span>
+                    <div class="mt-3 space-y-2">
+                        @foreach (var cat in _categories)
+                        {
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <LucideIconCn Name="@cat.IconName" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs">@cat.Category</span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs tabular-nums font-medium">@cat.MergedCount</span>
+                                    <LucideIconCn Name="check-circle-2" Size="12" Class="size-3 text-emerald-500/60" />
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div class="mt-3 border-t pt-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-muted-foreground">Total</span>
+                            <span class="text-sm font-medium tabular-nums">@MergedTotalItems items</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="text-xs" @onclick="Reset">
+                        Done
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private record StepDef(string Id, int Number, string Label);
+    private record AccountProfile(string Email, string Initials, string Plan, string MemberSince, int Projects, string Storage);
+
+    private sealed class MergeCategory
+    {
+        public string Id { get; init; } = "";
+        public string Category { get; init; } = "";
+        public string IconName { get; init; } = "";
+        public int PrimaryCount { get; init; }
+        public int SecondaryCount { get; init; }
+        public int MergedCount { get; init; }
+        public int Conflicts { get; init; }
+        public string? Resolution { get; set; }
+    }
+
+    private static readonly StepDef[] _steps =
+    [
+        new("search", 1, "Find Account"),
+        new("review", 2, "Review Merge"),
+        new("complete", 3, "Complete"),
+    ];
+
+    private static readonly AccountProfile _primaryAccount = new(
+        "emma@acme-corp.com", "EA", "Pro", "Jan 2023", 12, "7.2 GB"
+    );
+
+    private static readonly AccountProfile _secondaryAccount = new(
+        "emma.old@gmail.com", "EO", "Free", "Aug 2021", 5, "1.8 GB"
+    );
+
+    private static readonly Dictionary<string, string> _conflictDetails = new()
+    {
+        ["files"] = "3 files share identical paths — choosing an account determines which version is preserved in the merged project tree.",
+        ["team"] = "1 team member exists in both accounts with different roles — select which role assignment to keep.",
+        ["databases"] = "2 database connections use the same alias — pick which credentials and configuration to retain.",
+    };
+
+    private string _step = "search";
+    private string _searchEmail = "";
+    private bool _isSearching;
+    private bool _isMerging;
+    private string? _expandedConflict;
+    private List<MergeCategory> _categories = CreateInitialCategories();
+
+    private static List<MergeCategory> CreateInitialCategories() =>
+    [
+        new() { Id = "projects",  Category = "Projects",      IconName = "folder",   PrimaryCount = 12,  SecondaryCount = 5,   MergedCount = 17,   Conflicts = 0 },
+        new() { Id = "files",     Category = "Files & Assets", IconName = "file",     PrimaryCount = 847, SecondaryCount = 234, MergedCount = 1078, Conflicts = 3 },
+        new() { Id = "team",      Category = "Team Members",   IconName = "users",    PrimaryCount = 8,   SecondaryCount = 3,   MergedCount = 10,   Conflicts = 1 },
+        new() { Id = "api-keys",  Category = "API Keys",       IconName = "key",      PrimaryCount = 4,   SecondaryCount = 2,   MergedCount = 6,    Conflicts = 0 },
+        new() { Id = "webhooks",  Category = "Webhooks",       IconName = "webhook",  PrimaryCount = 6,   SecondaryCount = 1,   MergedCount = 7,    Conflicts = 0 },
+        new() { Id = "databases", Category = "Databases",      IconName = "database", PrimaryCount = 3,   SecondaryCount = 2,   MergedCount = 5,    Conflicts = 2 },
+    ];
+
+    private int CurrentStepIndex => Array.FindIndex(_steps, s => s.Id == _step);
+    private int TotalConflicts => _categories.Sum(c => c.Conflicts);
+    private int ResolvedConflicts => _categories.Count(c => c.Conflicts > 0 && c.Resolution != null);
+    private int ConflictCategoryCount => _categories.Count(c => c.Conflicts > 0);
+    private bool AllConflictsResolved => ConflictCategoryCount == ResolvedConflicts;
+    private int MergedTotalItems => _categories.Sum(c => c.MergedCount);
+
+    private async Task HandleSearch()
+    {
+        _isSearching = true;
+        await Task.Delay(1500);
+        _isSearching = false;
+        _step = "review";
+    }
+
+    private async Task HandleMerge()
+    {
+        _isMerging = true;
+        await Task.Delay(2000);
+        _isMerging = false;
+        _step = "complete";
+    }
+
+    private void HandleResolve(string categoryId, string resolution)
+    {
+        var cat = _categories.FirstOrDefault(c => c.Id == categoryId);
+        if (cat != null) cat.Resolution = resolution;
+    }
+
+    private void ToggleConflict(string catId)
+    {
+        _expandedConflict = _expandedConflict == catId ? null : catId;
+    }
+
+    private void HandleSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrEmpty(_searchEmail))
+            _ = HandleSearch();
+    }
+
+    private void GoBack()
+    {
+        _step = "search";
+        _categories = CreateInitialCategories();
+        _expandedConflict = null;
+    }
+
+    private void Reset()
+    {
+        _step = "search";
+        _searchEmail = "";
+        _categories = CreateInitialCategories();
+        _expandedConflict = null;
+    }
+}

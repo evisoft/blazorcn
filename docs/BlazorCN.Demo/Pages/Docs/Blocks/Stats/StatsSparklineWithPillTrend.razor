@@ -1,0 +1,171 @@
+@* ============================================================
+   Block: stats-sparkline-with-pill-trend
+   Title: StatsSparklineWithPillTrend
+   Description: A sparkline tile grid stats block for React and Next.js with per-metric inline AreaCharts, prominent rounded-full pill trend badges tinted by direction, and tabular-nums current value displays built with shadcn/ui ChartContainer and Tailwind CSS
+   Source: original/blocks/stats/stats-sparkline-with-pill-trend.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        @foreach (var metric in _metrics)
+        {
+            var isUp = metric.Direction == TrendDirection.Up;
+            var pillClass = isUp
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "bg-red-500/10 text-red-600 dark:text-red-400";
+            var strokeColor = metric.ColorKey switch
+            {
+                "mrr"     => "oklch(0.646 0.222 41.116)",
+                "active"  => "oklch(0.6 0.118 184.704)",
+                "latency" => "oklch(0.769 0.188 70.08)",
+                _         => "currentColor"
+            };
+            var gradientId = $"spark-fill-{metric.Id}";
+
+            <div class="overflow-hidden rounded-lg border bg-card" key="@metric.Id">
+                <div class="flex items-start justify-between gap-3 px-4 py-3">
+                    <div class="min-w-0">
+                        <dt class="truncate text-sm font-medium">@metric.Label</dt>
+                        <p class="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                            @metric.Symbol
+                        </p>
+                    </div>
+                    <span class="@Cn.Merge("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums", pillClass)">
+                        @if (isUp)
+                        {
+                            <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="trending-down" Size="12" Class="size-3" />
+                        }
+                        @metric.Delta
+                    </span>
+                </div>
+
+                <div class="px-4">
+                    <dd class="text-2xl font-semibold tabular-nums">@metric.Value</dd>
+                </div>
+
+                <div class="mt-2 h-16">
+                    @{
+                        var pts = metric.Series;
+                        var minVal = pts.Min(p => p.Value);
+                        var maxVal = pts.Max(p => p.Value);
+                        var range = maxVal - minVal;
+                        if (range == 0) { range = 1; }
+                        var svgW = 200.0;
+                        var svgH = 64.0;
+                        var stepX = svgW / (pts.Length - 1);
+                        var polyPoints = string.Join(" ", pts.Select((p, i) =>
+                        {
+                            var x = i * stepX;
+                            var y = svgH - ((p.Value - minVal) / range * (svgH * 0.85) + svgH * 0.07);
+                            return $"{x:F1},{y:F1}";
+                        }));
+                        var firstPt = $"0,{svgH:F1}";
+                        var lastPt = $"{svgW:F1},{svgH:F1}";
+                        var areaPoints = $"{firstPt} {polyPoints} {lastPt}";
+                    }
+                    <svg viewBox="0 0 @svgW @svgH" preserveAspectRatio="none" class="h-full w-full" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="@gradientId" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="@strokeColor" stop-opacity="0.35" />
+                                <stop offset="100%" stop-color="@strokeColor" stop-opacity="0" />
+                            </linearGradient>
+                        </defs>
+                        <polygon points="@areaPoints" fill="url(#@gradientId)" />
+                        <polyline points="@polyPoints" fill="none" stroke="@strokeColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </div>
+            </div>
+        }
+    </dl>
+</section>
+
+@code {
+    private enum TrendDirection { Up, Down }
+
+    private record SparkPoint(string Day, double Value);
+
+    private record Metric(
+        string Id,
+        string Label,
+        string Symbol,
+        string Value,
+        string Delta,
+        TrendDirection Direction,
+        string ColorKey,
+        SparkPoint[] Series
+    );
+
+    private static readonly Metric[] _metrics =
+    [
+        new Metric(
+            Id: "mrr",
+            Label: "Monthly recurring revenue",
+            Symbol: "MRR",
+            Value: "$187,420",
+            Delta: "+12.4%",
+            Direction: TrendDirection.Up,
+            ColorKey: "mrr",
+            Series:
+            [
+                new SparkPoint("Mar 14", 158200),
+                new SparkPoint("Mar 17", 162450),
+                new SparkPoint("Mar 20", 165980),
+                new SparkPoint("Mar 23", 168300),
+                new SparkPoint("Mar 26", 172100),
+                new SparkPoint("Mar 29", 174870),
+                new SparkPoint("Apr 01", 178240),
+                new SparkPoint("Apr 04", 181420),
+                new SparkPoint("Apr 07", 184130),
+                new SparkPoint("Apr 10", 187420),
+            ]
+        ),
+        new Metric(
+            Id: "active",
+            Label: "Weekly active users",
+            Symbol: "WAU",
+            Value: "48,372",
+            Delta: "+6.8%",
+            Direction: TrendDirection.Up,
+            ColorKey: "active",
+            Series:
+            [
+                new SparkPoint("Mar 14", 41200),
+                new SparkPoint("Mar 17", 42800),
+                new SparkPoint("Mar 20", 43100),
+                new SparkPoint("Mar 23", 42450),
+                new SparkPoint("Mar 26", 44800),
+                new SparkPoint("Mar 29", 45260),
+                new SparkPoint("Apr 01", 46190),
+                new SparkPoint("Apr 04", 46870),
+                new SparkPoint("Apr 07", 47540),
+                new SparkPoint("Apr 10", 48372),
+            ]
+        ),
+        new Metric(
+            Id: "latency",
+            Label: "p99 API latency",
+            Symbol: "p99",
+            Value: "412 ms",
+            Delta: "-3.2%",
+            Direction: TrendDirection.Down,
+            ColorKey: "latency",
+            Series:
+            [
+                new SparkPoint("Mar 14", 438),
+                new SparkPoint("Mar 17", 442),
+                new SparkPoint("Mar 20", 451),
+                new SparkPoint("Mar 23", 436),
+                new SparkPoint("Mar 26", 428),
+                new SparkPoint("Mar 29", 424),
+                new SparkPoint("Apr 01", 420),
+                new SparkPoint("Apr 04", 418),
+                new SparkPoint("Apr 07", 415),
+                new SparkPoint("Apr 10", 412),
+            ]
+        ),
+    ];
+}

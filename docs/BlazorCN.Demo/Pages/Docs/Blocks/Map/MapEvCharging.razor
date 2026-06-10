@@ -1,0 +1,311 @@
+@* ============================================================
+   Block: map-ev-charging
+   Title: MapEvCharging
+   Description: EV charging station finder map with availability indicators, charger type badges, pricing info, and station detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-ev-charging.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="battery-charging" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">EV Charging</span>
+                <span class="text-xs text-muted-foreground">@_totalAvailable/@_totalPorts ports available</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => SetTypeFilter(null))"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _typeFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                @foreach (var ct in _chargerTypes)
+                {
+                    var chargerType = ct;
+                    <button
+                        type="button"
+                        @onclick="@(() => SetTypeFilter(chargerType))"
+                        class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _typeFilter == chargerType ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        @chargerType
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map — Map/MapMarker/MarkerContent/MarkerTooltip/MarkerPopup are custom registry
+           components with no BlazorCN equivalent; rendered as a styled static map placeholder
+           showing all markers and popup detail for the selected station. *@
+        <div class="relative h-[440px] border-b bg-muted/30">
+            @* Map background grid lines to suggest a map *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                Los Angeles, CA
+            </div>
+
+            @* Map zoom controls (bottom-right) *@
+            <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="locate" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* Station markers plotted by relative position *@
+            @foreach (var st in _filtered)
+            {
+                var station = st;
+                var pos = GetMarkerPosition(station);
+                var sCfg = GetStatusConfig(station.Status);
+                <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSelected(station.Id))"
+                        class="group relative flex flex-col items-center">
+                        @* Marker pill *@
+                        <div class="@Cn.Merge("flex items-center gap-1 rounded-full border border-white px-1.5 py-0.5 shadow-md", station.Status == "available" ? "bg-emerald-500" : station.Status == "busy" ? "bg-amber-500" : "bg-red-500")">
+                            <LucideIconCn Name="zap" Size="10" Class="size-2.5 text-white" />
+                            <span class="text-[10px] font-medium tabular-nums text-white">@station.AvailablePorts/@station.TotalPorts</span>
+                        </div>
+                        @* Tooltip (shown on hover via group-hover) *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@station.Name</span>
+                                <span class="text-muted-foreground">· @sCfg.Label</span>
+                            </div>
+                        </div>
+                    </button>
+
+                    @* Popup (shown when selected) *@
+                    @if (_selected == station.Id)
+                    {
+                        <div class="absolute bottom-full left-1/2 mb-2 w-60 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                            @* Close button *@
+                            <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                            <div class="mb-2">
+                                <div class="flex items-start justify-between">
+                                    <p class="text-sm font-medium">@station.Name</p>
+                                    <span class="@Cn.Merge("size-2 shrink-0 rounded-full", sCfg.Dot)"></span>
+                                </div>
+                                <p class="text-xs text-muted-foreground">@station.Network</p>
+                            </div>
+                            <div class="mb-2 flex items-start gap-1">
+                                <LucideIconCn Name="map-pin" Size="12" Class="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+                                <span class="text-xs text-muted-foreground">@station.Address</span>
+                            </div>
+                            <div class="mb-2 grid grid-cols-2 gap-2">
+                                <div>
+                                    <p class="text-xs text-muted-foreground">Available</p>
+                                    <p class="@Cn.Merge("text-sm font-medium", sCfg.TextClass)">@station.AvailablePorts of @station.TotalPorts</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-muted-foreground">Pricing</p>
+                                    <p class="text-sm font-medium tabular-nums">@station.Pricing</p>
+                                </div>
+                            </div>
+                            <div class="mb-2 border-t pt-2">
+                                <p class="mb-1 text-xs font-medium text-muted-foreground">Connectors</p>
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach (var conn in station.Connectors)
+                                    {
+                                        var connector = conn;
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs font-normal tabular-nums">
+                                            @connector.Type · @connector.Power
+                                        </BadgeCn>
+                                    }
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-1">
+                                @foreach (var amenity in station.Amenities)
+                                {
+                                    var am = amenity;
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                        @am
+                                    </BadgeCn>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Station list *@
+        <div>
+            @for (int idx = 0; idx < _filtered.Length; idx++)
+            {
+                var station = _filtered[idx];
+                var isLast = idx == _filtered.Length - 1;
+                var isExpanded = _expanded == station.Id;
+                var sCfg = GetStatusConfig(station.Status);
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpanded(station.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", sCfg.Dot)"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@station.Name</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@station.Network · @station.Address</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium tabular-nums">@station.AvailablePorts/@station.TotalPorts</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal tabular-nums">
+                                @station.Pricing
+                            </BadgeCn>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-9">
+                            <div class="flex flex-wrap gap-1">
+                                @foreach (var conn in station.Connectors)
+                                {
+                                    var connector = conn;
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs font-normal">
+                                        @($"{connector.Count}x {connector.Type} · {connector.Power}")
+                                    </BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                @for (int ai = 0; ai < station.Amenities.Length; ai++)
+                                {
+                                    var amenity = station.Amenities[ai];
+                                    var aidx = ai;
+                                    <span>
+                                        @if (aidx > 0)
+                                        {
+                                            <span>· </span>
+                                        }
+                                        @amenity
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Connector(string Type, string Power, int Count);
+
+    private record Station(
+        string Id,
+        string Name,
+        string Network,
+        string Address,
+        string Status,
+        int AvailablePorts,
+        int TotalPorts,
+        Connector[] Connectors,
+        string Pricing,
+        string[] Amenities,
+        double Longitude,
+        double Latitude
+    );
+
+    private record StatusConfig(string Dot, string Label, string TextClass);
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly Station[] _stations =
+    [
+        new("s1", "Downtown Supercharger", "Tesla", "350 S Grand Ave, Los Angeles, CA", "available", 6, 12,
+            [new("Tesla", "250 kW", 12)],
+            "$0.36/kWh", ["Restrooms", "Coffee Shop", "WiFi"], -118.255, 34.051),
+        new("s2", "Wilshire Fast Charge", "Electrify America", "4821 Wilshire Blvd, Los Angeles, CA", "busy", 1, 8,
+            [new("CCS", "150 kW", 6), new("CHAdeMO", "50 kW", 2)],
+            "$0.43/kWh", ["Shopping", "Restrooms"], -118.335, 34.062),
+        new("s3", "Hollywood Level 2", "ChargePoint", "6801 Hollywood Blvd, Los Angeles, CA", "available", 4, 6,
+            [new("J1772", "7.7 kW", 4), new("CCS", "62.5 kW", 2)],
+            "$0.28/kWh", ["Parking Garage", "Restrooms", "Dining"], -118.322, 34.102),
+        new("s4", "Silver Lake Hub", "EVgo", "2530 Hyperion Ave, Los Angeles, CA", "available", 3, 4,
+            [new("CCS", "100 kW", 2), new("CHAdeMO", "50 kW", 2)],
+            "$0.39/kWh", ["Grocery Store", "WiFi"], -118.261, 34.088),
+        new("s5", "Marina del Rey Station", "Blink", "4175 Admiralty Way, Marina del Rey, CA", "offline", 0, 4,
+            [new("J1772", "7.7 kW", 4)],
+            "$0.25/kWh", ["Beach Access", "Restrooms"], -118.45, 33.98),
+        new("s6", "Koreatown Power Hub", "Electrify America", "3500 W 6th St, Los Angeles, CA", "busy", 2, 10,
+            [new("CCS", "350 kW", 4), new("CCS", "150 kW", 4), new("CHAdeMO", "50 kW", 2)],
+            "$0.48/kWh", ["Mall", "Food Court", "Restrooms", "WiFi"], -118.305, 34.064),
+    ];
+
+    private static readonly string[] _chargerTypes = ["CCS", "CHAdeMO", "J1772", "Tesla"];
+
+    private string? _typeFilter = null;
+    private string? _selected = null;
+    private string? _expanded = null;
+
+    private Station[] _filtered => _typeFilter == null
+        ? _stations
+        : _stations.Where(s => s.Connectors.Any(c => c.Type == _typeFilter)).ToArray();
+
+    private int _totalAvailable => _stations.Sum(s => s.AvailablePorts);
+    private int _totalPorts => _stations.Sum(s => s.TotalPorts);
+
+    private void SetTypeFilter(string? filter)
+    {
+        _typeFilter = filter;
+        _selected = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "available" => new StatusConfig("bg-emerald-500", "Available", "text-emerald-600 dark:text-emerald-400"),
+        "busy" => new StatusConfig("bg-amber-500", "Busy", "text-amber-600 dark:text-amber-400"),
+        _ => new StatusConfig("bg-red-500", "Offline", "text-red-600 dark:text-red-400"),
+    };
+
+    // Map bounding box: lon [-118.46, -118.25], lat [33.97, 34.11]
+    private static MarkerPos GetMarkerPosition(Station station)
+    {
+        var lonMin = -118.46;
+        var lonMax = -118.25;
+        var latMin = 33.97;
+        var latMax = 34.11;
+        var left = (station.Longitude - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top = (latMax - station.Latitude) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

@@ -1,0 +1,331 @@
+@* ============================================================
+   Block: reviews-bulk-actions
+   Title: ReviewsBulkActions
+   Description: An admin bulk review moderation panel for React and Next.js with selectable data table rows, sticky action toolbar, status filtering, and animated state transitions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-bulk-actions.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-sm font-medium">Review Moderation</span>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @_reviews.Count reviews across @_productCount products
+                    </p>
+                </div>
+                <div class="relative w-48">
+                    <LucideIconCn Name="search" Size="14" Class="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <InputCn @bind-Value="_searchQuery" Placeholder="Search reviews..." Class="h-8 pl-8 text-xs" />
+                </div>
+            </div>
+        </div>
+
+        @* Status filter tabs *@
+        <div class="flex items-center gap-1 overflow-x-auto border-b px-4 py-2">
+            @foreach (var tab in _filterTabs)
+            {
+                var tabValue = tab.Value;
+                var count = GetStatusCount(tabValue);
+                var isActive = _statusFilter == tabValue;
+                <button
+                    type="button"
+                    @onclick="@(() => SetFilter(tabValue))"
+                    class="@Cn.Merge("flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-medium transition-colors", isActive ? "bg-foreground/5 text-foreground" : "text-muted-foreground hover:text-foreground")">
+                    @if (tabValue != "all")
+                    {
+                        var dotClass = GetStatusDot(tabValue);
+                        <span class="@Cn.Merge("size-1.5 rounded-full", dotClass)"></span>
+                    }
+                    @tab.Label
+                    <span class="tabular-nums text-muted-foreground">@count</span>
+                </button>
+            }
+        </div>
+
+        @* Data table *@
+        <div class="w-full overflow-auto">
+            <table class="w-full caption-bottom text-sm">
+                <thead class="[&_tr]:border-b">
+                    <tr class="border-b transition-colors hover:bg-transparent">
+                        <th class="h-10 w-10 pl-4 text-left align-middle font-medium text-muted-foreground">
+                            <span class="flex cursor-pointer items-center">
+                                <CheckboxCn
+                                    Checked="@_allSelected"
+                                    CheckedChanged="@((bool _) => ToggleAll())" />
+                            </span>
+                        </th>
+                        <th class="h-10 px-4 text-left align-middle text-xs font-medium text-muted-foreground">Review</th>
+                        <th class="h-10 w-28 px-4 text-left align-middle text-xs font-medium text-muted-foreground">Product</th>
+                        <th class="h-10 w-20 px-4 text-left align-middle text-xs font-medium text-muted-foreground">Rating</th>
+                        <th class="h-10 w-24 px-4 text-right align-middle text-xs font-medium text-muted-foreground">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="[&_tr:last-child]:border-0">
+                    @foreach (var review in _filteredReviews)
+                    {
+                        var rev = review;
+                        var isSelected = _selected.Contains(rev.Id);
+                        var statusDot = GetStatusDot(rev.Status);
+                        var statusLabel = GetStatusLabel(rev.Status);
+                        var statusTextColor = GetStatusTextColor(rev.Status);
+                        var totalReports = rev.Reports.Sum(r => r.Count);
+                        <tr class="@Cn.Merge("border-b transition-colors hover:bg-muted/50", isSelected ? "bg-muted/30" : "")">
+                            <td class="p-4 pl-4 align-middle">
+                                <span class="flex cursor-pointer items-center">
+                                    <CheckboxCn
+                                        Checked="@isSelected"
+                                        CheckedChanged="@((bool _) => ToggleOne(rev.Id))" />
+                                </span>
+                            </td>
+                            <td class="p-4 align-middle">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="truncate text-sm font-medium">@rev.Title</span>
+                                        @if (rev.HasMedia)
+                                        {
+                                            <span class="shrink-0 text-[10px] text-muted-foreground">+media</span>
+                                        }
+                                    </div>
+                                    <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                        <span>@rev.Author</span>
+                                        <span class="text-muted-foreground/40">|</span>
+                                        <span>@rev.Date</span>
+                                        <span class="text-muted-foreground/40">|</span>
+                                        <span class="tabular-nums">@(rev.WordCount)w</span>
+                                        @if (rev.Verified)
+                                        {
+                                            <span class="text-muted-foreground/40">|</span>
+                                            <span class="text-emerald-600 dark:text-emerald-400">Verified</span>
+                                        }
+                                        @if (totalReports > 0)
+                                        {
+                                            <span class="text-muted-foreground/40">|</span>
+                                            <span class="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                                                <LucideIconCn Name="circle-alert" Size="10" Class="size-2.5" />
+                                                <span class="tabular-nums">@totalReports reports</span>
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="p-4 align-middle">
+                                <span class="text-xs text-muted-foreground">@rev.Product</span>
+                            </td>
+                            <td class="p-4 align-middle">
+                                <div class="flex items-center gap-0.5">
+                                    @for (int i = 0; i < 5; i++)
+                                    {
+                                        var idx = i;
+                                        <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", idx < rev.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/20")" />
+                                    }
+                                </div>
+                            </td>
+                            <td class="p-4 text-right align-middle">
+                                <div class="flex items-center justify-end gap-1.5">
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", statusDot)"></span>
+                                    <span class="@Cn.Merge("text-xs", statusTextColor)">@statusLabel</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!_filteredReviews.Any())
+        {
+            <div class="flex flex-col items-center justify-center py-12">
+                <LucideIconCn Name="message-square" Size="24" Class="size-6 text-muted-foreground/40" />
+                <span class="mt-2 text-sm text-muted-foreground">No reviews match your filters</span>
+            </div>
+        }
+
+        @* Floating action toolbar *@
+        @if (_selectedCount > 0)
+        {
+            <div class="sticky bottom-0 border-t bg-card px-4 py-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium">@_selectedCount selected</span>
+                    <div class="flex items-center gap-1.5">
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs"
+                                  @onclick="@(() => BulkAction("approve"))">
+                            <LucideIconCn Name="check-circle-2" Size="12" Class="size-3 text-emerald-500" />
+                            Approve
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs"
+                                  @onclick="@(() => BulkAction("reject"))">
+                            <LucideIconCn Name="x-circle" Size="12" Class="size-3 text-muted-foreground" />
+                            Reject
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs"
+                                  @onclick="@(() => BulkAction("flag"))">
+                            <LucideIconCn Name="flag" Size="12" Class="size-3 text-amber-500" />
+                            Flag
+                        </ButtonCn>
+
+                        <div class="relative">
+                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs"
+                                      @onclick="@(() => _showActions = !_showActions)">
+                                More
+                                <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                            </ButtonCn>
+                            @if (_showActions)
+                            {
+                                <div class="absolute bottom-full right-0 z-10 mb-1 w-36 overflow-hidden rounded-md border bg-card shadow-md">
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => BulkAction("spam"))"
+                                        class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/50">
+                                        <LucideIconCn Name="mail" Size="12" Class="size-3 text-muted-foreground" />
+                                        Mark as Spam
+                                    </button>
+                                    <div class="border-t"></div>
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => BulkAction("delete"))"
+                                        class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 transition-colors hover:bg-muted/50 dark:text-red-400">
+                                        <LucideIconCn Name="trash-2" Size="12" Class="size-3" />
+                                        Delete Forever
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record ReviewReport(string Reason, int Count);
+
+    private class ModerationReview
+    {
+        public string Id { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string Email { get; set; } = "";
+        public int Rating { get; set; }
+        public string Title { get; set; } = "";
+        public string Excerpt { get; set; } = "";
+        public string Product { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Date { get; set; } = "";
+        public ReviewReport[] Reports { get; set; } = [];
+        public int WordCount { get; set; }
+        public bool HasMedia { get; set; }
+        public bool Verified { get; set; }
+    }
+
+    private record FilterTab(string Value, string Label);
+
+    private static readonly FilterTab[] _filterTabs =
+    [
+        new("all", "All"),
+        new("pending", "Pending"),
+        new("flagged", "Flagged"),
+        new("published", "Published"),
+        new("rejected", "Rejected"),
+        new("spam", "Spam"),
+    ];
+
+    private static readonly Dictionary<string, (string Label, string Dot, string TextColor)> _statusConfig = new()
+    {
+        ["published"] = ("Published", "bg-emerald-500", "text-emerald-600 dark:text-emerald-400"),
+        ["pending"]   = ("Pending",   "bg-blue-500",    "text-blue-600 dark:text-blue-400"),
+        ["flagged"]   = ("Flagged",   "bg-amber-500",   "text-amber-600 dark:text-amber-400"),
+        ["rejected"]  = ("Rejected",  "bg-red-500",     "text-red-600 dark:text-red-400"),
+        ["spam"]      = ("Spam",      "bg-muted-foreground/50", "text-muted-foreground"),
+    };
+
+    private List<ModerationReview> _reviews = new()
+    {
+        new() { Id = "mr-1", Author = "Sarah Chen",        Email = "s.chen@@email.com",      Rating = 5, Title = "Exactly what our engineering team needed",        Excerpt = "We migrated our entire form system to this library in two sprints. The TypeScript support is exceptional...",         Product = "FormKit Pro",       Status = "published", Date = "Mar 28, 2026", Reports = [],                                                                               WordCount = 187, HasMedia = true,  Verified = true  },
+        new() { Id = "mr-2", Author = "David Kim",         Email = "d.kim@@company.io",       Rating = 1, Title = "Contains promotional links to competitor product", Excerpt = "I recommend switching to CompetitorX which has better pricing. Visit competitorx.com for a discount...",            Product = "Auth Module",       Status = "flagged",   Date = "Mar 27, 2026", Reports = [new("Spam / Promotional", 4), new("Competitor link", 2)],                          WordCount = 45,  HasMedia = false, Verified = false },
+        new() { Id = "mr-3", Author = "Elena Petrov",      Email = "elena.p@@startup.dev",    Rating = 2, Title = "Missing critical SSO integration for enterprise",  Excerpt = "We evaluated this for our 500-person org but the lack of SAML SSO is a dealbreaker. The REST API is solid...",     Product = "Auth Module",       Status = "pending",   Date = "Mar 26, 2026", Reports = [],                                                                               WordCount = 234, HasMedia = false, Verified = true  },
+        new() { Id = "mr-4", Author = "buy-followers-2026", Email = "promo@@spammail.net",    Rating = 5, Title = "AMAZING BUY NOW CLICK HERE",                       Excerpt = "Best product ever. Click my link for 50% off on all products. Limited time offer only for you...",               Product = "UI Kit",            Status = "spam",      Date = "Mar 26, 2026", Reports = [new("Spam / Promotional", 12)],                                                    WordCount = 18,  HasMedia = false, Verified = false },
+        new() { Id = "mr-5", Author = "Priya Sharma",      Email = "priya.s@@designco.com",   Rating = 5, Title = "Best component library for rapid prototyping",     Excerpt = "Our design team ships prototypes in half the time now. The Figma-to-code workflow is seamless...",               Product = "UI Kit",            Status = "published", Date = "Mar 25, 2026", Reports = [],                                                                               WordCount = 156, HasMedia = true,  Verified = true  },
+        new() { Id = "mr-6", Author = "Jordan Lee",        Email = "jordan@@freelance.io",    Rating = 4, Title = "Great DX but documentation needs examples",        Excerpt = "The API surface is well-designed and the bundle size is impressively small. I just wish the docs had more...",   Product = "Table Components",  Status = "pending",   Date = "Mar 24, 2026", Reports = [],                                                                               WordCount = 198, HasMedia = false, Verified = true  },
+        new() { Id = "mr-7", Author = "Alex Turner",       Email = "a.turner@@agency.co",     Rating = 3, Title = "Theming system needs a complete rework",           Excerpt = "The base components are solid but customizing the theme beyond color tokens is painful. We ended up...",          Product = "Theme System",      Status = "pending",   Date = "Mar 23, 2026", Reports = [new("Needs review", 1)],                                                          WordCount = 312, HasMedia = false, Verified = true  },
+        new() { Id = "mr-8", Author = "Mika Tanaka",       Email = "mika.t@@studio.jp",       Rating = 5, Title = "Shipped our landing page in under a day",          Excerpt = "The landing page blocks saved us at least a week of work. Copy-paste, customize content, deploy...",             Product = "Landing Blocks",    Status = "published", Date = "Mar 22, 2026", Reports = [],                                                                               WordCount = 89,  HasMedia = true,  Verified = true  },
+    };
+
+    private HashSet<string> _selected = new();
+    private string _statusFilter = "all";
+    private string _searchQuery = "";
+    private bool _showActions = false;
+
+    private IEnumerable<ModerationReview> _filteredReviews => _reviews
+        .Where(r => _statusFilter == "all" || r.Status == _statusFilter)
+        .Where(r => string.IsNullOrWhiteSpace(_searchQuery) ||
+                    r.Title.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    r.Author.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    r.Product.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase));
+
+    private int _productCount => _reviews.Select(r => r.Product).Distinct().Count();
+
+    private bool _allSelected => _filteredReviews.Any() && _filteredReviews.All(r => _selected.Contains(r.Id));
+
+    private int _selectedCount => _selected.Count(id => _filteredReviews.Any(r => r.Id == id));
+
+    private int GetStatusCount(string status)
+    {
+        if (status == "all") return _reviews.Count;
+        return _reviews.Count(r => r.Status == status);
+    }
+
+    private string GetStatusDot(string status) =>
+        _statusConfig.TryGetValue(status, out var cfg) ? cfg.Dot : "";
+
+    private string GetStatusLabel(string status) =>
+        _statusConfig.TryGetValue(status, out var cfg) ? cfg.Label : status;
+
+    private string GetStatusTextColor(string status) =>
+        _statusConfig.TryGetValue(status, out var cfg) ? cfg.TextColor : "";
+
+    private void SetFilter(string filter)
+    {
+        _statusFilter = filter;
+        _selected.Clear();
+    }
+
+    private void ToggleAll()
+    {
+        if (_allSelected)
+            _selected.Clear();
+        else
+            _selected = new HashSet<string>(_filteredReviews.Select(r => r.Id));
+    }
+
+    private void ToggleOne(string id)
+    {
+        if (!_selected.Add(id))
+            _selected.Remove(id);
+    }
+
+    private static readonly Dictionary<string, string> _actionStatusMap = new()
+    {
+        ["approve"] = "published",
+        ["reject"]  = "rejected",
+        ["flag"]    = "flagged",
+        ["spam"]    = "spam",
+    };
+
+    private void BulkAction(string action)
+    {
+        if (action == "delete")
+        {
+            _reviews.RemoveAll(r => _selected.Contains(r.Id));
+        }
+        else if (_actionStatusMap.TryGetValue(action, out var newStatus))
+        {
+            foreach (var rev in _reviews.Where(r => _selected.Contains(r.Id)))
+                rev.Status = newStatus;
+        }
+        _selected.Clear();
+        _showActions = false;
+    }
+}

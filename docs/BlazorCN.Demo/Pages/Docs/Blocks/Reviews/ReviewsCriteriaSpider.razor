@@ -1,0 +1,358 @@
+@* ============================================================
+   Block: reviews-criteria-spider
+   Title: ReviewsCriteriaSpider
+   Description: A multi-criteria radar chart review visualization built with React, Next.js, shadcn/ui, and Tailwind CSS. Features an animated SVG spider/radar polygon with 6 scored dimensions, comparison overlay, score legend, and written review summary using pure CSS and SVG with motion/react draw-in animation.
+   Source: original/blocks/reviews/reviews-criteria-spider.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with product selector *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium">Criteria Evaluation</span>
+                <button type="button"
+                        @onclick="@(() => _showComparison = !_showComparison)"
+                        class="@Cn.Merge("rounded-md px-2 py-1 text-[10px] transition-colors", _showComparison ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")">
+                    @(_showComparison ? "Hide overlay" : "Compare")
+                </button>
+            </div>
+            <div class="mt-2 flex gap-1">
+                @foreach (var ev in _evaluations)
+                {
+                    var evLocal = ev;
+                    var idx = Array.IndexOf(_evaluations, evLocal);
+                    <button type="button"
+                            @onclick="@(() => _selectedIdx = idx)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs transition-colors", _selectedIdx == idx ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50")">
+                        @ev.Product
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Product info *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-sm font-medium">@_evaluation.Product</span>
+                    <p class="text-xs text-muted-foreground">@_evaluation.Category</p>
+                </div>
+                <div class="text-right">
+                    <div class="flex items-baseline gap-1">
+                        <span class="@Cn.Merge("text-2xl font-semibold tabular-nums", GetScoreColor(_evaluation.OverallScore))">
+                            @_evaluation.OverallScore
+                        </span>
+                        <span class="text-xs text-muted-foreground">/ 10</span>
+                    </div>
+                    <span class="@Cn.Merge("text-xs font-medium", GetVerdictColor(_evaluation.Verdict))">
+                        @_evaluation.Verdict
+                    </span>
+                    <span class="ml-1 text-[10px] text-muted-foreground">
+                        &middot; @_evaluation.ReviewerCount.ToString("N0") reviews
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        @* Radar chart *@
+        <div class="border-b px-4 py-4">
+            @{
+                var sides = _evaluation.Criteria.Length;
+                var mainPath = GetPolygonPath(_evaluation.Criteria);
+                var compPath = _showComparison ? GetPolygonPath(_comparison.Criteria) : null;
+            }
+            <svg viewBox="@($"0 0 {Center * 2} {Center * 2}")"
+                 class="mx-auto w-full max-w-[260px]"
+                 role="img"
+                 aria-label="@($"Radar chart showing {_evaluation.Product} scores across {sides} criteria")">
+                @* Grid rings *@
+                @for (var ring = 0; ring < Rings; ring++)
+                {
+                    var ringLocal = ring;
+                    <path d="@GetGridPath(sides, ringLocal)"
+                          fill="none"
+                          stroke="currentColor"
+                          class="text-border"
+                          stroke-width="@(ringLocal == Rings - 1 ? "1" : "0.5")" />
+                }
+                @* Axis lines *@
+                @for (var i = 0; i < sides; i++)
+                {
+                    var iLocal = i;
+                    var angle = Math.PI * 2 * iLocal / sides - Math.PI / 2;
+                    <line x1="@Center" y1="@Center"
+                          x2="@FormatCoord(Center + Radius * Math.Cos(angle))"
+                          y2="@FormatCoord(Center + Radius * Math.Sin(angle))"
+                          stroke="currentColor"
+                          class="text-border"
+                          stroke-width="0.5" />
+                }
+                @* Comparison polygon (behind) *@
+                @if (compPath != null)
+                {
+                    <path d="@compPath"
+                          fill="currentColor"
+                          class="text-muted-foreground/10"
+                          stroke="currentColor"
+                          stroke-width="1"
+                          opacity="0.5" />
+                }
+                @* Main data polygon *@
+                <path d="@mainPath"
+                      fill="currentColor"
+                      class="text-foreground/10"
+                      stroke="currentColor"
+                      stroke-width="1.5" />
+                @* Score dots on vertices *@
+                @for (var i = 0; i < sides; i++)
+                {
+                    var iLocal = i;
+                    var c = _evaluation.Criteria[iLocal];
+                    var pt = GetPolygonPoint(iLocal, sides, c.Score, c.MaxScore);
+                    <circle cx="@FormatCoord(pt.X)" cy="@FormatCoord(pt.Y)"
+                            r="2.5"
+                            fill="currentColor"
+                            class="text-foreground" />
+                }
+                @* Axis labels — SVG <text> rendered as MarkupString per RZ1023 rule *@
+                @for (var i = 0; i < sides; i++)
+                {
+                    var iLocal = i;
+                    var c = _evaluation.Criteria[iLocal];
+                    var angle = Math.PI * 2 * iLocal / sides - Math.PI / 2;
+                    var labelRadius = Radius + 16;
+                    var lx = Center + labelRadius * Math.Cos(angle);
+                    var ly = Center + labelRadius * Math.Sin(angle);
+                    var textAnchor = Math.Abs(Math.Cos(angle)) < 0.1 ? "middle" : (Math.Cos(angle) > 0 ? "start" : "end");
+                    @((MarkupString)$"<text x=\"{lx:F2}\" y=\"{ly:F2}\" text-anchor=\"{textAnchor}\" dominant-baseline=\"central\" class=\"fill-muted-foreground text-[8px]\">{c.Label}</text>")
+                }
+            </svg>
+            @if (_showComparison)
+            {
+                <div class="mt-2 flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
+                    <div class="flex items-center gap-1.5">
+                        <span class="inline-block h-0.5 w-3 rounded-full bg-foreground"></span>
+                        <span>@_evaluation.Product</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="inline-block h-0.5 w-3 rounded-full bg-muted-foreground/40"></span>
+                        <span>@_comparison.Product</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Score legend *@
+        <div class="border-b px-4 py-3">
+            <div class="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                @for (var idx = 0; idx < _evaluation.Criteria.Length; idx++)
+                {
+                    var idxLocal = idx;
+                    var c = _evaluation.Criteria[idxLocal];
+                    var percentage = c.Score / c.MaxScore * 100;
+                    var compCriterion = _comparison.Criteria[idxLocal];
+                    var diff = _showComparison ? (double?)(c.Score - compCriterion.Score) : null;
+                    <div class="flex items-center gap-2">
+                        <span class="w-28 shrink-0 text-xs text-muted-foreground">@c.Label</span>
+                        <div class="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div class="h-full rounded-full bg-foreground/60"
+                                 style="@($"width:{percentage:F1}%")"></div>
+                        </div>
+                        <span class="@Cn.Merge("w-6 text-right text-xs font-medium tabular-nums", GetScoreColor(c.Score))">
+                            @c.Score
+                        </span>
+                        @if (diff != null)
+                        {
+                            var diffVal = diff.Value;
+                            <span class="@Cn.Merge("w-8 text-right text-[10px] tabular-nums", diffVal > 0 ? "text-emerald-600 dark:text-emerald-400" : (diffVal < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"))">
+                                @(diffVal > 0 ? "+" : "")@diffVal.ToString("F1")
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Strengths & Weaknesses *@
+        <div class="border-b px-4 py-3">
+            @{
+                var highest = _evaluation.Criteria.OrderByDescending(c => c.Score).First();
+                var lowest = _evaluation.Criteria.OrderBy(c => c.Score).First();
+            }
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <span class="text-xs font-medium text-muted-foreground">
+                        Strongest: @highest.Label
+                    </span>
+                    <div class="mt-1.5 space-y-1">
+                        @foreach (var s in _evaluation.Strengths)
+                        {
+                            <p class="text-xs leading-relaxed text-muted-foreground">@s</p>
+                        }
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs font-medium text-muted-foreground">
+                        Weakest: @lowest.Label
+                    </span>
+                    <div class="mt-1.5 space-y-1">
+                        @foreach (var w in _evaluation.Weaknesses)
+                        {
+                            <p class="text-xs leading-relaxed text-muted-foreground">@w</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="px-4 py-3">
+            <p class="text-xs leading-relaxed text-muted-foreground">@_evaluation.Summary</p>
+            <div class="mt-2 flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                    @_evaluation.ReviewerCount.ToString("N0") reviewers
+                </BadgeCn>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                    @_evaluation.Criteria.Length criteria
+                </BadgeCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private const double Center = 120;
+    private const double Radius = 90;
+    private const int Rings = 4;
+
+    private int _selectedIdx = 0;
+    private bool _showComparison = false;
+
+    private ProductEvaluation _evaluation => _evaluations[_selectedIdx];
+    private ProductEvaluation _comparison => _evaluations[_selectedIdx == 0 ? 1 : 0];
+
+    private record Criterion(string Label, double Score, double MaxScore);
+
+    private record ProductEvaluation(
+        string Id,
+        string Product,
+        string Category,
+        double OverallScore,
+        int ReviewerCount,
+        string Verdict,
+        string Summary,
+        Criterion[] Criteria,
+        string[] Strengths,
+        string[] Weaknesses
+    );
+
+    private static readonly ProductEvaluation[] _evaluations =
+    [
+        new(
+            Id: "eval-a",
+            Product: "Figma",
+            Category: "Design Tools",
+            OverallScore: 9.1,
+            ReviewerCount: 4827,
+            Verdict: "Excellent",
+            Summary: "The industry standard for collaborative design. Real-time multiplayer editing, robust component systems, and deep prototyping capabilities make it indispensable for product teams. Plugin ecosystem is the strongest in the category. Minor weaknesses in offline support and complex animation workflows.",
+            Criteria:
+            [
+                new("Collaboration", 9.8, 10),
+                new("Component System", 9.4, 10),
+                new("Prototyping", 8.7, 10),
+                new("Performance", 8.5, 10),
+                new("Plugin Ecosystem", 9.6, 10),
+                new("Learning Curve", 8.6, 10),
+            ],
+            Strengths:
+            [
+                "Real-time multiplayer with zero lag",
+                "Auto Layout rivals CSS flexbox",
+                "Plugin API enables deep customization",
+            ],
+            Weaknesses:
+            [
+                "Offline editing is limited",
+                "Advanced animations need external tools",
+            ]
+        ),
+        new(
+            Id: "eval-b",
+            Product: "Framer",
+            Category: "Design Tools",
+            OverallScore: 8.4,
+            ReviewerCount: 2156,
+            Verdict: "Very Good",
+            Summary: "A powerful hybrid design and publishing tool. Excels at creating production websites directly from design. Strong animation capabilities and code component support. Component system is maturing but lacks the depth of more established tools. Performance with large projects can be challenging.",
+            Criteria:
+            [
+                new("Collaboration", 7.8, 10),
+                new("Component System", 7.9, 10),
+                new("Prototyping", 9.2, 10),
+                new("Performance", 7.4, 10),
+                new("Plugin Ecosystem", 7.1, 10),
+                new("Learning Curve", 8.0, 10),
+            ],
+            Strengths:
+            [
+                "Built-in animation timeline editor",
+                "Direct design-to-production publishing",
+                "Code components with React support",
+            ],
+            Weaknesses:
+            [
+                "Large files cause editor slowdowns",
+                "Smaller plugin/community ecosystem",
+                "Collaboration lacks real-time cursors",
+            ]
+        ),
+    ];
+
+    private static (double X, double Y) GetPolygonPoint(int index, int total, double value, double maxValue)
+    {
+        var angle = Math.PI * 2 * index / total - Math.PI / 2;
+        var ratio = value / maxValue;
+        return (
+            X: Center + Radius * ratio * Math.Cos(angle),
+            Y: Center + Radius * ratio * Math.Sin(angle)
+        );
+    }
+
+    private static string GetPolygonPath(Criterion[] criteria)
+    {
+        var points = criteria.Select((c, i) => GetPolygonPoint(i, criteria.Length, c.Score, c.MaxScore)).ToArray();
+        var parts = points.Select((p, i) => $"{(i == 0 ? "M" : "L")} {p.X:F2} {p.Y:F2}");
+        return string.Join(" ", parts) + " Z";
+    }
+
+    private static string GetGridPath(int sides, int ring)
+    {
+        var ratio = (ring + 1.0) / Rings;
+        var points = Enumerable.Range(0, sides).Select(i =>
+        {
+            var angle = Math.PI * 2 * i / sides - Math.PI / 2;
+            return (X: Center + Radius * ratio * Math.Cos(angle), Y: Center + Radius * ratio * Math.Sin(angle));
+        }).ToArray();
+        var parts = points.Select((p, i) => $"{(i == 0 ? "M" : "L")} {p.X:F2} {p.Y:F2}");
+        return string.Join(" ", parts) + " Z";
+    }
+
+    private static string GetScoreColor(double score)
+    {
+        if (score >= 9.0) return "text-emerald-600 dark:text-emerald-400";
+        if (score >= 7.5) return "text-foreground";
+        if (score >= 5.0) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private static string GetVerdictColor(string verdict)
+    {
+        if (verdict == "Excellent") return "text-emerald-600 dark:text-emerald-400";
+        if (verdict == "Very Good") return "text-blue-600 dark:text-blue-400";
+        return "text-foreground";
+    }
+
+    private static string FormatCoord(double v) => v.ToString("F2");
+}

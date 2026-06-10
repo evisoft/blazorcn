@@ -1,0 +1,169 @@
+@* ============================================================
+   Block: stats-radar-chart-card
+   Title: StatsRadarChartCard
+   Description: A radar spider chart stats card for React and Next.js with Recharts RadarChart showing six performance dimensions as a filled polygon, PolarGrid and PolarAngleAxis labels, NumberFlow animated overall score, and var(--chart-1) fill built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-radar-chart-card.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-md p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">System health score</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">6 dimensions · Last 30 days</p>
+            </div>
+            <div class="text-right">
+                <div class="min-w-[60px]">
+                    <span class="text-2xl font-semibold tabular-nums">@_overallScore</span>
+                </div>
+                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    Good
+                </span>
+            </div>
+        </div>
+
+        @* Radar Chart — rendered as inline SVG *@
+        <div class="px-4 py-4">
+            <div class="mx-auto aspect-square max-h-[240px] w-full max-w-[240px]">
+                <svg viewBox="0 0 240 240" class="w-full h-full" aria-label="Radar chart showing system health dimensions">
+                    @* Polar grid — 4 concentric hexagons at 25%, 50%, 75%, 100% *@
+                    @foreach (var ring in _rings)
+                    {
+                        @((MarkupString)BuildPolygon(ring, "fill-none stroke-border/60", "0.5"))
+                    }
+                    @* Axis lines from centre to each vertex *@
+                    @foreach (var pt in _outerPoints)
+                    {
+                        var lx2 = pt.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                        var ly2 = pt.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                        @((MarkupString)$"<line x1=\"120\" y1=\"120\" x2=\"{lx2}\" y2=\"{ly2}\" stroke=\"var(--border)\" stroke-width=\"0.5\" stroke-opacity=\"0.6\"/>")
+                    }
+                    @* Filled data polygon *@
+                    @((MarkupString)BuildDataPolygon())
+                    @* Axis labels *@
+                    @foreach (var lbl in _labels)
+                    {
+                        var lblx = lbl.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                        var lbly = lbl.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                        @((MarkupString)$"<text x=\"{lblx}\" y=\"{lbly}\" text-anchor=\"{lbl.Anchor}\" dominant-baseline=\"{lbl.Baseline}\" font-size=\"11\" fill=\"var(--muted-foreground)\">{lbl.Text}</text>")
+                    }
+                </svg>
+            </div>
+        </div>
+
+        @* Dimension legend footer *@
+        <div class="border-t px-4 py-2.5">
+            <div class="flex flex-wrap gap-x-4 gap-y-1">
+                @foreach (var d in _dimensions)
+                {
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-xs text-muted-foreground">@d.Name:</span>
+                        <span class="text-xs font-medium tabular-nums">@d.Score</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Dimension(string Name, int Score, int FullMark);
+    private record LabelInfo(double X, double Y, string Text, string Anchor, string Baseline);
+    private record Point(double X, double Y);
+
+    private static readonly Dimension[] _dimensions =
+    [
+        new("Performance", 86, 100),
+        new("Reliability", 92, 100),
+        new("Security",    78, 100),
+        new("Scalability", 71, 100),
+        new("Usability",   88, 100),
+        new("Cost Eff.",   65, 100),
+    ];
+
+    private static readonly int _overallScore =
+        (int)Math.Round(_dimensions.Average(d => d.Score));
+
+    // Chart geometry constants (centre = 120, 120; max radius = 86px)
+    private const double _cx = 120;
+    private const double _cy = 120;
+    private const double _maxR = 86;
+    private static readonly int _n = 6;
+
+    // Pre-compute outer vertex positions (angle offset -90° so first spoke points up)
+    private static Point[] _outerPoints = ComputePoints(1.0);
+
+    private static readonly double[] _rings = [0.25, 0.50, 0.75, 1.0];
+
+    private static readonly LabelInfo[] _labels = BuildLabels();
+
+    // Helpers
+    private static Point[] ComputePoints(double fraction)
+    {
+        var pts = new Point[_n];
+        for (var i = 0; i < _n; i++)
+        {
+            var angle = (2 * Math.PI * i / _n) - (Math.PI / 2);
+            pts[i] = new Point(
+                _cx + fraction * _maxR * Math.Cos(angle),
+                _cy + fraction * _maxR * Math.Sin(angle));
+        }
+        return pts;
+    }
+
+    private static string PointsAttr(Point[] pts)
+    {
+        return string.Join(" ", pts.Select(p =>
+            $"{p.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)},{p.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}"));
+    }
+
+    private static string BuildPolygon(double fraction, string cssClass, string strokeWidth)
+    {
+        var pts = ComputePoints(fraction);
+        var pointsStr = PointsAttr(pts);
+        return $"<polygon points=\"{pointsStr}\" class=\"{cssClass}\" stroke-width=\"{strokeWidth}\"/>";
+    }
+
+    private static string BuildDataPolygon()
+    {
+        var pts = new Point[_n];
+        for (var i = 0; i < _n; i++)
+        {
+            var fraction = (double)_dimensions[i].Score / _dimensions[i].FullMark;
+            var angle = (2 * Math.PI * i / _n) - (Math.PI / 2);
+            pts[i] = new Point(
+                _cx + fraction * _maxR * Math.Cos(angle),
+                _cy + fraction * _maxR * Math.Sin(angle));
+        }
+        var pointsStr = PointsAttr(pts);
+        return $"<polygon points=\"{pointsStr}\" fill=\"var(--chart-1)\" fill-opacity=\"0.3\" stroke=\"var(--chart-1)\" stroke-width=\"2\" stroke-linejoin=\"round\"/>";
+    }
+
+    private static LabelInfo[] BuildLabels()
+    {
+        const double labelR = 100; // slightly beyond max radius
+        var infos = new LabelInfo[_n];
+        for (var i = 0; i < _n; i++)
+        {
+            var angle = (2 * Math.PI * i / _n) - (Math.PI / 2);
+            var x = _cx + labelR * Math.Cos(angle);
+            var y = _cy + labelR * Math.Sin(angle);
+
+            // Determine text-anchor based on horizontal position
+            string anchor;
+            if (x < _cx - 4) anchor = "end";
+            else if (x > _cx + 4) anchor = "start";
+            else anchor = "middle";
+
+            // Determine dominant-baseline based on vertical position
+            string baseline;
+            if (y < _cy - 4) baseline = "auto";
+            else if (y > _cy + 4) baseline = "hanging";
+            else baseline = "middle";
+
+            infos[i] = new LabelInfo(x, y, _dimensions[i].Name, anchor, baseline);
+        }
+        return infos;
+    }
+}

@@ -1,0 +1,217 @@
+@* ============================================================
+   Block: file-upload-access-control
+   Title: FileUploadAccessControl
+   Description: File access control panel for React and Next.js with per-file permission matrix, user and role listings, read write delete checkboxes per user per file, and inherit permissions toggle using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-access-control.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield" Size="16" Class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Access control</span>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        @_files.Length files &middot; @_users.Length users
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-muted-foreground text-xs">Inherit</span>
+                <SwitchCn @bind-Checked="_inheritEnabled" />
+            </div>
+        </div>
+
+        @if (_inheritEnabled)
+        {
+            <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                <LucideIconCn Name="users" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                <span class="text-muted-foreground text-xs">
+                    Permissions inherited from parent folder. Individual overrides still apply.
+                </span>
+            </div>
+        }
+
+        @* File list with expandable permission matrix *@
+        <div>
+            @foreach (var fileEntry in _files)
+            {
+                var file = fileEntry;
+                var isExpanded = _expandedFile == file.Id;
+                var isLast = file.Id == _files[_files.Length - 1].Id;
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpand(file.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="text-muted-foreground">
+                            @if (file.Type == "document")
+                            {
+                                <LucideIconCn Name="file-text" Size="14" Class="size-3.5" />
+                            }
+                            else if (file.Type == "spreadsheet")
+                            {
+                                <LucideIconCn Name="file-spreadsheet" Size="14" Class="size-3.5" />
+                            }
+                            else if (file.Type == "image")
+                            {
+                                <LucideIconCn Name="image" Size="14" Class="size-3.5" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="file" Size="14" Class="size-3.5" />
+                            }
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <span class="block truncate font-medium text-sm">@file.Name</span>
+                            <span class="text-muted-foreground text-xs">@file.Size</span>
+                        </div>
+                        <span class="text-muted-foreground text-xs tabular-nums">
+                            @GetPermissionCount(file.Id) grants
+                        </span>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4">
+                            @* Permission matrix header *@
+                            <div class="mb-1 flex items-center gap-3 pl-8">
+                                <span class="min-w-0 flex-1 text-muted-foreground text-xs"></span>
+                                @foreach (var perm in _permissionTypes)
+                                {
+                                    <span class="w-14 text-center font-medium text-muted-foreground text-xs capitalize">
+                                        @perm
+                                    </span>
+                                }
+                            </div>
+
+                            @* Per-user permission rows *@
+                            @foreach (var userEntry in _users)
+                            {
+                                var user = userEntry;
+                                var fileId = file.Id;
+                                <div class="flex items-center gap-3 rounded-md py-2 pl-2 pr-0 transition-colors hover:bg-muted/50">
+                                    <div class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted/50">
+                                        <span class="text-[10px] font-medium">@user.Initials</span>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="truncate font-medium text-sm">@user.Name</span>
+                                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", GetRoleDot(user.Role))"></span>
+                                        </div>
+                                        <span class="text-muted-foreground text-xs capitalize">
+                                            @user.Role
+                                        </span>
+                                    </div>
+                                    @foreach (var permType in _permissionTypes)
+                                    {
+                                        var pt = permType;
+                                        var uid = user.Id;
+                                        <span class="flex w-14 cursor-pointer items-center justify-center">
+                                            <CheckboxCn
+                                                Checked="@GetPerm(fileId, uid, pt)"
+                                                CheckedChanged="@((bool _) => TogglePermission(fileId, uid, pt))"
+                                                Disabled="@(_inheritEnabled && user.Role == "owner")" />
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record FileEntry(string Id, string Name, string Type, string Size);
+    private record UserEntry(string Id, string Name, string Role, string Initials);
+
+    private static readonly FileEntry[] _files =
+    [
+        new("f1", "Q4-revenue-report.pdf", "document", "2.4 MB"),
+        new("f2", "employee-directory.xlsx", "spreadsheet", "890 KB"),
+        new("f3", "product-mockup.png", "image", "4.1 MB"),
+        new("f4", "api-specification.pdf", "document", "1.2 MB"),
+    ];
+
+    private static readonly UserEntry[] _users =
+    [
+        new("u1", "Sarah Chen", "owner", "SC"),
+        new("u2", "Marcus Johnson", "editor", "MJ"),
+        new("u3", "Elena Rodriguez", "editor", "ER"),
+        new("u4", "David Kim", "viewer", "DK"),
+    ];
+
+    private static readonly string[] _permissionTypes = ["read", "write", "delete"];
+
+    // permissions[fileId][userId][perm] = bool
+    private Dictionary<string, Dictionary<string, Dictionary<string, bool>>> _permissions = BuildInitialPermissions();
+
+    private string? _expandedFile = "f1";
+    private bool _inheritEnabled = false;
+
+    private static Dictionary<string, Dictionary<string, Dictionary<string, bool>>> BuildInitialPermissions()
+    {
+        var roleDefaults = new Dictionary<string, Dictionary<string, bool>>
+        {
+            ["owner"]  = new() { ["read"] = true,  ["write"] = true,  ["delete"] = true  },
+            ["editor"] = new() { ["read"] = true,  ["write"] = true,  ["delete"] = false },
+            ["viewer"] = new() { ["read"] = true,  ["write"] = false, ["delete"] = false },
+        };
+
+        var perms = new Dictionary<string, Dictionary<string, Dictionary<string, bool>>>();
+        foreach (var file in _files)
+        {
+            perms[file.Id] = new Dictionary<string, Dictionary<string, bool>>();
+            foreach (var user in _users)
+            {
+                perms[file.Id][user.Id] = new Dictionary<string, bool>(roleDefaults[user.Role]);
+            }
+        }
+        return perms;
+    }
+
+    private bool GetPerm(string fileId, string userId, string perm)
+    {
+        return _permissions.TryGetValue(fileId, out var fp) &&
+               fp.TryGetValue(userId, out var up) &&
+               up.TryGetValue(perm, out var val) && val;
+    }
+
+    private void TogglePermission(string fileId, string userId, string perm)
+    {
+        if (_permissions.TryGetValue(fileId, out var fp) &&
+            fp.TryGetValue(userId, out var up) &&
+            up.ContainsKey(perm))
+        {
+            up[perm] = !up[perm];
+        }
+    }
+
+    private int GetPermissionCount(string fileId)
+    {
+        if (!_permissions.TryGetValue(fileId, out var fp)) return 0;
+        int count = 0;
+        foreach (var up in fp.Values)
+            foreach (var val in up.Values)
+                if (val) count++;
+        return count;
+    }
+
+    private void ToggleExpand(string fileId)
+    {
+        _expandedFile = _expandedFile == fileId ? null : fileId;
+    }
+
+    private static string GetRoleDot(string role) => role switch
+    {
+        "owner"  => "bg-foreground",
+        "editor" => "bg-blue-500",
+        _        => "bg-muted-foreground",
+    };
+}

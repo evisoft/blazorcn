@@ -1,0 +1,141 @@
+@* ============================================================
+   Block: monitoring-p99-latency-chart
+   Title: MonitoringP99LatencyChart
+   Description: A high-precision latency monitoring dashboard focusing on tail performance (P50, P95, P99) with multi-series trend analysis.
+   Source: original/blocks/monitoring/monitoring-p99-latency-chart.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-2xl border bg-background shadow-sm">
+        <div class="flex items-center justify-between border-b px-6 py-5 bg-blue-500/[0.02]">
+            <div class="flex items-center gap-3.5">
+                <div class="flex size-11 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20">
+                    <LucideIconCn Name="bar-chart-4" Size="24" Class="size-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                    <h3 class="text-base font-bold tracking-tight">Tail Latency Analysis</h3>
+                    <p class="mt-0.5 text-muted-foreground text-xs font-semibold">
+                        Percentile Distribution · Past hour
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                    Spike Detected
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x border-b">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                var stroke = s.Status == "warning" ? "#f59e0b" : "#3b82f6";
+                var fill = s.Status == "warning" ? "#f59e0b" : "#3b82f6";
+                var chartPoints = BuildMiniChartPoints(s.DataKey);
+                <div class="p-6 transition-colors hover:bg-muted/5">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-black text-muted-foreground uppercase tracking-widest">@s.Label</span>
+                        <LucideIconCn Name="@s.IconName" Size="16" Class="size-4 text-muted-foreground/30" />
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-3xl font-black tabular-nums tracking-tighter">
+                            @s.Value
+                        </span>
+                        <span class="text-muted-foreground text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+
+                    <div class="h-10 w-full mt-6">
+                        <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="w-full h-full">
+                            <polyline points="@chartPoints.Line" fill="none" stroke="@stroke" stroke-width="2" />
+                            <polygon points="@chartPoints.Fill" fill="@fill" fill-opacity="0.03" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="p-6 space-y-4">
+            <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-widest">
+                <span class="text-muted-foreground">Historical Trend (P99)</span>
+                <span class="text-blue-600">60m Window</span>
+            </div>
+            <div class="h-32 w-full rounded-xl border bg-muted/20 p-4">
+                @{
+                    var mainPoints = BuildMiniChartPoints("p99");
+                }
+                <svg viewBox="0 0 100 96" preserveAspectRatio="none" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="#3b82f6" stop-opacity="0.2" />
+                            <stop offset="95%" stop-color="#3b82f6" stop-opacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <polygon points="@mainPoints.Fill" fill="url(#latencyGradient)" />
+                    <polyline points="@mainPoints.Line" fill="none" stroke="#3b82f6" stroke-width="2.5" />
+                </svg>
+            </div>
+        </div>
+
+        <div class="px-6 py-4 bg-muted/10 border-t flex items-center justify-between">
+            <span class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                Data Refresh: Every 10s
+            </span>
+            <button type="button" class="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 hover:underline">
+                Histogram Details →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record P99DataPoint(int P50, int P95, int P99);
+    private record ChartPaths(string Line, string Fill);
+
+    private record StatItem(string Label, int Value, string Unit, string IconName, string Status, string DataKey);
+
+    private static readonly P99DataPoint[] _p99Data =
+    [
+        new(12, 45, 124),
+        new(14, 48, 132),
+        new(13, 52, 128),
+        new(15, 68, 245),
+        new(12, 55, 184),
+        new(14, 49, 156),
+        new(16, 51, 142),
+        new(15, 47, 138),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("P50 (Median)", 15, "ms", "timer", "healthy", "p50"),
+        new("P95 Latency", 47, "ms", "activity", "healthy", "p95"),
+        new("P99 (Tail)", 138, "ms", "zap", "warning", "p99"),
+    ];
+
+    private ChartPaths BuildMiniChartPoints(string dataKey)
+    {
+        const int chartW = 100;
+        const int chartH = 40;
+        var vals = _p99Data.Select(d => dataKey switch
+        {
+            "p50" => d.P50,
+            "p95" => d.P95,
+            _ => d.P99
+        }).ToArray();
+
+        var minVal = vals.Min();
+        var maxVal = vals.Max();
+        var range = maxVal - minVal == 0 ? 1 : maxVal - minVal;
+        int count = vals.Length;
+
+        double sx(int i) => count <= 1 ? 0 : (double)chartW / (count - 1) * i;
+        double sy(int v) => chartH - (double)(v - minVal) / range * (chartH - 4) - 2;
+
+        var linePoints = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{sx(i):F1},{sy(vals[i]):F1}"));
+        var fillPoints = $"0,{chartH} " + linePoints + $" {chartW},{chartH}";
+
+        return new ChartPaths(linePoints, fillPoints);
+    }
+}

@@ -1,0 +1,162 @@
+@* ============================================================
+   Block: stats-pareto-chart-card
+   Title: StatsParetoChartCard
+   Description: A Pareto chart stats card for React and Next.js with Recharts ComposedChart combining descending-sorted bars and a cumulative percentage line, a ReferenceLine at the 80% threshold, NumberFlow animated top-contributor callout, and dual Y-axes built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-pareto-chart-card.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Error distribution (Pareto)</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Last 24 hours · @_total total errors</p>
+            </div>
+            <div class="text-right">
+                <p class="text-xs text-muted-foreground">Top @_vitalFewCount categories =</p>
+                <div class="min-w-[50px]">
+                    <span class="text-lg font-semibold tabular-nums">@_vitalFewPct%</span>
+                </div>
+            </div>
+        </div>
+        <div class="px-4 py-4">
+            @{
+                var chartW = 560;
+                var chartH = 220;
+                var marginLeft = 27;
+                var marginRight = 43;
+                var marginTop = 4;
+                var marginBottom = 28;
+                var plotW = chartW - marginLeft - marginRight;
+                var plotH = chartH - marginTop - marginBottom;
+                var barCount = _paretoData.Length;
+                var barGap = 4;
+                var barW = (plotW - barGap * (barCount - 1)) / barCount;
+                var maxValue = _paretoData.Max(d => d.Value);
+                // round up to a nice number
+                var yMax = (int)(Math.Ceiling((double)maxValue / 50) * 50);
+                var yTicks = new[] { 0, yMax / 4, yMax / 2, 3 * yMax / 4, yMax };
+            }
+            <div class="h-[220px] w-full overflow-hidden">
+                <svg width="100%" viewBox="0 0 @chartW @chartH" preserveAspectRatio="xMidYMid meet" style="display:block;">
+                    <!-- grid lines -->
+                    @foreach (var tick in yTicks)
+                    {
+                        var gy = marginTop + plotH - (tick * plotH / yMax);
+                        @((MarkupString)$"<line x1=\"{marginLeft}\" y1=\"{gy}\" x2=\"{marginLeft + plotW}\" y2=\"{gy}\" stroke=\"var(--border)\" stroke-dasharray=\"3 3\" stroke-width=\"1\" />")
+                    }
+
+                    <!-- bars -->
+                    @for (var i = 0; i < barCount; i++)
+                    {
+                        var d = _paretoData[i];
+                        var bx = marginLeft + i * (barW + barGap);
+                        var bh = (int)(d.Value * plotH / yMax);
+                        var by = marginTop + plotH - bh;
+                        @((MarkupString)$"<rect x=\"{bx}\" y=\"{by}\" width=\"{barW}\" height=\"{bh}\" fill=\"var(--chart-1)\" rx=\"3\" ry=\"3\" />")
+                    }
+
+                    <!-- reference line at 80% on right axis -->
+                    @{
+                        var refY = marginTop + plotH - (80 * plotH / 100);
+                    }
+                    @((MarkupString)$"<line x1=\"{marginLeft}\" y1=\"{refY}\" x2=\"{marginLeft + plotW}\" y2=\"{refY}\" stroke=\"var(--border)\" stroke-dasharray=\"6 4\" stroke-width=\"1\" />")
+                    @((MarkupString)$"<text x=\"{marginLeft + plotW + 3}\" y=\"{refY + 4}\" font-size=\"10\" fill=\"var(--muted-foreground)\" text-anchor=\"start\">80%</text>")
+
+                    <!-- cumulative line -->
+                    @{
+                        var pts = string.Join(" ", _paretoData.Select((d, i) =>
+                        {
+                            var cx = marginLeft + i * (barW + barGap) + barW / 2;
+                            var cy = marginTop + plotH - (d.Cumulative * plotH / 100);
+                            return $"{cx},{cy}";
+                        }));
+                    }
+                    @((MarkupString)$"<polyline points=\"{pts}\" fill=\"none\" stroke=\"var(--chart-2)\" stroke-width=\"2\" />")
+
+                    <!-- dots on cumulative line -->
+                    @for (var i = 0; i < barCount; i++)
+                    {
+                        var d = _paretoData[i];
+                        var cx = marginLeft + i * (barW + barGap) + barW / 2;
+                        var cy = marginTop + plotH - (d.Cumulative * plotH / 100);
+                        @((MarkupString)$"<circle cx=\"{cx}\" cy=\"{cy}\" r=\"3\" fill=\"var(--chart-2)\" />")
+                    }
+
+                    <!-- left Y axis ticks -->
+                    @foreach (var tick in yTicks)
+                    {
+                        var ty = marginTop + plotH - (tick * plotH / yMax);
+                        @((MarkupString)$"<text x=\"{marginLeft - 4}\" y=\"{ty + 4}\" font-size=\"11\" fill=\"var(--muted-foreground)\" text-anchor=\"end\">{tick}</text>")
+                    }
+
+                    <!-- right Y axis ticks (0%, 25%, 50%, 75%, 100%) -->
+                    @foreach (var pct in new[] { 0, 25, 50, 75, 100 })
+                    {
+                        var ry2 = marginTop + plotH - (pct * plotH / 100);
+                        @((MarkupString)$"<text x=\"{marginLeft + plotW + 4}\" y=\"{ry2 + 4}\" font-size=\"11\" fill=\"var(--muted-foreground)\" text-anchor=\"start\">{pct}%</text>")
+                    }
+
+                    <!-- X axis labels -->
+                    @for (var i = 0; i < barCount; i++)
+                    {
+                        var d = _paretoData[i];
+                        var lx = marginLeft + i * (barW + barGap) + barW / 2;
+                        var ly = marginTop + plotH + 16;
+                        @((MarkupString)$"<text x=\"{lx}\" y=\"{ly}\" font-size=\"10\" fill=\"var(--muted-foreground)\" text-anchor=\"middle\" transform=\"rotate(-20,{lx},{ly})\">{d.Category}</text>")
+                    }
+                </svg>
+            </div>
+        </div>
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <div class="flex items-center gap-1.5">
+                <span class="size-2.5 rounded-sm" style="background-color:var(--chart-1)"></span>
+                <span class="text-xs text-muted-foreground">Count</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="h-px w-4 border-t-2" style="border-color:var(--chart-2)"></span>
+                <span class="text-xs text-muted-foreground">Cumulative %</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ParetoItem(string Category, int Value, int Cumulative);
+
+    private static readonly ParetoItem[] _paretoData = BuildParetoData();
+
+    private static ParetoItem[] BuildParetoData()
+    {
+        var raw = new (string Category, int Value)[]
+        {
+            ("Auth errors", 342),
+            ("Timeout", 218),
+            ("Rate limit", 156),
+            ("Bad request", 89),
+            ("Not found", 64),
+            ("Server error", 42),
+            ("CORS", 28),
+            ("Other", 15),
+        };
+        int total = 0;
+        foreach (var r in raw) total += r.Value;
+        int running = 0;
+        var result = new ParetoItem[raw.Length];
+        for (int i = 0; i < raw.Length; i++)
+        {
+            running += raw[i].Value;
+            int cumulative = (int)Math.Round((double)running / total * 100);
+            result[i] = new ParetoItem(raw[i].Category, raw[i].Value, cumulative);
+        }
+        return result;
+    }
+
+    private static readonly int _total = _paretoData.Sum(d => d.Value);
+
+    private static readonly int _vitalFewCount =
+        _paretoData.Count(d => d.Cumulative <= 80) + 1;
+
+    private static readonly int _vitalFewPct =
+        _paretoData[Math.Min(_vitalFewCount - 1, _paretoData.Length - 1)].Cumulative;
+}

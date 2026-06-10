@@ -1,0 +1,226 @@
+@* ============================================================
+   Block: changelog-rate-limit-changes
+   Title: ChangelogRateLimitChanges
+   Description: React API rate limit changelog block for Next.js with before-and-after comparisons, endpoint grouping, and tier-based limit tables built with TypeScript, shadcn/ui Badge and Button, Framer Motion, and Tailwind CSS.
+   Source: original/blocks/changelog/changelog-rate-limit-changes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="gauge" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Rate Limit Changelog</span>
+            <span class="text-muted-foreground text-xs">API limits by tier</span>
+        </div>
+
+        @* Releases *@
+        <div>
+            @foreach (var release in _releases)
+            {
+                var rel = release;
+                @* Release header *@
+                <div>
+                    <div class="border-b bg-muted/30 px-4 py-2.5">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-medium text-xs">@rel.Version</span>
+                            <span class="text-muted-foreground/60 text-xs">@rel.Date</span>
+                        </div>
+                        <p class="mt-0.5 text-muted-foreground text-xs">@rel.Summary</p>
+                    </div>
+
+                    @* Endpoint changes *@
+                    @foreach (var change in rel.Changes)
+                    {
+                        var ch = change;
+                        var isExpanded = _expanded == ch.Id;
+                        var isLastChange = ch.Id == rel.Changes[rel.Changes.Length - 1].Id;
+                        var isLastRelease = rel.Version == _releases[_releases.Length - 1].Version;
+                        var outerClass = Cn.Merge(!(isLastChange && isLastRelease) ? "border-b" : "");
+                        var chevronClass = Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "");
+                        var dirColor = GetDirectionColor(ch.Direction);
+                        var dirLabel = GetDirectionLabel(ch.Direction);
+                        var dirIconName = GetDirectionIcon(ch.Direction);
+                        var methodClass = Cn.Merge("shrink-0 px-1.5 py-0 font-mono font-normal text-[10px]", GetMethodColor(ch.Method));
+
+                        <div class="@outerClass">
+                            <button
+                                type="button"
+                                @onclick="@(() => ToggleExpand(ch.Id))"
+                                class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@methodClass">@ch.Method</BadgeCn>
+                                <div class="min-w-0 flex-1">
+                                    <span class="font-mono text-sm">@ch.Endpoint</span>
+                                </div>
+                                <LucideIconCn Name="@dirIconName" Size="12" Class="@($"size-3 shrink-0 {dirColor}")" />
+                                <span class="@($"shrink-0 text-[10px] {dirColor}")">@dirLabel</span>
+                                <LucideIconCn Name="chevron-right" Size="16" Class="@chevronClass" />
+                            </button>
+
+                            @if (isExpanded)
+                            {
+                                <div class="px-4 pb-3">
+                                    <p class="mb-2 text-muted-foreground text-xs">@ch.Description</p>
+
+                                    @* Tier limits table *@
+                                    <div class="overflow-hidden rounded-md border">
+                                        <table class="w-full">
+                                            <thead>
+                                                <tr class="border-b bg-muted/50">
+                                                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground text-xs">Tier</th>
+                                                    <th class="px-3 py-1.5 text-right font-medium text-muted-foreground text-xs">Previous</th>
+                                                    <th class="px-3 py-1.5 text-center font-medium text-muted-foreground text-xs"></th>
+                                                    <th class="px-3 py-1.5 text-right font-medium text-muted-foreground text-xs">New</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var tl in ch.TierLimits)
+                                                {
+                                                    var tierLimit = tl;
+                                                    var changed = tierLimit.NewLimit != tierLimit.OldLimit;
+                                                    var increased = tierLimit.NewLimit > tierLimit.OldLimit;
+                                                    var newLimitClass = Cn.Merge(
+                                                        "px-3 py-1.5 text-right font-mono text-xs tabular-nums",
+                                                        changed
+                                                            ? (increased ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")
+                                                            : "text-muted-foreground"
+                                                    );
+                                                    <tr class="border-b last:border-b-0">
+                                                        <td class="px-3 py-1.5 text-xs">@GetTierLabel(tierLimit.Tier)</td>
+                                                        <td class="px-3 py-1.5 text-right font-mono text-muted-foreground text-xs tabular-nums">@tierLimit.OldLimit.ToString("N0") @tierLimit.Unit</td>
+                                                        <td class="px-3 py-1.5 text-center">
+                                                            <LucideIconCn Name="arrow-right" Size="12" Class="mx-auto size-3 text-muted-foreground/40" />
+                                                        </td>
+                                                        <td class="@newLimitClass">@tierLimit.NewLimit.ToString("N0") @tierLimit.Unit</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div class="mt-2 flex items-center justify-between">
+                                        <span class="text-muted-foreground text-[10px]">Effective @ch.EffectiveDate</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "rl1";
+
+    private record TierLimit(string Tier, int OldLimit, int NewLimit, string Unit);
+
+    private record EndpointChange(
+        string Id,
+        string Endpoint,
+        string Method,
+        string Description,
+        string Direction,
+        TierLimit[] TierLimits,
+        string EffectiveDate
+    );
+
+    private record RateLimitRelease(
+        string Version,
+        string Date,
+        string Summary,
+        EndpointChange[] Changes
+    );
+
+    private void ToggleExpand(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private static string GetTierLabel(string tier) => tier switch
+    {
+        "free"       => "Free",
+        "pro"        => "Pro",
+        "enterprise" => "Enterprise",
+        _            => tier,
+    };
+
+    private static string GetDirectionIcon(string direction) => direction switch
+    {
+        "increase"  => "arrow-up",
+        "decrease"  => "arrow-down",
+        _           => "arrow-right",
+    };
+
+    private static string GetDirectionColor(string direction) => direction switch
+    {
+        "increase"  => "text-emerald-600 dark:text-emerald-400",
+        "decrease"  => "text-red-600 dark:text-red-400",
+        _           => "text-muted-foreground",
+    };
+
+    private static string GetDirectionLabel(string direction) => direction switch
+    {
+        "increase"  => "Increased",
+        "decrease"  => "Decreased",
+        _           => "Unchanged",
+    };
+
+    private static string GetMethodColor(string method) => method switch
+    {
+        "GET"    => "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+        "POST"   => "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        "PUT"    => "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+        "DELETE" => "bg-red-500/10 text-red-600 dark:text-red-400",
+        "PATCH"  => "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+        _        => "",
+    };
+
+    private static readonly RateLimitRelease[] _releases =
+    [
+        new("2026-03-30", "Mar 30", "Increased limits for Pro and Enterprise tiers on core endpoints",
+            [
+                new("rl1", "/api/v2/search",   "GET",  "Search queries across all indexed resources",      "increase",
+                    [
+                        new("free",       60,   60,   "req/min"),
+                        new("pro",       300,  600,   "req/min"),
+                        new("enterprise", 1000, 3000, "req/min"),
+                    ],
+                    "Apr 1, 2026"),
+                new("rl2", "/api/v2/webhooks", "POST", "Webhook event delivery and registration",          "increase",
+                    [
+                        new("free",       10,   20,   "req/min"),
+                        new("pro",       100,  200,   "req/min"),
+                        new("enterprise", 500, 1000,  "req/min"),
+                    ],
+                    "Apr 1, 2026"),
+                new("rl3", "/api/v2/exports",  "POST", "Bulk data export to CSV, JSON, or Parquet",        "decrease",
+                    [
+                        new("free",       10,    5,   "req/hr"),
+                        new("pro",        60,   30,   "req/hr"),
+                        new("enterprise", 200, 200,   "req/hr"),
+                    ],
+                    "Apr 1, 2026"),
+            ]),
+        new("2026-03-15", "Mar 15", "Standardized rate limit headers and added burst allowances",
+            [
+                new("rl4", "/api/v2/users",   "GET", "User profile and account information retrieval",        "increase",
+                    [
+                        new("free",        30,   60,  "req/min"),
+                        new("pro",        200,  300,  "req/min"),
+                        new("enterprise", 1000, 1500, "req/min"),
+                    ],
+                    "Mar 20, 2026"),
+                new("rl5", "/api/v2/uploads", "PUT", "File and asset upload with multipart support",          "unchanged",
+                    [
+                        new("free",         5,   5,   "req/min"),
+                        new("pro",         50,  50,   "req/min"),
+                        new("enterprise",  200, 200,  "req/min"),
+                    ],
+                    "Mar 20, 2026"),
+            ]),
+    ];
+}

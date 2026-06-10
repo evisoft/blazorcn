@@ -1,0 +1,139 @@
+@* ============================================================
+   Block: changelog-markdown-preview
+   Title: ChangelogMarkdownPreview
+   Description: A changelog block where entries render markdown-style content with bold text, inline code, and structured formatting for rich release notes.
+   Source: original/blocks/changelog/changelog-markdown-preview.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="file-text" Size="16" Class="size-4 text-muted-foreground" />
+            <h2 class="text-sm font-medium">Release Notes</h2>
+            <span class="ml-auto text-xs text-muted-foreground">Markdown preview</span>
+        </div>
+
+        @* Entries *@
+        @for (int idx = 0; idx < _entries.Length; idx++)
+        {
+            var entry = _entries[idx];
+            var entryClass = Cn.Merge("px-4 py-4", idx < _entries.Length - 1 ? "border-b" : "");
+            <div class="@entryClass">
+                <div class="mb-2 flex items-center gap-2">
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 font-mono text-xs">
+                        <LucideIconCn Name="tag" Size="12" Class="size-3" />
+                        @entry.Version
+                    </BadgeCn>
+                    <span class="text-xs text-muted-foreground">@entry.Date</span>
+                </div>
+                <h3 class="mb-2 text-sm font-medium">@entry.Title</h3>
+                <ul class="space-y-1.5">
+                    @foreach (var line in entry.Content)
+                    {
+                        <li class="flex gap-2 text-xs leading-relaxed text-muted-foreground">
+                            <span class="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground/40"></span>
+                            <span>
+                                @foreach (var seg in ParseLine(line))
+                                {
+                                    if (seg.IsBold)
+                                    {
+                                        <span class="font-medium text-foreground">@seg.Text</span>
+                                    }
+                                    else if (seg.IsCode)
+                                    {
+                                        <code class="rounded bg-muted px-1 font-mono text-xs">@seg.Text</code>
+                                    }
+                                    else
+                                    {
+                                        <span>@seg.Text</span>
+                                    }
+                                }
+                            </span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private record ChangelogEntry(string Version, string Date, string Title, string[] Content);
+
+    private record LineSegment(string Text, bool IsBold, bool IsCode);
+
+    private static readonly ChangelogEntry[] _entries =
+    [
+        new("v3.8.0", "Mar 25, 2026", "Query Builder Overhaul",
+        [
+            "Rebuilt the **query builder** from scratch with support for nested conditions and `GROUP BY` clauses.",
+            "Added **auto-complete** for column names using the `schema.introspect()` API.",
+            "Fixed a regression where `JOIN` statements dropped the `ON` clause silently.",
+            "Performance: query parsing is now **4x faster** on datasets exceeding 10k rows.",
+        ]),
+        new("v3.7.2", "Mar 18, 2026", "Dashboard Widget Fixes",
+        [
+            "Resolved an issue where **custom widgets** failed to render after a `config.reload()` call.",
+            "The `useWidgetState` hook now supports **generics** for typed widget data.",
+            "Deprecated the `legacyLayout` prop — migrate to `gridTemplate` before **v4.0**.",
+        ]),
+        new("v3.7.0", "Mar 10, 2026", "Export Pipeline Improvements",
+        [
+            "New **CSV export** pipeline with support for custom delimiters and `UTF-8 BOM` headers.",
+            "Added `onExportProgress` callback for tracking large export operations.",
+            "Fixed encoding issues with **non-ASCII characters** in exported filenames.",
+        ]),
+    ];
+
+    private static LineSegment[] ParseLine(string line)
+    {
+        var result = new System.Collections.Generic.List<LineSegment>();
+        var remaining = line;
+        while (remaining.Length > 0)
+        {
+            int boldStart = remaining.IndexOf("**");
+            int codeStart = remaining.IndexOf("`");
+
+            if (boldStart == -1 && codeStart == -1)
+            {
+                result.Add(new LineSegment(remaining, false, false));
+                break;
+            }
+
+            bool isBold;
+            int nextSpecial;
+            if (boldStart != -1 && (codeStart == -1 || boldStart < codeStart))
+            {
+                nextSpecial = boldStart;
+                isBold = true;
+            }
+            else
+            {
+                nextSpecial = codeStart;
+                isBold = false;
+            }
+
+            if (nextSpecial > 0)
+                result.Add(new LineSegment(remaining[..nextSpecial], false, false));
+
+            if (isBold)
+            {
+                int endBold = remaining.IndexOf("**", nextSpecial + 2);
+                if (endBold == -1) { result.Add(new LineSegment(remaining[nextSpecial..], false, false)); break; }
+                result.Add(new LineSegment(remaining[(nextSpecial + 2)..endBold], true, false));
+                remaining = remaining[(endBold + 2)..];
+            }
+            else
+            {
+                int endCode = remaining.IndexOf("`", nextSpecial + 1);
+                if (endCode == -1) { result.Add(new LineSegment(remaining[nextSpecial..], false, false)); break; }
+                result.Add(new LineSegment(remaining[(nextSpecial + 1)..endCode], false, true));
+                remaining = remaining[(endCode + 1)..];
+            }
+        }
+        return [.. result];
+    }
+}

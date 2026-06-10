@@ -1,0 +1,162 @@
+@* ============================================================
+   Block: comments-access-control
+   Title: CommentsAccessControl
+   Description: A granular permission-based comment section for React and Next.js with role-based visibility, comment-level permissions, and access badges built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-access-control.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Access-Controlled Comments</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Role-based visibility • @_visibleComments.Count visible
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1.5 text-xs">
+                    <LucideIconCn Name="shield-check" Size="12" Class="size-3" />
+                    Protected
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Role Selector *@
+        <div class="border-b bg-muted/30 px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-xs text-muted-foreground">Current role:</span>
+                <div class="flex gap-1.5">
+                    @foreach (var r in _roles)
+                    {
+                        var role = r;
+                        <button type="button"
+                                @onclick="@(() => SetRole(role))"
+                                class="@Cn.Merge("rounded-sm px-2 py-1 text-xs font-medium transition-all", _currentRole == role ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                            @role
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Comment List *@
+        <div>
+            @for (int i = 0; i < _visibleComments.Count; i++)
+            {
+                var comment = _visibleComments[i];
+                var isLast = i == _visibleComments.Count - 1 && _hiddenCount == 0;
+                var initials = GetInitials(comment.Author);
+                var roleColorClass = GetRoleColor(comment.AuthorRole);
+                var roleIconName = GetRoleIconName(comment.AuthorRole);
+
+                <div class="@(isLast ? "p-4" : "border-b p-4")">
+                    <div class="flex gap-3">
+                        <AvatarCn Class="size-8 shrink-0">
+                            <AvatarImageCn Src="@comment.Avatar" Alt="@comment.Author" />
+                            <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@comment.Author</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("gap-1 text-[10px] font-normal", roleColorClass)">
+                                    <LucideIconCn Name="@roleIconName" Size="12" Class="size-3" />
+                                    @comment.AuthorRole
+                                </BadgeCn>
+                                <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                            </div>
+                            <div class="mt-1.5 flex items-start gap-2">
+                                @if (comment.MinRole != "viewer")
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="mt-0.5 shrink-0 gap-1 text-[10px] font-normal">
+                                        <LucideIconCn Name="lock" Size="10" Class="size-2.5" />
+                                        @(comment.MinRole + "+")
+                                    </BadgeCn>
+                                }
+                                <p class="text-sm leading-relaxed">@comment.Content</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (_hiddenCount > 0)
+            {
+                <div class="border-b bg-muted/20 px-4 py-6 text-center">
+                    <LucideIconCn Name="lock" Size="24" Class="mx-auto size-6 text-muted-foreground/40" />
+                    <p class="mt-2 text-sm text-muted-foreground">
+                        @_hiddenCount @(_hiddenCount == 1 ? "comment is" : "comments are") hidden
+                    </p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Requires higher permission level to view
+                    </p>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Viewing as @_currentRole</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span>@_visibleComments.Count/@_comments.Length visible</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CommentItem(string Id, string Author, string Avatar, string Content, string Timestamp, string MinRole, string AuthorRole);
+
+    private static readonly Dictionary<string, int> _roleHierarchy = new()
+    {
+        ["viewer"] = 1,
+        ["editor"] = 2,
+        ["admin"] = 3,
+        ["owner"] = 4,
+    };
+
+    private static readonly string[] _roles = ["viewer", "editor", "admin", "owner"];
+
+    private static readonly CommentItem[] _comments =
+    [
+        new("1", "Sarah Chen", "", "All team members can see this comment. It contains general project updates and non-sensitive information.", "10 min ago", "viewer", "admin"),
+        new("2", "James Wilson", "", "Editors and above: The content approval workflow needs revision. Current SLA is not sustainable with our team size.", "25 min ago", "editor", "owner"),
+        new("3", "Maya Patel", "", "Admin only: Considering org restructure. Finance and Engineering to merge under single VP. Confidential until board approval.", "1 hour ago", "admin", "owner"),
+        new("4", "Alex Morgan", "", "Owner eyes only: Acquisition offer received from competitor. Valuation at $450M. Legal review in progress.", "2 hours ago", "owner", "owner"),
+    ];
+
+    private string _currentRole = "editor";
+
+    private List<CommentItem> _visibleComments => _comments.Where(c => _roleHierarchy[_currentRole] >= _roleHierarchy[c.MinRole]).ToList();
+    private int _hiddenCount => _comments.Length - _visibleComments.Count;
+
+    private void SetRole(string role)
+    {
+        _currentRole = role;
+    }
+
+    private static string GetInitials(string author)
+    {
+        return string.Concat(author.Split(' ').Select(n => n.Length > 0 ? n[0].ToString().ToUpper() : ""));
+    }
+
+    private static string GetRoleColor(string role) => role switch
+    {
+        "viewer" => "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+        "editor" => "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        "admin" => "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+        "owner" => "bg-red-500/10 text-red-600 dark:text-red-400",
+        _ => "",
+    };
+
+    private static string GetRoleIconName(string role) => role switch
+    {
+        "viewer" => "user",
+        "editor" => "user-check",
+        "admin" => "shield-check",
+        "owner" => "shield-check",
+        _ => "user",
+    };
+}

@@ -1,0 +1,213 @@
+@* ============================================================
+   Block: form-undo-redo
+   Title: FormUndoRedo
+   Description: A form with full undo and redo functionality that tracks state history and allows users to step backward and forward through changes
+   Source: original/blocks/form/form-undo-redo.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with undo/redo controls *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h2 class="text-sm font-medium">Edit Document</h2>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Step @(_currentIndex + 1) of @(_history.Count)
+                </p>
+            </div>
+            <div class="flex items-center gap-1">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 px-2"
+                          @onclick="HandleUndo" Disabled="@(!_canUndo)">
+                    <LucideUndo2Cn Size="14" Class="size-3.5" />
+                    <span class="text-xs">Undo</span>
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 px-2"
+                          @onclick="HandleRedo" Disabled="@(!_canRedo)">
+                    <span class="text-xs">Redo</span>
+                    <LucideRedo2Cn Size="14" Class="size-3.5" />
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Form *@
+        <div class="p-4">
+            <div class="space-y-4">
+                @* Title field *@
+                <div class="space-y-2">
+                    <LabelCn For="doc-title">Title</LabelCn>
+                    <InputCn Id="doc-title"
+                             Value="@_title"
+                             ValueChanged="@((string? v) => OnTitleChanged(v))"
+                             Placeholder="Enter document title" />
+                    @if (_titleError != null)
+                    {
+                        <p class="text-sm text-destructive">@_titleError</p>
+                    }
+                </div>
+
+                @* Description field *@
+                <div class="space-y-2">
+                    <LabelCn For="doc-description">Description</LabelCn>
+                    <TextareaCn Id="doc-description"
+                                Value="@_description"
+                                ValueChanged="@((string? v) => OnDescriptionChanged(v))"
+                                Placeholder="Enter document description"
+                                Rows="4"
+                                Class="resize-none" />
+                    @if (_descriptionError != null)
+                    {
+                        <p class="text-sm text-destructive">@_descriptionError</p>
+                    }
+                </div>
+
+                @* Tags field *@
+                <div class="space-y-2">
+                    <LabelCn For="doc-tags">Tags</LabelCn>
+                    <InputCn Id="doc-tags"
+                             Value="@_tags"
+                             ValueChanged="@((string? v) => OnTagsChanged(v))"
+                             Placeholder="Comma-separated tags" />
+                    @if (_tagsError != null)
+                    {
+                        <p class="text-sm text-destructive">@_tagsError</p>
+                    }
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <ButtonCn Size="ButtonSize.Sm" @onclick="HandleSubmit">
+                    Save Changes
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record FormSnapshot(string Title, string Description, string Tags);
+
+    private string _title = "Product Launch Plan";
+    private string _description = "Comprehensive strategy for Q2 product release";
+    private string _tags = "product, launch, strategy";
+
+    private string? _titleError;
+    private string? _descriptionError;
+    private string? _tagsError;
+
+    private List<FormSnapshot> _history = new();
+    private int _currentIndex = -1;
+    private bool _isUpdating = false;
+
+    private bool _canUndo => _currentIndex > 0;
+    private bool _canRedo => _currentIndex < _history.Count - 1;
+
+    private System.Threading.CancellationTokenSource? _debounceCts;
+
+    protected override void OnInitialized()
+    {
+        _history.Add(new FormSnapshot(_title, _description, _tags));
+        _currentIndex = 0;
+    }
+
+    private void OnTitleChanged(string? value)
+    {
+        _title = value ?? "";
+        TriggerHistoryCapture();
+    }
+
+    private void OnDescriptionChanged(string? value)
+    {
+        _description = value ?? "";
+        TriggerHistoryCapture();
+    }
+
+    private void OnTagsChanged(string? value)
+    {
+        _tags = value ?? "";
+        TriggerHistoryCapture();
+    }
+
+    private void TriggerHistoryCapture()
+    {
+        if (_isUpdating) return;
+
+        _debounceCts?.Cancel();
+        _debounceCts = new System.Threading.CancellationTokenSource();
+        var token = _debounceCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(500, token);
+                await InvokeAsync(() =>
+                {
+                    var current = new FormSnapshot(_title, _description, _tags);
+                    var last = _currentIndex >= 0 ? _history[_currentIndex] : null;
+
+                    if (last != null &&
+                        current.Title == last.Title &&
+                        current.Description == last.Description &&
+                        current.Tags == last.Tags)
+                        return;
+
+                    // Trim future history
+                    if (_currentIndex < _history.Count - 1)
+                        _history = _history.Take(_currentIndex + 1).ToList();
+
+                    _history.Add(current);
+
+                    // Limit to 50 items
+                    if (_history.Count > 50)
+                        _history.RemoveAt(0);
+
+                    _currentIndex = _history.Count - 1;
+                    StateHasChanged();
+                });
+            }
+            catch (TaskCanceledException)
+            {
+                // debounce cancelled — newer change came in
+            }
+        }, token);
+    }
+
+    private void HandleUndo()
+    {
+        if (!_canUndo) return;
+        _isUpdating = true;
+        _currentIndex--;
+        var snap = _history[_currentIndex];
+        _title = snap.Title;
+        _description = snap.Description;
+        _tags = snap.Tags;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(100);
+            await InvokeAsync(() => { _isUpdating = false; StateHasChanged(); });
+        });
+    }
+
+    private void HandleRedo()
+    {
+        if (!_canRedo) return;
+        _isUpdating = true;
+        _currentIndex++;
+        var snap = _history[_currentIndex];
+        _title = snap.Title;
+        _description = snap.Description;
+        _tags = snap.Tags;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(100);
+            await InvokeAsync(() => { _isUpdating = false; StateHasChanged(); });
+        });
+    }
+
+    private void HandleSubmit()
+    {
+        _titleError = string.IsNullOrWhiteSpace(_title) ? "Title is required" : null;
+        _descriptionError = string.IsNullOrWhiteSpace(_description) ? "Description is required" : null;
+        _tagsError = null;
+        // Submission logic would go here
+    }
+}

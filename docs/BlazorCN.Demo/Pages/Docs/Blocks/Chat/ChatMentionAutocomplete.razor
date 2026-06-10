@@ -1,0 +1,230 @@
+@* ============================================================
+   Block: chat-mention-autocomplete
+   Title: ChatMentionAutocomplete
+   Description: React chat block with @mention autocomplete for Next.js featuring inline user mentions, dropdown popover, highlighted mention spans, and real-time filtering using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-mention-autocomplete.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="at-sign" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Team Chat</span>
+            <span class="text-muted-foreground text-xs">Payments API</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs">@_users.Length members</BadgeCn>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto py-2">
+            @for (int i = 0; i < _messages.Length; i++)
+            {
+                var msg = _messages[i];
+                var grouped = i > 0 && _messages[i].Sender == _messages[i - 1].Sender;
+                <div class="@Cn.Merge("group flex gap-2 px-4 transition-colors hover:bg-accent", grouped ? "py-0.5" : "mt-3 first:mt-0")">
+                    @* Avatar column *@
+                    <div class="w-8 shrink-0 pt-0.5">
+                        @if (!grouped)
+                        {
+                            <AvatarCn Class="size-8">
+                                <AvatarFallbackCn Class="text-xs font-medium">@msg.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                        }
+                        @if (grouped)
+                        {
+                            <span class="hidden text-[10px] text-muted-foreground group-hover:inline">@msg.Timestamp</span>
+                        }
+                    </div>
+                    @* Body *@
+                    <div class="min-w-0 flex-1">
+                        @if (!grouped)
+                        {
+                            <div class="flex items-baseline gap-2">
+                                <span class="font-medium text-sm">@msg.Sender</span>
+                                <span class="text-muted-foreground text-xs">@msg.Timestamp</span>
+                            </div>
+                        }
+                        <div class="text-sm leading-relaxed">@((MarkupString)RenderMessageContent(msg.Content))</div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="relative border-t px-4 py-3">
+            @* Mention autocomplete dropdown *@
+            @if (_mentionOpen && _filteredUsers.Count > 0)
+            {
+                <div class="absolute bottom-full left-4 right-4 mb-1 overflow-hidden rounded-md border bg-popover shadow-md">
+                    <div class="p-1">
+                        <div class="px-2 py-1.5">
+                            <span class="font-medium text-muted-foreground text-xs">Mention a person</span>
+                        </div>
+                        @for (int ui = 0; ui < _filteredUsers.Count; ui++)
+                        {
+                            var user = _filteredUsers[ui];
+                            var idx = ui;
+                            <button
+                                type="button"
+                                class="@Cn.Merge("flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm transition-colors", idx == _activeIndex ? "bg-muted/50" : "hover:bg-muted/50")"
+                                @onclick="@(() => InsertMention(user))">
+                                <div class="relative">
+                                    <AvatarCn Class="size-6">
+                                        <AvatarFallbackCn Class="text-[10px] font-medium">@user.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <span class="@Cn.Merge("absolute -right-0.5 -bottom-0.5 size-2 rounded-full border border-popover", user.Online ? "bg-emerald-500" : "bg-muted-foreground/40")"></span>
+                                </div>
+                                <span class="font-medium text-sm">@user.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto h-5 font-normal text-[10px]">@user.Role</BadgeCn>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="flex items-end gap-2">
+                <div class="relative min-w-0 flex-1 rounded-md border bg-background">
+                    <TextareaCn
+                        Value="@_input"
+                        @oninput="@(e => HandleInputChange(e.Value?.ToString() ?? ""))"
+                        @onkeydown="HandleKeyDown"
+                        Placeholder="@("Type a message... Use \"@\" to mention")"
+                        Rows="1"
+                        Class="min-h-0 max-h-32 resize-none border-0 bg-transparent pr-10 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0" />
+                    <ButtonCn
+                        Type="submit"
+                        Size="ButtonSize.Icon"
+                        Variant="ButtonVariant.Ghost"
+                        Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                        Class="absolute top-1/2 right-1 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record User(string Id, string Name, string Role, string Initials, bool Online);
+    private record ChatMessage(string Id, string Sender, string Initials, string Content, string Timestamp);
+
+    private static readonly User[] _users =
+    [
+        new("u1", "Alice Chen",    "Engineering", "AC", true),
+        new("u2", "Bob Martinez",  "Design",       "BM", true),
+        new("u3", "Carol Johnson", "Product",      "CJ", false),
+        new("u4", "David Kim",     "Engineering",  "DK", true),
+        new("u5", "Eva Novak",     "Marketing",    "EN", false),
+        new("u6", "Frank Li",      "DevOps",       "FL", true),
+    ];
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("m1", "Alice Chen",  "AC", "Hey team, has anyone reviewed the new API schema for the payments service?", "10:32 AM"),
+        new("m2", "Bob Martinez","BM", "I took a look yesterday. The webhook endpoints look solid but I think we need to add pagination to the transaction list endpoint.", "10:34 AM"),
+        new("m3", "Carol Johnson","CJ", "Agreed with @Bob Martinez on pagination. @David Kim can you check if our SDK supports cursor-based pagination already?", "10:36 AM"),
+        new("m4", "David Kim",   "DK", "Looking into it now. @Alice Chen the SDK has offset pagination but not cursor-based. I can add it this sprint.", "10:38 AM"),
+        new("m5", "Alice Chen",  "AC", "Perfect. @Eva Novak can you update the docs once @David Kim has the cursor pagination PR merged? We should announce it in the changelog too.", "10:41 AM"),
+        new("m6", "Eva Novak",   "EN", "Will do. I will draft the changelog entry and have it ready for review by Thursday. @Frank Li can you handle the deployment pipeline update?", "10:43 AM"),
+        new("m7", "Frank Li",    "FL", "On it. The staging environment already has the new schema. I will set up the canary deploy for the pagination changes once the PR is ready.", "10:45 AM"),
+    ];
+
+    private string _input = "";
+    private bool _mentionOpen = false;
+    private string _mentionFilter = "";
+    private int _activeIndex = 0;
+
+    private List<User> _filteredUsers =>
+        _users.Where(u => u.Name.Contains(_mentionFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private void HandleInputChange(string value)
+    {
+        _input = value;
+        // Simple heuristic: find last '@' followed by word chars at end
+        var atIdx = value.LastIndexOf('@');
+        if (atIdx >= 0)
+        {
+            var afterAt = value.Substring(atIdx + 1);
+            // Only open if no space/newline after the @
+            if (!afterAt.Contains(' ') && !afterAt.Contains('\n'))
+            {
+                _mentionFilter = afterAt;
+                _mentionOpen = true;
+                _activeIndex = 0;
+                return;
+            }
+        }
+        _mentionOpen = false;
+        _mentionFilter = "";
+    }
+
+    private void InsertMention(User user)
+    {
+        var atIdx = _input.LastIndexOf('@');
+        if (atIdx >= 0)
+        {
+            var before = _input.Substring(0, atIdx);
+            _input = $"{before}@{user.Name} ";
+        }
+        else
+        {
+            _input += $"@{user.Name} ";
+        }
+        _mentionOpen = false;
+        _mentionFilter = "";
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (_mentionOpen && _filteredUsers.Count > 0)
+        {
+            if (e.Key == "ArrowDown")
+            {
+                _activeIndex = (_activeIndex + 1) % _filteredUsers.Count;
+                return;
+            }
+            if (e.Key == "ArrowUp")
+            {
+                _activeIndex = (_activeIndex - 1 + _filteredUsers.Count) % _filteredUsers.Count;
+                return;
+            }
+            if (e.Key == "Enter" && _activeIndex < _filteredUsers.Count)
+            {
+                InsertMention(_filteredUsers[_activeIndex]);
+                return;
+            }
+            if (e.Key == "Escape")
+            {
+                _mentionOpen = false;
+                return;
+            }
+        }
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            HandleSubmit();
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+        _mentionOpen = false;
+    }
+
+    /// <summary>
+    /// Converts @Name Surname mentions in message text into highlighted HTML spans.
+    /// Returns an HTML string safe for use with MarkupString.
+    /// </summary>
+    private static string RenderMessageContent(string content)
+    {
+        // Matches @Firstname Lastname (two capitalised words)
+        var result = System.Text.RegularExpressions.Regex.Replace(
+            System.Net.WebUtility.HtmlEncode(content),
+            @"@([A-Z][a-z]+ [A-Z][a-z]+)",
+            m => $"<span class=\"rounded px-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium text-sm\">@{m.Groups[1].Value}</span>"
+        );
+        return result;
+    }
+}

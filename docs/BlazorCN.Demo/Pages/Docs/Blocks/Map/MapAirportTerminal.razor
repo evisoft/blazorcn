@@ -1,0 +1,273 @@
+@* ============================================================
+   Block: map-airport-terminal
+   Title: MapAirportTerminal
+   Description: Interactive airport terminal map with gate markers, airline assignments, flight status badges, terminal section overlays, and gate detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-airport-terminal.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="plane" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Terminal Map</span>
+                <span class="text-xs text-muted-foreground">JFK International</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => SetTerminalFilter(null))"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _terminalFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    All
+                </button>
+                @foreach (var t in _terminals)
+                {
+                    var terminal = t;
+                    <button
+                        type="button"
+                        @onclick="@(() => SetTerminalFilter(terminal))"
+                        class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _terminalFilter == terminal ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        Terminal @terminal
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">
+                        @_filtered.Length gates
+                    </span>
+                </div>
+                <div class="max-h-[440px] divide-y overflow-y-auto">
+                    @foreach (var g in _filtered)
+                    {
+                        var gate = g;
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectGate(gate))"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedGateId == gate.Id ? "bg-muted/50" : "")"
+                        >
+                            <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-md text-[10px] font-semibold text-white", GetAirlineColor(gate.Airline))">
+                                @gate.Gate
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-sm font-medium">@gate.Flight</span>
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", GetStatusDot(gate.Status))"></span>
+                                </div>
+                                <span class="truncate text-xs text-muted-foreground">
+                                    @gate.Destination
+                                </span>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5">
+                                <span class="text-xs font-medium tabular-nums">@gate.DepartureTime</span>
+                                <span class="text-[10px] text-muted-foreground">@gate.Airline</span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map area (static visual — no live map library) *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Terminal section overlays *@
+                @foreach (var sec in _terminalSections)
+                {
+                    <div
+                        class="absolute rounded border-2 flex items-center justify-center"
+                        style="@($"border-color:{sec.Color};background-color:{sec.Color}1a;{sec.CssPosition}")"
+                    >
+                        <span class="text-[10px] font-semibold" style="@($"color:{sec.Color}")">@sec.Name</span>
+                    </div>
+                }
+
+                @* Gate markers *@
+                @foreach (var g in _filtered)
+                {
+                    var gate = g;
+                    <button
+                        type="button"
+                        @onclick="@(() => TogglePopup(gate))"
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{gate.MapX}%;top:{gate.MapY}%")"
+                        title="@($"{gate.Flight} — {gate.Destination}")"
+                    >
+                        <div class="@Cn.Merge("flex size-6 items-center justify-center rounded-full border-2 border-white text-[9px] font-bold text-white shadow-md", GetAirlineColor(gate.Airline))">
+                            @gate.Gate
+                        </div>
+                    </button>
+                }
+
+                @* Popup *@
+                @if (_popupGate != null)
+                {
+                    <div class="absolute right-3 top-3 z-10 w-52 rounded-lg border bg-card p-3 shadow-lg">
+                        <div class="mb-2 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium">@_popupGate.Flight</p>
+                                <p class="text-xs text-muted-foreground">@_popupGate.Airline</p>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">Gate @_popupGate.Gate</BadgeCn>
+                                <button type="button" @onclick="@(() => _popupGate = null)" class="ml-1 text-muted-foreground hover:text-foreground">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-1.5">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-muted-foreground">Destination</span>
+                                <span class="font-medium">@_popupGate.Destination</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-muted-foreground">Departure</span>
+                                <span class="font-medium tabular-nums">@_popupGate.DepartureTime</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-muted-foreground">Boarding</span>
+                                <span class="font-medium tabular-nums">@_popupGate.BoardingTime</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-muted-foreground">Aircraft</span>
+                                <span class="font-medium">@_popupGate.Aircraft</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-muted-foreground">Status</span>
+                                <span class="flex items-center gap-1.5 font-medium">
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", GetStatusDot(_popupGate.Status))"></span>
+                                    @GetStatusLabel(_popupGate.Status)
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* Zoom controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-card shadow-sm text-sm font-medium hover:bg-muted/50">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-card shadow-sm text-sm font-medium hover:bg-muted/50">−</button>
+                </div>
+            </div>
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_counts.Boarding boarding
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                @_counts.OnTime on time
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @_counts.Delayed delayed
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-muted-foreground/40"></span>
+                @_counts.Departed departed
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record GateInfo(
+        string Id, string Gate, string Terminal, string Airline, string Flight,
+        string Destination, string DepartureTime, string BoardingTime, string Aircraft,
+        string Status, double MapX, double MapY);
+
+    private record TerminalSection(string Id, string Name, string Color, string CssPosition);
+
+    private record StatusCounts(int Boarding, int OnTime, int Delayed, int Departed);
+
+    private static readonly GateInfo[] _gates =
+    [
+        new("g1", "A1", "A", "Delta",     "DL 1247", "Atlanta (ATL)",  "2:15 PM", "1:45 PM", "Boeing 737-900",    "boarding",  18, 38),
+        new("g2", "A4", "A", "Delta",     "DL 892",  "Detroit (DTW)",  "2:45 PM", "2:15 PM", "Airbus A321",       "on-time",   25, 42),
+        new("g3", "B2", "B", "United",    "UA 456",  "Chicago (ORD)",  "3:00 PM", "2:30 PM", "Boeing 777-300",    "on-time",   35, 50),
+        new("g4", "B7", "B", "United",    "UA 1102", "Denver (DEN)",   "3:30 PM", "3:00 PM", "Boeing 737 MAX 9",  "delayed",   44, 55),
+        new("g5", "C3", "C", "American",  "AA 319",  "Dallas (DFW)",   "1:50 PM", "1:20 PM", "Airbus A320",       "departed",  53, 62),
+        new("g6", "C6", "C", "American",  "AA 780",  "Miami (MIA)",    "4:10 PM", "3:40 PM", "Boeing 787-9",      "on-time",   61, 67),
+        new("g7", "D1", "D", "JetBlue",   "B6 217",  "Boston (BOS)",   "2:00 PM", "1:30 PM", "Airbus A220-300",   "boarding",  70, 74),
+        new("g8", "D5", "D", "Southwest", "WN 542",  "Orlando (MCO)",  "3:15 PM", "2:45 PM", "Boeing 737-800",    "on-time",   78, 80),
+    ];
+
+    private static readonly TerminalSection[] _terminalSections =
+    [
+        new("t-a", "Terminal A", "#3b82f6", "left:10%;top:28%;width:18%;height:20%"),
+        new("t-b", "Terminal B", "#6366f1", "left:28%;top:40%;width:18%;height:20%"),
+        new("t-c", "Terminal C", "#ef4444", "left:46%;top:52%;width:18%;height:20%"),
+        new("t-d", "Terminal D", "#f59e0b", "left:64%;top:64%;width:18%;height:20%"),
+    ];
+
+    private string? _selectedGateId;
+    private GateInfo? _popupGate;
+    private string? _terminalFilter;
+
+    private string[] _terminals = ["A", "B", "C", "D"];
+
+    private GateInfo[] _filtered => _terminalFilter is null
+        ? _gates
+        : _gates.Where(g => g.Terminal == _terminalFilter).ToArray();
+
+    private StatusCounts _counts => new(
+        _gates.Count(g => g.Status == "boarding"),
+        _gates.Count(g => g.Status == "on-time"),
+        _gates.Count(g => g.Status == "delayed"),
+        _gates.Count(g => g.Status == "departed"));
+
+    private void SetTerminalFilter(string? filter)
+    {
+        _terminalFilter = filter;
+        _popupGate = null;
+        _selectedGateId = null;
+    }
+
+    private void SelectGate(GateInfo gate)
+    {
+        _selectedGateId = gate.Id;
+        _popupGate = gate;
+    }
+
+    private void TogglePopup(GateInfo gate)
+    {
+        _popupGate = _popupGate?.Id == gate.Id ? null : gate;
+        _selectedGateId = gate.Id;
+    }
+
+    private static string GetAirlineColor(string airline) => airline switch
+    {
+        "Delta"     => "bg-blue-600",
+        "United"    => "bg-indigo-500",
+        "American"  => "bg-red-500",
+        "JetBlue"   => "bg-sky-500",
+        "Southwest" => "bg-amber-500",
+        _           => "bg-muted-foreground",
+    };
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "boarding"  => "bg-emerald-500",
+        "on-time"   => "bg-blue-500",
+        "delayed"   => "bg-red-500",
+        "departed"  => "bg-muted-foreground/40",
+        _           => "bg-muted-foreground",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "boarding"  => "Boarding",
+        "on-time"   => "On Time",
+        "delayed"   => "Delayed",
+        "departed"  => "Departed",
+        _           => status,
+    };
+}

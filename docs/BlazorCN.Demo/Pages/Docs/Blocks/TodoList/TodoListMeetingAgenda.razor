@@ -1,0 +1,185 @@
+@* ============================================================
+   Block: todo-list-meeting-agenda
+   Title: TodoListMeetingAgenda
+   Description: React todo list meeting agenda block for Next.js with time allocations, speaker assignments, notes toggle, and active item highlighting using shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-meeting-agenda.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="list" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Meeting Agenda</span>
+            </div>
+            <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                <span class="tabular-nums">@_totalDuration min total</span>
+                @if (_started)
+                {
+                    <span>·</span>
+                    <span class="tabular-nums">@_completedDuration min done</span>
+                }
+            </div>
+        </div>
+
+        @* Progress *@
+        @if (_started)
+        {
+            <div class="border-b px-4 py-2.5">
+                <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div class="h-full rounded-full bg-emerald-500" style="@($"width:{_progressPercent}%")"></div>
+                </div>
+            </div>
+        }
+
+        @* Agenda items *@
+        <div>
+            @for (int i = 0; i < _items.Count; i++)
+            {
+                var item = _items[i];
+                var index = i;
+                var isActive = _activeIndex == index;
+                var isLast = index == _items.Count - 1;
+                var hasNotes = _expandedNotes == item.Id;
+                var itemId = item.Id;
+                <div class="@Cn.Merge(!isLast ? "border-b" : "", isActive ? "bg-muted/30" : "")">
+                    <div class="flex items-start gap-3 px-4 py-3">
+                        @* Item number *@
+                        <span class="@($"flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] tabular-nums {(item.Completed ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}")">
+                            @(index + 1)
+                        </span>
+
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="@($"font-medium text-sm{(item.Completed ? " text-muted-foreground line-through" : "")}")">
+                                    @item.Title
+                                </span>
+                            </div>
+
+                            <div class="mt-1 flex items-center gap-2 text-muted-foreground text-xs">
+                                <span class="flex items-center gap-1">
+                                    <AvatarCn Class="size-4">
+                                        <AvatarFallbackCn Class="text-[8px]">@item.Speaker.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    @item.Speaker.Name
+                                </span>
+                                <span>·</span>
+                                <span class="flex items-center gap-1 tabular-nums">
+                                    <LucideIconCn Name="clock" Size="10" Class="size-2.5" />
+                                    @item.Duration min
+                                </span>
+                            </div>
+
+                            @* Notes *@
+                            @if (hasNotes)
+                            {
+                                <div class="overflow-hidden">
+                                    <div class="mt-2 rounded-md bg-muted/50 p-3">
+                                        <span class="font-medium text-muted-foreground text-xs">Notes</span>
+                                        <p class="mt-1 text-sm leading-relaxed">
+                                            @(string.IsNullOrEmpty(item.Notes) ? "No notes added yet." : item.Notes)
+                                        </p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @* Notes toggle *@
+                        <div class="flex shrink-0 items-center gap-1">
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 w-6 p-0" @onclick="@(() => ToggleNotes(itemId))">
+                                @if (hasNotes)
+                                {
+                                    <LucideIconCn Name="chevron-down" Size="14" Class="size-3.5 text-muted-foreground" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="sticky-note" Size="12" Class="size-3 text-muted-foreground" />
+                                }
+                            </ButtonCn>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">@_items.Count agenda items</span>
+            @if (!_started)
+            {
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" @onclick="StartMeeting">
+                    <LucideIconCn Name="play" Size="12" Class="size-3" />
+                    Start Meeting
+                </ButtonCn>
+            }
+            else
+            {
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" @onclick="NextItem">
+                    <LucideIconCn Name="skip-forward" Size="12" Class="size-3" />
+                    @(_activeIndex != null && _activeIndex < _items.Count - 1 ? "Next Item" : "End Meeting")
+                </ButtonCn>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SpeakerInfo(string Name, string Initials);
+
+    private class AgendaItem
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+        public int Duration { get; set; }
+        public SpeakerInfo Speaker { get; set; } = new("", "");
+        public string Notes { get; set; } = "";
+        public bool Completed { get; set; }
+    }
+
+    private List<AgendaItem> _items =
+    [
+        new() { Id = "a1", Title = "Sprint review and demo", Duration = 15, Speaker = new("Alex Chen", "AC"), Notes = "Demo the new dashboard analytics features and billing integration updates.", Completed = false },
+        new() { Id = "a2", Title = "Performance metrics review", Duration = 10, Speaker = new("Jordan Lee", "JL"), Notes = "Core Web Vitals report, API response times, and error rate trends.", Completed = false },
+        new() { Id = "a3", Title = "Design system v3 rollout plan", Duration = 10, Speaker = new("Sam Rivera", "SR"), Notes = "", Completed = false },
+        new() { Id = "a4", Title = "Q3 roadmap prioritization", Duration = 20, Speaker = new("Taylor Kim", "TK"), Notes = "Review feature requests from customer feedback and align with business goals.", Completed = false },
+        new() { Id = "a5", Title = "Hiring updates and team capacity", Duration = 5, Speaker = new("Morgan Wu", "MW"), Notes = "Two senior engineer candidates in final round. Start dates for new hires.", Completed = false },
+        new() { Id = "a6", Title = "Open discussion and action items", Duration = 10, Speaker = new("Alex Chen", "AC"), Notes = "", Completed = false },
+    ];
+
+    private int? _activeIndex = null;
+    private string? _expandedNotes = null;
+    private bool _started = false;
+
+    private int _totalDuration => _items.Sum(i => i.Duration);
+    private int _completedDuration => _items.Where(i => i.Completed).Sum(i => i.Duration);
+    private int _progressPercent => _totalDuration > 0 ? _completedDuration * 100 / _totalDuration : 0;
+
+    private void StartMeeting()
+    {
+        _started = true;
+        _activeIndex = 0;
+    }
+
+    private void NextItem()
+    {
+        if (_activeIndex == null) return;
+        var idx = _activeIndex.Value;
+        _items[idx].Completed = true;
+        if (idx < _items.Count - 1)
+        {
+            _activeIndex = idx + 1;
+        }
+        else
+        {
+            _activeIndex = null;
+            _started = false;
+        }
+    }
+
+    private void ToggleNotes(string itemId)
+    {
+        _expandedNotes = _expandedNotes == itemId ? null : itemId;
+    }
+}

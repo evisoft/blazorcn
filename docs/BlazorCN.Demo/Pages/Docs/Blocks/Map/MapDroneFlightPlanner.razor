@@ -1,0 +1,284 @@
+@* ============================================================
+   Block: map-drone-flight-planner
+   Title: MapDroneFlightPlanner
+   Description: Drone flight path planner map block for Next.js with waypoint markers, flight path route lines, altitude indicators, no-fly zones, and mission summary using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-drone-flight-planner.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="plane" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Flight Planner</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    @_waypoints.Length waypoints
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="ruler" Size="12" Class="size-3" />
+                    @_missionDistance
+                </span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                    @_missionDuration
+                </span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="battery-medium" Size="12" Class="size-3" />
+                    @_missionBattery
+                </span>
+            </div>
+        </div>
+
+        @* Map + Panel *@
+        <div class="flex">
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Flight path SVG overlay *@
+                    <svg class="absolute inset-0 h-full w-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                        @{
+                            var pathPoints = string.Join(" ", _waypoints.Select(wp => {
+                                var p = GetMarkerPosition(wp.Longitude, wp.Latitude);
+                                return $"{p.X:F1}%,{p.Y:F1}%";
+                            }));
+                        }
+                        @((MarkupString)$"<polyline points=\"{pathPoints}\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"3\" stroke-opacity=\"0.8\" stroke-dasharray=\"6 4\" />")
+                    </svg>
+
+                    @* Waypoint markers *@
+                    @foreach (var wp in _waypoints)
+                    {
+                        var waypoint = wp;
+                        var idx = Array.IndexOf(_waypoints, waypoint);
+                        var pos = GetMarkerPosition(waypoint.Longitude, waypoint.Latitude);
+                        var isSelected = _selectedWaypoint == waypoint.Id;
+                        var markerClass = isSelected
+                            ? "flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-sm border-blue-500 bg-blue-500 text-white"
+                            : "flex size-6 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-sm border-white bg-card text-foreground";
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                            <button
+                                type="button"
+                                class="relative flex flex-col items-center"
+                                @onclick="@(() => SelectWaypoint(waypoint.Id))">
+                                <div class="@markerClass">
+                                    @(idx + 1)
+                                </div>
+                                <span class="mt-0.5 rounded bg-card/80 px-1 py-0.5 font-mono text-[9px]">
+                                    @(waypoint.Altitude)m
+                                </span>
+                            </button>
+                        </div>
+                    }
+
+                    @* No-fly zone markers *@
+                    @foreach (var zone in _noFlyZones)
+                    {
+                        var nfz = zone;
+                        var nfzPos = GetMarkerPosition(nfz.Longitude, nfz.Latitude);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{nfzPos.X:F1}%;top:{nfzPos.Y:F1}%")"
+                            title="@($"No-fly: {nfz.Name}")">
+                            <div class="flex size-5 items-center justify-center rounded-full bg-red-500/20">
+                                <LucideIconCn Name="triangle-alert" Size="12" Class="size-3 text-red-500" />
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                    Map view — San Francisco, CA
+                </div>
+            </div>
+
+            @* Sidebar *@
+            <div class="w-60 shrink-0 border-l">
+                @* Mission summary *@
+                <div class="border-b px-4 py-3">
+                    <span class="text-xs font-medium text-muted-foreground">Mission summary</span>
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                        <div>
+                            <span class="block text-[10px] text-muted-foreground">Distance</span>
+                            <span class="text-sm font-semibold tabular-nums">@_missionDistance</span>
+                        </div>
+                        <div>
+                            <span class="block text-[10px] text-muted-foreground">Duration</span>
+                            <span class="text-sm font-semibold tabular-nums">@_missionDuration</span>
+                        </div>
+                        <div>
+                            <span class="block text-[10px] text-muted-foreground">Max altitude</span>
+                            <span class="text-sm font-semibold tabular-nums">@_missionMaxAltitude</span>
+                        </div>
+                        <div>
+                            <span class="block text-[10px] text-muted-foreground">Battery est.</span>
+                            <span class="text-sm font-semibold tabular-nums">@_missionBattery</span>
+                        </div>
+                    </div>
+                </div>
+
+                @* Waypoints *@
+                <div class="border-b">
+                    <div class="px-4 py-2">
+                        <span class="text-xs font-medium text-muted-foreground">Waypoints</span>
+                    </div>
+                    <div class="max-h-[240px] overflow-y-auto">
+                        @for (var wi = 0; wi < _waypoints.Length; wi++)
+                        {
+                            var wp = _waypoints[wi];
+                            var isSelected = _selectedWaypoint == wp.Id;
+                            var isLast = wi == _waypoints.Length - 1;
+                            var wpCapture = wp;
+                            var rowClass = Cn.Merge(
+                                "flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted/50",
+                                isLast ? "" : "border-b",
+                                isSelected ? "bg-muted/30" : ""
+                            );
+                            var altClass = "block font-mono text-xs tabular-nums " + AltitudeColor(wp.Altitude);
+                            <button
+                                type="button"
+                                class="@rowClass"
+                                @onclick="@(() => ToggleWaypoint(wpCapture.Id))">
+                                <LucideIconCn Name="map-pin" Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                <div class="min-w-0 flex-1">
+                                    <span class="block text-xs font-medium">@wp.Name</span>
+                                    <span class="block text-[10px] text-muted-foreground">@wp.Action</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="@altClass">@(wp.Altitude)m</span>
+                                    <span class="block text-[10px] text-muted-foreground">@(wp.Speed) m/s</span>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @* No-fly zones *@
+                <div>
+                    <div class="px-4 py-2">
+                        <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <LucideIconCn Name="triangle-alert" Size="12" Class="size-3 text-red-500" />
+                            No-fly zones
+                        </span>
+                    </div>
+                    @for (var zi = 0; zi < _noFlyZones.Length; zi++)
+                    {
+                        var zone = _noFlyZones[zi];
+                        var isExpanded = _expandedZone == zone.Id;
+                        var isLast = zi == _noFlyZones.Length - 1;
+                        var zoneCapture = zone;
+                        var chevronClass = Cn.Merge(
+                            "size-3 text-muted-foreground/60 transition-transform duration-200",
+                            isExpanded ? "rotate-90" : ""
+                        );
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                class="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted/50"
+                                @onclick="@(() => ToggleZone(zoneCapture.Id))">
+                                <span class="size-1.5 shrink-0 rounded-full bg-red-500"></span>
+                                <span class="flex-1 text-xs font-medium">@zone.Name</span>
+                                <LucideIconCn Name="chevron-right" Size="12" Class="@chevronClass" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="px-4 pb-2 pl-7">
+                                    <div class="rounded-md bg-muted/50 p-2">
+                                        <span class="block text-[10px] text-muted-foreground">Radius: @zone.Radius</span>
+                                        <span class="block text-[10px] text-muted-foreground">@zone.Reason</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Waypoint(
+        string Id,
+        string Name,
+        double Longitude,
+        double Latitude,
+        int Altitude,
+        int Speed,
+        string Action
+    );
+
+    private record NoFlyZone(
+        string Id,
+        string Name,
+        double Longitude,
+        double Latitude,
+        string Radius,
+        string Reason
+    );
+
+    private static readonly Waypoint[] _waypoints =
+    [
+        new("wp1", "Takeoff",  -122.4094, 37.7749, 0,   0,  "Launch"),
+        new("wp2", "WP-A",     -122.4134, 37.7779, 120, 15, "Photo"),
+        new("wp3", "WP-B",     -122.4174, 37.7809, 200, 12, "Video start"),
+        new("wp4", "WP-C",     -122.4154, 37.7849, 200, 12, "Video stop"),
+        new("wp5", "WP-D",     -122.4114, 37.7829, 150, 15, "Photo"),
+        new("wp6", "Landing",  -122.4094, 37.7749, 0,   8,  "Return home"),
+    ];
+
+    private static readonly NoFlyZone[] _noFlyZones =
+    [
+        new("nfz1", "Helipad Zone",  -122.42,  37.779, "200m", "Hospital helipad"),
+        new("nfz2", "Gov Building",  -122.405, 37.781, "150m", "Government facility"),
+    ];
+
+    private const string _missionDistance    = "3.2 km";
+    private const string _missionDuration    = "18 min";
+    private const string _missionMaxAltitude = "200 m";
+    private const string _missionBattery     = "62%";
+
+    private string? _selectedWaypoint = "wp3";
+    private string? _expandedZone = null;
+
+    private void SelectWaypoint(string id)
+    {
+        _selectedWaypoint = id;
+    }
+
+    private void ToggleWaypoint(string id)
+    {
+        _selectedWaypoint = _selectedWaypoint == id ? null : id;
+    }
+
+    private void ToggleZone(string id)
+    {
+        _expandedZone = _expandedZone == id ? null : id;
+    }
+
+    private static string AltitudeColor(int alt)
+    {
+        if (alt >= 180) return "text-red-600 dark:text-red-400";
+        if (alt >= 100) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+
+    // Map lon/lat to CSS percentage positions.
+    // Viewport: lon [-122.425, -122.400], lat [37.772, 37.788]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -122.425, lonMax = -122.400;
+        const double latMin = 37.772,   latMax = 37.788;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

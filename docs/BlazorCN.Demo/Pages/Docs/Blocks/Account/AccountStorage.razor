@@ -1,0 +1,243 @@
+@* ============================================================
+   Block: account-storage
+   Title: AccountStorage
+   Description: A storage usage dashboard block for React and Next.js with usage ring visualization, category breakdown bars, per-category actions, and upgrade prompt built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-storage.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with usage summary *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-start justify-between">
+                <div>
+                    <div class="mb-1 flex items-center gap-2">
+                        <LucideHardDriveCn Size="16" Class="text-muted-foreground" />
+                        <h2 class="text-sm font-medium">Storage</h2>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        @_currentPlan.Name plan — @FormatBytes(_currentPlan.TotalBytes) total
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs tabular-nums">
+                    @(_effectivePercentage.ToString("F0"))% used
+                </BadgeCn>
+            </div>
+
+            @* Usage bar *@
+            <div class="mt-4">
+                <div class="mb-2 flex items-baseline justify-between">
+                    <span class="text-2xl font-semibold tabular-nums">
+                        @FormatBytes(_effectiveTotalUsed)
+                    </span>
+                    <span class="text-xs text-muted-foreground">
+                        @FormatBytes(_currentPlan.TotalBytes - _effectiveTotalUsed) available
+                    </span>
+                </div>
+
+                @* Stacked bar showing all categories *@
+                <div class="flex h-3 w-full overflow-hidden rounded-full bg-muted/50">
+                    @foreach (var cat in _effectiveCategories)
+                    {
+                        var width = (cat.SizeBytes / _currentPlan.TotalBytes) * 100;
+                        if (width > 0)
+                        {
+                            <div class="@($"{cat.BarColor} h-full")" style="@($"width:{width:F1}%")"></div>
+                        }
+                    }
+                </div>
+
+                @* Legend *@
+                <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                    @foreach (var cat in _effectiveCategories)
+                    {
+                        <div class="flex items-center gap-1.5">
+                            <span class="@($"size-2 rounded-full {cat.BarColor}")"></span>
+                            <span class="text-[10px] text-muted-foreground">@cat.Name</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Near-limit warning *@
+        @if (_isNearLimit && _clearedCategories.Count == 0)
+        {
+            <div class="border-b bg-amber-500/10 px-4 py-3">
+                <div class="flex items-start gap-3">
+                    <LucideAlertTriangleCn Size="16" Class="mt-0.5 text-amber-600" />
+                    <div class="flex-1">
+                        <p class="text-sm font-medium">Running low on storage</p>
+                        <p class="text-xs text-muted-foreground">
+                            You have used @(_effectivePercentage.ToString("F0"))% of your storage. Consider
+                            clearing cache or upgrading your plan.
+                        </p>
+                    </div>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="shrink-0">
+                        Upgrade plan
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Category breakdown *@
+        <div class="divide-y">
+            @foreach (var cat in _effectiveCategories)
+            {
+                var percentage = _currentPlan.TotalBytes > 0 ? (cat.SizeBytes / _currentPlan.TotalBytes) * 100 : 0;
+                var isProcessing = _processingId == cat.Id;
+                var isCleared = _clearedCategories.Contains(cat.Id);
+                <div class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                        <div class="@($"flex h-8 w-8 items-center justify-center rounded-md bg-muted/50 {cat.Color}")">
+                            <LucideIconCn Name="@cat.IconName" Size="16" />
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+                            <div class="mb-1 flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@cat.Name</span>
+                                    <span class="text-xs text-muted-foreground tabular-nums">
+                                        @FormatCount(cat.FileCount) files
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium tabular-nums">
+                                        @FormatBytes(cat.SizeBytes)
+                                    </span>
+                                    <span class="text-xs text-muted-foreground tabular-nums">
+                                        @(percentage.ToString("F1"))%
+                                    </span>
+                                </div>
+                            </div>
+
+                            @* Horizontal bar *@
+                            <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
+                                <div class="@($"h-full rounded-full {(isCleared ? "bg-muted" : cat.BarColor)}")" style="@($"width:{percentage:F1}%")"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Action row *@
+                    @if (cat.Action != null && !isCleared)
+                    {
+                        <div class="mt-2 flex justify-end">
+                            <ButtonCn
+                                Size="ButtonSize.Sm"
+                                Variant="ButtonVariant.Outline"
+                                Class="@(cat.Action.Variant == "destructive" ? "h-7 text-xs text-red-600 hover:bg-red-500/10 hover:text-red-600" : "h-7 text-xs")"
+                                Disabled="@isProcessing"
+                                @onclick="@(() => HandleAction(cat.Id))">
+                                @if (isProcessing)
+                                {
+                                    <span class="flex items-center gap-1.5">
+                                        <span class="size-3 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+                                        Processing...
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="flex items-center gap-1.5">
+                                        @if (cat.Action.Variant == "destructive")
+                                        {
+                                            <LucideTrash2Cn Size="12" />
+                                        }
+                                        @cat.Action.Label
+                                    </span>
+                                }
+                            </ButtonCn>
+                        </div>
+                    }
+
+                    @if (isCleared)
+                    {
+                        <p class="mt-1.5 text-xs text-emerald-600">Cleared successfully</p>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t bg-muted/30 px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span class="tabular-nums">
+                        @(_effectiveCategories.Sum(c => c.FileCount).ToString("N0")) total files
+                    </span>
+                    <span class="text-muted-foreground/40">|</span>
+                    <span>Last synced 3 min ago</span>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-7 text-xs">
+                    View all files
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StorageCategoryAction(string Label, string Variant);
+
+    private record StorageCategory(
+        string Id,
+        string Name,
+        double SizeBytes,
+        int FileCount,
+        string IconName,
+        string Color,
+        string BarColor,
+        StorageCategoryAction? Action = null
+    );
+
+    private record StoragePlan(string Name, double TotalBytes, decimal PricePerMonth);
+
+    private static readonly StoragePlan _currentPlan = new(
+        "Pro",
+        100.0 * 1024 * 1024 * 1024,
+        29m
+    );
+
+    private static readonly StorageCategory[] _storageCategories =
+    [
+        new("documents", "Documents", 12.4 * 1024 * 1024 * 1024, 2847,  "file-text",   "text-blue-600",    "bg-blue-500",    new("Manage files",        "outline")),
+        new("media",     "Media",     15.8 * 1024 * 1024 * 1024, 1203,  "image",        "text-violet-600",  "bg-violet-500",  new("Manage files",        "outline")),
+        new("backups",   "Backups",    6.2 * 1024 * 1024 * 1024, 34,    "archive",      "text-emerald-600", "bg-emerald-500", new("Delete old backups",  "destructive")),
+        new("logs",      "Logs",       2.1 * 1024 * 1024 * 1024, 18420, "scroll-text",  "text-amber-600",   "bg-amber-500",   new("Purge logs",          "destructive")),
+        new("cache",     "Cache",      1.7 * 1024 * 1024 * 1024, 5612,  "database",     "text-red-600",     "bg-red-500",     new("Clear cache",         "destructive")),
+    ];
+
+    private readonly HashSet<string> _clearedCategories = [];
+    private string? _processingId;
+
+    private IEnumerable<StorageCategory> _effectiveCategories =>
+        _storageCategories.Select(cat => _clearedCategories.Contains(cat.Id)
+            ? cat with { SizeBytes = 0, FileCount = 0 }
+            : cat);
+
+    private double _effectiveTotalUsed => _effectiveCategories.Sum(c => c.SizeBytes);
+    private double _effectivePercentage => (_effectiveTotalUsed / _currentPlan.TotalBytes) * 100;
+    private static bool _isNearLimit => (_storageCategories.Sum(c => c.SizeBytes) / (100.0 * 1024 * 1024 * 1024)) * 100 >= 75;
+
+    private async Task HandleAction(string categoryId)
+    {
+        _processingId = categoryId;
+        await Task.Delay(1200);
+        _processingId = null;
+        _clearedCategories.Add(categoryId);
+    }
+
+    private static string FormatBytes(double bytes)
+    {
+        if (bytes == 0) return "0 B";
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        int i = (int)Math.Floor(Math.Log(bytes) / Math.Log(1024));
+        double value = bytes / Math.Pow(1024, i);
+        return $"{(value >= 10 ? value.ToString("F1") : value.ToString("F2"))} {units[i]}";
+    }
+
+    private static string FormatCount(int n)
+    {
+        if (n >= 1000) return $"{(n / 1000.0).ToString("F1")}k";
+        return n.ToString();
+    }
+}

@@ -1,0 +1,235 @@
+@* ============================================================
+   Block: file-upload-queue-manager
+   Title: FileUploadQueueManager
+   Description: File upload queue manager block for React and Next.js with priority ordering, pause and resume controls, retry failed uploads, and clear completed using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-queue-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Upload queue</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    @_queue.Count files · @_activeCount active · @_completedCount complete
+                </p>
+            </div>
+            @if (_completedCount > 0)
+            {
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                    Class="h-7 gap-1 text-xs text-muted-foreground"
+                    OnClick="ClearCompleted">
+                    <LucideIconCn Name="trash-2" Size="12" Class="size-3" />
+                    Clear completed
+                </ButtonCn>
+            }
+        </div>
+
+        @* Queue list *@
+        <div>
+            @for (int i = 0; i < _queue.Count; i++)
+            {
+                var idx = i;
+                var item = _queue[i];
+                var isLast = idx == _queue.Count - 1;
+                <div class="@Cn.Merge("px-4 py-3 transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                    <div class="flex items-center gap-2">
+                        @* Drag handle + reorder *@
+                        <div class="flex shrink-0 flex-col items-center gap-0.5">
+                            <button type="button"
+                                @onclick="@(() => MoveUp(idx))"
+                                class="text-muted-foreground/40 transition-colors hover:text-muted-foreground">
+                                <LucideIconCn Name="chevron-up" Size="12" Class="size-3" />
+                            </button>
+                            <LucideIconCn Name="grip-vertical" Size="12" Class="size-3 text-muted-foreground/40" />
+                            <button type="button"
+                                @onclick="@(() => MoveDown(idx))"
+                                class="text-muted-foreground/40 transition-colors hover:text-muted-foreground">
+                                <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+
+                        @* Status icon *@
+                        <div class="shrink-0">
+                            @if (item.Status == QueueStatus.Queued)
+                            {
+                                <LucideIconCn Name="file" Size="14" Class="size-3.5 text-muted-foreground" />
+                            }
+                            else if (item.Status == QueueStatus.Uploading)
+                            {
+                                <LucideIconCn Name="loader-2" Size="14" Class="size-3.5 animate-spin text-blue-500" />
+                            }
+                            else if (item.Status == QueueStatus.Paused)
+                            {
+                                <LucideIconCn Name="pause" Size="14" Class="size-3.5 text-amber-500" />
+                            }
+                            else if (item.Status == QueueStatus.Complete)
+                            {
+                                <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5 text-emerald-500" />
+                            }
+                            else if (item.Status == QueueStatus.Failed)
+                            {
+                                <LucideIconCn Name="alert-circle" Size="14" Class="size-3.5 text-red-500" />
+                            }
+                        </div>
+
+                        @* File info *@
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="truncate font-medium text-sm">@item.Name</span>
+                                <button type="button"
+                                    @onclick="@(() => CyclePriority(idx))"
+                                    class="flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 transition-colors hover:bg-muted">
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", PriorityDot(item.Priority))"></span>
+                                    <span class="text-muted-foreground text-xs">@PriorityLabel(item.Priority)</span>
+                                </button>
+                            </div>
+                            <span class="text-muted-foreground text-xs">@item.Size</span>
+                        </div>
+
+                        @* Actions *@
+                        <div class="flex shrink-0 items-center gap-1">
+                            @if (item.Status == QueueStatus.Uploading || item.Status == QueueStatus.Paused)
+                            {
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                    Class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                    OnClick="@(() => TogglePause(idx))">
+                                    @if (item.Status == QueueStatus.Uploading)
+                                    {
+                                        <LucideIconCn Name="pause" Size="12" Class="size-3" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="play" Size="12" Class="size-3" />
+                                    }
+                                </ButtonCn>
+                            }
+                            @if (item.Status == QueueStatus.Failed)
+                            {
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                    Class="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    OnClick="@(() => RetryUpload(idx))">
+                                    <LucideIconCn Name="rotate-ccw" Size="12" Class="size-3" />
+                                    Retry
+                                </ButtonCn>
+                            }
+                        </div>
+                    </div>
+
+                    @* Progress bar for uploading/paused/failed *@
+                    @if (item.Status == QueueStatus.Uploading || item.Status == QueueStatus.Paused || item.Status == QueueStatus.Failed)
+                    {
+                        <div class="mt-2 flex items-center gap-2 pl-[52px]">
+                            <div class="relative flex h-1 w-full items-center overflow-hidden rounded-full bg-secondary">
+                                <div class="@Cn.Merge("h-full transition-all", item.Status == QueueStatus.Failed ? "bg-red-500" : item.Status == QueueStatus.Paused ? "bg-amber-500" : "bg-primary")"
+                                     style="@($"width:{Math.Clamp(item.Progress, 0, 100)}%")">
+                                </div>
+                            </div>
+                            <span class="shrink-0 text-muted-foreground text-xs tabular-nums">@(item.Progress)%</span>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_queue.Count == 0)
+            {
+                <div class="px-4 py-8 text-center">
+                    <span class="text-muted-foreground text-xs">Upload queue is empty</span>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum Priority { High, Normal, Low }
+    private enum QueueStatus { Queued, Uploading, Paused, Complete, Failed }
+
+    private class QueueItem
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Size { get; set; } = "";
+        public Priority Priority { get; set; }
+        public QueueStatus Status { get; set; }
+        public int Progress { get; set; }
+    }
+
+    private List<QueueItem> _queue =
+    [
+        new QueueItem { Id = "q1", Name = "product-demo.mp4",        Size = "245 MB", Priority = Priority.High,   Status = QueueStatus.Uploading, Progress = 67  },
+        new QueueItem { Id = "q2", Name = "api-documentation.pdf",   Size = "3.2 MB", Priority = Priority.High,   Status = QueueStatus.Uploading, Progress = 34  },
+        new QueueItem { Id = "q3", Name = "database-backup.sql.gz",  Size = "89 MB",  Priority = Priority.Normal, Status = QueueStatus.Paused,    Progress = 52  },
+        new QueueItem { Id = "q4", Name = "design-system.fig",       Size = "156 MB", Priority = Priority.Normal, Status = QueueStatus.Queued,    Progress = 0   },
+        new QueueItem { Id = "q5", Name = "analytics-export.csv",    Size = "12 MB",  Priority = Priority.Low,    Status = QueueStatus.Queued,    Progress = 0   },
+        new QueueItem { Id = "q6", Name = "user-avatars.zip",        Size = "78 MB",  Priority = Priority.Normal, Status = QueueStatus.Failed,    Progress = 81  },
+        new QueueItem { Id = "q7", Name = "brand-guidelines.pdf",    Size = "8.4 MB", Priority = Priority.Low,    Status = QueueStatus.Complete,  Progress = 100 },
+        new QueueItem { Id = "q8", Name = "release-assets.tar.gz",   Size = "340 MB", Priority = Priority.High,   Status = QueueStatus.Complete,  Progress = 100 },
+    ];
+
+    private int _completedCount => _queue.Count(q => q.Status == QueueStatus.Complete);
+    private int _activeCount    => _queue.Count(q => q.Status == QueueStatus.Uploading);
+
+    private static string PriorityDot(Priority p) => p switch
+    {
+        Priority.High   => "bg-red-500",
+        Priority.Normal => "bg-blue-500",
+        _               => "bg-muted-foreground",
+    };
+
+    private static string PriorityLabel(Priority p) => p switch
+    {
+        Priority.High   => "High",
+        Priority.Normal => "Normal",
+        _               => "Low",
+    };
+
+    private void TogglePause(int index)
+    {
+        var item = _queue[index];
+        if (item.Status == QueueStatus.Uploading)
+            item.Status = QueueStatus.Paused;
+        else if (item.Status == QueueStatus.Paused)
+            item.Status = QueueStatus.Uploading;
+    }
+
+    private void RetryUpload(int index)
+    {
+        var item = _queue[index];
+        item.Status = QueueStatus.Uploading;
+        item.Progress = 0;
+    }
+
+    private void ClearCompleted()
+    {
+        _queue.RemoveAll(q => q.Status == QueueStatus.Complete);
+    }
+
+    private void CyclePriority(int index)
+    {
+        var item = _queue[index];
+        item.Priority = item.Priority switch
+        {
+            Priority.Low    => Priority.Normal,
+            Priority.Normal => Priority.High,
+            _               => Priority.Low,
+        };
+    }
+
+    private void MoveUp(int index)
+    {
+        if (index <= 0) return;
+        var temp = _queue[index - 1];
+        _queue[index - 1] = _queue[index];
+        _queue[index] = temp;
+    }
+
+    private void MoveDown(int index)
+    {
+        if (index >= _queue.Count - 1) return;
+        var temp = _queue[index + 1];
+        _queue[index + 1] = _queue[index];
+        _queue[index] = temp;
+    }
+}

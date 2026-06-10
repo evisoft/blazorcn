@@ -1,0 +1,307 @@
+@* ============================================================
+   Block: music-playlist-analytics
+   Title: MusicPlaylistAnalytics
+   Description: A playlist performance analytics block for React and Next.js with follower growth chart, skip rate, save rate, top songs by saves, listener demographics, and reach metrics built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-playlist-analytics.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="list-music" Size="16" Class="size-4 text-muted-foreground" />
+                    <span class="font-medium text-sm">Playlist Analytics</span>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@_playlistName</BadgeCn>
+            </div>
+        </div>
+
+        @* Key Metrics *@
+        <div class="grid grid-cols-2 border-b sm:grid-cols-4">
+            <div class="border-b border-r px-4 py-3 sm:border-b-0">
+                <p class="font-medium text-muted-foreground text-xs">Followers</p>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">@_totalFollowers.ToString("N0")</p>
+                <div class="mt-0.5 flex items-center gap-1">
+                    <LucideIconCn Name="arrow-up" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                    <span class="text-emerald-600 text-xs dark:text-emerald-400">
+                        +@(_followerChange.ToString("N0")) (@(_followerChangePercent)%)
+                    </span>
+                </div>
+            </div>
+            <div class="border-b px-4 py-3 sm:border-b-0 sm:border-r">
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="skip-forward" Size="12" Class="size-3 text-muted-foreground" />
+                    <p class="font-medium text-muted-foreground text-xs">Skip Rate</p>
+                </div>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">@(_skipRate)%</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">Avg across all tracks</p>
+            </div>
+            <div class="border-r px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="bookmark" Size="12" Class="size-3 text-muted-foreground" />
+                    <p class="font-medium text-muted-foreground text-xs">Save Rate</p>
+                </div>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">@(_saveRate)%</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">Listeners who saved</p>
+            </div>
+            <div class="px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="trending-up" Size="12" Class="size-3 text-muted-foreground" />
+                    <p class="font-medium text-muted-foreground text-xs">CTR</p>
+                </div>
+                <p class="mt-0.5 font-semibold text-2xl tabular-nums">@(_clickThroughRate)%</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">@FormatNumber(_totalImpressions) impressions</p>
+            </div>
+        </div>
+
+        @* Follower Growth Chart *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="users" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-muted-foreground text-xs">Follower Growth — Last 12 Weeks</span>
+            </div>
+            <div class="mt-2">
+                <svg viewBox="0 0 560 180" class="h-[180px] w-full" preserveAspectRatio="none">
+                    @* grid lines *@
+                    @foreach (var tick in _chartYTicks)
+                    {
+                        var ty = ChartY(tick);
+                        <line x1="36" y1="@ty.ToString("F1")" x2="552" y2="@ty.ToString("F1")" stroke="currentColor" stroke-opacity="0.1" stroke-width="1" />
+                    }
+
+                    @* area fill *@
+                    <path d="@BuildAreaPath()" fill="var(--chart-1)" fill-opacity="0.1" />
+
+                    @* line *@
+                    <polyline points="@BuildPolyline()" fill="none" stroke="var(--chart-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+
+                    @* x-axis labels *@
+                    @for (var xi = 0; xi < _followerData.Length; xi++)
+                    {
+                        var lx = ChartX(xi);
+                        @((MarkupString)$"<text x=\"{lx:F1}\" y=\"176\" text-anchor=\"middle\" font-size=\"11\" fill=\"currentColor\" fill-opacity=\"0.5\">{_followerData[xi].Week}</text>")
+                    }
+
+                    @* y-axis labels *@
+                    @foreach (var tick in _chartYTicks)
+                    {
+                        var ty2 = ChartY(tick);
+                        var label = $"{tick / 1000}K";
+                        @((MarkupString)$"<text x=\"32\" y=\"{ty2 + 4:F1}\" text-anchor=\"end\" font-size=\"11\" fill=\"currentColor\" fill-opacity=\"0.5\">{label}</text>")
+                    }
+                </svg>
+            </div>
+        </div>
+
+        @* Top Songs by Saves *@
+        <div class="border-b">
+            <div class="flex items-center gap-2 border-b px-4 py-2.5">
+                <LucideIconCn Name="bookmark" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-muted-foreground text-xs">Top Songs by Saves</span>
+            </div>
+            @for (var si = 0; si < _topSongs.Length; si++)
+            {
+                var song = _topSongs[si];
+                var idx = si;
+                var isLast = idx == _topSongs.Length - 1;
+                <div class="@SongRowClass(isLast)">
+                    <div class="flex items-center gap-3">
+                        <span class="w-4 font-mono text-muted-foreground text-xs tabular-nums">@(idx + 1)</span>
+                        <div>
+                            <p class="font-medium text-sm">@song.Title</p>
+                            <p class="text-muted-foreground text-xs">@song.Artist</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-right">
+                            <p class="font-medium text-xs tabular-nums">@song.Saves.ToString("N0") saves</p>
+                            <div class="flex items-center justify-end gap-1">
+                                @if (song.SkipRate < 12)
+                                {
+                                    <LucideIconCn Name="arrow-down" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="arrow-up" Size="12" Class="size-3 text-muted-foreground" />
+                                }
+                                <span class="text-muted-foreground text-xs tabular-nums">@song.SkipRate% skip</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Demographics *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="globe" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-muted-foreground text-xs">Listener Demographics</span>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-4">
+                @* Age breakdown *@
+                <div>
+                    <p class="font-medium text-muted-foreground text-xs">Age Groups</p>
+                    <div class="mt-1.5 flex flex-col gap-1.5">
+                        @foreach (var demo in _ageDemographics)
+                        {
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs">@demo.Label</span>
+                                <div class="flex items-center gap-2">
+                                    <div class="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                                        <div class="h-full rounded-full bg-foreground/70" style="@($"width:{demo.Percentage}%")"></div>
+                                    </div>
+                                    <span class="w-7 text-right font-mono text-muted-foreground text-xs tabular-nums">@(demo.Percentage)%</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @* Region breakdown *@
+                <div>
+                    <p class="font-medium text-muted-foreground text-xs">Top Regions</p>
+                    <div class="mt-1.5 flex flex-col gap-1.5">
+                        @foreach (var demo in _regionDemographics)
+                        {
+                            <div class="flex items-center justify-between">
+                                <span class="max-w-[100px] truncate text-xs">@demo.Label</span>
+                                <div class="flex items-center gap-2">
+                                    <div class="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                                        <div class="h-full rounded-full bg-foreground/70" style="@($"width:{demo.Percentage}%")"></div>
+                                    </div>
+                                    <span class="w-7 text-right font-mono text-muted-foreground text-xs tabular-nums">@(demo.Percentage)%</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Analytics for the last 30 days &middot; Updated daily at midnight UTC
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record TopSong(string Id, string Title, string Artist, int Saves, double SkipRate);
+    private record Demographic(string Label, int Percentage);
+    private record FollowerPoint(string Week, int Followers);
+
+    private const string _playlistName = "Late Night Drives";
+    private const int _totalFollowers = 48720;
+    private const int _followerChange = 2340;
+    private const double _followerChangePercent = 5.1;
+    private const double _skipRate = 18.4;
+    private const double _saveRate = 12.7;
+    private const int _totalImpressions = 284000;
+    private const double _clickThroughRate = 3.2;
+
+    private static readonly FollowerPoint[] _followerData =
+    [
+        new("W1",  39200),
+        new("W2",  40100),
+        new("W3",  41800),
+        new("W4",  42500),
+        new("W5",  43900),
+        new("W6",  44200),
+        new("W7",  45800),
+        new("W8",  46380),
+        new("W9",  47100),
+        new("W10", 47900),
+        new("W11", 48200),
+        new("W12", 48720),
+    ];
+
+    private static readonly TopSong[] _topSongs =
+    [
+        new("1", "Midnight Signal",  "Kael Voss",    3420,  8.2),
+        new("2", "Slow Burn",        "Luna Rae",     2810, 11.5),
+        new("3", "Glass Highway",    "The Drift",    2340, 14.1),
+        new("4", "Echoes of You",    "Echo Park",    1980, 16.8),
+        new("5", "Neon Pulse",       "Nox Meridian", 1650, 19.3),
+    ];
+
+    private static readonly Demographic[] _ageDemographics =
+    [
+        new("18-24", 34),
+        new("25-34", 41),
+        new("35-44", 16),
+        new("45+",    9),
+    ];
+
+    private static readonly Demographic[] _regionDemographics =
+    [
+        new("United States", 38),
+        new("United Kingdom", 14),
+        new("Germany",        11),
+        new("Brazil",          9),
+        new("Other",          28),
+    ];
+
+    private static string SongRowClass(bool isLast) =>
+        Cn.Merge("flex items-center justify-between px-4 py-2.5 transition-colors hover:bg-muted/50", isLast ? "" : "border-b");
+
+    private static string FormatNumber(int n)
+    {
+        if (n >= 1_000_000) return $"{n / 1_000_000.0:F1}M";
+        if (n >= 1_000)     return $"{n / 1_000.0:F1}K";
+        return n.ToString();
+    }
+
+    // Chart constants: viewBox 560x180, padLeft=36, padRight=8, padTop=8, padBottom=24
+    private const int _chartMinVal = 38000;
+    private const int _chartMaxVal = 50000;
+    private static readonly int[] _chartYTicks = [38000, 41000, 44000, 47000, 50000];
+
+    private static double ChartX(int index)
+    {
+        var count = _followerData.Length;
+        return 36.0 + (double)index / (count - 1) * 516.0; // 560-36-8=516
+    }
+
+    private static double ChartY(int value)
+    {
+        // padTop=8, chartH=148 (180-8-24)
+        return 8.0 + 148.0 - (double)(value - _chartMinVal) / (_chartMaxVal - _chartMinVal) * 148.0;
+    }
+
+    private static string BuildPolyline()
+    {
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < _followerData.Length; i++)
+        {
+            var x = ChartX(i);
+            var y = ChartY(_followerData[i].Followers);
+            if (i > 0) sb.Append(' ');
+            sb.Append($"{x:F1},{y:F1}");
+        }
+        return sb.ToString();
+    }
+
+    private static string BuildAreaPath()
+    {
+        var sb = new System.Text.StringBuilder();
+        // start at bottom-left
+        sb.Append($"M 36,156"); // padLeft, padTop+chartH = 8+148=156
+        for (var i = 0; i < _followerData.Length; i++)
+        {
+            var x = ChartX(i);
+            var y = ChartY(_followerData[i].Followers);
+            sb.Append($" L {x:F1},{y:F1}");
+        }
+        // close back to bottom-right then bottom-left
+        sb.Append($" L 552,156 Z"); // padLeft+chartW=36+516=552
+        return sb.ToString();
+    }
+}

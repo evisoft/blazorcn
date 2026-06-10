@@ -1,0 +1,335 @@
+@* ============================================================
+   Block: map-wildlife-tracker
+   Title: MapWildlifeTracker
+   Description: React wildlife migration tracker block for Next.js with animal species markers, migration route paths, season filters, species detail popups, and population stats using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-wildlife-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="eye" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Wildlife Tracker</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-muted-foreground tabular-nums">
+                    @_filteredSpecies.Length species
+                </span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground">
+                    @_filteredSpecies.Sum(s => s.Route.Length) waypoints
+                </span>
+            </div>
+        </div>
+
+        @* Season filters *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2.5">
+            @foreach (var season in _seasons)
+            {
+                var sid = season;
+                <button
+                    type="button"
+                    @onclick="@(() => _activeSeason = sid.Id)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-1 text-xs font-medium transition-colors", _activeSeason == sid.Id ? "bg-foreground text-background" : "bg-muted/50 text-muted-foreground hover:bg-muted")">
+                    @sid.Label
+                </button>
+            }
+        </div>
+
+        <div class="flex flex-col md:flex-row">
+            @* Species list *@
+            <div class="w-full border-b md:w-72 md:shrink-0 md:border-b-0 md:border-r">
+                <div class="max-h-[300px] overflow-y-auto md:max-h-[400px]">
+                    @foreach (var sp in _filteredSpecies)
+                    {
+                        var spec = sp;
+                        var isExpanded = _expanded == spec.Id;
+                        var statusInfo = GetStatusInfo(spec.Status);
+                        <div class="border-b last:border-b-0">
+                            <button
+                                type="button"
+                                @onclick="@(() => { _expanded = (isExpanded ? null : spec.Id); _selected = spec.Id; })"
+                                class="@Cn.Merge("flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selected == spec.Id ? "bg-muted/50" : "")">
+                                <span class="@Cn.Merge("size-2 shrink-0 rounded-full", spec.DotColor)" />
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-sm">@spec.Emoji</span>
+                                        <span class="truncate text-sm font-medium">@spec.Name</span>
+                                    </div>
+                                    <p class="truncate text-xs italic text-muted-foreground">
+                                        @spec.ScientificName
+                                    </p>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/40 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+
+                            @if (isExpanded)
+                            {
+                                <div class="space-y-1.5 px-3 pb-3 pl-8">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Population</span>
+                                        <span class="text-xs font-medium tabular-nums">@spec.Population</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Status</span>
+                                        <span class="@Cn.Merge("text-xs font-medium", statusInfo.Color)">
+                                            @statusInfo.Label
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Last seen</span>
+                                        <span class="text-xs text-muted-foreground tabular-nums">
+                                            @spec.LastSeen
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Active</span>
+                                        <div class="flex gap-1">
+                                            @foreach (var s in spec.ActiveSeason)
+                                            {
+                                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal capitalize">@s</BadgeCn>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    @if (_filteredSpecies.Length == 0)
+                    {
+                        <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                            No species active this season
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map placeholder *@
+            <div class="relative h-[350px] flex-1 overflow-hidden bg-muted/20 md:h-[440px]">
+                @* Subtle grid background *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Global Migration Map
+                </div>
+
+                @* Migration route lines (SVG) *@
+                <svg class="absolute inset-0 h-full w-full" viewBox="0 0 800 440" preserveAspectRatio="none">
+                    @foreach (var sp in _filteredSpecies)
+                    {
+                        var isSelected = _selected == sp.Id;
+                        var pts = string.Join(" ", sp.Route.Select((coord, i) =>
+                        {
+                            var px = MapLonToPercent(coord[0]) * 800;
+                            var py = MapLatToPercent(coord[1]) * 440;
+                            return (i == 0 ? "M" : "L") + $" {px:F1} {py:F1}";
+                        }));
+                        <path d="@pts" fill="none" stroke="@sp.RouteColor"
+                              stroke-width="@(isSelected ? "3" : "1.5")"
+                              stroke-opacity="@(isSelected ? "0.8" : "0.3")"
+                              stroke-dasharray="4 4" />
+                    }
+                </svg>
+
+                @* Markers *@
+                @foreach (var sp in _filteredSpecies)
+                {
+                    var spec = sp;
+                    var isSelected = _selected == spec.Id;
+                    var leftPct = MapLonToPercent(spec.CurrentLng) * 100;
+                    var topPct = MapLatToPercent(spec.CurrentLat) * 100;
+                    var statusInfo = GetStatusInfo(spec.Status);
+                    <div class="absolute" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%)")">
+                        @* Marker dot *@
+                        <button
+                            type="button"
+                            @onclick="@(() => { _selected = spec.Id; _expanded = spec.Id; })"
+                            class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-white shadow-md transition-all", spec.DotColor, isSelected ? "size-6" : "size-4")">
+                            @if (isSelected)
+                            {
+                                <span class="text-[10px]">@spec.Emoji</span>
+                            }
+                        </button>
+
+                        @* Tooltip (always shown below marker) *@
+                        <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                            <div class="text-center">
+                                <p class="font-medium">@spec.Emoji @spec.Name</p>
+                                <p class="text-[10px] opacity-70">@spec.LastSeen</p>
+                            </div>
+                        </div>
+
+                        @* Popup *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 top-full z-10 mt-7 w-52 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-base">@spec.Emoji</span>
+                                    <div>
+                                        <p class="text-sm font-medium">@spec.Name</p>
+                                        <p class="text-xs italic text-muted-foreground">
+                                            @spec.ScientificName
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="mt-2 space-y-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Population</span>
+                                        <span class="text-xs font-medium tabular-nums">
+                                            @spec.Population
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Status</span>
+                                        <span class="@Cn.Merge("text-xs font-medium", statusInfo.Color)">
+                                            @statusInfo.Label
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Route points</span>
+                                        <span class="text-xs text-muted-foreground tabular-nums">
+                                            @spec.Route.Length waypoints
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Map controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-3 border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                @foreach (var sp in _filteredSpecies)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", sp.DotColor)" />
+                        @sp.Name
+                    </span>
+                }
+            </div>
+            <span class="ml-auto text-xs text-muted-foreground">GPS data · updated hourly</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SpeciesData(
+        string Id,
+        string Name,
+        string ScientificName,
+        string Emoji,
+        string Color,
+        string DotColor,
+        string RouteColor,
+        string[] ActiveSeason,
+        string Population,
+        string Status,
+        string LastSeen,
+        double CurrentLng,
+        double CurrentLat,
+        double[][] Route
+    );
+
+    private record SeasonItem(string Id, string Label);
+
+    private record StatusInfo(string Label, string Color);
+
+    private static StatusInfo GetStatusInfo(string status) => status switch
+    {
+        "LC" => new("Least Concern", "text-emerald-600 dark:text-emerald-400"),
+        "NT" => new("Near Threatened", "text-blue-600 dark:text-blue-400"),
+        "VU" => new("Vulnerable", "text-amber-600 dark:text-amber-400"),
+        "EN" => new("Endangered", "text-red-600 dark:text-red-400"),
+        "CR" => new("Critically Endangered", "text-red-700 dark:text-red-300"),
+        _ => new(status, "text-muted-foreground"),
+    };
+
+    private static readonly SeasonItem[] _seasons =
+    [
+        new("all", "All"),
+        new("spring", "Spring"),
+        new("summer", "Summer"),
+        new("autumn", "Autumn"),
+        new("winter", "Winter"),
+    ];
+
+    private static readonly SpeciesData[] _allSpecies =
+    [
+        new(
+            "arctic-tern", "Arctic Tern", "Sterna paradisaea", "🐦",
+            "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+            "bg-blue-500", "#3b82f6",
+            ["spring", "autumn"],
+            "~2 million", "LC", "3 hours ago",
+            -20.0, 64.1,
+            [[-20.0, 64.1], [-15.0, 55.0], [-10.0, 42.0], [-8.0, 30.0], [-5.0, 15.0], [5.0, 0.0], [10.0, -20.0], [5.0, -45.0], [0.0, -60.0]]
+        ),
+        new(
+            "monarch", "Monarch Butterfly", "Danaus plexippus", "🦋",
+            "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+            "bg-amber-500", "#f59e0b",
+            ["autumn", "spring"],
+            "~300 million", "EN", "1 hour ago",
+            -100.3, 35.2,
+            [[-79.4, 43.7], [-85.0, 40.0], [-90.0, 37.0], [-95.0, 33.0], [-100.3, 28.0], [-100.3, 19.4]]
+        ),
+        new(
+            "humpback", "Humpback Whale", "Megaptera novaeangliae", "🐋",
+            "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+            "bg-cyan-500", "#06b6d4",
+            ["winter", "spring"],
+            "~80,000", "LC", "6 hours ago",
+            -156.5, 20.8,
+            [[-149.0, 58.0], [-152.0, 50.0], [-155.0, 40.0], [-156.5, 30.0], [-156.5, 20.8]]
+        ),
+        new(
+            "wildebeest", "Wildebeest", "Connochaetes taurinus", "🦬",
+            "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+            "bg-emerald-500", "#10b981",
+            ["summer", "autumn"],
+            "~1.5 million", "LC", "12 hours ago",
+            34.8, -1.5,
+            [[34.8, -2.8], [34.9, -2.2], [35.0, -1.8], [34.8, -1.5], [34.5, -1.3], [34.2, -1.5], [34.0, -2.0], [34.3, -2.5], [34.8, -2.8]]
+        ),
+        new(
+            "snow-goose", "Snow Goose", "Anser caerulescens", "🪿",
+            "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+            "bg-violet-500", "#8b5cf6",
+            ["autumn", "spring"],
+            "~5 million", "LC", "2 hours ago",
+            -95.7, 48.0,
+            [[-85.0, 63.0], [-90.0, 55.0], [-95.7, 48.0], [-97.0, 40.0], [-95.0, 32.0], [-93.0, 29.5]]
+        ),
+    ];
+
+    // Global bounding box covering all species coordinates
+    private const double _lonMin = -170.0;
+    private const double _lonMax = 50.0;
+    private const double _latMin = -65.0;
+    private const double _latMax = 70.0;
+
+    private string _activeSeason = "all";
+    private string _selected = "arctic-tern";
+    private string? _expanded;
+
+    private SpeciesData[] _filteredSpecies =>
+        _activeSeason == "all"
+            ? _allSpecies
+            : _allSpecies.Where(s => s.ActiveSeason.Contains(_activeSeason)).ToArray();
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+}

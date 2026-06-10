@@ -1,0 +1,213 @@
+@* ============================================================
+   Block: map-air-quality
+   Title: MapAirQuality
+   Description: Air quality index map block for Next.js with AQI-colored markers, pollutant type badges, health recommendations, and station detail tooltips using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-air-quality.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="wind" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Air Quality Index</span>
+                <span class="text-muted-foreground text-xs">Los Angeles Metro</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_countGood Good
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_countModerate Moderate
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_countUnhealthy Unhealthy
+                </span>
+            </div>
+        </div>
+
+        @* Map + Panel *@
+        <div class="flex">
+            @* Map placeholder (Map/MapMarker components are not available in BlazorCN; rendered as a styled placeholder with AQI markers) *@
+            <div class="relative h-[500px] flex-1 bg-muted/30 flex items-center justify-center">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                    @* AQI markers positioned roughly relative to the LA area viewport *@
+                    @foreach (var station in _stations)
+                    {
+                        var cfg = GetConfig(station.Level);
+                        var pos = GetMarkerPosition(station.Longitude, station.Latitude);
+                        <button
+                            type="button"
+                            class="absolute flex size-8 items-center justify-center rounded-full border-2 border-white font-bold text-white text-xs shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110"
+                            style="@($"background-color:{cfg.Bg};left:{pos.X}%;top:{pos.Y}%")"
+                            @onclick="@(() => SelectStation(station.Id))"
+                            title="@station.Name — AQI @station.Aqi"
+                        >
+                            @station.Aqi
+                        </button>
+                    }
+                </div>
+                <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                    Map view — Los Angeles Metro
+                </div>
+            </div>
+
+            @* Detail panel *@
+            <div class="w-64 shrink-0 border-l">
+                @* Station list *@
+                <div class="max-h-[500px] overflow-y-auto">
+                    @foreach (var (station, index) in _stations.Select((s, i) => (s, i)))
+                    {
+                        var cfg = GetConfig(station.Level);
+                        var isExpanded = _expanded == station.Id;
+                        var isLast = index == _stations.Length - 1;
+                        var item = station;
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                class="@Cn.Merge("flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedStation == item.Id ? "bg-muted/30" : "")"
+                                @onclick="@(() => ToggleStation(item.Id))"
+                            >
+                                <span class="@($"size-1.5 shrink-0 rounded-full {cfg.Dot}")"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="block font-medium text-xs">@station.Name</span>
+                                    <span class="block text-muted-foreground text-[10px]">@station.UpdatedAgo</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="@($"block font-semibold text-sm tabular-nums {cfg.Color}")">
+                                        @station.Aqi
+                                    </span>
+                                    <span class="block text-muted-foreground text-[10px]">@cfg.Label</span>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+
+                            @if (isExpanded)
+                            {
+                                <div class="px-4 pb-3">
+                                    @* Pollutants *@
+                                    <div class="mb-2 flex flex-wrap gap-1">
+                                        @foreach (var p in station.Pollutants)
+                                        {
+                                            <BadgeCn Variant="@(p.Name == station.DominantPollutant ? BadgeVariant.Default : BadgeVariant.Secondary)" Class="font-mono text-[10px]">
+                                                @p.Name @p.Value @p.Unit
+                                            </BadgeCn>
+                                        }
+                                    </div>
+
+                                    @* Health recommendation *@
+                                    <div class="rounded-md bg-muted/50 p-2.5">
+                                        <div class="mb-1 flex items-center gap-1">
+                                            <LucideIconCn Name="heart-pulse" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="font-medium text-muted-foreground text-[10px]">Health advice</span>
+                                        </div>
+                                        <p class="text-xs leading-relaxed">@GetHealthRecommendation(station.Level)</p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Pollutant(string Name, double Value, string Unit);
+
+    private record Station(
+        string Id,
+        string Name,
+        double Longitude,
+        double Latitude,
+        int Aqi,
+        string Level,
+        string DominantPollutant,
+        Pollutant[] Pollutants,
+        string UpdatedAgo
+    );
+
+    private record LevelConfig(string Color, string Bg, string Label, string Dot);
+
+    private static readonly Station[] _stations =
+    [
+        new("s1", "Downtown Central", -118.2437, 34.0522, 42, "good", "PM2.5",
+            [new("PM2.5", 10.2, "ug/m3"), new("PM10", 22.1, "ug/m3"), new("O3", 35.0, "ppb"), new("NO2", 18.4, "ppb")],
+            "3 min ago"),
+        new("s2", "Industrial District", -118.2137, 34.0352, 128, "unhealthy-sensitive", "PM10",
+            [new("PM2.5", 42.8, "ug/m3"), new("PM10", 88.3, "ug/m3"), new("O3", 52.0, "ppb"), new("NO2", 45.2, "ppb")],
+            "5 min ago"),
+        new("s3", "Harbor Freeway", -118.2737, 34.0122, 167, "unhealthy", "NO2",
+            [new("PM2.5", 58.1, "ug/m3"), new("PM10", 72.0, "ug/m3"), new("O3", 48.0, "ppb"), new("NO2", 82.6, "ppb")],
+            "2 min ago"),
+        new("s4", "Griffith Park", -118.2942, 34.0722, 38, "good", "O3",
+            [new("PM2.5", 8.4, "ug/m3"), new("PM10", 15.2, "ug/m3"), new("O3", 32.0, "ppb"), new("NO2", 12.1, "ppb")],
+            "4 min ago"),
+        new("s5", "Westside Corridor", -118.3537, 34.0422, 72, "moderate", "PM2.5",
+            [new("PM2.5", 22.5, "ug/m3"), new("PM10", 38.0, "ug/m3"), new("O3", 40.0, "ppb"), new("NO2", 25.8, "ppb")],
+            "1 min ago"),
+        new("s6", "University Campus", -118.2837, 34.0222, 55, "moderate", "O3",
+            [new("PM2.5", 14.0, "ug/m3"), new("PM10", 28.5, "ug/m3"), new("O3", 44.0, "ppb"), new("NO2", 20.3, "ppb")],
+            "6 min ago"),
+    ];
+
+    private static LevelConfig GetConfig(string level) => level switch
+    {
+        "good"               => new("text-emerald-600 dark:text-emerald-400", "#22c55e", "Good",          "bg-emerald-500"),
+        "moderate"           => new("text-amber-600 dark:text-amber-400",    "#eab308", "Moderate",       "bg-amber-500"),
+        "unhealthy-sensitive"=> new("text-orange-600 dark:text-orange-400",  "#f97316", "USG",            "bg-orange-500"),
+        "unhealthy"          => new("text-red-600 dark:text-red-400",        "#ef4444", "Unhealthy",      "bg-red-500"),
+        "very-unhealthy"     => new("text-purple-600 dark:text-purple-400",  "#a855f7", "Very Unhealthy", "bg-purple-500"),
+        _                    => new("text-muted-foreground",                 "#6b7280", level,            "bg-muted-foreground"),
+    };
+
+    private static string GetHealthRecommendation(string level) => level switch
+    {
+        "good"                => "Air quality is satisfactory. Enjoy outdoor activities.",
+        "moderate"            => "Unusually sensitive people should consider reducing prolonged outdoor exertion.",
+        "unhealthy-sensitive" => "Sensitive groups should limit prolonged outdoor exertion. Others may experience symptoms.",
+        "unhealthy"           => "Everyone should reduce prolonged outdoor exertion. Sensitive groups should avoid it.",
+        "very-unhealthy"      => "Health alert. Everyone may experience health effects. Avoid all outdoor exertion.",
+        _                     => "",
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-118.37, -118.19], lat [33.99, 34.09]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -118.37, lonMax = -118.19;
+        const double latMin = 33.99,   latMax = 34.09;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        // clamp to 5–95% to keep markers visible
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private int _countGood       => Array.FindAll(_stations, s => s.Level == "good").Length;
+    private int _countModerate   => Array.FindAll(_stations, s => s.Level == "moderate").Length;
+    private int _countUnhealthy  => Array.FindAll(_stations, s => s.Level is "unhealthy-sensitive" or "unhealthy" or "very-unhealthy").Length;
+
+    private string? _selectedStation = "s2";
+    private string? _expanded        = "s2";
+
+    private void SelectStation(string id)
+    {
+        _selectedStation = id;
+        _expanded = id;
+    }
+
+    private void ToggleStation(string id)
+    {
+        _selectedStation = id;
+        _expanded = _expanded == id ? null : id;
+    }
+}

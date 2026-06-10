@@ -1,0 +1,114 @@
+@* ============================================================
+   Block: monitoring-redis-status
+   Title: MonitoringRedisStatus
+   Description: A high-performance monitoring block for Redis instances, tracking memory usage, command throughput, and cache hit rates in real-time.
+   Source: original/blocks/monitoring/monitoring-redis-status.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div class="flex items-center justify-between border-b px-5 py-4 bg-red-500/[0.02]">
+            <div class="flex items-center gap-3">
+                <div class="flex size-10 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20">
+                    <LucideIconCn Name="database" Size="20" Class="size-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold leading-none">Redis Production</h3>
+                    <p class="mt-1 text-muted-foreground text-[11px] font-medium">
+                        v7.2.4 · 6 nodes cluster
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <div class="size-1.5 rounded-full bg-emerald-500"></div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                    Online
+                </span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                var idx = System.Array.IndexOf(_stats, s);
+                var borderClass = idx != _stats.Length - 1 ? "sm:border-r border-b sm:border-b-0" : "";
+                var strokeColor = s.Status == "warning" ? "#f59e0b" : "#ef4444";
+                var stopColor = s.Status == "warning" ? "#f59e0b" : "#ef4444";
+                var gradientId = $"gradient-redis-{idx}";
+                var chartW = 200;
+                var chartH = 48;
+                var trendCount = s.Trend.Length;
+                double StepX(int i) => trendCount <= 1 ? 0 : (double)chartW / (trendCount - 1) * i;
+                var minVal = s.Trend.Min();
+                var maxVal = s.Trend.Max();
+                var range = maxVal - minVal;
+                if (range < 1) { range = 1; }
+                double TrendY(int i) => chartH - (s.Trend[i] - minVal) / range * chartH * 0.9 - chartH * 0.05;
+                var linePoints = string.Join(" ", Enumerable.Range(0, trendCount).Select(i => $"{StepX(i):F1},{TrendY(i):F1}"));
+                var fillPoints = $"0,{chartH} " + linePoints + $" {chartW},{chartH}";
+                <div class="p-5 @borderClass">
+                    <div class="flex items-center justify-between mb-3">
+                        <LucideIconCn Name="@s.IconName" Size="16" Class="size-4 text-muted-foreground/60" />
+                        <BadgeCn Variant="@(s.Status == "warning" ? BadgeVariant.Secondary : BadgeVariant.Secondary)"
+                                 Class="@($"h-4.5 px-1 text-[9px] font-bold uppercase tracking-tighter {(s.Status == "warning" ? "bg-amber-500/10 text-amber-600 border-amber-500/20" : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20")}")">
+                            @(s.Status == "warning" ? "Degraded" : "Optimal")
+                        </BadgeCn>
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-black tabular-nums tracking-tighter text-foreground">
+                            @s.DisplayValue
+                        </span>
+                        <span class="text-muted-foreground text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+                    <p class="text-[10px] font-bold text-muted-foreground mt-1 uppercase tracking-widest">@s.Label</p>
+
+                    <div class="h-12 w-full mt-4">
+                        <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="@gradientId" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stop-color="@stopColor" stop-opacity="0.1" />
+                                    <stop offset="95%" stop-color="@stopColor" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="@fillPoints" fill="url(#@gradientId)" />
+                            <polyline points="@linePoints" fill="none" stroke="@strokeColor" stroke-width="2" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <hr class="border-border" />
+
+        <div class="px-5 py-3.5 bg-muted/20 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-foreground">Evictions:</span>
+                    <span class="text-amber-600">0</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-foreground">Clients:</span>
+                    <span class="text-blue-600">842</span>
+                </div>
+            </div>
+            <button type="button" class="text-[10px] font-black uppercase text-red-600 dark:text-red-400 hover:tracking-[0.1em] transition-all">
+                CLI Access →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record RedisStat(string Label, string DisplayValue, string Unit, string IconName, string Status, double[] Trend);
+
+    private static readonly double[] _baseTrend = [420, 450, 480, 460, 490, 510, 530, 520, 550, 580, 610, 590];
+
+    private static readonly RedisStat[] _stats =
+    [
+        new("Memory Used", "1.24", "GB", "database", "healthy", _baseTrend),
+        new("Ops/Sec", "15420", "ops", "zap", "healthy", [12600, 13500, 14400, 13800, 14700, 15300, 15900, 15600, 16500, 17400, 18300, 17700]),
+        new("Hit Rate", "94.2", "%", "hash", "warning", [94.2, 94.5, 94.8, 94.6, 94.9, 95.1, 95.3, 95.2, 95.5, 95.8, 96.1, 95.9]),
+    ];
+}

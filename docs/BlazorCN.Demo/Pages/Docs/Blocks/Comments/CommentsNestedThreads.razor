@@ -1,0 +1,184 @@
+@* ============================================================
+   Block: comments-nested-threads
+   Title: CommentsNestedThreads
+   Description: A deeply nested comment thread system for React and Next.js with collapsible branches, depth indicators, and load more replies built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-nested-threads.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Discussion Thread</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">Deep nested conversations</p>
+        </div>
+
+        @* Thread list *@
+        <div class="divide-y">
+            @foreach (var comment in _threadData)
+            {
+                var c = comment;
+                <div class="p-4">
+                    @RenderComment(c, 0)
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record CommentData(string Id, string Author, string Avatar, string Content, string Timestamp, CommentData[] Replies);
+
+    private static readonly CommentData[] _threadData =
+    [
+        new("1", "Alice Thompson", "", "The recursive implementation is elegant but might hit stack overflow with deeply nested data. Has anyone benchmarked this?", "1h ago",
+        [
+            new("1-1", "Bob Martinez", "", "Good point. I tested with 10,000 nodes and it started throwing errors around depth 5000.", "45m ago",
+            [
+                new("1-1-1", "Carol Lee", "", "You could use a trampolined version to avoid stack overflow. Here's a snippet that converts recursion to iteration.", "30m ago",
+                [
+                    new("1-1-1-1", "David Kim", "", "Nice! Though for React components, I'd recommend keeping depth under 100 for performance reasons.", "20m ago",
+                    [
+                        new("1-1-1-1-1", "Eve Rodriguez", "", "Agreed. We implemented a depth limit of 50 with a 'continue thread' button for deeper discussions.", "10m ago", []),
+                    ]),
+                ]),
+                new("1-1-2", "Frank Wilson", "", "I wonder if virtualization would help here. Only render visible nodes in the tree?", "25m ago", []),
+            ]),
+            new("1-2", "Grace Park", "", "For production use, I'd go with iteration + explicit stack. More verbose but predictable.", "40m ago", []),
+        ]),
+        new("2", "Henry Chen", "", "The TypeScript types for this are interesting. Anyone have a good recursive type definition?", "2h ago",
+        [
+            new("2-1", "Iris Patel", "", "type Comment = { id: string; content: string; replies: Comment[] } should work. The key is the self-referencing replies array.", "1h 30m ago", []),
+        ]),
+    ];
+
+    // Per-comment state keyed by comment id
+    private readonly Dictionary<string, bool> _showReply = new();
+    private readonly Dictionary<string, bool> _collapsed = new();
+
+    private bool GetShowReply(string id) => _showReply.TryGetValue(id, out var v) && v;
+    private bool GetCollapsed(string id, int depth) => _collapsed.TryGetValue(id, out var v) ? v : depth >= 4;
+
+    private void ToggleReply(string id)
+    {
+        _showReply[id] = !GetShowReply(id);
+    }
+
+    private void ToggleCollapsed(string id, int depth)
+    {
+        _collapsed[id] = !GetCollapsed(id, depth);
+    }
+
+    private static string GetInitials(string author)
+    {
+        var parts = author.Split(' ');
+        var initials = "";
+        foreach (var p in parts)
+        {
+            if (p.Length > 0) initials += char.ToUpper(p[0]);
+        }
+        return initials;
+    }
+
+    private static int CountTotalReplies(CommentData[] replies)
+    {
+        var total = 0;
+        foreach (var r in replies)
+        {
+            total += 1 + (r.Replies?.Length ?? 0);
+        }
+        return total;
+    }
+
+    private RenderFragment RenderComment(CommentData comment, int depth) => __builder =>
+    {
+        var initials = GetInitials(comment.Author);
+        var showReply = GetShowReply(comment.Id);
+        var collapsed = GetCollapsed(comment.Id, depth);
+        var hasReplies = comment.Replies.Length > 0;
+        var totalReplies = CountTotalReplies(comment.Replies);
+
+        <div class="@(depth > 0 ? "relative pl-8 pt-3" : "")">
+            @if (depth > 0)
+            {
+                <div class="absolute left-4 top-0 h-full w-px bg-border"></div>
+            }
+
+            <div class="flex gap-3">
+                <AvatarCn Class="size-7 shrink-0">
+                    <AvatarImageCn Src="@comment.Avatar" Alt="@comment.Author" />
+                    <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+                </AvatarCn>
+
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-sm font-medium">@comment.Author</span>
+                        <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                        @if (depth > 0)
+                        {
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">L@(depth)</BadgeCn>
+                        }
+                    </div>
+                    <p class="mt-1 text-sm leading-relaxed">@comment.Content</p>
+
+                    <div class="mt-2 flex items-center gap-2">
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs" OnClick="@(() => ToggleReply(comment.Id))">
+                            <LucideIconCn Name="message-circle" Size="12" Class="size-3" />
+                            Reply
+                        </ButtonCn>
+
+                        @if (hasReplies)
+                        {
+                            var cId = comment.Id;
+                            var cDepth = depth;
+                            var isCollapsed = collapsed;
+                            var total = totalReplies;
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs" OnClick="@(() => ToggleCollapsed(cId, cDepth))">
+                                @if (isCollapsed)
+                                {
+                                    <LucideIconCn Name="chevron-right" Size="12" Class="size-3" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                                }
+                                @(isCollapsed ? "Show" : "Hide") @total @(total == 1 ? "reply" : "replies")
+                            </ButtonCn>
+                        }
+                    </div>
+
+                    @if (showReply)
+                    {
+                        var cId = comment.Id;
+                        <div class="mt-3 overflow-hidden rounded-md bg-muted/30 p-3">
+                            <input
+                                type="text"
+                                placeholder="Write a reply..."
+                                class="w-full border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+                            <div class="mt-2 flex gap-2">
+                                <ButtonCn Size="ButtonSize.Sm" Class="h-6 text-xs">
+                                    Reply
+                                </ButtonCn>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 text-xs" OnClick="@(() => { _showReply[cId] = false; })">
+                                    Cancel
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+
+                    @if (!collapsed && hasReplies)
+                    {
+                        @foreach (var reply in comment.Replies)
+                        {
+                            var r = reply;
+                            var d = depth + 1;
+                            @RenderComment(r, d)
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    };
+}

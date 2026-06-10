@@ -1,0 +1,123 @@
+@* ============================================================
+   Block: monitoring-feature-flag-rollout-status
+   Title: MonitoringFeatureFlagRolloutStatus
+   Description: Real-time monitoring of feature flag rollouts, showing adoption percentages, active flags, and rollout velocity with live sparklines using shadcn/ui and Framer Motion.
+   Source: original/blocks/monitoring/monitoring-feature-flag-rollout-status.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="check-circle" Size="16" Class="size-4 text-foreground" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">Feature Flags</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">
+                        Production Environment · Global Config
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span class="text-xs font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    In Progress
+                </span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3">
+            @foreach (var (stat, i) in _stats.Select((s, idx) => (s, idx)))
+            {
+                var st = stat;
+                var idx = i;
+                var isLast = idx == _stats.Length - 1;
+                var isWarning = st.Status == "warning";
+                var strokeColor = isWarning ? "#f59e0b" : "#10b981";
+                var gradientId = $"gradient-ff-{idx}";
+                var linePoints = BuildLinePoints(st.Trend, 200, 40);
+                var fillPoints = BuildFillPoints(st.Trend, 200, 40);
+                var badgeClass = isWarning
+                    ? "h-5 px-1.5 font-normal text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20"
+                    : "h-5 px-1.5 font-normal text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+                var cardClass = isLast ? "p-4" : "p-4 md:border-r border-b md:border-b-0";
+                var fillUrl = $"url(#{gradientId})";
+
+                <div class="@cardClass">
+                    <div class="flex items-center justify-between mb-2">
+                        <LucideIconCn Name="@st.Icon" Size="16" Class="size-4 text-muted-foreground" />
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@badgeClass">
+                            @(isWarning ? "Peaking" : "Normal")
+                        </BadgeCn>
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-semibold tabular-nums tracking-tight">@st.DisplayValue</span>
+                        <span class="text-muted-foreground text-xs font-medium">@st.Unit</span>
+                    </div>
+                    <p class="text-xs text-muted-foreground mt-0.5">@st.Label</p>
+
+                    <div class="h-10 w-full mt-4">
+                        <svg viewBox="0 0 200 40" preserveAspectRatio="none" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="@gradientId" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stop-color="@strokeColor" stop-opacity="0.1" />
+                                    <stop offset="95%" stop-color="@strokeColor" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="@fillPoints" fill="@fillUrl" />
+                            <polyline points="@linePoints" fill="none" stroke="@strokeColor" stroke-width="1.5" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <hr class="border-border" />
+
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between">
+            <span class="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">
+                Last Flag: v4.2.0-experimental
+            </span>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                Manage Flags →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TrendPoint(double Value);
+    private record StatItem(string Label, string DisplayValue, string Unit, string Icon, string Status, TrendPoint[] Trend);
+
+    private static readonly TrendPoint[] _baseData =
+    [
+        new(10), new(15), new(25), new(40), new(50),
+        new(65), new(80), new(95), new(100), new(100),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Active Flags",  "24",   "",    "flag",     "healthy", _baseData.Select(d => new TrendPoint(d.Value / 4.0 + 15)).ToArray()),
+        new("User Adoption", "84.2", "%",   "users",    "healthy", _baseData),
+        new("Rollout Speed", "12",   "f/h", "activity", "warning", _baseData.Select(d => new TrendPoint(d.Value % 30 + 10)).ToArray()),
+    ];
+
+    private static string BuildLinePoints(TrendPoint[] pts, int w, int h)
+    {
+        var count = pts.Length;
+        if (count == 0) return "";
+        var maxVal = pts.Max(p => p.Value);
+        if (maxVal == 0) maxVal = 1;
+        double StepX(int n) => count <= 1 ? 0 : (double)w / (count - 1) * n;
+        double PtY(int n) => h - pts[n].Value / maxVal * h;
+        return string.Join(" ", Enumerable.Range(0, count).Select(n => $"{StepX(n):F1},{PtY(n):F1}"));
+    }
+
+    private static string BuildFillPoints(TrendPoint[] pts, int w, int h)
+    {
+        var line = BuildLinePoints(pts, w, h);
+        return $"0,{h} " + line + $" {w},{h}";
+    }
+}

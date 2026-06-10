@@ -1,0 +1,243 @@
+@* ============================================================
+   Block: timeline-database-migrations
+   Title: TimelineDatabaseMigrations
+   Description: React migration history timeline built with Next.js, shadcn/ui, and Tailwind CSS.
+   Source: original/blocks/timeline/timeline-database-migrations.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="database" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Migrations</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-muted-foreground text-xs">@_migrations.Length total</span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_applied applied
+                </span>
+                @if (_rolledBack > 0)
+                {
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @_rolledBack rolled back
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Timeline *@
+        <div class="px-4 py-3">
+            <div class="relative">
+                @for (var i = 0; i < _migrations.Length; i++)
+                {
+                    var migration = _migrations[i];
+                    var isLast = i == _migrations.Length - 1;
+                    var isExpanded = _expanded == migration.Id;
+                    var hasSql = migration.Sql != null;
+                    var statusDotClass = GetStatusDot(migration.Status);
+                    var mig = migration;
+                    <div class="relative flex gap-3 pb-5 last:pb-0">
+                        @* Vertical line *@
+                        @if (!isLast)
+                        {
+                            @if (migration.Status == MigrationStatus.RolledBack)
+                            {
+                                <div class="absolute top-6 bottom-0 left-[7px] w-px border-l border-dashed border-red-500/30"></div>
+                            }
+                            else
+                            {
+                                <div class="absolute top-6 bottom-0 left-[7px] w-px bg-border"></div>
+                            }
+                        }
+
+                        @* Version dot *@
+                        <div class="relative z-10 flex shrink-0 pt-1.5">
+                            <div class="@($"size-[15px] rounded-full ring-2 ring-card {statusDotClass}")"></div>
+                        </div>
+
+                        @* Content *@
+                        <div class="min-w-0 flex-1">
+                            <button type="button"
+                                    @onclick="@(() => ToggleExpanded(mig.Id, hasSql))"
+                                    class="@(GetButtonClass(hasSql))">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="shrink-0 font-mono text-[10px] font-normal">
+                                            @migration.Version
+                                        </BadgeCn>
+                                        @if (migration.Direction == Direction.Up)
+                                        {
+                                            <LucideIconCn Name="arrow-up" Size="12" Class="size-3 shrink-0 text-emerald-500" />
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="arrow-down" Size="12" Class="size-3 shrink-0 text-red-500" />
+                                        }
+                                        @if (migration.Status == MigrationStatus.RolledBack)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="bg-red-500/10 text-red-600 text-[10px] dark:text-red-400">
+                                                Rolled back
+                                            </BadgeCn>
+                                        }
+                                    </div>
+                                    <p class="@($"mt-1 font-mono text-sm {(migration.Status == MigrationStatus.RolledBack ? "text-muted-foreground line-through" : "text-foreground")}")">
+                                        @migration.Name
+                                    </p>
+                                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                        @foreach (var op in migration.Operations)
+                                        {
+                                            var opColor = GetOpColor(op);
+                                            var opLabel = GetOpLabel(op);
+                                            <span class="@($"font-mono text-[10px] font-semibold {opColor}")">@opLabel</span>
+                                        }
+                                        <span class="text-muted-foreground/40 text-xs">·</span>
+                                        <span class="text-muted-foreground text-xs">@string.Join(", ", migration.Tables)</span>
+                                        <span class="text-muted-foreground/40 text-xs">·</span>
+                                        <span class="font-mono text-muted-foreground text-xs tabular-nums">@migration.ExecutionTime</span>
+                                        <span class="text-muted-foreground/40 text-xs">·</span>
+                                        <span class="text-muted-foreground text-xs">@migration.Timestamp</span>
+                                    </div>
+                                </div>
+
+                                @if (hasSql)
+                                {
+                                    <LucideIconCn Name="chevron-right" Size="16" Class="@($"size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200{(isExpanded ? " rotate-90" : "")}")" />
+                                }
+                            </button>
+
+                            @* SQL preview *@
+                            @if (isExpanded && migration.Sql != null)
+                            {
+                                var sqlLines = migration.Sql.Split('\n');
+                                <div class="mt-2 overflow-hidden rounded-md bg-zinc-950 p-3">
+                                    @for (var li = 0; li < sqlLines.Length; li++)
+                                    {
+                                        var line = sqlLines[li];
+                                        var lineNum = li + 1;
+                                        var lineClass = GetSqlLineClass(line);
+                                        var lineText = line.Length == 0 ? " " : line;
+                                        <p class="@($"font-mono text-xs leading-relaxed {lineClass}")">
+                                            <span class="mr-3 inline-block w-4 text-right text-zinc-600 select-none">@lineNum</span>@lineText
+                                        </p>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum OperationType { Create, Alter, Drop, Seed, Index }
+    private enum MigrationStatus { Applied, RolledBack, Pending }
+    private enum Direction { Up, Down }
+
+    private record Migration(
+        string Id,
+        string Version,
+        string Name,
+        OperationType[] Operations,
+        string[] Tables,
+        Direction Direction,
+        MigrationStatus Status,
+        string ExecutionTime,
+        string Timestamp,
+        string? Sql = null
+    );
+
+    private static readonly Migration[] _migrations =
+    [
+        new("m1", "20260324_001", "add_workspace_billing_columns",
+            [OperationType.Alter],
+            ["workspaces"],
+            Direction.Up, MigrationStatus.Applied, "34ms", "Mar 24, 09:14",
+            "ALTER TABLE workspaces\n  ADD COLUMN billing_email VARCHAR(255),\n  ADD COLUMN stripe_customer_id VARCHAR(255),\n  ADD COLUMN plan_tier VARCHAR(50) DEFAULT 'free';\n\nCREATE INDEX idx_workspaces_stripe_customer\n  ON workspaces (stripe_customer_id);"),
+        new("m2", "20260323_003", "create_audit_logs_table",
+            [OperationType.Create, OperationType.Index],
+            ["audit_logs"],
+            Direction.Up, MigrationStatus.Applied, "128ms", "Mar 23, 16:42",
+            "CREATE TABLE audit_logs (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  workspace_id UUID NOT NULL REFERENCES workspaces(id),\n  actor_id UUID NOT NULL REFERENCES users(id),\n  action VARCHAR(100) NOT NULL,\n  resource_type VARCHAR(100) NOT NULL,\n  resource_id VARCHAR(255),\n  metadata JSONB DEFAULT '{}',\n  ip_address INET,\n  created_at TIMESTAMPTZ DEFAULT now()\n);\n\nCREATE INDEX idx_audit_logs_workspace ON audit_logs (workspace_id, created_at DESC);\nCREATE INDEX idx_audit_logs_actor ON audit_logs (actor_id);"),
+        new("m3", "20260323_002", "drop_legacy_sessions",
+            [OperationType.Drop],
+            ["legacy_sessions", "legacy_tokens"],
+            Direction.Up, MigrationStatus.Applied, "12ms", "Mar 23, 14:08",
+            "DROP TABLE IF EXISTS legacy_tokens;\nDROP TABLE IF EXISTS legacy_sessions;"),
+        new("m4", "20260323_001", "add_user_preferences_jsonb",
+            [OperationType.Alter],
+            ["users"],
+            Direction.Down, MigrationStatus.RolledBack, "18ms", "Mar 23, 11:30",
+            "-- Rolled back due to JSONB validation issues\nALTER TABLE users\n  DROP COLUMN IF EXISTS preferences;"),
+        new("m5", "20260322_002", "seed_default_roles",
+            [OperationType.Seed],
+            ["roles", "permissions"],
+            Direction.Up, MigrationStatus.Applied, "45ms", "Mar 22, 18:55",
+            "INSERT INTO roles (name, description) VALUES\n  ('owner', 'Full workspace access'),\n  ('admin', 'Manage members and settings'),\n  ('member', 'Standard access'),\n  ('viewer', 'Read-only access');\n\nINSERT INTO permissions (role_name, resource, action) VALUES\n  ('owner', '*', '*'),\n  ('admin', 'members', 'manage'),\n  ('admin', 'settings', 'write'),\n  ('member', 'projects', 'write'),\n  ('viewer', 'projects', 'read');"),
+        new("m6", "20260322_001", "create_projects_table",
+            [OperationType.Create, OperationType.Index],
+            ["projects"],
+            Direction.Up, MigrationStatus.Applied, "89ms", "Mar 22, 10:20"),
+    ];
+
+    private int _applied => Array.FindAll(_migrations, m => m.Status == MigrationStatus.Applied).Length;
+    private int _rolledBack => Array.FindAll(_migrations, m => m.Status == MigrationStatus.RolledBack).Length;
+
+    private string? _expanded = "m1";
+
+    private void ToggleExpanded(string id, bool hasSql)
+    {
+        if (!hasSql) return;
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private static string GetStatusDot(MigrationStatus status) => status switch
+    {
+        MigrationStatus.Applied => "bg-emerald-500",
+        MigrationStatus.RolledBack => "bg-red-500",
+        _ => "bg-muted-foreground/30",
+    };
+
+    private static string GetOpColor(OperationType op) => op switch
+    {
+        OperationType.Create => "text-emerald-600 dark:text-emerald-400",
+        OperationType.Alter  => "text-blue-600 dark:text-blue-400",
+        OperationType.Drop   => "text-red-600 dark:text-red-400",
+        OperationType.Seed   => "text-violet-600 dark:text-violet-400",
+        OperationType.Index  => "text-amber-600 dark:text-amber-400",
+        _                    => "",
+    };
+
+    private static string GetOpLabel(OperationType op) => op switch
+    {
+        OperationType.Create => "CREATE",
+        OperationType.Alter  => "ALTER",
+        OperationType.Drop   => "DROP",
+        OperationType.Seed   => "SEED",
+        OperationType.Index  => "INDEX",
+        _                    => op.ToString().ToUpperInvariant(),
+    };
+
+    private static string GetButtonClass(bool hasSql) =>
+        hasSql ? "flex w-full items-center gap-2 text-left cursor-pointer"
+               : "flex w-full items-center gap-2 text-left cursor-default";
+
+    private static string GetSqlLineClass(string line)
+    {
+        var trimmed = line.TrimStart();
+        if (trimmed.StartsWith("--"))
+            return "text-zinc-600";
+        if (trimmed.StartsWith("CREATE ") || trimmed.StartsWith("ALTER ") ||
+            trimmed.StartsWith("DROP ") || trimmed.StartsWith("INSERT ") ||
+            trimmed.StartsWith("ADD ") || trimmed.StartsWith("ON "))
+            return "text-blue-400";
+        return "text-zinc-400";
+    }
+}

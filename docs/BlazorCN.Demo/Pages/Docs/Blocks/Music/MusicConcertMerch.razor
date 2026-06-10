@@ -1,0 +1,231 @@
+@* ============================================================
+   Block: music-concert-merch
+   Title: MusicConcertMerch
+   Description: A concert merchandise store block for React and Next.js with product list, size selector, color dots, quantity picker, add to cart, and cart total built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-concert-merch.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shopping-bag" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Concert Merch</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shopping-cart" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                    @_cartCount items
+                </span>
+            </div>
+        </div>
+
+        @* Products *@
+        <div>
+            @foreach (var prod in _products)
+            {
+                var product = prod;
+                var isLast = product.Id == _products[_products.Length - 1].Id;
+                <div class="@Cn.Merge("px-4 py-3", isLast ? "" : "border-b")">
+
+                    @* Product header *@
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-sm">@product.Name</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                @product.Category
+                            </BadgeCn>
+                        </div>
+                        <span class="font-semibold text-sm tabular-nums">$@product.Price</span>
+                    </div>
+
+                    @* Size + Color row *@
+                    <div class="mt-2.5 flex items-center gap-4">
+                        @* Sizes *@
+                        <div class="flex items-center gap-1">
+                            <span class="mr-1 text-muted-foreground text-xs">Size</span>
+                            @foreach (var sz in product.Sizes)
+                            {
+                                var size = sz;
+                                var pid = product.Id;
+                                <ButtonCn Variant="ButtonVariant.Outline"
+                                          Size="ButtonSize.Sm"
+                                          Class="@Cn.Merge("h-6 px-2 text-xs", _selectedSizes.TryGetValue(pid, out var selSz) && selSz == size ? "ring-2 ring-foreground" : "")"
+                                          @onclick="@(() => SelectSize(pid, size))"
+                                          aria-label="@($"Size {size}")">
+                                    @size
+                                </ButtonCn>
+                            }
+                        </div>
+
+                        @* Colors *@
+                        <div class="flex items-center gap-1.5">
+                            <span class="mr-0.5 text-muted-foreground text-xs">Color</span>
+                            @foreach (var col in product.Colors)
+                            {
+                                var color = col;
+                                var pid2 = product.Id;
+                                var isSelected = _selectedColors.TryGetValue(pid2, out var selCol) && selCol == color.Name;
+                                <button type="button"
+                                        class="@Cn.Merge("size-5 rounded-full border-2 transition-all", isSelected ? "border-foreground scale-110" : "border-transparent")"
+                                        style="@($"background-color:{color.Hex}")"
+                                        @onclick="@(() => SelectColor(pid2, color.Name))"
+                                        aria-label="@($"Color {color.Name}")">
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    @* Add to cart *@
+                    <div class="mt-2.5">
+                        <ButtonCn Size="ButtonSize.Sm"
+                                  Variant="ButtonVariant.Outline"
+                                  Class="h-7 w-full gap-1.5 text-xs"
+                                  @onclick="@(() => AddToCart(product))">
+                            @if (_addedFeedback == product.Id)
+                            {
+                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                <span>Added</span>
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                                <span>Add to Cart</span>
+                            }
+                        </ButtonCn>
+                    </div>
+
+                </div>
+            }
+        </div>
+
+        @* Cart total *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">Total</span>
+                <span class="text-muted-foreground text-xs">
+                    @_cartCount @(_cartCount == 1 ? "item" : "items")
+                </span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="font-semibold text-sm tabular-nums">$@_cartTotal</span>
+                <ButtonCn Size="ButtonSize.Sm"
+                          Class="h-7 gap-1.5 text-xs"
+                          Disabled="@(_cartCount == 0)">
+                    Checkout
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record ProductColor(string Name, string Hex);
+
+    private record Product(
+        string Id,
+        string Name,
+        int Price,
+        string[] Sizes,
+        ProductColor[] Colors,
+        string Category
+    );
+
+    private record CartItem(string ProductId, string Size, string Color, int Quantity);
+
+    private static readonly Product[] _products =
+    [
+        new("tshirt", "Tour T-Shirt", 35,
+            ["S", "M", "L", "XL", "XXL"],
+            [new("Black", "#171717"), new("White", "#fafafa"), new("Navy", "#1e3a5f")],
+            "Apparel"),
+        new("hoodie", "Logo Hoodie", 65,
+            ["S", "M", "L", "XL"],
+            [new("Black", "#171717"), new("Charcoal", "#404040")],
+            "Apparel"),
+        new("poster", "Limited Poster", 25,
+            ["18x24", "24x36"],
+            [new("Matte", "#e5e5e5"), new("Glossy", "#fafafa")],
+            "Print"),
+        new("vinyl", "Deluxe Vinyl", 40,
+            ["Standard", "Deluxe"],
+            [new("Black", "#171717"), new("Clear", "#d4d4d8"), new("Red", "#dc2626")],
+            "Music"),
+        new("cap", "Embroidered Cap", 28,
+            ["One Size"],
+            [new("Black", "#171717"), new("Tan", "#d2b48c")],
+            "Apparel"),
+    ];
+
+    private Dictionary<string, string> _selectedSizes = InitSelectedSizes();
+    private Dictionary<string, string> _selectedColors = InitSelectedColors();
+    private List<CartItem> _cart = new();
+    private string? _addedFeedback = null;
+
+    private static Dictionary<string, string> InitSelectedSizes()
+    {
+        var d = new Dictionary<string, string>();
+        foreach (var p in _products)
+            d[p.Id] = p.Sizes.Length > 0 ? p.Sizes[0] : "";
+        return d;
+    }
+
+    private static Dictionary<string, string> InitSelectedColors()
+    {
+        var d = new Dictionary<string, string>();
+        foreach (var p in _products)
+            d[p.Id] = p.Colors.Length > 0 ? p.Colors[0].Name : "";
+        return d;
+    }
+
+    private int _cartTotal => _cart.Aggregate(0, (sum, item) =>
+    {
+        var prod = System.Array.Find(_products, p => p.Id == item.ProductId);
+        return sum + (prod?.Price ?? 0) * item.Quantity;
+    });
+
+    private int _cartCount => _cart.Sum(item => item.Quantity);
+
+    private void SelectSize(string productId, string size)
+    {
+        _selectedSizes[productId] = size;
+    }
+
+    private void SelectColor(string productId, string colorName)
+    {
+        _selectedColors[productId] = colorName;
+    }
+
+    private System.Timers.Timer? _feedbackTimer;
+
+    private void AddToCart(Product product)
+    {
+        var size = _selectedSizes.TryGetValue(product.Id, out var s) ? s : (product.Sizes.Length > 0 ? product.Sizes[0] : "");
+        var color = _selectedColors.TryGetValue(product.Id, out var c) ? c : (product.Colors.Length > 0 ? product.Colors[0].Name : "");
+
+        var existing = _cart.Find(item => item.ProductId == product.Id && item.Size == size && item.Color == color);
+        if (existing != null)
+        {
+            var idx = _cart.IndexOf(existing);
+            _cart[idx] = existing with { Quantity = existing.Quantity + 1 };
+        }
+        else
+        {
+            _cart.Add(new CartItem(product.Id, size, color, 1));
+        }
+
+        _addedFeedback = product.Id;
+
+        _feedbackTimer?.Dispose();
+        _feedbackTimer = new System.Timers.Timer(1500) { AutoReset = false };
+        _feedbackTimer.Elapsed += (_, _) =>
+        {
+            _addedFeedback = null;
+            InvokeAsync(StateHasChanged);
+        };
+        _feedbackTimer.Start();
+    }
+}

@@ -1,0 +1,226 @@
+@* ============================================================
+   Block: file-upload-duplicate-detection
+   Title: FileUploadDuplicateDetection
+   Description: React file upload block for Next.js with duplicate file detection, name and hash matching, skip replace and keep-both resolution options, duplicate count indicator, and conflict list built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-duplicate-detection.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <p class="font-medium text-sm">Duplicate Detection</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Review and resolve duplicate files before uploading
+                </p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                <LucideIconCn Name="upload" Size="12" Class="size-3" />
+                Upload
+            </ButtonCn>
+        </div>
+
+        @* Duplicate summary *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <LucideIconCn Name="shield-alert" Size="16" Class="size-4 text-amber-500" />
+            <span class="font-medium text-sm tabular-nums">@_incoming.Length</span>
+            <span class="text-muted-foreground text-xs">
+                @(_incoming.Length == 1 ? "duplicate" : "duplicates") detected
+            </span>
+            <span class="text-muted-foreground text-xs">·</span>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @(_incoming.Where(f => f.MatchType == "both").Count()) exact
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @(_incoming.Where(f => f.MatchType == "name").Count()) name
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @(_incoming.Where(f => f.MatchType == "hash").Count()) content
+                </span>
+            </div>
+            @if (PendingCount > 0)
+            {
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs tabular-nums">
+                    @PendingCount pending
+                </BadgeCn>
+            }
+        </div>
+
+        @* Conflict list *@
+        <div>
+            @for (var idx = 0; idx < _incoming.Length; idx++)
+            {
+                var file = _incoming[idx];
+                var isLast = idx == _incoming.Length - 1;
+                var existing = GetExistingFile(file.MatchedFileId);
+                var isResolved = file.Resolution != "pending";
+                var matchDotClass = GetMatchDotClass(file.MatchType);
+                var matchLabel = GetMatchLabel(file.MatchType);
+                var fileId = file.Id;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="px-4 py-3">
+                        <div class="flex items-start gap-3">
+                            <div class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
+                                @if (isResolved)
+                                {
+                                    <LucideIconCn Name="check" Size="16" Class="size-4 text-emerald-500" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="alert-triangle" Size="16" Class="size-4 text-amber-500" />
+                                }
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="truncate font-medium text-sm">@file.Name</span>
+                                    <span class="@($"size-1.5 shrink-0 rounded-full {matchDotClass}")"></span>
+                                    <span class="shrink-0 text-muted-foreground text-xs">@matchLabel</span>
+                                </div>
+
+                                @* Comparison *@
+                                <div class="mt-1.5 rounded-md bg-muted/50 p-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <LucideIconCn Name="file" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="font-mono text-muted-foreground text-xs">@existing?.Name</span>
+                                            <span class="text-muted-foreground text-xs">@existing?.Size</span>
+                                        </div>
+                                        <span class="text-muted-foreground text-xs">Uploaded @existing?.UploadedAt</span>
+                                    </div>
+                                    <div class="mt-1 flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <LucideIconCn Name="file" Size="12" Class="size-3 text-foreground" />
+                                            <span class="font-mono text-xs">@file.Name</span>
+                                            <span class="text-muted-foreground text-xs">@file.Size</span>
+                                        </div>
+                                        <span class="text-muted-foreground text-xs">New upload</span>
+                                    </div>
+                                </div>
+
+                                @* Resolution actions *@
+                                @if (isResolved)
+                                {
+                                    <div class="mt-2 flex items-center gap-1.5">
+                                        <LucideIconCn Name="check" Size="12" Class="size-3 text-emerald-500" />
+                                        <span class="text-muted-foreground text-xs capitalize">
+                                            @(file.Resolution == "keep-both"
+                                                ? "Keeping both"
+                                                : file.Resolution == "skip"
+                                                    ? "Skipped"
+                                                    : "Replaced")
+                                        </span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="mt-2 flex items-center gap-1.5">
+                                        <ButtonCn
+                                            Variant="ButtonVariant.Ghost"
+                                            Size="ButtonSize.Sm"
+                                            Class="h-6 gap-1 px-2 text-xs"
+                                            OnClick="@(() => Resolve(fileId, "skip"))">
+                                            <LucideIconCn Name="skip-forward" Size="12" Class="size-3" />
+                                            Skip
+                                        </ButtonCn>
+                                        <ButtonCn
+                                            Variant="ButtonVariant.Ghost"
+                                            Size="ButtonSize.Sm"
+                                            Class="h-6 gap-1 px-2 text-xs"
+                                            OnClick="@(() => Resolve(fileId, "replace"))">
+                                            <LucideIconCn Name="file" Size="12" Class="size-3" />
+                                            Replace
+                                        </ButtonCn>
+                                        <ButtonCn
+                                            Variant="ButtonVariant.Ghost"
+                                            Size="ButtonSize.Sm"
+                                            Class="h-6 gap-1 px-2 text-xs"
+                                            OnClick="@(() => Resolve(fileId, "keep-both"))">
+                                            <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                            Keep Both
+                                        </ButtonCn>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <p class="text-muted-foreground text-xs">
+                @ResolvedCount of @_incoming.Length conflicts resolved
+            </p>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs" Disabled="@(PendingCount > 0)">
+                Continue upload
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ExistingFile(string Id, string Name, string Size, string Hash, string UploadedAt);
+
+    private class IncomingFile
+    {
+        public string Id { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string Size { get; init; } = "";
+        public string Hash { get; init; } = "";
+        public string MatchType { get; init; } = "";
+        public string MatchedFileId { get; init; } = "";
+        public string Resolution { get; set; } = "pending";
+    }
+
+    private static readonly ExistingFile[] _existingFiles =
+    [
+        new("e1", "quarterly-report.pdf",  "2.4 MB",  "a3f2b8c1", "Mar 10, 2026"),
+        new("e2", "logo-dark.svg",         "18 KB",   "d7e9f4a2", "Feb 28, 2026"),
+        new("e3", "hero-image.png",        "4.1 MB",  "b1c3d5e7", "Mar 5, 2026"),
+        new("e4", "user-data-export.csv",  "892 KB",  "f8a2c4d6", "Mar 12, 2026"),
+    ];
+
+    private IncomingFile[] _incoming =
+    [
+        new IncomingFile { Id = "i1", Name = "quarterly-report.pdf", Size = "2.4 MB", Hash = "a3f2b8c1", MatchType = "both",  MatchedFileId = "e1", Resolution = "pending" },
+        new IncomingFile { Id = "i2", Name = "logo-dark.svg",        Size = "22 KB",  Hash = "k9m1n3p5", MatchType = "name",  MatchedFileId = "e2", Resolution = "pending" },
+        new IncomingFile { Id = "i3", Name = "banner-final.png",     Size = "4.1 MB", Hash = "b1c3d5e7", MatchType = "hash",  MatchedFileId = "e3", Resolution = "pending" },
+        new IncomingFile { Id = "i4", Name = "team-photo.jpg",       Size = "3.8 MB", Hash = "x2y4z6w8", MatchType = "name",  MatchedFileId = "e4", Resolution = "pending" },
+    ];
+
+    private int PendingCount => _incoming.Count(f => f.Resolution == "pending");
+    private int ResolvedCount => _incoming.Length - PendingCount;
+
+    private void Resolve(string id, string resolution)
+    {
+        var file = _incoming.FirstOrDefault(f => f.Id == id);
+        if (file != null)
+            file.Resolution = resolution;
+    }
+
+    private ExistingFile? GetExistingFile(string matchedId)
+        => _existingFiles.FirstOrDefault(f => f.Id == matchedId);
+
+    private static string GetMatchLabel(string matchType) => matchType switch
+    {
+        "name" => "Same name",
+        "hash" => "Same content",
+        "both" => "Exact duplicate",
+        _      => matchType,
+    };
+
+    private static string GetMatchDotClass(string matchType) => matchType switch
+    {
+        "name" => "bg-amber-500",
+        "hash" => "bg-blue-500",
+        "both" => "bg-red-500",
+        _      => "bg-muted",
+    };
+}

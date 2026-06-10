@@ -1,0 +1,140 @@
+@* ============================================================
+   Block: checkout-bulk-order
+   Title: CheckoutBulkOrder
+   Description: A React and Next.js wholesale bulk order checkout with table-style layout, SKU columns, quantity inputs, line totals, import button, and minimum order notice using shadcn/ui Input, Button, Badge, and Tailwind CSS
+   Source: original/blocks/checkout/checkout-bulk-order.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">Bulk Order</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_activeItems.Count() line items
+                </BadgeCn>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                <LucideIconCn Name="upload" Size="12" Class="size-3" />
+                Import Order
+            </ButtonCn>
+        </div>
+
+        @* Minimum order notice *@
+        @if (_belowMinimum)
+        {
+            <div class="flex items-center gap-2 border-b bg-amber-500/5 px-4 py-2.5">
+                <LucideIconCn Name="alert-circle" Size="14" Class="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span class="text-xs text-amber-700 dark:text-amber-300">
+                    Minimum order is $@MinimumOrder.ToString("F2"). Add $@((_minimumOrder - _subtotal).ToString("F2")) more to proceed.
+                </span>
+            </div>
+        }
+
+        @* Table header *@
+        <div class="grid grid-cols-[100px_1fr_90px_80px_90px_32px] items-center gap-2 border-b bg-muted/30 px-4 py-2">
+            <span class="font-medium text-muted-foreground text-xs">SKU</span>
+            <span class="font-medium text-muted-foreground text-xs">Product</span>
+            <span class="font-medium text-muted-foreground text-xs text-right">Unit Price</span>
+            <span class="font-medium text-muted-foreground text-xs text-right">Qty</span>
+            <span class="font-medium text-muted-foreground text-xs text-right">Line Total</span>
+            <span></span>
+        </div>
+
+        @* Order rows *@
+        <div>
+            @{
+                var itemList = _items.ToList();
+            }
+            @foreach (var it in itemList)
+            {
+                var item = it;
+                var lineTotal = item.UnitPrice * item.Quantity;
+                var isLast = itemList.IndexOf(item) == itemList.Count - 1;
+                <div class="@Cn.Merge("grid grid-cols-[100px_1fr_90px_80px_90px_32px] items-center gap-2 px-4 py-2.5 transition-colors hover:bg-muted/30", isLast ? "" : "border-b")">
+                    <span class="truncate font-mono text-muted-foreground text-xs">@item.Sku</span>
+                    <div class="min-w-0">
+                        <span class="truncate font-medium text-sm">@item.Name</span>
+                        <p class="text-muted-foreground text-xs">@item.InStock in stock</p>
+                    </div>
+                    <span class="text-right text-sm tabular-nums">$@item.UnitPrice.ToString("F2")</span>
+                    <InputCn Type="number" Min="@("0")" Max="@(item.InStock.ToString())" Value="@item.Quantity.ToString()" ValueChanged="@((string v) => UpdateQuantity(item.Id, v))" Class="h-7 text-right text-xs tabular-nums" />
+                    <span class="@Cn.Merge("text-right text-sm tabular-nums", lineTotal > 0 ? "font-medium" : "text-muted-foreground")">
+                        $@lineTotal.ToString("F2")
+                    </span>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0 text-muted-foreground" OnClick="@(() => RemoveItem(item.Id))">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                    </ButtonCn>
+                </div>
+            }
+        </div>
+
+        @* Running total footer *@
+        <div class="border-t bg-muted/30 px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-muted-foreground text-xs">
+                    @_totalUnits total units across @_activeItems.Count() products
+                </span>
+                <div class="flex items-baseline gap-1">
+                    <span class="text-muted-foreground text-xs">Subtotal</span>
+                    <span class="font-semibold text-lg tabular-nums">$@_subtotal.ToString("F2")</span>
+                </div>
+            </div>
+        </div>
+
+        @* Submit *@
+        <div class="border-t px-4 py-3">
+            <ButtonCn Class="w-full" Disabled="@(_belowMinimum || _totalUnits == 0)">
+                @if (_belowMinimum)
+                {
+                    @($"Add ${(_minimumOrder - _subtotal).ToString("F2")} more to meet minimum")
+                }
+                else
+                {
+                    @("Place Bulk Order")
+                }
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record OrderItem(string Id, string Sku, string Name, double UnitPrice, int Quantity, int InStock);
+
+    private const double MinimumOrder = 500.0;
+    private readonly double _minimumOrder = MinimumOrder;
+
+    private List<OrderItem> _items =
+    [
+        new("1", "WH-TEE-001", "Classic Cotton Tee",       8.50,  50,  500),
+        new("2", "WH-POL-014", "Performance Polo",        14.25,  30,  200),
+        new("3", "WH-HOD-008", "Heavyweight Hoodie",      22.00,  25,  150),
+        new("4", "WH-CAP-003", "Structured Snapback Cap",  6.75, 100, 1000),
+        new("5", "WH-JKT-021", "Softshell Jacket",        34.50,   0,   80),
+        new("6", "WH-BAG-009", "Canvas Tote Bag",          4.25,   0,  600),
+    ];
+
+    private IEnumerable<OrderItem> _activeItems => _items.Where(i => i.Quantity > 0);
+    private double _subtotal => _items.Sum(i => i.UnitPrice * i.Quantity);
+    private int _totalUnits => _items.Sum(i => i.Quantity);
+    private bool _belowMinimum => _subtotal < _minimumOrder;
+
+    private void UpdateQuantity(string id, string value)
+    {
+        if (!int.TryParse(value, out var qty))
+            qty = 0;
+
+        _items = _items.Select(i =>
+        {
+            if (i.Id != id) return i;
+            var clamped = Math.Max(0, Math.Min(qty, i.InStock));
+            return i with { Quantity = clamped };
+        }).ToList();
+    }
+
+    private void RemoveItem(string id)
+    {
+        _items = _items.Where(i => i.Id != id).ToList();
+    }
+}

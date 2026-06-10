@@ -1,0 +1,252 @@
+@* ============================================================
+   Block: map-pollution-monitor
+   Title: MapPollutionMonitor
+   Description: React pollution monitoring map block for Next.js with AQI-colored station indicators, pollutant breakdown, health alerts, and station detail popups using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-pollution-monitor.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="wind" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Air Quality Monitor</span>
+                <span class="text-xs text-muted-foreground">@_stations.Length stations</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_countGood
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_countModerate
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-orange-500"></span>
+                    @_countSensitive
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_countUnhealthy
+                </span>
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-baseline gap-1">
+                <span class="@($"text-2xl font-semibold tabular-nums {AqiLevel(_avgAqi).Text}")">@_avgAqi</span>
+                <span class="text-xs text-muted-foreground">AQI</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@AqiLevel(_avgAqi).Label</BadgeCn>
+            <span class="text-xs text-muted-foreground">·</span>
+            <span class="text-xs text-muted-foreground">City average</span>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[500px]">
+            @* Simulated map background (Map/MapMarker/MarkerPopup are not available in BlazorCN) *@
+            <div class="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+            @* Station markers *@
+            @foreach (var station in _stations)
+            {
+                var sl = AqiLevel(station.Aqi);
+                var pos = GetMarkerPosition(station.Lng, station.Lat);
+                var stationCopy = station;
+                <div class="absolute -translate-x-1/2 -translate-y-1/2" style="@($"left:{pos.X}%;top:{pos.Y}%")">
+                    <button
+                        type="button"
+                        class="flex items-center gap-1.5 rounded-full border bg-card px-2 py-0.5 shadow-sm hover:shadow-md transition-shadow"
+                        @onclick="@(() => ToggleSelected(stationCopy.Id))"
+                        title="@($"{stationCopy.Name} · AQI {stationCopy.Aqi} ({sl.Label})")"
+                    >
+                        <span class="@($"size-2 rounded-full {sl.Color}")"></span>
+                        <span class="@($"text-xs font-medium tabular-nums {sl.Text}")">@station.Aqi</span>
+                    </button>
+
+                    @* Popup *@
+                    @if (_selected == station.Id)
+                    {
+                        <div class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-10 w-64 rounded-lg border bg-popover p-3 shadow-lg text-popover-foreground">
+                            <div class="mb-1 flex items-center justify-between">
+                                <span class="text-sm font-medium">@station.Name</span>
+                                <div class="flex items-baseline gap-1">
+                                    <span class="@($"text-lg font-semibold tabular-nums {sl.Text}")">@station.Aqi</span>
+                                    <span class="text-[10px] text-muted-foreground">AQI</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-muted-foreground">@station.Area</p>
+
+                            @* Weather *@
+                            <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="thermometer" Size="12" Class="size-3" />
+                                    @station.Temp
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="activity" Size="12" Class="size-3" />
+                                    @station.Humidity humidity
+                                </span>
+                            </div>
+
+                            @* Pollutant breakdown *@
+                            <div class="mt-2.5 space-y-1.5">
+                                @foreach (var p in station.Pollutants)
+                                {
+                                    var barWidth = AqiBarWidth(p.Aqi);
+                                    var barColor = AqiBarColor(p.Aqi);
+                                    <div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">@p.Name</span>
+                                            <span class="font-mono tabular-nums">@p.Value @p.Unit</span>
+                                        </div>
+                                        <div class="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-muted/50">
+                                            <div class="@($"h-full rounded-full {barColor}")" style="@($"width:{barWidth}")"></div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Health advice *@
+                            <div class="mt-2.5 rounded-md bg-muted/50 p-2">
+                                <div class="mb-1 flex items-center gap-1">
+                                    <LucideIconCn Name="alert-triangle" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-[10px] font-medium text-muted-foreground">Health advisory</span>
+                                </div>
+                                <p class="text-xs leading-relaxed text-muted-foreground">@station.HealthAdvice</p>
+                            </div>
+
+                            <div class="mt-2 text-right">
+                                <span class="text-[10px] text-muted-foreground">Updated @station.LastUpdated</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            @* Map label *@
+            <div class="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                Map view — New York City
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Pollutant(string Name, double Value, string Unit, int Aqi);
+
+    private record Station(
+        string Id,
+        string Name,
+        string Area,
+        double Lng,
+        double Lat,
+        int Aqi,
+        string Temp,
+        string Humidity,
+        Pollutant[] Pollutants,
+        string HealthAdvice,
+        string LastUpdated
+    );
+
+    private record AqiLevelInfo(string Label, string Color, string Text);
+
+    private static readonly Station[] _stations =
+    [
+        new("p1", "Downtown Central", "Financial District", -73.981, 40.709, 42, "68°F", "54%",
+            [
+                new("PM2.5", 10.2, "µg/m³", 42),
+                new("PM10",  18.5, "µg/m³", 17),
+                new("O₃",   35.0, "ppb",    29),
+                new("NO₂",  15.8, "ppb",    15),
+                new("CO",    0.4, "ppm",     4),
+            ],
+            "Air quality is satisfactory. No precautions needed.",
+            "5 min ago"),
+        new("p2", "Midtown East", "Grand Central", -73.977, 40.753, 88, "71°F", "48%",
+            [
+                new("PM2.5", 28.4, "µg/m³", 85),
+                new("PM10",  42.1, "µg/m³", 38),
+                new("O₃",   68.0, "ppb",    88),
+                new("NO₂",  38.2, "ppb",    36),
+                new("CO",    1.2, "ppm",    14),
+            ],
+            "Moderate air quality. Sensitive individuals should limit outdoor exertion.",
+            "8 min ago"),
+        new("p3", "Harlem North", "Upper Manhattan", -73.944, 40.811, 124, "70°F", "52%",
+            [
+                new("PM2.5", 45.6, "µg/m³", 124),
+                new("PM10",  68.3, "µg/m³",  57),
+                new("O₃",   82.0, "ppb",    115),
+                new("NO₂",  52.1, "ppb",     49),
+                new("CO",    2.1, "ppm",     23),
+            ],
+            "Unhealthy for sensitive groups. Children, elderly, and those with respiratory conditions should stay indoors.",
+            "3 min ago"),
+        new("p4", "Brooklyn Heights", "Brooklyn", -73.995, 40.696, 56, "67°F", "58%",
+            [
+                new("PM2.5", 14.8, "µg/m³", 56),
+                new("PM10",  24.2, "µg/m³", 22),
+                new("O₃",   42.0, "ppb",    38),
+                new("NO₂",  22.4, "ppb",    21),
+                new("CO",    0.6, "ppm",     7),
+            ],
+            "Moderate air quality. Unusually sensitive individuals may experience symptoms.",
+            "12 min ago"),
+        new("p5", "Queens Blvd", "Sunnyside, Queens", -73.922, 40.742, 162, "72°F", "44%",
+            [
+                new("PM2.5", 72.4, "µg/m³", 158),
+                new("PM10",  95.0, "µg/m³",  72),
+                new("O₃",   98.0, "ppb",    162),
+                new("NO₂",  68.5, "ppb",     65),
+                new("CO",    3.8, "ppm",     42),
+            ],
+            "Unhealthy. Everyone should reduce prolonged outdoor exertion. Sensitive groups should avoid outdoor activity.",
+            "1 min ago"),
+    ];
+
+    private static AqiLevelInfo AqiLevel(int aqi)
+    {
+        if (aqi <= 50)  return new("Good",      "bg-emerald-500", "text-emerald-600 dark:text-emerald-400");
+        if (aqi <= 100) return new("Moderate",  "bg-amber-500",   "text-amber-600 dark:text-amber-400");
+        if (aqi <= 150) return new("Sensitive", "bg-orange-500",  "text-orange-600 dark:text-orange-400");
+        return new("Unhealthy", "bg-red-500", "text-red-600 dark:text-red-400");
+    }
+
+    private static string AqiBarWidth(int aqi) => $"{Math.Min((aqi / 200.0) * 100.0, 100.0):F1}%";
+
+    private static string AqiBarColor(int aqi)
+    {
+        if (aqi <= 50)  return "bg-emerald-500";
+        if (aqi <= 100) return "bg-amber-500";
+        if (aqi <= 150) return "bg-orange-500";
+        return "bg-red-500";
+    }
+
+    // Map viewport: lon [-74.02, -73.91], lat [40.68, 40.83]
+    private static (double X, double Y) GetMarkerPosition(double lon, double lat)
+    {
+        const double lonMin = -74.02, lonMax = -73.91;
+        const double latMin = 40.68,  latMax = 40.83;
+        var x = (lon - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (lat - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private int _avgAqi => (int)Math.Round(_stations.Average(s => s.Aqi));
+
+    private int _countGood      => Array.FindAll(_stations, s => s.Aqi <= 50).Length;
+    private int _countModerate  => Array.FindAll(_stations, s => s.Aqi > 50 && s.Aqi <= 100).Length;
+    private int _countSensitive => Array.FindAll(_stations, s => s.Aqi > 100 && s.Aqi <= 150).Length;
+    private int _countUnhealthy => Array.FindAll(_stations, s => s.Aqi > 150).Length;
+
+    private string? _selected;
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+}

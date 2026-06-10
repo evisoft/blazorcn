@@ -1,0 +1,197 @@
+@* ============================================================
+   Block: chat-system-messages
+   Title: ChatSystemMessages
+   Description: React chat event stream with rich system event cards for Next.js showing user joins, topic changes, file shares, call starts, and integration events using TypeScript, shadcn/ui, Framer Motion, and Tailwind CSS
+   Source: original/blocks/chat/chat-system-messages.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                <LucideIconCn Name="hash" Size="14" Class="size-3.5 text-muted-foreground" />
+            </div>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">project-atlas</span>
+                <span class="ml-2 text-muted-foreground text-xs">Activity Stream</span>
+            </div>
+            <span class="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+                @_entries.Length entries
+            </span>
+        </div>
+
+        @* Filter tabs *@
+        <div class="flex items-center gap-1 border-b px-4 py-2">
+            @foreach (var tab in _tabs)
+            {
+                var tabKey = tab.Key;
+                <button type="button"
+                        @onclick="@(() => _activeTab = tabKey)"
+                        class="@Cn.Merge("flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors", _activeTab == tab.Key ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")">
+                    @tab.Label
+                    <span class="text-muted-foreground text-[10px]">@tab.Count</span>
+                </button>
+            }
+        </div>
+
+        @* Event Stream *@
+        <div class="flex flex-1 flex-col overflow-y-auto py-2">
+            @{
+                var filtered = _entries.Where(e =>
+                    _activeTab == "all" ? true :
+                    _activeTab == "events" ? e.EntryType == "event" :
+                    e.EntryType == "message").ToArray();
+            }
+            @for (int i = 0; i < filtered.Length; i++)
+            {
+                var entry = filtered[i];
+                @if (entry.EntryType == "event")
+                {
+                    var iconName = GetEventIconName(entry.EventType!);
+                    var metaIconName = GetMetaIconName(entry.EventType!);
+                    <div class="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+                        <LucideIconCn Name="@iconName" Size="14" Class="size-3.5 shrink-0" />
+                        <span>
+                            <span class="font-medium text-foreground">@entry.Actor</span>
+                            @(" ")@entry.Description
+                        </span>
+                        @if (entry.Metadata != null)
+                        {
+                            <span class="text-muted-foreground/40">&middot;</span>
+                            <span class="flex items-center gap-1 font-mono text-[10px]">
+                                @if (metaIconName != null)
+                                {
+                                    <LucideIconCn Name="@metaIconName" Size="10" Class="size-2.5" />
+                                }
+                                @entry.Metadata
+                            </span>
+                        }
+                        <span class="text-muted-foreground/40">&middot;</span>
+                        <span class="text-[10px]">@entry.Timestamp</span>
+                    </div>
+                }
+                else
+                {
+                    var prevEntry = i > 0 ? filtered[i - 1] : null;
+                    var showAvatar = prevEntry == null || prevEntry.EntryType != "message" || prevEntry.Sender != entry.Sender;
+                    var shortTime = entry.Timestamp!.Replace(" AM", "").Replace(" PM", "");
+                    <div class="group flex gap-2 px-3 py-1 hover:bg-accent/50">
+                        <div class="w-8 shrink-0 pt-0.5">
+                            @if (showAvatar)
+                            {
+                                <AvatarCn Class="size-8">
+                                    <AvatarFallbackCn Class="text-[10px]">@entry.SenderInitials</AvatarFallbackCn>
+                                </AvatarCn>
+                            }
+                            else
+                            {
+                                <span class="hidden items-center justify-center text-[10px] text-muted-foreground group-hover:flex h-full">
+                                    @shortTime
+                                </span>
+                            }
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            @if (showAvatar)
+                            {
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium text-sm">@entry.Sender</span>
+                                    <span class="text-[10px] text-muted-foreground">@entry.Timestamp</span>
+                                </div>
+                            }
+                            <p class="text-sm leading-relaxed">@entry.Content</p>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-3 py-3">
+            <form @onsubmit="HandleSubmit" class="flex items-end gap-2 rounded-lg border bg-background px-3 py-2">
+                <textarea @bind="_input" @bind:event="oninput"
+                          placeholder="@("Message #project-atlas...")"
+                          rows="1"
+                          class="min-h-0 max-h-32 resize-none border-0 bg-transparent p-0 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 flex-1 outline-none"></textarea>
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatEntry(
+        string Id,
+        string EntryType,
+        string? EventType = null,
+        string? Actor = null,
+        string? Description = null,
+        string? Metadata = null,
+        string? Sender = null,
+        string? SenderInitials = null,
+        string? Content = null,
+        string? Timestamp = null
+    );
+
+    private record TabItem(string Key, string Label, int Count);
+
+    private static readonly ChatEntry[] _entries =
+    [
+        new("1",  "event", EventType: "topic",       Actor: "Sarah Chen",  Description: "Created the channel #project-atlas",    Timestamp: "9:00 AM"),
+        new("2",  "event", EventType: "join",         Actor: "Sarah Chen",  Description: "Joined the channel",                    Timestamp: "9:00 AM"),
+        new("3",  "event", EventType: "join",         Actor: "Alex Rivera", Description: "Joined the channel",                    Timestamp: "9:01 AM"),
+        new("4",  "event", EventType: "integration",  Actor: "Sarah Chen",  Description: "Connected GitHub integration",           Metadata: "shadcn/project-atlas",                           Timestamp: "9:02 AM"),
+        new("5",  "message", Sender: "Sarah Chen",   SenderInitials: "SC", Content: "Hey team, channel is ready. I connected the GitHub repo so we get commit notifications here.",              Timestamp: "9:03 AM"),
+        new("6",  "event", EventType: "file",         Actor: "Sarah Chen",  Description: "Shared a file",                         Metadata: "atlas-architecture-v2.pdf (2.4 MB)",              Timestamp: "9:05 AM"),
+        new("7",  "message", Sender: "Alex Rivera",  SenderInitials: "AR", Content: "Got it. Reviewing the architecture doc now.",                                                              Timestamp: "9:08 AM"),
+        new("8",  "event", EventType: "join",         Actor: "Jordan Kim",  Description: "Joined the channel",                    Timestamp: "9:10 AM"),
+        new("9",  "event", EventType: "topic",        Actor: "Sarah Chen",  Description: "Changed the topic",                     Metadata: "Atlas v2 Launch — Target: April 15",         Timestamp: "9:15 AM"),
+        new("10", "event", EventType: "calendar",     Actor: "Sarah Chen",  Description: "Scheduled a meeting",                   Metadata: "Atlas Sprint Planning — Today at 3:00 PM",   Timestamp: "9:20 AM"),
+        new("11", "event", EventType: "call",         Actor: "Jordan Kim",  Description: "Started a huddle",                      Metadata: "Quick sync — 3 participants — 12 min",   Timestamp: "9:30 AM"),
+        new("12", "message", Sender: "Jordan Kim",   SenderInitials: "JK", Content: "Huddle summary: agreed on the API schema. Sarah will own auth, Alex takes billing, I have the dashboard.", Timestamp: "9:45 AM"),
+        new("13", "event", EventType: "file",         Actor: "Alex Rivera", Description: "Shared a file",                         Metadata: "billing-api-spec.yaml (18 KB)",                   Timestamp: "9:50 AM"),
+        new("14", "message", Sender: "Sarah Chen",   SenderInitials: "SC", Content: "Excellent. I will have the auth module API spec ready before the 3pm sprint planning.",                    Timestamp: "9:55 AM"),
+    ];
+
+    private TabItem[] _tabs => [
+        new("all",      "All",      _entries.Length),
+        new("events",   "Events",   _entries.Count(e => e.EntryType == "event")),
+        new("messages", "Messages", _entries.Count(e => e.EntryType == "message")),
+    ];
+
+    private string _activeTab = "all";
+    private string _input = "";
+
+    private static string GetEventIconName(string eventType) => eventType switch
+    {
+        "join"        => "user-plus",
+        "topic"       => "hash",
+        "file"        => "file",
+        "call"        => "phone",
+        "integration" => "puzzle",
+        "calendar"    => "calendar",
+        _             => "circle",
+    };
+
+    private static string? GetMetaIconName(string eventType) => eventType switch
+    {
+        "integration" => "link",
+        "file"        => "file",
+        "calendar"    => "calendar",
+        "call"        => "phone",
+        "topic"       => "hash",
+        _             => null,
+    };
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+}

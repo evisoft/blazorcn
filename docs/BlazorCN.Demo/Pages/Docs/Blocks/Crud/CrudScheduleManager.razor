@@ -1,0 +1,195 @@
+@* ============================================================
+   Block: crud-schedule-manager
+   Title: CrudScheduleManager
+   Description: Schedule and shift management with time slots, employee assignment, coverage tracking, and conflict detection
+   Source: original/blocks/crud/crud-schedule-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="calendar-clock" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Schedule</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_shifts.Count shifts · @_shifts.Count(s => s.Status == "confirmed") confirmed
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    Add Shift
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search shifts..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var f in _filterOptions)
+                {
+                    var fv = f;
+                    <button type="button"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == fv.Key ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")"
+                            @onclick="@(() => _filter = fv.Key)">
+                        @fv.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @{ var filtered = _shifts.Where(s => (_filter == "all" || s.Status == _filter) &&
+                   (s.Employee.ToLower().Contains(_search.ToLower()) ||
+                    s.Role.ToLower().Contains(_search.ToLower()) ||
+                    s.Date.ToLower().Contains(_search.ToLower()))).ToList(); }
+            @foreach (var shift in filtered)
+            {
+                var sh = shift;
+                var dotColor = GetStatusColor(sh.Status);
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", dotColor)"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@sh.Employee</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">
+                                    @sh.Role
+                                </BadgeCn>
+                            </div>
+                            <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span class="font-medium text-foreground">@sh.Date</span>
+                                <span>·</span>
+                                <span class="tabular-nums">@sh.StartTime - @sh.EndTime</span>
+                                <span>·</span>
+                                <span>@sh.Duration</span>
+                                <span>·</span>
+                                <span>@sh.Location</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(sh.Notes))
+                            {
+                                <p class="mt-1 text-xs text-muted-foreground">@sh.Notes</p>
+                            }
+                            @if (sh.Status == "pending" || sh.Status == "swap-requested")
+                            {
+                                <div class="mt-2 flex gap-1">
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                              Class="h-6 px-2 text-xs"
+                                              @onclick="@(() => HandleConfirm(sh.Id))">
+                                        Confirm
+                                    </ButtonCn>
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                              Class="h-6 px-2 text-xs text-destructive"
+                                              @onclick="@(() => HandleCancel(sh.Id))">
+                                        Cancel
+                                    </ButtonCn>
+                                </div>
+                            }
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Reassign</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Request Swap</DropdownMenuItemCn>
+                                @if (sh.Status != "cancelled")
+                                {
+                                    <DropdownMenuItemCn @onclick="@(() => HandleCancel(sh.Id))">Cancel Shift</DropdownMenuItemCn>
+                                }
+                                <DropdownMenuItemCn Class="text-destructive" @onclick="@(() => HandleDelete(sh.Id))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (filtered.Count == 0)
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No shifts found
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class Shift
+    {
+        public int Id { get; set; }
+        public string Employee { get; set; } = "";
+        public string Role { get; set; } = "";
+        public string Date { get; set; } = "";
+        public string StartTime { get; set; } = "";
+        public string EndTime { get; set; } = "";
+        public string Duration { get; set; } = "";
+        public string Location { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Notes { get; set; } = "";
+    }
+
+    private class FilterOption
+    {
+        public string Key { get; set; } = "";
+        public string Label { get; set; } = "";
+    }
+
+    private readonly List<Shift> _shifts =
+    [
+        new() { Id = 1, Employee = "Sarah Chen",   Role = "Shift Lead", Date = "Mon, Mar 25", StartTime = "6:00 AM",  EndTime = "2:00 PM",  Duration = "8h", Location = "Main Floor", Status = "confirmed",     Notes = "Opening shift, inventory count" },
+        new() { Id = 2, Employee = "Mike Johnson", Role = "Associate",  Date = "Mon, Mar 25", StartTime = "9:00 AM",  EndTime = "5:00 PM",  Duration = "8h", Location = "Main Floor", Status = "confirmed",     Notes = "" },
+        new() { Id = 3, Employee = "Emma Davis",   Role = "Associate",  Date = "Mon, Mar 25", StartTime = "2:00 PM",  EndTime = "10:00 PM", Duration = "8h", Location = "Main Floor", Status = "swap-requested", Notes = "Requested swap with Lisa for personal appointment" },
+        new() { Id = 4, Employee = "David Lee",    Role = "Shift Lead", Date = "Tue, Mar 26", StartTime = "6:00 AM",  EndTime = "2:00 PM",  Duration = "8h", Location = "Warehouse",  Status = "confirmed",     Notes = "Shipment receiving day" },
+        new() { Id = 5, Employee = "Lisa Wang",    Role = "Associate",  Date = "Tue, Mar 26", StartTime = "10:00 AM", EndTime = "6:00 PM",  Duration = "8h", Location = "Main Floor", Status = "pending",       Notes = "Awaiting confirmation" },
+        new() { Id = 6, Employee = "Tom Bradley",  Role = "Associate",  Date = "Tue, Mar 26", StartTime = "2:00 PM",  EndTime = "10:00 PM", Duration = "8h", Location = "Main Floor", Status = "cancelled",     Notes = "Called in sick - needs coverage" },
+        new() { Id = 7, Employee = "Alex Morgan",  Role = "Shift Lead", Date = "Wed, Mar 27", StartTime = "6:00 AM",  EndTime = "2:00 PM",  Duration = "8h", Location = "Main Floor", Status = "confirmed",     Notes = "New hire training" },
+    ];
+
+    private static readonly FilterOption[] _filterOptions =
+    [
+        new() { Key = "all",            Label = "All" },
+        new() { Key = "confirmed",      Label = "Confirmed" },
+        new() { Key = "pending",        Label = "Pending" },
+        new() { Key = "swap-requested", Label = "Swap" },
+        new() { Key = "cancelled",      Label = "Cancelled" },
+    ];
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private void HandleDelete(int id) => _shifts.RemoveAll(s => s.Id == id);
+
+    private void HandleConfirm(int id)
+    {
+        var shift = _shifts.Find(s => s.Id == id);
+        if (shift != null) shift.Status = "confirmed";
+    }
+
+    private void HandleCancel(int id)
+    {
+        var shift = _shifts.Find(s => s.Id == id);
+        if (shift != null) shift.Status = "cancelled";
+    }
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "confirmed"      => "bg-emerald-500",
+        "pending"        => "bg-amber-500",
+        "swap-requested" => "bg-blue-500",
+        "cancelled"      => "bg-red-500",
+        _                => "bg-muted-foreground",
+    };
+}

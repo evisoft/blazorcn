@@ -1,0 +1,124 @@
+@* ============================================================
+   Block: monitoring-bigquery-usage-stats
+   Title: MonitoringBigqueryUsageStats
+   Description: Advanced BigQuery monitoring dashboard featuring query slot utilization, bytes processed analysis, and reservation tracking with shadcn/ui and Recharts.
+   Source: original/blocks/monitoring/monitoring-bigquery-usage-stats.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="bar-chart-3" Size="16" Class="size-4 text-foreground" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">BigQuery Usage</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">
+                        Compute &amp; Processing Metrics
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="size-1.5 rounded-full bg-emerald-500"></div>
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Within Limits</span>
+            </div>
+        </div>
+
+        @* Stats Grid *@
+        <div class="grid grid-cols-1 md:grid-cols-3 border-b">
+            @foreach (var stat in _stats)
+            {
+                var isLast = stat.Label == "Avg Latency";
+                <div class="@(isLast ? "p-4" : "p-4 md:border-r border-b md:border-b-0")">
+                    <div class="flex items-center gap-1.5 mb-1 text-muted-foreground">
+                        <LucideIconCn Name="@stat.Icon" Size="12" Class="size-3" />
+                        <span class="text-[10px] font-semibold uppercase tracking-wider">@stat.Label</span>
+                    </div>
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-semibold tabular-nums tracking-tight">@stat.Value</span>
+                        @if (!string.IsNullOrEmpty(stat.Unit))
+                        {
+                            <span class="text-xs text-muted-foreground font-medium">@stat.Unit</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Slot Utilization Chart *@
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Slot Utilization (Last 8h)</span>
+                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">Project: data-prod-af21</BadgeCn>
+            </div>
+            @* Area chart rendered as an inline SVG sparkline *@
+            <div class="h-32 w-full">
+                @{
+                    var maxSlots = 920.0;
+                    var chartH = 128.0;
+                    var chartW = 600.0;
+                    var pts = _usageData;
+                    var n = pts.Length;
+                    var step = chartW / (n - 1);
+
+                    // Build polyline points (top path)
+                    var linePts = string.Join(" ", Enumerable.Range(0, n).Select(i =>
+                        $"{i * step:F1},{chartH - pts[i].Slots / maxSlots * chartH:F1}"));
+
+                    // Build filled area path
+                    var areaPath = "M " + string.Join(" L ", Enumerable.Range(0, n).Select(i =>
+                        $"{i * step:F1},{chartH - pts[i].Slots / maxSlots * chartH:F1}"))
+                        + $" L {(n - 1) * step:F1},{chartH:F1} L 0,{chartH:F1} Z";
+                }
+                <svg viewBox="@($"0 0 {chartW:F0} {chartH:F0}")" preserveAspectRatio="none" class="w-full h-full text-foreground">
+                    <defs>
+                        <linearGradient id="bqFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="currentColor" stop-opacity="0.05" />
+                            <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <path d="@areaPath" fill="url(#bqFill)" />
+                    @((MarkupString)$"<polyline points=\"{linePts}\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" />")
+                </svg>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between border-t">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span class="font-medium">Region: US (multi-regional)</span>
+            </div>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                Analysis Hub @("→")
+            </button>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, string Value, string Unit, string Icon);
+    private record UsagePoint(string Time, double Slots);
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Active Slots", "750",  "",  "gauge"),
+        new("TB Processed", "12.4", "",  "database"),
+        new("Avg Latency",  "4.2",  "s", "zap"),
+    ];
+
+    private static readonly UsagePoint[] _usageData =
+    [
+        new("08:00",  45),
+        new("09:00", 120),
+        new("10:00", 850),
+        new("11:00", 620),
+        new("12:00", 410),
+        new("13:00", 380),
+        new("14:00", 920),
+        new("15:00", 750),
+    ];
+}

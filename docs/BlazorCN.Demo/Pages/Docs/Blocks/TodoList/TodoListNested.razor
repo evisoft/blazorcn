@@ -1,0 +1,231 @@
+@* ============================================================
+   Block: todo-list-nested
+   Title: TodoListNested
+   Description: A multi-level nested todo list block for React and Next.js with three levels of depth, collapsible children, and progress rollup built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-nested.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Projects</span>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_completedGrandchildren of @_totalGrandchildren tasks
+            </span>
+        </div>
+
+        @* Nested list *@
+        <div>
+            @for (int ti = 0; ti < _tasks.Count; ti++)
+            {
+                var task = _tasks[ti];
+                var taskId = task.Id;
+                var isExpandedL1 = _expandedL1.Contains(task.Id);
+                var isLastTask = ti == _tasks.Count - 1;
+                var stats = CountAll(task.Children);
+                var progressPercent = stats.Total > 0 ? (int)Math.Round((double)stats.Completed / stats.Total * 100.0) : 0;
+
+                <div class="@(isLastTask && !isExpandedL1 ? "" : "border-b")">
+                    @* Level 1 - Parent *@
+                    <button type="button"
+                            @onclick="@(() => ToggleExpandL1(taskId))"
+                            aria-expanded="@isExpandedL1.ToString().ToLower()"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <LucideIconCn Name="chevron-right" Size="16"
+                                      Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpandedL1 ? "rotate-90" : "")" />
+                        <span class="min-w-0 flex-1 font-medium text-sm">@task.Text</span>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <div class="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+                                <div class="h-full rounded-full bg-foreground transition-all duration-300"
+                                     style="@($"width:{progressPercent}%")"></div>
+                            </div>
+                            <span class="text-muted-foreground text-xs tabular-nums">
+                                @stats.Completed/@stats.Total
+                            </span>
+                        </div>
+                    </button>
+
+                    @* Level 2 - Children *@
+                    @if (isExpandedL1)
+                    {
+                        <div class="overflow-hidden">
+                            @foreach (var ch in task.Children)
+                            {
+                                var child = ch;
+                                var childId = child.Id;
+                                var isExpandedL2 = _expandedL2.Contains(child.Id);
+                                var childStats = CountChildGrandchildren(child);
+                                var childAllDone = childStats.Completed == childStats.Total && childStats.Total > 0;
+
+                                <div>
+                                    @* Child row *@
+                                    <button type="button"
+                                            @onclick="@(() => ToggleExpandL2(childId))"
+                                            aria-expanded="@isExpandedL2.ToString().ToLower()"
+                                            class="flex w-full items-center gap-2.5 py-2.5 pr-4 pl-8 text-left transition-colors hover:bg-muted/50">
+                                        <LucideIconCn Name="chevron-right" Size="14"
+                                                      Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200", isExpandedL2 ? "rotate-90" : "")" />
+                                        <span class="@Cn.Merge("min-w-0 flex-1 text-sm", childAllDone ? "text-muted-foreground line-through" : "text-foreground")">
+                                            @child.Text
+                                        </span>
+                                        <span class="text-muted-foreground text-xs tabular-nums">
+                                            @childStats.Completed/@childStats.Total
+                                        </span>
+                                    </button>
+
+                                    @* Level 3 - Grandchildren *@
+                                    @if (isExpandedL2)
+                                    {
+                                        <div class="overflow-hidden">
+                                            @foreach (var g in child.Children)
+                                            {
+                                                var gc = g;
+                                                var gcId = gc.Id;
+
+                                                <div class="flex w-full items-center gap-3 py-2 pr-4 pl-16 transition-colors hover:bg-muted/50">
+                                                    <CheckboxCn Id="@($"nested-{gc.Id}")"
+                                                                Checked="@gc.Completed"
+                                                                CheckedChanged="@((bool _) => ToggleGrandChild(taskId, childId, gcId))" />
+                                                    <span class="@Cn.Merge("min-w-0 flex-1 cursor-pointer text-sm transition-all duration-200", gc.Completed ? "text-muted-foreground line-through" : "text-foreground")"
+                                                          @onclick="@(() => ToggleGrandChild(taskId, childId, gcId))"
+                                                          @onkeydown="@((KeyboardEventArgs e) => HandleGcKeyDown(e, taskId, childId, gcId))"
+                                                          role="button"
+                                                          tabindex="0">
+                                                        @gc.Text
+                                                    </span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">
+                @_tasks.Count projects · @_totalGrandchildren tasks total
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record GrandChildItem(string Id, string Text, bool Completed);
+    private record ChildItem(string Id, string Text, bool Completed, GrandChildItem[] Children);
+    private record TaskItem(string Id, string Text, ChildItem[] Children);
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Launch new marketing website", new ChildItem[]
+        {
+            new("1a", "Design homepage layout", true, new GrandChildItem[]
+            {
+                new("1a1", "Create hero section mockup", true),
+                new("1a2", "Design feature grid", true),
+                new("1a3", "Build footer component", false),
+            }),
+            new("1b", "Implement frontend", false, new GrandChildItem[]
+            {
+                new("1b1", "Set up Next.js project", true),
+                new("1b2", "Integrate CMS content", false),
+                new("1b3", "Add analytics tracking", false),
+            }),
+        }),
+        new("2", "Backend API migration", new ChildItem[]
+        {
+            new("2a", "Database schema redesign", false, new GrandChildItem[]
+            {
+                new("2a1", "Audit current schema", true),
+                new("2a2", "Write migration scripts", false),
+            }),
+            new("2b", "API endpoint refactor", false, new GrandChildItem[]
+            {
+                new("2b1", "Update auth endpoints", false),
+                new("2b2", "Migrate data endpoints", false),
+                new("2b3", "Add versioning headers", false),
+            }),
+        }),
+        new("3", "Mobile app improvements", new ChildItem[]
+        {
+            new("3a", "Performance optimization", false, new GrandChildItem[]
+            {
+                new("3a1", "Profile render cycles", true),
+                new("3a2", "Implement lazy loading", true),
+            }),
+        }),
+    ];
+
+    private HashSet<string> _expandedL1 = ["1"];
+    private HashSet<string> _expandedL2 = ["1a"];
+
+    private int _totalGrandchildren => _tasks.Sum(t => CountAll(t.Children).Total);
+    private int _completedGrandchildren => _tasks.Sum(t => CountAll(t.Children).Completed);
+
+    private static (int Total, int Completed) CountAll(ChildItem[] children)
+    {
+        int total = 0, completed = 0;
+        foreach (var child in children)
+            foreach (var gc in child.Children)
+            {
+                total++;
+                if (gc.Completed) completed++;
+            }
+        return (total, completed);
+    }
+
+    private static (int Total, int Completed) CountChildGrandchildren(ChildItem child)
+    {
+        int total = 0, completed = 0;
+        foreach (var gc in child.Children)
+        {
+            total++;
+            if (gc.Completed) completed++;
+        }
+        return (total, completed);
+    }
+
+    private void ToggleExpandL1(string id)
+    {
+        if (_expandedL1.Contains(id)) _expandedL1.Remove(id);
+        else _expandedL1.Add(id);
+    }
+
+    private void ToggleExpandL2(string id)
+    {
+        if (_expandedL2.Contains(id)) _expandedL2.Remove(id);
+        else _expandedL2.Add(id);
+    }
+
+    private void ToggleGrandChild(string taskId, string childId, string gcId)
+    {
+        var taskIdx = _tasks.FindIndex(t => t.Id == taskId);
+        if (taskIdx < 0) return;
+        var task = _tasks[taskIdx];
+
+        var childIdx = Array.FindIndex(task.Children, c => c.Id == childId);
+        if (childIdx < 0) return;
+        var child = task.Children[childIdx];
+
+        var gcIdx = Array.FindIndex(child.Children, g => g.Id == gcId);
+        if (gcIdx < 0) return;
+
+        var newGcs = child.Children.ToArray();
+        newGcs[gcIdx] = newGcs[gcIdx] with { Completed = !newGcs[gcIdx].Completed };
+
+        var newChildren = task.Children.ToArray();
+        newChildren[childIdx] = child with { Children = newGcs };
+
+        _tasks[taskIdx] = task with { Children = newChildren };
+    }
+
+    private void HandleGcKeyDown(KeyboardEventArgs e, string taskId, string childId, string gcId)
+    {
+        if (e.Key == "Enter" || e.Key == " ") ToggleGrandChild(taskId, childId, gcId);
+    }
+}

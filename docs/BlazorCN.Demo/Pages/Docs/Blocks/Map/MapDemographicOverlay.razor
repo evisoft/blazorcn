@@ -1,0 +1,278 @@
+@* ============================================================
+   Block: map-demographic-overlay
+   Title: MapDemographicOverlay
+   Description: Interactive demographic data overlay map with census markers, age distribution badges, income level indicators, and demographic detail cards built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-demographic-overlay.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="users" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Demographics</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length regions</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    All
+                </button>
+                @foreach (var lvl in _incomeLevels)
+                {
+                    var level = lvl;
+                    <button
+                        type="button"
+                        @onclick="@(() => _filter = _filter == level ? null : level)"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == level ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        <span class="@($"size-1.5 rounded-full {GetIncomeDot(level)}")"></span>
+                        @GetIncomeLabel(level)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[500px]">
+            @* Simulated US map background — Map/MapMarker/MarkerPopup/MarkerTooltip are not BlazorCN components *@
+            <div class="absolute inset-0 overflow-hidden">
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Income-level markers positioned by approximate lat/lon *@
+                @foreach (var r in _filtered)
+                {
+                    var region = r;
+                    var pos = GetMarkerPosition(region.Longitude, region.Latitude);
+                    var isSelected = _selected == region.Id;
+                    <button
+                        type="button"
+                        class="@Cn.Merge("absolute size-4 rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-125 focus:outline-none", GetIncomeDot(region.IncomeLevel))"
+                        style="@($"left:{pos.X}%;top:{pos.Y}%")"
+                        @onclick="@(() => ToggleSelected(region.Id))"
+                        title="@($"{region.Name}, {region.State} — {FormatIncome(region.MedianIncome)}")"
+                    >
+                    </button>
+                }
+
+                @* Selected region popup *@
+                @if (_activeRegion != null)
+                {
+                    var active = _activeRegion;
+                    var pos = GetMarkerPosition(active.Longitude, active.Latitude);
+                    <div
+                        class="absolute z-20 w-60 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+                        style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - 20px))")"
+                    >
+                        <div class="mb-2 flex items-start justify-between">
+                            <div>
+                                <p class="text-sm font-medium">@active.Name</p>
+                                <p class="text-xs text-muted-foreground">@active.State</p>
+                            </div>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                @FormatIncome(active.MedianIncome)
+                            </BadgeCn>
+                        </div>
+                        <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span class="tabular-nums">Pop @((active.Population / 1000.0).ToString("F0"))k</span>
+                            <span>·</span>
+                            <span class="tabular-nums">Age @active.MedianAge</span>
+                            <span>·</span>
+                            <span class="tabular-nums">@active.CollegeRate% college</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            <p class="text-xs font-medium text-muted-foreground">Age distribution</p>
+                            @foreach (var entry in GetAgeEntries(active))
+                            {
+                                <div class="flex items-center gap-2">
+                                    <span class="w-10 text-xs text-muted-foreground">@entry.Label</span>
+                                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                                        <div
+                                            class="h-full rounded-full bg-blue-500/70"
+                                            style="@($"width:{entry.Value}%")"
+                                        ></div>
+                                    </div>
+                                    <span class="w-6 text-right text-xs tabular-nums text-muted-foreground">@entry.Value%</span>
+                                </div>
+                            }
+                        </div>
+                        <button
+                            type="button"
+                            class="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                            @onclick="@(() => _selected = null)"
+                        >
+                            <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        </button>
+                    </div>
+                }
+
+                <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                    Map view — United States
+                </div>
+            </div>
+        </div>
+
+        @* Region list *@
+        <div>
+            @for (var i = 0; i < _filtered.Length; i++)
+            {
+                var region = _filtered[i];
+                var isExpanded = _expanded == region.Id;
+                var isLast = i == _filtered.Length - 1;
+                <div class="@(isLast && !isExpanded ? "" : "border-t")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpanded(region.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                    >
+                        <span class="@($"size-2 shrink-0 rounded-full {GetIncomeDot(region.IncomeLevel)}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@region.Name, @region.State</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Pop @((region.Population / 1000.0).ToString("F0"))k · Median age @region.MedianAge
+                            </p>
+                        </div>
+                        <span class="text-xs font-medium tabular-nums">@FormatIncome(region.MedianIncome)</span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                            @region.CollegeRate% college
+                        </BadgeCn>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="grid grid-cols-4 gap-3 px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Population</span>
+                                <p class="mt-1 text-sm font-semibold tabular-nums">@region.Population.ToString("N0")</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Median income</span>
+                                <p class="mt-1 text-sm font-semibold tabular-nums">@("$")@region.MedianIncome.ToString("N0")</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Homeownership</span>
+                                <p class="mt-1 text-sm font-semibold tabular-nums">@region.Homeownership%</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="text-xs font-medium text-muted-foreground">Household size</span>
+                                <p class="mt-1 text-sm font-semibold tabular-nums">@region.AvgHouseholdSize</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record AgeDistribution(int Under18, int Age18to34, int Age35to54, int Age55to74, int Over75);
+    private record AgeEntry(string Label, int Value);
+
+    private record Region(
+        string Id,
+        string Name,
+        string State,
+        double Longitude,
+        double Latitude,
+        int Population,
+        int MedianIncome,
+        string IncomeLevel,
+        double MedianAge,
+        double CollegeRate,
+        double Homeownership,
+        double AvgHouseholdSize,
+        AgeDistribution AgeDist
+    );
+
+    private static readonly string[] _incomeLevels = ["high", "upper-mid", "mid", "low"];
+
+    private static string GetIncomeDot(string level) => level switch
+    {
+        "high"      => "bg-emerald-500",
+        "upper-mid" => "bg-blue-500",
+        "mid"       => "bg-amber-500",
+        "low"       => "bg-red-500",
+        _           => "bg-gray-500",
+    };
+
+    private static string GetIncomeLabel(string level) => level switch
+    {
+        "high"      => "$90k+",
+        "upper-mid" => "$60-90k",
+        "mid"       => "$40-60k",
+        "low"       => "<$40k",
+        _           => level,
+    };
+
+    private static readonly Region[] _regions =
+    [
+        new("d1", "Palo Alto",  "CA", -122.143,  37.4419,   68572,  174800, "high",      42.3, 81.2, 56.7, 2.6,
+            new AgeDistribution(20, 18, 28, 24, 10)),
+        new("d2", "Austin",     "TX",  -97.7431,  30.2672,  978908,   75413, "upper-mid", 34.6, 52.8, 44.1, 2.4,
+            new AgeDistribution(18, 32, 26, 17,  7)),
+        new("d3", "Brooklyn",   "NY",  -73.9442,  40.6782, 2648452,   62940, "upper-mid", 35.1, 42.3, 28.9, 2.7,
+            new AgeDistribution(22, 28, 24, 18,  8)),
+        new("d4", "Detroit",    "MI",  -83.0458,  42.3314,  639111,   34762, "low",       34.5, 16.7, 47.3, 2.6,
+            new AgeDistribution(26, 24, 22, 20,  8)),
+        new("d5", "Scottsdale", "AZ", -111.9261,  33.4942,  241361,   92298, "high",      47.8, 62.1, 65.4, 2.2,
+            new AgeDistribution(16, 16, 22, 30, 16)),
+        new("d6", "Nashville",  "TN",  -86.7816,  36.1627,  689447,   59828, "mid",       34.1, 41.2, 52.6, 2.4,
+            new AgeDistribution(20, 30, 24, 18,  8)),
+        new("d7", "Seattle",    "WA", -122.3321,  47.6062,  749256,  105391, "high",      35.4, 63.8, 45.2, 2.1,
+            new AgeDistribution(14, 30, 28, 20,  8)),
+        new("d8", "Memphis",    "TN",  -90.049,   35.1495,  633104,   41228, "mid",       33.8, 26.4, 44.8, 2.6,
+            new AgeDistribution(26, 24, 22, 20,  8)),
+    ];
+
+    private string? _filter = null;
+    private string? _selected = null;
+    private string? _expanded = null;
+
+    private Region[] _filtered => _filter != null
+        ? [.. _regions.Where(r => r.IncomeLevel == _filter)]
+        : _regions;
+
+    private Region? _activeRegion => _selected != null
+        ? Array.Find(_regions, r => r.Id == _selected)
+        : null;
+
+    private static string FormatIncome(int n) => $"${(int)Math.Round(n / 1000.0)}k";
+
+    private static AgeEntry[] GetAgeEntries(Region region) =>
+    [
+        new AgeEntry("<18",   region.AgeDist.Under18),
+        new AgeEntry("18-34", region.AgeDist.Age18to34),
+        new AgeEntry("35-54", region.AgeDist.Age35to54),
+        new AgeEntry("55-74", region.AgeDist.Age55to74),
+        new AgeEntry("75+",   region.AgeDist.Over75),
+    ];
+
+    // Map lon/lat to % positions within the US viewport placeholder.
+    // US viewport: lon [-125, -66], lat [24, 50]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -125.0, lonMax = -66.0;
+        const double latMin = 24.0,   latMax = 50.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+}

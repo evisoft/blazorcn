@@ -1,0 +1,348 @@
+@* ============================================================
+   Block: kanban-production-schedule
+   Title: KanbanProductionSchedule
+   Description: React kanban board for Next.js with production scheduling columns and a Sheet side panel showing order details, product specs, materials, QC results, and shipping info using shadcn/ui Sheet and Tailwind CSS.
+   Source: original/blocks/kanban/kanban-production-schedule.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="cog" Size="16" Class="size-4 text-muted-foreground" />
+            <h2 class="text-sm font-medium">Production Schedule</h2>
+            <span class="text-xs text-muted-foreground">@_orders.Length orders</span>
+            <div class="ml-auto flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @(_orders.Count(o => o.Priority == "rush")) rush
+                </span>
+            </div>
+        </div>
+
+        @* Kanban columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var colOrders = _orders.Where(o => o.Stage == column.Stage).ToArray();
+                var colQty = colOrders.Sum(o => o.Quantity);
+                <div class="min-h-[480px]">
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", StageDotClass(column.Stage))"></span>
+                        <span class="text-xs font-medium">@column.Label</span>
+                        <span class="ml-auto text-xs text-muted-foreground tabular-nums">
+                            @colQty.ToString("N0") total
+                        </span>
+                    </div>
+                    <div class="divide-y">
+                        @foreach (var ord in colOrders)
+                        {
+                            var order = ord;
+                            <button type="button"
+                                    class="@Cn.Merge("flex w-full flex-col gap-1 border-l-4 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", StageBorderClass(order.Stage), _selectedId == order.Id ? "bg-muted/50 ring-2 ring-foreground ring-inset" : "")"
+                                    @onclick="@(() => _selectedId = order.Id)">
+                                <span class="truncate text-sm font-medium">@order.Product</span>
+                                <span class="font-mono text-xs text-muted-foreground">
+                                    @order.OrderNumber
+                                </span>
+                                <div class="flex items-center gap-2">
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", PriorityDotClass(order.Priority))"></span>
+                                    <span class="text-xs text-muted-foreground tabular-nums">
+                                        @order.Quantity.ToString("N0") @order.Unit
+                                    </span>
+                                    <span class="ml-auto flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground">
+                                        @order.Initials
+                                    </span>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* Sheet side panel *@
+    <SheetCn Open="@(_selectedId != null)" OpenChanged="@((open) => { if (!open) _selectedId = null; })">
+        <SheetContentCn Class="overflow-y-auto sm:max-w-md">
+            @if (_selected != null)
+            {
+                var sel = _selected;
+                <SheetHeaderCn>
+                    <SheetTitleCn Class="text-sm font-medium">@sel.Product</SheetTitleCn>
+                    <SheetDescriptionCn>
+                        <span class="flex items-center gap-2">
+                            <span class="font-mono text-xs">@sel.OrderNumber</span>
+                            <span class="text-xs text-muted-foreground">·</span>
+                            <span class="@Cn.Merge("size-1.5 rounded-full", StageDotClass(sel.Stage))"></span>
+                            <span class="capitalize text-xs">@sel.Stage.Replace("-", " ")</span>
+                        </span>
+                    </SheetDescriptionCn>
+                </SheetHeaderCn>
+
+                @* Order details *@
+                <div class="border-b px-4 pb-4">
+                    <span class="text-xs font-medium text-muted-foreground">Order Details</span>
+                    <div class="mt-2 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Customer</span>
+                            <span class="font-medium">@sel.Customer</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Quantity</span>
+                            <span class="font-medium tabular-nums">
+                                @sel.Quantity.ToString("N0") @sel.Unit
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Priority</span>
+                            <span class="flex items-center gap-1.5 font-medium capitalize">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", PriorityDotClass(sel.Priority))"></span>
+                                @sel.Priority
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Due date</span>
+                            <span class="font-medium">@sel.DueDate</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Assignee</span>
+                            <span class="flex items-center gap-1.5 font-medium">
+                                <span class="flex size-5 items-center justify-center rounded-full bg-muted text-[9px] text-muted-foreground">
+                                    @sel.Initials
+                                </span>
+                                @sel.Assignee
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                @* Product specs *@
+                <div class="border-b px-4 py-4">
+                    <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <LucideIconCn Name="ruler" Size="14" Class="size-3.5" />
+                        Product Specifications
+                    </span>
+                    <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        @sel.Specs
+                    </p>
+                </div>
+
+                @* Materials *@
+                <div class="border-b px-4 py-4">
+                    <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <LucideIconCn Name="box" Size="14" Class="size-3.5" />
+                        Materials
+                    </span>
+                    <div class="mt-2 space-y-1.5">
+                        @foreach (var mat in sel.Materials)
+                        {
+                            <div class="flex items-center gap-2 text-xs">
+                                <span class="size-1 rounded-full bg-foreground/30"></span>
+                                <span>@mat</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @* QC results *@
+                <div class="border-b px-4 py-4">
+                    <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <LucideIconCn Name="clipboard-check" Size="14" Class="size-3.5" />
+                        Quality Check Results
+                    </span>
+                    @if (sel.QcChecks.Length > 0)
+                    {
+                        <div class="mt-2 space-y-2">
+                            @foreach (var chk in sel.QcChecks)
+                            {
+                                var check = chk;
+                                <div class="flex items-center gap-2 text-xs">
+                                    @if (check.Passed)
+                                    {
+                                        <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5 text-emerald-500" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="x-circle" Size="14" Class="size-3.5 text-red-500" />
+                                    }
+                                    <span class="@Cn.Merge("", !check.Passed ? "font-medium text-red-600 dark:text-red-400" : "")">
+                                        @check.Label
+                                    </span>
+                                    <span class="ml-auto text-[10px] text-muted-foreground">
+                                        @(check.Passed ? "Pass" : "Fail")
+                                    </span>
+                                </div>
+                            }
+                            <div class="mt-1 rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium tabular-nums">
+                                    @sel.QcChecks.Count(c => c.Passed)/@sel.QcChecks.Length passed
+                                </span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="mt-2 text-xs text-muted-foreground">Pending quality inspection</p>
+                    }
+                </div>
+
+                @* Shipping info *@
+                <div class="px-4 py-4">
+                    <span class="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <LucideIconCn Name="truck" Size="14" Class="size-3.5" />
+                        Shipping
+                    </span>
+                    <div class="mt-2 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Method</span>
+                            <span class="font-medium">@sel.ShippingMethod</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-muted-foreground">Tracking</span>
+                            <span class="font-mono text-[10px]">@sel.TrackingNumber</span>
+                        </div>
+                        <div class="rounded-md bg-muted/50 p-2.5">
+                            <span class="block text-[10px] text-muted-foreground">Ship to</span>
+                            <span class="block text-xs">@sel.ShippingAddress</span>
+                        </div>
+                    </div>
+                </div>
+
+                @* Actions *@
+                <div class="flex gap-2 border-t px-4 py-3">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">Update status</ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs text-muted-foreground">Print label</ButtonCn>
+                </div>
+            }
+        </SheetContentCn>
+    </SheetCn>
+</section>
+
+@code {
+    private record QcCheck(string Label, bool Passed);
+
+    private record ProductionOrder(
+        string Id,
+        string OrderNumber,
+        string Product,
+        string Stage,
+        string Priority,
+        int Quantity,
+        string Unit,
+        string Customer,
+        string DueDate,
+        string Assignee,
+        string Initials,
+        string Specs,
+        string[] Materials,
+        QcCheck[] QcChecks,
+        string ShippingMethod,
+        string TrackingNumber,
+        string ShippingAddress
+    );
+
+    private record ColumnDef(string Stage, string Label);
+
+    private static readonly ProductionOrder[] _orders =
+    [
+        new("o1",  "PO-2026-0417", "Precision Gear Assembly",      "queued",        "rush",     500,   "units",  "Atlas Manufacturing",  "Apr 12", "Tom Briggs",   "TB",
+            "Hardened steel gears, 0.005mm tolerance, zinc-nickel plating. Must meet ISO 6336 Class 5 quality standard.",
+            ["4140 alloy steel bar", "Zinc-nickel plating solution", "Cutting fluid Grade 7"],
+            [],
+            "Freight (LTL)", "--", "614 Industrial Pkwy, Columbus, OH 43215"),
+
+        new("o2",  "PO-2026-0418", "Custom Circuit Board v3",      "queued",        "standard", 2000,  "boards", "Stratos Cloud",         "Apr 20", "Karen Blake",  "KB",
+            "4-layer PCB, FR-4 substrate, 1oz copper weight, ENIG finish. IPC-A-600 Class 2 compliance required.",
+            ["FR-4 laminate sheets", "Copper foil (1oz)", "ENIG plating chemicals", "Solder paste SAC305"],
+            [],
+            "Ground", "--", "650 Cloud Way, San Jose, CA 95134"),
+
+        new("o3",  "PO-2026-0412", "Aluminum Enclosure Housing",   "in-production", "standard", 300,   "units",  "Horizon Energy",        "Apr 15", "Tom Briggs",   "TB",
+            "6061-T6 aluminum, CNC machined, anodized black. IP65 water-resistant sealing with silicone gasket.",
+            ["6061-T6 aluminum billet", "Anodizing chemicals", "Silicone gasket rolls", "Stainless fasteners M3"],
+            [],
+            "Freight (LTL)", "--", "713 Energy Blvd, Houston, TX 77002"),
+
+        new("o4",  "PO-2026-0410", "Silicone Seal Ring Kit",       "in-production", "rush",     5000,  "kits",   "Meridian Healthcare",   "Apr 10", "Karen Blake",  "KB",
+            "Medical-grade silicone (USP Class VI), durometer 40A. Each kit contains 4 rings: 12mm, 18mm, 24mm, 30mm ID.",
+            ["Medical-grade silicone compound", "Release agent", "Packaging pouches (sterile)"],
+            [],
+            "Next Day Air", "--", "415 Health Ave, San Francisco, CA 94107"),
+
+        new("o5",  "PO-2026-0408", "Stainless Steel Brackets",     "in-production", "standard", 1200,  "pieces", "Vertex Logistics",      "Apr 18", "Tom Briggs",   "TB",
+            "304 stainless steel, laser cut and bent to 90 degrees. Passivated finish per ASTM A967.",
+            ["304 SS sheet (16 gauge)", "Passivation solution", "Protective film"],
+            [],
+            "Ground", "--", "312 Logistics Dr, Chicago, IL 60607"),
+
+        new("o6",  "PO-2026-0401", "Polymer Injection Mold Parts", "quality-check", "standard", 8000,  "pieces", "Bloom Retail",          "Apr 8",  "Karen Blake",  "KB",
+            "ABS plastic, color-matched to Pantone 7545C. Wall thickness 2.5mm minimum. Textured finish MT-11010.",
+            ["ABS resin (Pantone 7545C)", "Mold release spray", "Anti-static packaging"],
+            [new("Dimensional accuracy", true), new("Color consistency", true), new("Surface finish quality", false), new("Stress test", true)],
+            "Ground", "--", "206 Retail Ct, Seattle, WA 98101"),
+
+        new("o7",  "PO-2026-0398", "Copper Heat Sink Assembly",    "quality-check", "rush",     750,   "units",  "Catalyst EdTech",       "Apr 6",  "Tom Briggs",   "TB",
+            "C110 copper, skived fin design, nickel-plated. Thermal resistance must be under 0.15 C/W at 25W TDP.",
+            ["C110 copper bar stock", "Nickel plating solution", "Thermal interface paste"],
+            [new("Thermal resistance test", true), new("Plating adhesion", true), new("Dimensional check", true), new("Visual inspection", true)],
+            "2-Day Air", "--", "512 Tech Park, Austin, TX 78701"),
+
+        new("o8",  "PO-2026-0385", "Packaging Insert Trays",       "shipped",       "standard", 10000, "trays",  "Neon Digital Agency",   "Apr 2",  "Karen Blake",  "KB",
+            "Recycled PET thermoformed trays, 0.5mm wall thickness, matte black. Custom cavities for product kit components.",
+            ["Recycled PET sheet (black)", "Thermoforming mold tooling"],
+            [new("Cavity fit test", true), new("Material thickness", true), new("Drop test", true), new("Visual inspection", true)],
+            "Freight (FTL)", "FRT-8842917", "305 Design Blvd, Miami, FL 33101"),
+
+        new("o9",  "PO-2026-0372", "Machined Titanium Pins",       "shipped",       "rush",     200,   "pieces", "Pinnacle Finance",      "Mar 30", "Tom Briggs",   "TB",
+            "Grade 5 titanium (Ti-6Al-4V), Swiss-turned, 0.002mm tolerance. Passivated per AMS 2488.",
+            ["Ti-6Al-4V rod stock", "Cutting tools (carbide)", "Passivation chemicals"],
+            [new("CMM measurement", true), new("Surface roughness", true), new("Material cert review", true), new("Passivation verification", true)],
+            "Next Day Air", "1Z999AA10123456784", "212 Finance St, New York, NY 10005"),
+
+        new("o10", "PO-2026-0365", "LED Panel Assembly",           "shipped",       "standard", 400,   "panels", "Atlas Manufacturing",   "Mar 28", "Karen Blake",  "KB",
+            "12x12 inch LED panels, 5000K color temp, 95+ CRI. Integrated constant-current driver. UL listed.",
+            ["LED strips (5000K)", "Aluminum backing plate", "Diffuser lens sheet", "Driver IC modules"],
+            [new("Light output test", true), new("Color temperature", true), new("Electrical safety", true), new("Burn-in test (24h)", true)],
+            "Ground", "1Z999BB10987654321", "614 Industrial Pkwy, Columbus, OH 43215"),
+    ];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("queued",        "Queued"),
+        new("in-production", "In Production"),
+        new("quality-check", "Quality Check"),
+        new("shipped",       "Shipped"),
+    ];
+
+    private string? _selectedId = null;
+
+    private ProductionOrder? _selected => _selectedId != null ? _orders.FirstOrDefault(o => o.Id == _selectedId) : null;
+
+    private static string StageDotClass(string stage) => stage switch
+    {
+        "queued"        => "bg-blue-500",
+        "in-production" => "bg-amber-500",
+        "quality-check" => "bg-violet-500",
+        "shipped"       => "bg-emerald-500",
+        _               => "",
+    };
+
+    private static string StageBorderClass(string stage) => stage switch
+    {
+        "queued"        => "border-l-blue-500",
+        "in-production" => "border-l-amber-500",
+        "quality-check" => "border-l-violet-500",
+        "shipped"       => "border-l-emerald-500",
+        _               => "",
+    };
+
+    private static string PriorityDotClass(string priority) => priority switch
+    {
+        "rush"     => "bg-red-500",
+        "standard" => "bg-zinc-400",
+        "low"      => "bg-blue-400",
+        _          => "",
+    };
+}

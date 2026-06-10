@@ -1,0 +1,221 @@
+@* ============================================================
+   Block: chat-customer-support
+   Title: ChatCustomerSupport
+   Description: React customer support widget block for Next.js with branded header, queue position indicator, category chips, CSAT star rating, canned response suggestions, transfer to agent button, and ticket reference using shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-customer-support.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Branded header *@
+        <div class="flex items-center gap-2.5 border-b bg-muted/30 px-4 py-2.5">
+            <div class="flex size-6 items-center justify-center rounded bg-foreground">
+                <LucideIconCn Name="headphones" Size="14" Class="size-3.5 text-background" />
+            </div>
+            <span class="font-medium text-sm">Support</span>
+            <BadgeCn Variant="BadgeVariant.Outline" Class="ml-auto font-mono text-[10px]">
+                @_ticketId
+            </BadgeCn>
+        </div>
+
+        @* Agent info bar *@
+        <div class="flex items-center gap-3 border-b px-4 py-2.5">
+            <div class="relative">
+                <AvatarCn Class="size-8">
+                    <AvatarFallbackCn Class="text-xs">@_agentInitials</AvatarFallbackCn>
+                </AvatarCn>
+                <span class="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-card"></span>
+            </div>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                    <span class="font-medium text-sm">@_agentName</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">
+                        Support
+                    </BadgeCn>
+                </div>
+            </div>
+        </div>
+
+        @* Messages — flat layout *@
+        <div class="flex flex-1 flex-col overflow-y-auto">
+            @foreach (var msg in _initialMessages)
+            {
+                var msgId = msg.Id;
+                if (msg.Role == "system")
+                {
+                    <div class="flex justify-center px-4 py-2">
+                        <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                            <LucideIconCn Name="message-circle" Size="12" Class="size-3" />
+                            @msg.Content
+                        </span>
+                    </div>
+                }
+                else
+                {
+                    var idx = System.Array.IndexOf(_initialMessages, msg);
+                    var isAgent = msg.Role == "agent";
+                    var prevMsg = idx > 0 ? _initialMessages[idx - 1] : null;
+                    var showHeader = prevMsg == null || prevMsg.Role != msg.Role;
+
+                    <div>
+                        <div class="@Cn.Merge("group flex gap-2 px-4 transition-colors hover:bg-accent", showHeader ? "pt-2.5 pb-0.5" : "py-0.5")">
+                            @* Avatar column *@
+                            <div class="w-10 shrink-0">
+                                @if (showHeader && isAgent)
+                                {
+                                    <AvatarCn Class="size-8">
+                                        <AvatarFallbackCn Class="text-[10px]">@_agentInitials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                }
+                                @if (showHeader && !isAgent)
+                                {
+                                    <AvatarCn Class="size-8">
+                                        <AvatarFallbackCn Class="text-[10px]">YO</AvatarFallbackCn>
+                                    </AvatarCn>
+                                }
+                            </div>
+                            @* Body *@
+                            <div class="min-w-0 flex-1">
+                                @if (showHeader)
+                                {
+                                    <div class="flex items-baseline gap-2">
+                                        <span class="font-medium text-sm">@(isAgent ? _agentName : "You")</span>
+                                        <span class="text-muted-foreground text-xs">@msg.Timestamp</span>
+                                    </div>
+                                }
+                                <p class="text-sm leading-relaxed">@msg.Content</p>
+                                @if (!showHeader)
+                                {
+                                    <span class="hidden text-muted-foreground text-[10px] group-hover:inline">
+                                        @msg.Timestamp
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        @* Quick action chips after last agent message *@
+                        @if (msgId == _lastAgentMsgId)
+                        {
+                            <div class="flex gap-1.5 px-4 pt-2 pb-1 pl-14">
+                                @foreach (var action in _quickActions)
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 rounded-full px-2.5 text-xs">
+                                        @action.Label
+                                    </ButtonCn>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            @* CSAT rating card *@
+            <div class="flex justify-center px-4 py-4">
+                <div class="rounded-lg bg-muted/50 px-6 py-4 text-center">
+                    <p class="mb-2 font-medium text-muted-foreground text-xs">
+                        Rate this conversation
+                    </p>
+                    <div class="flex items-center justify-center gap-1">
+                        @foreach (var star in new[] { 1, 2, 3, 4, 5 })
+                        {
+                            var s = star;
+                            <button type="button"
+                                    @onclick="@(() => SetRating(s))"
+                                    @onmouseenter="@(() => _hoveredStar = s)"
+                                    @onmouseleave="@(() => _hoveredStar = 0)"
+                                    class="rounded-sm p-0.5 transition-colors hover:bg-muted">
+                                <LucideIconCn Name="star" Size="20" Class="@Cn.Merge("size-5 transition-colors", s <= ActiveStars ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")" />
+                            </button>
+                        }
+                    </div>
+                    @if (_rating > 0)
+                    {
+                        <p class="mt-2 text-muted-foreground text-xs">Thanks for your feedback</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <InputCn @bind-Value="_input"
+                         Placeholder="Type a message..."
+                         Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="size-9 shrink-0 text-muted-foreground hover:text-foreground"
+                          OnClick="HandleSubmit">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost"
+                          Size="ButtonSize.Sm"
+                          Class="h-9 gap-1.5 text-muted-foreground text-xs hover:text-foreground">
+                    <LucideIconCn Name="phone-off" Size="14" Class="size-3.5" />
+                    End chat
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private const string _agentName = "Maya Chen";
+    private const string _agentInitials = "MC";
+    private const string _ticketId = "TKT-48291";
+
+    private string _input = "";
+    private int _rating = 0;
+    private int _hoveredStar = 0;
+
+    private int ActiveStars => _hoveredStar != 0 ? _hoveredStar : _rating;
+
+    private record QuickAction(string Id, string Label);
+
+    private static readonly QuickAction[] _quickActions =
+    [
+        new("track", "Track order"),
+        new("billing", "Billing help"),
+        new("reset", "Reset password"),
+    ];
+
+    private record Message(string Id, string Role, string Content, string Timestamp);
+
+    private static readonly Message[] _initialMessages =
+    [
+        new("s1", "system", "Conversation started — Category: Integration", "10:00 AM"),
+        new("1", "agent", "Hi there! I'm Maya, your support specialist. How can I help you today?", "10:02 AM"),
+        new("2", "customer", "I'm having trouble connecting my Stripe account. The integration page shows an error after I authorize.", "10:03 AM"),
+        new("3", "agent", "I can help with that. The authorization error usually happens when the redirect URI doesn't match. Can you confirm which environment you're using — development or production?", "10:04 AM"),
+        new("4", "customer", "I'm on production. The URL is https://app.acme.com/integrations/stripe/callback", "10:04 AM"),
+        new("5", "agent", "Found the issue. Your Stripe dashboard has the redirect URI set to /stripe-callback instead of /stripe/callback. I've updated it on our end. Can you try authorizing again?", "10:06 AM"),
+        new("6", "customer", "That worked! It's connected now. Thanks for the quick fix.", "10:07 AM"),
+        new("7", "agent", "Glad it's working! Is there anything else I can help you with today?", "10:07 AM"),
+        new("8", "customer", "No, that's everything. Thank you!", "10:08 AM"),
+    ];
+
+    private static readonly string? _lastAgentMsgId = ComputeLastAgentMsgId();
+
+    private static string? ComputeLastAgentMsgId()
+    {
+        for (int i = _initialMessages.Length - 1; i >= 0; i--)
+        {
+            if (_initialMessages[i].Role == "agent")
+                return _initialMessages[i].Id;
+        }
+        return null;
+    }
+
+    private void SetRating(int star)
+    {
+        _rating = star;
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

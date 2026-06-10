@@ -1,0 +1,158 @@
+@* ============================================================
+   Block: crud-campaign-manager
+   Title: CrudCampaignManager
+   Description: Marketing campaign management with status tracking, budget allocation, performance metrics, and scheduling
+   Source: original/blocks/crud/crud-campaign-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="target" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Campaigns</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @FormatCurrency(_totalSpent) of @FormatCurrency(_totalBudget) spent
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    New Campaign
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search campaigns..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var s in new[] { "all", "active", "paused", "draft", "completed" })
+                {
+                    var status = s;
+                    <button type="button" @onclick="@(() => _filter = status)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == status ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @(char.ToUpper(status[0]) + status[1..])
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @foreach (var campaign in _filtered)
+            {
+                var spentPct = campaign.Budget > 0 ? (int)Math.Round((double)campaign.Spent / campaign.Budget * 100) : 0;
+                var dotColor = campaign.Status switch
+                {
+                    "active" => "bg-emerald-500",
+                    "paused" => "bg-amber-500",
+                    "completed" => "bg-blue-500",
+                    _ => "bg-muted-foreground/40"
+                };
+                var campId = campaign.Id;
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", dotColor)"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@campaign.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">
+                                    @campaign.Channel
+                                </BadgeCn>
+                            </div>
+                            <div class="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                                <span>@campaign.StartDate — @campaign.EndDate</span>
+                                <span class="tabular-nums">
+                                    @FormatCurrency(campaign.Spent) / @FormatCurrency(campaign.Budget) (@(spentPct)%)
+                                </span>
+                            </div>
+                            <div class="mt-1.5 flex items-center gap-4 text-xs text-muted-foreground">
+                                <span>@campaign.Impressions impressions</span>
+                                <span>@campaign.Clicks clicks</span>
+                                <span class="font-medium text-foreground">@campaign.Conversions conversions</span>
+                            </div>
+                            <div class="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
+                                <div class="h-full rounded-full bg-foreground/20"
+                                     style="@($"width:{spentPct}%")"></div>
+                            </div>
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                                @if (campaign.Status == "active" || campaign.Status == "paused")
+                                {
+                                    <DropdownMenuItemCn OnClick="@(() => HandlePause(campId))">
+                                        @(campaign.Status == "paused" ? "Resume" : "Pause")
+                                    </DropdownMenuItemCn>
+                                }
+                                <DropdownMenuItemCn>Duplicate</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View Report</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(campId))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (!_filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No campaigns found
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Campaign(int Id, string Name, string Channel, string Status, int Budget, int Spent,
+        string Impressions, string Clicks, int Conversions, string StartDate, string EndDate);
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private Campaign[] _campaigns = _initial.ToArray();
+
+    private IEnumerable<Campaign> _filtered =>
+        _campaigns
+            .Where(c => _filter == "all" || c.Status == _filter)
+            .Where(c => c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private int _totalBudget => _campaigns.Sum(c => c.Budget);
+    private int _totalSpent => _campaigns.Sum(c => c.Spent);
+
+    private static string FormatCurrency(int n) => $"${n:N0}";
+
+    private void HandleDelete(int id) =>
+        _campaigns = _campaigns.Where(c => c.Id != id).ToArray();
+
+    private void HandlePause(int id) =>
+        _campaigns = _campaigns.Select(c =>
+            c.Id == id
+                ? c with { Status = c.Status == "paused" ? "active" : "paused" }
+                : c
+        ).ToArray();
+
+    private static readonly Campaign[] _initial =
+    [
+        new(1, "Spring Product Launch",       "Multi-channel", "active",    15000, 8750,  "245K", "12.4K", 342, "Mar 1",  "Mar 31"),
+        new(2, "Blog Content Promotion",      "Social",        "active",     3000, 1200,  "89K",  "4.2K",  156, "Mar 10", "Apr 10"),
+        new(3, "Enterprise Webinar Series",   "Email",         "draft",      5000,    0,  "—",    "—",       0, "Apr 1",  "Apr 30"),
+        new(4, "Retargeting - Cart Abandonment","Display",     "active",     8000, 6200,  "520K", "8.1K",  489, "Feb 15", "Mar 31"),
+        new(5, "Q1 Brand Awareness",          "Social",        "completed", 12000,11800,  "1.2M", "34K",   890, "Jan 1",  "Mar 15"),
+        new(6, "Partner Referral Program",    "Email",         "paused",     4000, 1500,  "45K",  "2.8K",   67, "Feb 1",  "Apr 30"),
+    ];
+}

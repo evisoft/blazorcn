@@ -1,0 +1,339 @@
+@* ============================================================
+   Block: account-deployment-targets
+   Title: AccountDeploymentTargets
+   Description: A card stack deployment targets panel for React and Next.js with environment badges, monospace URLs, provider icons, deploy status indicators, expandable environment details, and add target form built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-deployment-targets.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Deployment Targets</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Manage environments where your application ships
+                    </p>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="gap-1.5 text-xs"
+                          OnClick="@(() => _showAddForm = !_showAddForm)">
+                    @if (_showAddForm)
+                    {
+                        <LucideXCn Class="h-3.5 w-3.5" Size="14" />
+                        <text>Cancel</text>
+                    }
+                    else
+                    {
+                        <LucidePlusCn Class="h-3.5 w-3.5" Size="14" />
+                        <text>Add Target</text>
+                    }
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Add Form *@
+        @if (_showAddForm)
+        {
+            <div class="border-b bg-muted/30 px-4 py-3 space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                    <InputCn Placeholder="Target name" Class="h-8 text-sm" />
+                    <SelectCn @bind-Value="_newEnvironment">
+                        <SelectTriggerCn Class="h-8 text-sm">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            <SelectItemCn Value="production">Production</SelectItemCn>
+                            <SelectItemCn Value="staging">Staging</SelectItemCn>
+                            <SelectItemCn Value="preview">Preview</SelectItemCn>
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <SelectCn @bind-Value="_newProvider">
+                        <SelectTriggerCn Class="h-8 text-sm">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            <SelectItemCn Value="vercel">Vercel</SelectItemCn>
+                            <SelectItemCn Value="aws">AWS CloudFront</SelectItemCn>
+                            <SelectItemCn Value="netlify">Netlify</SelectItemCn>
+                            <SelectItemCn Value="fly">Fly.io</SelectItemCn>
+                        </SelectContentCn>
+                    </SelectCn>
+                    <InputCn Placeholder="Branch (e.g., main)" Class="h-8 text-sm font-mono" />
+                </div>
+                <div class="flex justify-end gap-2">
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-7 text-xs"
+                              OnClick="@(() => _showAddForm = false)">
+                        Cancel
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                        <LucidePlusCn Class="h-3 w-3" Size="12" />
+                        Create Target
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Status summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-2">
+            <span class="text-xs text-muted-foreground">
+                <span class="font-medium text-foreground">@_targets.Length</span> target@(_targets.Length != 1 ? "s" : "")
+            </span>
+            <span class="flex items-center gap-1 text-xs text-emerald-700">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_liveCount live
+            </span>
+            @if (_failedCount > 0)
+            {
+                <span class="flex items-center gap-1 text-xs text-red-700">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_failedCount failed
+                </span>
+            }
+        </div>
+
+        @* Target cards *@
+        <div class="space-y-2 p-3">
+            @foreach (var target in _targets)
+            {
+                var env = _envConfig[target.Environment];
+                var status = _statusConfig[target.Status];
+                var isExpanded = _expandedId == target.Id;
+                var isCurrentlyDeploying = _deployingId == target.Id;
+                <div class="@Cn.Merge("rounded-md border border-l-2 overflow-hidden", env.Border)">
+                    @* Card main row *@
+                    <div class="flex items-start gap-3 px-3 py-3 cursor-pointer transition-colors hover:bg-muted/30"
+                         @onclick="@(() => ToggleExpand(target.Id))">
+                        <div class="mt-0.5 shrink-0">
+                            <LucideServerCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-sm font-medium">@target.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary"
+                                         Class="@Cn.Merge("h-4 px-1.5 text-[10px] border-0", env.Bg, env.Color)">
+                                    @env.Label
+                                </BadgeCn>
+                                <span class="@Cn.Merge("flex items-center gap-1 text-[10px]", status.Text)">
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", status.Dot)"></span>
+                                    @status.Label
+                                </span>
+                            </div>
+                            <div class="mt-1 flex items-center gap-1">
+                                <span class="truncate font-mono text-xs text-muted-foreground">@target.Url</span>
+                                <button type="button"
+                                        class="shrink-0 rounded p-0.5 hover:bg-muted"
+                                        @onclick="@(() => HandleCopyUrl(target.Url, target.Id))"
+                                        @onclick:stopPropagation="true">
+                                    @if (_copiedUrl == target.Id)
+                                    {
+                                        <LucideCheckCn Class="h-3 w-3 text-emerald-600" Size="12" />
+                                    }
+                                    else
+                                    {
+                                        <LucideCopyCn Class="h-3 w-3 text-muted-foreground" Size="12" />
+                                    }
+                                </button>
+                                <a href="@target.Url"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   class="shrink-0 rounded p-0.5 hover:bg-muted"
+                                   @onclick:stopPropagation="true">
+                                    <LucideExternalLinkCn Class="h-3 w-3 text-muted-foreground" Size="12" />
+                                </a>
+                            </div>
+                            <div class="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
+                                <span>@target.Provider</span>
+                                <span class="flex items-center gap-1">
+                                    <LucideGitBranchCn Class="h-3 w-3" Size="12" />
+                                    <span class="font-mono">@target.Details.Branch</span>
+                                </span>
+                                <span>Deployed @target.LastDeployed</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0" @onclick:stopPropagation="true">
+                            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                      Class="h-7 gap-1 text-xs"
+                                      Disabled="@(isCurrentlyDeploying || target.Status == "deploying")"
+                                      OnClick="@(() => HandleDeploy(target.Id))">
+                                @if (isCurrentlyDeploying)
+                                {
+                                    <LucideLoader2Cn Class="h-3 w-3 animate-spin" Size="12" />
+                                }
+                                else
+                                {
+                                    <LucideRocketCn Class="h-3 w-3" Size="12" />
+                                }
+                                Deploy
+                            </ButtonCn>
+                            <button type="button"
+                                    class="@Cn.Merge("h-4 w-4 text-muted-foreground transition-transform duration-200 cursor-pointer", isExpanded ? "rotate-180" : "")"
+                                    @onclick="@(() => ToggleExpand(target.Id))">
+                                <LucideChevronDownCn Class="h-4 w-4" Size="16" />
+                            </button>
+                        </div>
+                    </div>
+
+                    @* Expandable details *@
+                    @if (isExpanded)
+                    {
+                        <div class="border-t bg-muted/20 px-3 py-3">
+                            <div class="grid grid-cols-3 gap-3">
+                                <div class="rounded bg-muted/50 p-2">
+                                    <span class="flex items-center gap-1 text-[10px] font-medium uppercase text-muted-foreground">
+                                        <LucideVariableCn Class="h-3 w-3" Size="12" />
+                                        Env Vars
+                                    </span>
+                                    <span class="mt-0.5 block text-sm font-medium tabular-nums">
+                                        @target.Details.EnvVarsCount
+                                    </span>
+                                </div>
+                                <div class="rounded bg-muted/50 p-2">
+                                    <span class="flex items-center gap-1 text-[10px] font-medium uppercase text-muted-foreground">
+                                        <LucideMapPinCn Class="h-3 w-3" Size="12" />
+                                        Region
+                                    </span>
+                                    <span class="mt-0.5 block text-xs font-medium truncate">
+                                        @target.Details.Region
+                                    </span>
+                                </div>
+                                <div class="rounded bg-muted/50 p-2">
+                                    <span class="flex items-center gap-1 text-[10px] font-medium uppercase text-muted-foreground">
+                                        <LucideGlobeCn Class="h-3 w-3" Size="12" />
+                                        Framework
+                                    </span>
+                                    <span class="mt-0.5 block text-xs font-medium">
+                                        @target.Details.Framework
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mt-2 flex items-center gap-2 rounded bg-muted/50 px-2 py-1.5">
+                                <LucideCircleCn Class="h-3 w-3 text-muted-foreground" Size="12" />
+                                <span class="font-mono text-[10px] text-muted-foreground">
+                                    @target.CommitHash
+                                </span>
+                                <span class="truncate text-[10px] text-muted-foreground">
+                                    @target.CommitMessage
+                                </span>
+                            </div>
+                            <div class="mt-2">
+                                <span class="text-[10px] text-muted-foreground">
+                                    Build: <span class="font-mono">@target.Details.BuildCommand</span>
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EnvironmentDetail(int EnvVarsCount, string Branch, string Region, string BuildCommand, string Framework);
+
+    private class DeploymentTarget
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Environment { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string Provider { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string LastDeployed { get; set; } = "";
+        public string CommitHash { get; set; } = "";
+        public string CommitMessage { get; set; } = "";
+        public EnvironmentDetail Details { get; set; } = new(0, "", "", "", "");
+    }
+
+    private record StatusConfig(string Label, string Dot, string Text);
+    private record EnvConfig(string Label, string Color, string Bg, string Border);
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["live"]      = new("Live",      "bg-emerald-500",              "text-emerald-700"),
+        ["deploying"] = new("Deploying", "bg-amber-500 animate-pulse",  "text-amber-700"),
+        ["failed"]    = new("Failed",    "bg-red-500",                  "text-red-700"),
+        ["idle"]      = new("Idle",      "bg-muted-foreground/50",      "text-muted-foreground"),
+    };
+
+    private static readonly Dictionary<string, EnvConfig> _envConfig = new()
+    {
+        ["production"] = new("Production", "text-emerald-700", "bg-emerald-500/10", "border-l-emerald-500"),
+        ["staging"]    = new("Staging",    "text-amber-700",   "bg-amber-500/10",   "border-l-amber-500"),
+        ["preview"]    = new("Preview",    "text-blue-700",    "bg-blue-500/10",    "border-l-blue-500"),
+    };
+
+    private static readonly DeploymentTarget[] _targets =
+    [
+        new()
+        {
+            Id = "target-prod", Name = "Production", Environment = "production",
+            Url = "https://app.acme.com", Provider = "Vercel", Status = "live",
+            LastDeployed = "2 hours ago", CommitHash = "a3f8c21",
+            CommitMessage = "fix: resolve checkout race condition",
+            Details = new(24, "main", "US East (iad1)", "next build", "Next.js 16"),
+        },
+        new()
+        {
+            Id = "target-staging", Name = "Staging", Environment = "staging",
+            Url = "https://staging.acme.com", Provider = "Vercel", Status = "deploying",
+            LastDeployed = "12 min ago", CommitHash = "e7b4d09",
+            CommitMessage = "feat: add multi-currency support",
+            Details = new(22, "develop", "US East (iad1)", "next build", "Next.js 16"),
+        },
+        new()
+        {
+            Id = "target-preview", Name = "Preview", Environment = "preview",
+            Url = "https://preview-feat-auth.acme.com", Provider = "Vercel", Status = "live",
+            LastDeployed = "1 day ago", CommitHash = "c2a1f88",
+            CommitMessage = "feat: OAuth2 PKCE flow integration",
+            Details = new(18, "feat/auth-revamp", "EU West (cdg1)", "next build", "Next.js 16"),
+        },
+        new()
+        {
+            Id = "target-aws", Name = "Edge Workers", Environment = "production",
+            Url = "https://edge.acme.com", Provider = "AWS CloudFront", Status = "failed",
+            LastDeployed = "3 hours ago", CommitHash = "b9d3e44",
+            CommitMessage = "chore: update edge runtime config",
+            Details = new(8, "main", "Global (CloudFront)", "wrangler deploy", "Hono"),
+        },
+    ];
+
+    private int _liveCount => _targets.Count(t => t.Status == "live");
+    private int _failedCount => _targets.Count(t => t.Status == "failed");
+
+    private string? _expandedId;
+    private string? _deployingId;
+    private string? _copiedUrl;
+    private bool _showAddForm;
+    private string _newEnvironment = "staging";
+    private string _newProvider = "vercel";
+
+    private void ToggleExpand(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+
+    private void HandleDeploy(string id)
+    {
+        _deployingId = id;
+        _ = Task.Delay(2500).ContinueWith(_ =>
+        {
+            _deployingId = null;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private void HandleCopyUrl(string url, string id)
+    {
+        _copiedUrl = id;
+        _ = Task.Delay(2000).ContinueWith(_ =>
+        {
+            _copiedUrl = null;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+}

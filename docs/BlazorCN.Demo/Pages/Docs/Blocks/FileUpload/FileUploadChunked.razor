@@ -1,0 +1,235 @@
+@* ============================================================
+   Block: file-upload-chunked
+   Title: FileUploadChunked
+   Description: React chunked file upload block for Next.js with resumable uploads, chunk-by-chunk progress, individual chunk status indicators, resume after interruption, and chunk size configuration using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-chunked.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Chunked upload</span>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @ChunkSizeMb MB chunks
+                </BadgeCn>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="text-muted-foreground text-xs">Resumable</span>
+            </div>
+        </div>
+
+        @* Drop zone *@
+        <div class="border-b px-4 py-4">
+            <div class="flex flex-col items-center justify-center rounded-md border border-dashed px-4 py-5">
+                <LucideIconCn Name="upload" Size="20" Class="mb-2 size-5 text-muted-foreground/60" />
+                <p class="font-medium text-sm">Drop large files here</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">
+                    Files are split into @ChunkSizeMb MB chunks for reliable upload
+                </p>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-3 h-7 text-xs">
+                    Browse files
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* File list *@
+        <div>
+            @for (int i = 0; i < _fileList.Length; i++)
+            {
+                var file = _fileList[i];
+                var isLast = i == _fileList.Length - 1;
+                var isExpanded = _expandedFile == file.Id;
+                var overallProgress = GetOverallProgress(file.Chunks);
+                var completedChunks = file.Chunks.Count(c => c.Status == "complete");
+                var hasError = file.Chunks.Any(c => c.Status == "error");
+                var allComplete = file.Chunks.All(c => c.Status == "complete");
+                var fileId = file.Id;
+                <div class="@Cn.Merge(isLast ? "" : "border-b")">
+                    @* File row *@
+                    <button
+                        type="button"
+                        @onclick="@(() => _expandedFile = isExpanded ? null : fileId)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground/60" />
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="truncate font-medium text-sm">@file.Name</span>
+                                @if (file.Paused)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                        Paused
+                                    </BadgeCn>
+                                }
+                                @if (hasError && !file.Paused)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs text-red-600 dark:text-red-400">
+                                        Error
+                                    </BadgeCn>
+                                }
+                                @if (allComplete)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs text-emerald-600 dark:text-emerald-400">
+                                        Complete
+                                    </BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2">
+                                <span class="text-muted-foreground text-xs">@file.TotalSize</span>
+                                <span class="text-muted-foreground text-xs">·</span>
+                                <span class="text-muted-foreground text-xs">@GetActiveChunkLabel(file.Chunks)</span>
+                            </div>
+                        </div>
+                        <span class="shrink-0 tabular-nums text-muted-foreground text-xs">@overallProgress%</span>
+                    </button>
+
+                    @* Overall progress *@
+                    <div class="px-4 pb-2">
+                        <ProgressCn Value="@overallProgress" Class="h-1" />
+                        <div class="mt-1.5 flex items-center justify-between">
+                            <span class="text-muted-foreground text-xs tabular-nums">
+                                @completedChunks of @file.Chunks.Length chunks complete
+                            </span>
+                            <div class="flex items-center gap-1.5">
+                                @if (file.Paused || hasError)
+                                {
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Ghost"
+                                        Size="ButtonSize.Sm"
+                                        Class="h-6 gap-1 px-2 text-xs"
+                                        OnClick="@((MouseEventArgs e) => TogglePause(fileId))">
+                                        <LucideIconCn Name="play" Size="12" Class="size-3" />
+                                        Resume
+                                    </ButtonCn>
+                                }
+                                @if (!file.Paused && !hasError && !allComplete)
+                                {
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Ghost"
+                                        Size="ButtonSize.Sm"
+                                        Class="h-6 gap-1 px-2 text-xs"
+                                        OnClick="@((MouseEventArgs e) => TogglePause(fileId))">
+                                        <LucideIconCn Name="pause-circle" Size="12" Class="size-3" />
+                                        Pause
+                                    </ButtonCn>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Expanded chunk list *@
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="mb-2 flex items-center justify-between">
+                                    <span class="font-medium text-muted-foreground text-xs">Chunk details</span>
+                                    <span class="text-muted-foreground text-xs">@ChunkSizeMb MB each</span>
+                                </div>
+                                <div class="space-y-1.5">
+                                    @foreach (var chunk in file.Chunks)
+                                    {
+                                        <div class="flex items-center gap-2">
+                                            @if (chunk.Status == "pending")
+                                            {
+                                                <LucideIconCn Name="circle" Size="12" Class="size-3 text-muted-foreground/40" />
+                                            }
+                                            else if (chunk.Status == "uploading")
+                                            {
+                                                <LucideIconCn Name="loader-2" Size="12" Class="size-3 animate-spin text-blue-500" />
+                                            }
+                                            else if (chunk.Status == "complete")
+                                            {
+                                                <LucideIconCn Name="check-circle" Size="12" Class="size-3 text-emerald-500" />
+                                            }
+                                            else if (chunk.Status == "error")
+                                            {
+                                                <LucideIconCn Name="x-circle" Size="12" Class="size-3 text-red-500" />
+                                            }
+                                            <span class="w-16 font-mono text-xs">Chunk @chunk.Index</span>
+                                            <div class="flex-1">
+                                                <ProgressCn Value="@chunk.Progress" Class="h-1" />
+                                            </div>
+                                            <span class="w-12 text-right text-muted-foreground text-xs tabular-nums">
+                                                @if (chunk.Status == "complete" || chunk.Status == "error")
+                                                {
+                                                    @GetChunkStatusLabel(chunk.Status)
+                                                }
+                                                else
+                                                {
+                                                    @($"{chunk.Progress}%")
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private const int ChunkSizeMb = 5;
+
+    private record ChunkItem(int Index, string Status, int Progress);
+    private record ChunkedFile(string Id, string Name, string TotalSize, int ChunkSizeMb, bool Paused, ChunkItem[] Chunks);
+
+    private static readonly ChunkedFile[] _initialFiles =
+    [
+        new("1", "product-demo-final.mp4", "847 MB", ChunkSizeMb, false,
+        [
+            new(1, "complete",  100),
+            new(2, "complete",  100),
+            new(3, "complete",  100),
+            new(4, "complete",  100),
+            new(5, "uploading",  62),
+            new(6, "pending",     0),
+            new(7, "pending",     0),
+            new(8, "pending",     0),
+        ]),
+        new("2", "dataset-training-v3.zip", "312 MB", ChunkSizeMb, true,
+        [
+            new(1, "complete", 100),
+            new(2, "complete", 100),
+            new(3, "error",     78),
+            new(4, "pending",    0),
+            new(5, "pending",    0),
+        ]),
+    ];
+
+    private ChunkedFile[] _fileList = _initialFiles;
+    private string? _expandedFile = "1";
+
+    private static int GetOverallProgress(ChunkItem[] chunks)
+    {
+        var total = chunks.Sum(c => c.Progress);
+        return (int)Math.Round((double)total / chunks.Length);
+    }
+
+    private static string GetActiveChunkLabel(ChunkItem[] chunks)
+    {
+        var uploading = chunks.FirstOrDefault(c => c.Status == "uploading");
+        if (uploading != null) return $"Chunk {uploading.Index} of {chunks.Length}";
+        var error = chunks.FirstOrDefault(c => c.Status == "error");
+        if (error != null) return $"Chunk {error.Index} failed";
+        if (chunks.All(c => c.Status == "complete")) return "All chunks uploaded";
+        return "Waiting to start";
+    }
+
+    private static string GetChunkStatusLabel(string status) => status switch
+    {
+        "complete"  => "Complete",
+        "error"     => "Failed",
+        "uploading" => "Uploading",
+        _           => "Pending",
+    };
+
+    private void TogglePause(string id)
+    {
+        _fileList = _fileList.Select(f => f.Id == id ? f with { Paused = !f.Paused } : f).ToArray();
+    }
+}

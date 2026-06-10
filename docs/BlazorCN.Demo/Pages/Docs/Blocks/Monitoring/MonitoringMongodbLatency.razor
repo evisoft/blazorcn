@@ -1,0 +1,102 @@
+@* ============================================================
+   Block: monitoring-mongodb-latency
+   Title: MonitoringMongodbLatency
+   Description: A high-granularity monitoring dashboard for MongoDB operations, tracking read/write latency, command execution times, and collection-level performance.
+   Source: original/blocks/monitoring/monitoring-mongodb-latency.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-2xl border bg-zinc-950 text-zinc-100 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-zinc-800 px-6 py-5 bg-emerald-500/[0.02]">
+            <div class="flex items-center gap-4">
+                <div class="flex size-11 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                    <LucideIconCn Name="database" Size="24" Class="size-6 text-emerald-500" />
+                </div>
+                <div>
+                    <h3 class="text-base font-bold tracking-tight">MongoDB Atlas</h3>
+                    <p class="mt-0.5 text-zinc-500 text-xs font-medium">Cluster0 · Primary (us-east-1)</p>
+                </div>
+            </div>
+            <div class="flex flex-col items-end gap-1.5">
+                <div class="flex items-center gap-2">
+                    <div class="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-emerald-500">Primary</span>
+                </div>
+                <span class="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter">Replica Set: rs0</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-zinc-800">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                <div class="p-6 group hover:bg-zinc-900/50 transition-colors">
+                    <div class="flex items-center justify-between mb-4">
+                        <LucideIconCn Name="@s.IconName" Size="16" Class="size-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                        <BadgeCn Variant="BadgeVariant.Outline" Class="@($"h-4.5 px-1.5 text-[9px] font-black uppercase border-0 {(s.Status == "warning" ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500")}")">
+                            @(s.Status == "warning" ? "Spiking" : "Low")
+                        </BadgeCn>
+                    </div>
+
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-3xl font-black tabular-nums tracking-tighter">@s.Value</span>
+                        <span class="text-zinc-500 text-[10px] font-bold uppercase">@s.Unit</span>
+                    </div>
+                    <p class="text-[10px] font-bold text-zinc-500 mt-1 uppercase tracking-widest">@s.Label</p>
+
+                    <div class="h-10 w-full mt-6">
+                        @{
+                            var trend = s.Trend;
+                            var tCount = trend.Length;
+                            var chartW = 300;
+                            var chartH = 40;
+                            var minV = trend.Min(d => d) * 0.8;
+                            var maxV = trend.Max(d => d) * 1.2;
+                            var vRange = maxV - minV == 0 ? 1 : maxV - minV;
+                            double Px(int i) => tCount <= 1 ? 0 : (double)chartW / (tCount - 1) * i;
+                            double Py(double v) => chartH - (v - minV) / vRange * chartH;
+                            var pts = string.Join(" ", Enumerable.Range(0, tCount).Select(i => $"{Px(i):F1},{Py(trend[i]):F1}"));
+                            var fillPts = $"0,{chartH} " + pts + $" {chartW},{chartH}";
+                            var strokeColor = s.Status == "warning" ? "#f59e0b" : "#10b981";
+                        }
+                        <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                            <defs>
+                                <linearGradient id="@($"mongoGrad-{s.Label.Replace(" ", "")}")" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stop-color="@strokeColor" stop-opacity="0.1" />
+                                    <stop offset="95%" stop-color="@strokeColor" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="@fillPts" fill="@($"url(#mongoGrad-{s.Label.Replace(" ", "")})")" />
+                            <polyline points="@pts" fill="none" stroke="@strokeColor" stroke-width="2" />
+                        </svg>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <hr class="border-t border-zinc-800" />
+
+        <div class="px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                <span class="text-zinc-400">P99 Latency: <span class="text-zinc-100">12.4ms</span></span>
+                <span class="text-zinc-400">Queue Depth: <span class="text-zinc-100">0</span></span>
+            </div>
+            <button type="button" class="text-[10px] font-black uppercase tracking-widest text-emerald-500 hover:text-emerald-400 transition-colors">
+                Profiler →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, string IconName, string Status, double Value, string Unit, double[] Trend);
+
+    private static readonly double[] _latencyBase = [1.2, 1.5, 2.1, 1.8, 4.5, 2.3, 1.9, 1.6, 2.8, 2.2, 1.7, 1.4];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Read Latency", "timer", "healthy", 1.84, "ms", [1.2, 1.5, 2.1, 1.8, 4.5, 2.3, 1.9, 1.6, 2.8, 2.2, 1.7, 1.4]),
+        new("Write Latency", "activity", "warning", 4.2, "ms", [3.0, 3.75, 5.25, 4.5, 11.25, 5.75, 4.75, 4.0, 7.0, 5.5, 4.25, 3.5]),
+        new("Operations", "gauge", "healthy", 2840, "ops/s", [2760.0, 2700.0, 2580.0, 2640.0, 2100.0, 2540.0, 2620.0, 2680.0, 2440.0, 2560.0, 2660.0, 2720.0]),
+    ];
+}

@@ -1,0 +1,280 @@
+@* ============================================================
+   Block: map-renewable-energy
+   Title: MapRenewableEnergy
+   Description: Renewable energy installation map with solar, wind, and hydro markers, capacity indicators, generation metrics, and facility detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-renewable-energy.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="zap" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Renewable Energy</span>
+                <span class="text-xs text-muted-foreground">Southern California</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="battery-charging" Size="12" Class="size-3" />
+                    <span class="tabular-nums font-medium text-foreground">@_totalOutput.ToString("N0")</span>
+                    / @_totalCapacity.ToString("N0") MW
+                </span>
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                @* Filters *@
+                <div class="flex items-center gap-1.5 border-b px-3 py-2">
+                    <button
+                        type="button"
+                        class="@Cn.Merge("rounded-full px-2 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                        @onclick="@(() => _filter = null)"
+                    >
+                        All
+                    </button>
+                    @foreach (var et in _energyTypes)
+                    {
+                        var energyType = et;
+                        var cfg = GetEnergyConfig(energyType);
+                        <button
+                            type="button"
+                            class="@Cn.Merge("flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors", _filter == energyType ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                            @onclick="@(() => _filter = _filter == energyType ? null : energyType)"
+                        >
+                            <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                            @cfg.Label
+                        </button>
+                    }
+                </div>
+
+                @* Installation list *@
+                <div class="divide-y">
+                    @foreach (var inst in _filtered)
+                    {
+                        var installation = inst;
+                        var cfg = GetEnergyConfig(installation.Type);
+                        var outputPercent = installation.CapacityMW > 0
+                            ? (int)Math.Round((double)installation.CurrentOutputMW / installation.CapacityMW * 100)
+                            : 0;
+                        var isSelected = _selectedId == installation.Id;
+                        <button
+                            type="button"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "")"
+                            @onclick="@(() => SelectInstallation(installation))"
+                        >
+                            <span class="@($"size-2 shrink-0 rounded-full {cfg.Color}")"></span>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@installation.Name</span>
+                                <div class="mt-0.5 flex items-center gap-2">
+                                    <span class="text-[10px] text-muted-foreground">@installation.CapacityMW MW</span>
+                                    <span class="text-[10px] text-muted-foreground">@outputPercent% output</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5">
+                                <span class="text-xs font-medium tabular-nums">@installation.CurrentOutputMW MW</span>
+                                <span class="@($"size-1.5 rounded-full {GetStatusDot(installation.Status)}")"></span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map area — Map/MapMarker/MapPopup components are not available in BlazorCN; rendered as a styled placeholder with proportionally-positioned installation markers *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Installation markers *@
+                    @foreach (var inst in _filtered)
+                    {
+                        var installation = inst;
+                        var cfg = GetEnergyConfig(installation.Type);
+                        var pos = GetMarkerPosition(installation.Longitude, installation.Latitude);
+                        <button
+                            type="button"
+                            class="absolute flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%;background-color:{cfg.Hex}")"
+                            @onclick="@(() => HandleMarkerClick(installation))"
+                            title="@($"{installation.Name} — {installation.CurrentOutputMW} MW")"
+                        >
+                            <LucideIconCn Name="@cfg.IconName" Size="14" Class="size-3.5 text-white" />
+                        </button>
+                    }
+
+                    @* Detail popup *@
+                    @if (_popupInstallation != null)
+                    {
+                        var popup = _popupInstallation;
+                        var pos = GetMarkerPosition(popup.Longitude, popup.Latitude);
+                        var cfg = GetEnergyConfig(popup.Type);
+                        var fillPct = popup.CapacityMW > 0
+                            ? (int)Math.Round((double)popup.CurrentOutputMW / popup.CapacityMW * 100)
+                            : 0;
+                        <div
+                            class="absolute z-20 w-56 rounded-md border bg-popover p-3 shadow-md text-popover-foreground text-xs"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%;transform:translate(-50%, calc(-100% - 16px))")"
+                        >
+                            <div class="mb-1 flex items-center justify-between">
+                                <span class="text-sm font-medium">@popup.Name</span>
+                                <div class="flex items-center gap-1">
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">@GetStatusLabel(popup.Status)</BadgeCn>
+                                    <button type="button" class="ml-1 text-muted-foreground hover:text-foreground" @onclick="@(() => _popupInstallation = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="mb-2 text-xs text-muted-foreground">@popup.Operator - Since @popup.Commissioned</p>
+                            <div class="mb-2 space-y-1">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Capacity</span>
+                                    <span class="tabular-nums font-medium">@popup.CapacityMW MW</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Current output</span>
+                                    <span class="tabular-nums font-medium">@popup.CurrentOutputMW MW</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Annual generation</span>
+                                    <span class="tabular-nums font-medium">@popup.AnnualGenerationGWh GWh</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Capacity factor</span>
+                                    <span class="tabular-nums font-medium">@popup.CapacityFactor%</span>
+                                </div>
+                            </div>
+                            <div class="border-t pt-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs text-muted-foreground">@cfg.Label</span>
+                                    <div class="h-1.5 w-20 rounded-full bg-muted">
+                                        <div
+                                            class="@($"h-full rounded-full {cfg.Color}")"
+                                            style="@($"width:{fillPct}%")"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                    Map view — Southern California
+                </div>
+            </div>
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var et in _energyTypes)
+            {
+                var energyType = et;
+                var cfg = GetEnergyConfig(energyType);
+                var count = _installations.Count(i => i.Type == energyType);
+                var capacity = _installations.Where(i => i.Type == energyType).Sum(i => i.CapacityMW);
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                    @cfg.Label (@count) - @capacity.ToString("N0") MW
+                </span>
+            }
+            <span class="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_installations.Count(i => i.Status == "operating") operating
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EnergyConfig(string Color, string Hex, string Label, string IconName);
+    private record Installation(
+        string Id,
+        string Name,
+        string Type,
+        string Status,
+        int CapacityMW,
+        int CurrentOutputMW,
+        int AnnualGenerationGWh,
+        double CapacityFactor,
+        string Commissioned,
+        string Operator,
+        double Longitude,
+        double Latitude
+    );
+
+    private static readonly Installation[] _installations =
+    [
+        new("re1", "Mojave Solar Park",     "solar", "operating",  550, 412, 1240, 25.7, "2022", "SunPower West",       -117.632, 35.014),
+        new("re2", "Tehachapi Wind Farm",   "wind",  "operating",  720, 518, 2100, 33.3, "2019", "Pacific Wind Energy", -118.449, 35.132),
+        new("re3", "Lake Isabella Hydro",   "hydro", "operating",  180, 142,  620, 39.3, "2015", "CalWater Power",      -118.473, 35.665),
+        new("re4", "Antelope Valley Solar", "solar", "partial",    320, 185,  780, 27.8, "2021", "Desert Light LLC",    -118.154, 34.735),
+        new("re5", "San Gorgonio Wind",     "wind",  "maintenance",450,   0, 1380, 35.0, "2018", "WindStream Corp",     -116.859, 33.934),
+        new("re6", "Owens Valley Solar",    "solar", "operating",  210, 168,  540, 29.4, "2023", "SunPower West",       -118.257, 36.469),
+        new("re7", "Kern River Hydro",      "hydro", "operating",   95,  78,  310, 37.2, "2016", "CalWater Power",      -118.781, 35.378),
+        new("re8", "Ridgecrest Wind Park",  "wind",  "operating",  280, 196,  850, 34.6, "2020", "Pacific Wind Energy", -117.673, 35.625),
+    ];
+
+    private static readonly string[] _energyTypes = ["solar", "wind", "hydro"];
+
+    private static EnergyConfig GetEnergyConfig(string type) => type switch
+    {
+        "solar" => new("bg-amber-500", "#f59e0b", "Solar",  "sun"),
+        "wind"  => new("bg-blue-500",  "#3b82f6", "Wind",   "wind"),
+        "hydro" => new("bg-cyan-500",  "#06b6d4", "Hydro",  "droplets"),
+        _       => new("bg-slate-400", "#94a3b8", "Other",  "zap"),
+    };
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "operating"   => "bg-emerald-500",
+        "partial"     => "bg-amber-500",
+        "maintenance" => "bg-red-500",
+        _             => "bg-slate-400",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "operating"   => "Operating",
+        "partial"     => "Partial",
+        "maintenance" => "Maintenance",
+        _             => status,
+    };
+
+    // Map lon/lat to % positions within the Southern California viewport.
+    // Viewport: lon [-120.5, -115.5], lat [33.0, 37.5]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -120.5, lonMax = -115.5;
+        const double latMin = 33.0,   latMax = 37.5;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private string? _selectedId = null;
+    private Installation? _popupInstallation = null;
+    private string? _filter = null;
+
+    private Installation[] _filtered => _filter != null
+        ? [.. _installations.Where(i => i.Type == _filter)]
+        : _installations;
+
+    private int _totalCapacity => _installations.Sum(i => i.CapacityMW);
+    private int _totalOutput   => _installations.Sum(i => i.CurrentOutputMW);
+
+    private void SelectInstallation(Installation installation)
+    {
+        _selectedId = installation.Id;
+        _popupInstallation = installation;
+    }
+
+    private void HandleMarkerClick(Installation installation)
+    {
+        _popupInstallation = _popupInstallation?.Id == installation.Id ? null : installation;
+        _selectedId = installation.Id;
+    }
+}

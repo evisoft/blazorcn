@@ -1,0 +1,213 @@
+@* ============================================================
+   Block: map-walkability-score
+   Title: MapWalkabilityScore
+   Description: Walkability score map with POI category markers, density-based scoring, category filters for grocery, transit, and parks, score badges, and area detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-walkability-score.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Score header *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="map-pin" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Walk Score</span>
+            </div>
+            <div class="flex items-baseline gap-1">
+                <span class="@($"font-semibold text-2xl tabular-nums {ScoreColor(_overallScore)}")">@_overallScore</span>
+                <span class="text-xs text-muted-foreground">/100</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@ScoreLabel(_overallScore)</BadgeCn>
+            <span class="ml-auto text-xs text-muted-foreground">@_filtered.Length nearby places</span>
+        </div>
+
+        @* Category filters *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2.5">
+            @foreach (var cat in _categories)
+            {
+                var catKey = cat;
+                var cfg = _categoryConfig[catKey];
+                var isActive = _activeCategories.Contains(catKey);
+                var count = Array.FindAll(_pois, p => p.Category == catKey).Length;
+                <button
+                    type="button"
+                    @onclick="@(() => ToggleCategory(catKey))"
+                    class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                    @cfg.Label
+                    <span class="tabular-nums">(@count)</span>
+                </button>
+            }
+        </div>
+
+        @* Map *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Center / "your location" pin *@
+                @{
+                    var centerPos = GetMarkerPosition(-73.9905, 40.735);
+                }
+                <div
+                    class="absolute flex size-5 items-center justify-center rounded-full border-2 border-foreground bg-background shadow-md -translate-x-1/2 -translate-y-1/2"
+                    style="@($"left:{centerPos.X}%;top:{centerPos.Y}%")"
+                    title="Your location"
+                >
+                    <span class="size-2 rounded-full bg-foreground"></span>
+                </div>
+
+                @* POI markers *@
+                @foreach (var poi in _filtered)
+                {
+                    var item = poi;
+                    var cfg = _categoryConfig[item.Category];
+                    var pos = GetMarkerPosition(item.Longitude, item.Latitude);
+                    var isSelected = _selected == item.Id;
+                    <div class="absolute -translate-x-1/2 -translate-y-1/2" style="@($"left:{pos.X}%;top:{pos.Y}%")">
+                        <button
+                            type="button"
+                            class="@($"flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md {cfg.Color} transition-transform hover:scale-110")"
+                            @onclick="@(() => ToggleSelected(item.Id))"
+                            title="@item.Name"
+                        >
+                            <LucideIconCn Name="@cfg.Icon" Size="12" Class="size-3 text-white" />
+                        </button>
+
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 top-full mt-1 w-56 -translate-x-1/2 z-10 rounded-md border bg-popover p-2.5 shadow-md text-popover-foreground">
+                                <div class="mb-1.5 flex items-start justify-between">
+                                    <p class="text-sm font-medium">@item.Name</p>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@item.Distance</BadgeCn>
+                                </div>
+                                <p class="mb-2 text-xs text-muted-foreground">@item.Detail</p>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                                    <span class="text-xs text-muted-foreground">@cfg.Label</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* Map label *@
+            <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                Union Square, New York
+            </div>
+        </div>
+
+        @* Category score breakdown *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var cat in _categories)
+            {
+                var cfg = _categoryConfig[cat];
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                    @cfg.Label
+                    <span class="@($"tabular-nums {ScoreColor(cfg.Score)}")">@cfg.Score</span>
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Poi(
+        string Id,
+        string Name,
+        string Category,
+        string Distance,
+        string Detail,
+        double Longitude,
+        double Latitude
+    );
+
+    private record CategoryCfg(string Color, string Icon, string Label, int Score);
+
+    private static readonly Dictionary<string, CategoryCfg> _categoryConfig = new()
+    {
+        ["grocery"] = new("bg-emerald-500", "shopping-cart", "Grocery", 92),
+        ["transit"]  = new("bg-blue-500",    "bus",           "Transit",  88),
+        ["parks"]    = new("bg-green-500",   "trees",         "Parks",    95),
+        ["dining"]   = new("bg-amber-500",   "utensils",      "Dining",   86),
+        ["schools"]  = new("bg-violet-500",  "school",        "Schools",  74),
+    };
+
+    private static readonly string[] _categories = ["grocery", "transit", "parks", "dining", "schools"];
+
+    private static readonly Poi[] _pois =
+    [
+        new("p1",  "Whole Foods Market",        "grocery", "0.2 mi", "Full-service grocery, open 7 AM - 10 PM daily",             -73.9885, 40.7355),
+        new("p2",  "Trader Joe's",              "grocery", "0.4 mi", "Specialty grocery, open 8 AM - 9 PM daily",                 -73.9935, 40.7325),
+        new("p3",  "Union Square Subway",       "transit", "0.1 mi", "4/5/6/N/Q/R/W/L lines. 2-5 min frequency at peak",         -73.9908, 40.7358),
+        new("p4",  "14th St / 6th Ave Station", "transit", "0.3 mi", "F/M/L lines. PATH connection available",                   -73.9975, 40.7381),
+        new("p5",  "Citi Bike Station - Broadway","transit","0.05 mi","24 docks, typically 8-12 bikes available",                 -73.9902, 40.7342),
+        new("p6",  "Union Square Park",         "parks",   "0.1 mi", "3.6 acres, farmers market Wed/Fri/Sat, playground",        -73.9903, 40.7362),
+        new("p7",  "Washington Square Park",    "parks",   "0.5 mi", "9.75 acres, landmark arch, dog runs, chess tables",        -73.9975, 40.7309),
+        new("p8",  "Stuyvesant Square",         "parks",   "0.4 mi", "4 acres, two blocks split by 2nd Ave, gardens",            -73.9833, 40.7335),
+        new("p9",  "Blue Bottle Coffee",        "dining",  "0.1 mi", "Specialty coffee shop, open 7 AM - 7 PM",                  -73.9918, 40.7349),
+        new("p10", "Gramercy Tavern",           "dining",  "0.2 mi", "New American fine dining, Michelin-starred",               -73.9885, 40.7385),
+        new("p11", "Ippudo Ramen",              "dining",  "0.3 mi", "Japanese ramen, typically 20 min wait at peak",            -73.9907, 40.7312),
+        new("p12", "PS 40 Elementary",          "schools", "0.3 mi", "Pre-K to 5th grade, rating 8/10, 480 students",            -73.9855, 40.7368),
+        new("p13", "Baruch College",            "schools", "0.5 mi", "CUNY public university, 19,000 students",                  -73.9835, 40.7405),
+    ];
+
+    private const int _overallScore = 87;
+
+    private HashSet<string> _activeCategories = new(["grocery", "transit", "parks", "dining", "schools"]);
+    private string? _selected;
+
+    private Poi[] _filtered => Array.FindAll(_pois, p => _activeCategories.Contains(p.Category));
+
+    private void ToggleCategory(string cat)
+    {
+        if (_activeCategories.Contains(cat))
+            _activeCategories.Remove(cat);
+        else
+            _activeCategories.Add(cat);
+        // deselect if the selected poi's category was toggled off
+        if (_selected != null)
+        {
+            var poi = Array.Find(_pois, p => p.Id == _selected);
+            if (poi != null && !_activeCategories.Contains(poi.Category))
+                _selected = null;
+        }
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static string ScoreColor(int score)
+    {
+        if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
+        if (score >= 50) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private static string ScoreLabel(int score)
+    {
+        if (score >= 90) return "Walker's Paradise";
+        if (score >= 70) return "Very Walkable";
+        if (score >= 50) return "Somewhat Walkable";
+        return "Car-Dependent";
+    }
+
+    // Map lon/lat to CSS percentage within the placeholder.
+    // Viewport: lon [-74.005, -73.975], lat [40.727, 40.745]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.005, lonMax = -73.975;
+        const double latMin = 40.727,  latMax = 40.745;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+}

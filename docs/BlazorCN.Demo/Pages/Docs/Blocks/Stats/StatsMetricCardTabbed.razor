@@ -1,0 +1,165 @@
+@* ============================================================
+   Block: stats-metric-card-tabbed
+   Title: StatsMetricCardTabbed
+   Description: A tabbed metric stats card for React and Next.js with four switchable metrics, inline tab navigation with border-b-2 active indicator, NumberFlow animated value transitions, per-metric sparkline, and semantic delta indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-metric-card-tabbed.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-md p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Tab bar *@
+        <div class="flex border-b" role="tablist">
+            @foreach (var tab in _tabs)
+            {
+                var t = tab;
+                <button type="button"
+                        role="tab"
+                        aria-selected="@(t == _activeTab ? "true" : "false")"
+                        @onclick="@(() => _activeTab = t)"
+                        class="@Cn.Merge("flex-1 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors", t == _activeTab ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")">
+                    @t
+                </button>
+            }
+        </div>
+        @* Content *@
+        <div class="px-4 py-4" role="tabpanel">
+            <div class="min-w-[140px]">
+                <span class="text-3xl font-semibold tabular-nums">@FormatValue(_activeTab)</span>
+            </div>
+            <div class="mt-1 flex items-center gap-1">
+                @if (GetMetric(_activeTab).ChangeType == "positive")
+                {
+                    <LucideIconCn Name="trending-up" Size="14" Class="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                }
+                else
+                {
+                    <LucideIconCn Name="trending-down" Size="14" Class="size-3.5 text-red-600 dark:text-red-400" aria-hidden="true" />
+                }
+                <span class="@Cn.Merge("text-xs font-medium tabular-nums", GetMetric(_activeTab).ChangeType == "positive" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                    @GetMetric(_activeTab).Change vs last period
+                </span>
+            </div>
+            <div class="mt-4">
+                <div class="h-16 w-full">
+                    @RenderSparkline(GetMetric(_activeTab).Spark)
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SparkPoint(string D, int V);
+
+    private record MetricData(
+        int Value,
+        string ValueFormatted,
+        string Change,
+        string ChangeType,
+        SparkPoint[] Spark
+    );
+
+    private static readonly string[] _tabs = ["Revenue", "Users", "Orders", "Sessions"];
+
+    private static readonly Dictionary<string, MetricData> _metrics = new()
+    {
+        ["Revenue"] = new MetricData(
+            187_420,
+            "$187,420",
+            "+12.4%",
+            "positive",
+            [
+                new("W1", 142), new("W2", 158), new("W3", 165),
+                new("W4", 172), new("W5", 168), new("W6", 187),
+            ]
+        ),
+        ["Users"] = new MetricData(
+            48_372,
+            "48,372",
+            "+8.1%",
+            "positive",
+            [
+                new("W1", 38), new("W2", 41), new("W3", 39),
+                new("W4", 44), new("W5", 46), new("W6", 48),
+            ]
+        ),
+        ["Orders"] = new MetricData(
+            3_847,
+            "3,847",
+            "-2.3%",
+            "negative",
+            [
+                new("W1", 42), new("W2", 38), new("W3", 40),
+                new("W4", 36), new("W5", 39), new("W6", 38),
+            ]
+        ),
+        ["Sessions"] = new MetricData(
+            284_610,
+            "284.6K",
+            "+5.7%",
+            "positive",
+            [
+                new("W1", 245), new("W2", 258), new("W3", 262),
+                new("W4", 270), new("W5", 275), new("W6", 285),
+            ]
+        ),
+    };
+
+    private string _activeTab = "Revenue";
+
+    private MetricData GetMetric(string tab) => _metrics[tab];
+
+    private string FormatValue(string tab) => _metrics[tab].ValueFormatted;
+
+    private MarkupString RenderSparkline(SparkPoint[] points)
+    {
+        if (points.Length == 0) return new MarkupString("");
+
+        int minV = int.MaxValue;
+        int maxV = int.MinValue;
+        foreach (var p in points)
+        {
+            if (p.V < minV) minV = p.V;
+            if (p.V > maxV) maxV = p.V;
+        }
+
+        double width = 300.0;
+        double height = 64.0;
+        double padY = 4.0;
+        double range = maxV == minV ? 1.0 : (double)(maxV - minV);
+        int n = points.Length;
+
+        var linePoints = new System.Text.StringBuilder();
+        var areaPoints = new System.Text.StringBuilder();
+
+        for (int i = 0; i < n; i++)
+        {
+            double x = (double)i / (n - 1) * width;
+            double y = padY + (1.0 - (points[i].V - minV) / range) * (height - padY * 2);
+            if (i == 0)
+            {
+                linePoints.Append($"{x:F1},{y:F1}");
+                areaPoints.Append($"M{x:F1},{height} L{x:F1},{y:F1}");
+            }
+            else
+            {
+                linePoints.Append($" {x:F1},{y:F1}");
+                areaPoints.Append($" L{x:F1},{y:F1}");
+            }
+        }
+        areaPoints.Append($" L{width:F1},{height} Z");
+
+        string svg = $@"<svg viewBox=""0 0 {width:F0} {height:F0}"" preserveAspectRatio=""none"" width=""100%"" height=""100%"" xmlns=""http://www.w3.org/2000/svg"">
+  <defs>
+    <linearGradient id=""spark-fill-{_activeTab}"" x1=""0"" x2=""0"" y1=""0"" y2=""1"">
+      <stop offset=""0%"" stop-color=""hsl(var(--chart-1))"" stop-opacity=""0.3"" />
+      <stop offset=""100%"" stop-color=""hsl(var(--chart-1))"" stop-opacity=""0"" />
+    </linearGradient>
+  </defs>
+  <path d=""{areaPoints}"" fill=""url(#spark-fill-{_activeTab})"" />
+  <polyline points=""{linePoints}"" fill=""none"" stroke=""hsl(var(--chart-1))"" stroke-width=""1.5"" stroke-linejoin=""round"" stroke-linecap=""round"" />
+</svg>";
+
+        return new MarkupString(svg);
+    }
+}

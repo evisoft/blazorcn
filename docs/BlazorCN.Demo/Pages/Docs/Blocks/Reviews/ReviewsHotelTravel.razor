@@ -1,0 +1,358 @@
+@* ============================================================
+   Block: reviews-hotel-travel
+   Title: ReviewsHotelTravel
+   Description: A split-panel hotel review block for React and Next.js with category bar ratings, trip metadata badges, room type indicators, and expandable guest comments. Built with shadcn/ui Badge, Progress, Tabs, and Tailwind CSS.
+   Source: original/blocks/reviews/reviews-hotel-travel.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="grid overflow-hidden rounded-lg border bg-card md:grid-cols-[280px_1fr]">
+
+        @* Left panel - Hotel summary *@
+        <div class="border-b border-r-0 bg-muted/30 md:border-b-0 md:border-r">
+            <div class="p-4">
+                <div>
+                    <span class="text-sm font-medium">@_hotelName</span>
+                    <div class="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <LucideIconCn Name="map-pin" Size="12" Class="size-3" />
+                        @_hotelLocation
+                    </div>
+                </div>
+
+                @* Overall score *@
+                <div class="mt-4 flex items-baseline gap-1.5">
+                    <span class="text-2xl font-semibold tabular-nums">@_overallScore</span>
+                    <span class="text-xs text-muted-foreground">/5</span>
+                    <span class="ml-1 text-xs text-muted-foreground">
+                        from @_totalReviews.ToString("N0") reviews
+                    </span>
+                </div>
+
+                @* Stars *@
+                <div class="mt-1 flex items-center gap-0.5">
+                    @for (int i = 0; i < 5; i++)
+                    {
+                        var idx = i;
+                        <LucideIconCn Name="star" Size="14" Class="@Cn.Merge("size-3.5", idx < (int)Math.Round(_overallScore) ? "fill-amber-500 text-amber-500" : "text-muted-foreground/30")" />
+                    }
+                </div>
+            </div>
+
+            @* Category breakdown *@
+            <div class="border-t px-4 py-3">
+                <span class="text-xs font-medium text-muted-foreground">Category ratings</span>
+                <div class="mt-2.5 space-y-3">
+                    @foreach (var category in _hotelCategories)
+                    {
+                        var cat = category;
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <LucideIconCn Name="@cat.IconName" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs text-muted-foreground">@cat.Name</span>
+                                </div>
+                                <span class="@Cn.Merge("text-xs font-medium tabular-nums", ScoreColor(cat.Score))">
+                                    @cat.Score.ToString("F1")
+                                </span>
+                            </div>
+                            <ProgressCn Value="@((cat.Score / 5.0) * 100.0)" Class="h-1" />
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Traveler breakdown *@
+            <div class="border-t px-4 py-3">
+                <span class="text-xs font-medium text-muted-foreground">Traveler types</span>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                    @foreach (var travelerType in _travelerTypes)
+                    {
+                        var tt = travelerType;
+                        var cnt = _reviews.Count(r => r.TravelerType == tt);
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal tabular-nums">
+                            @tt (@cnt)
+                        </BadgeCn>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Right panel - Reviews *@
+        <div class="flex flex-col">
+            <TabsCn Value="@_activeTab" ValueChanged="@((string v) => _activeTab = v)" Class="flex flex-1 flex-col">
+                <div class="border-b px-4 py-2">
+                    <TabsListCn Class="h-8 w-full justify-start bg-transparent p-0">
+                        <TabsTriggerCn Value="all" Class="h-7 rounded-md px-2.5 text-xs data-[state=active]:bg-muted">
+                            All
+                        </TabsTriggerCn>
+                        @foreach (var travelerType in _travelerTypes.Where(t => _reviews.Any(r => r.TravelerType == t)))
+                        {
+                            var tt = travelerType;
+                            <TabsTriggerCn Value="@tt.ToLower()" Class="h-7 rounded-md px-2.5 text-xs data-[state=active]:bg-muted">
+                                @tt
+                            </TabsTriggerCn>
+                        }
+                    </TabsListCn>
+                </div>
+
+                <TabsContentCn Value="@_activeTab" Class="mt-0 flex-1">
+                    @{
+                        var filteredReviews = _activeTab == "all"
+                            ? _reviews
+                            : _reviews.Where(r => r.TravelerType.ToLower() == _activeTab).ToArray();
+                    }
+                    @if (filteredReviews.Length == 0)
+                    {
+                        <div class="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                            No reviews for this traveler type
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var review in filteredReviews.Select((r, i) => new { Review = r, Index = i }))
+                        {
+                            var rv = review.Review;
+                            var idx = review.Index;
+                            var isLast = idx == filteredReviews.Length - 1;
+                            var isExpanded = _expandedId == rv.Id;
+                            <div class="@(isLast ? "" : "border-b")">
+                                <button type="button"
+                                        class="w-full px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                                        @onclick="@(() => _expandedId = (_expandedId == rv.Id ? null : rv.Id))">
+                                    <div class="flex items-start gap-3">
+                                        <div class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                                            @rv.Initials
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-sm font-medium">@rv.Author</span>
+                                                <span class="text-[10px] text-muted-foreground">@rv.Country</span>
+                                            </div>
+                                            <div class="mt-0.5 flex items-center gap-2">
+                                                <div class="flex items-center gap-0.5">
+                                                    @for (int si = 0; si < 5; si++)
+                                                    {
+                                                        var starIdx = si;
+                                                        <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", starIdx < rv.Overall ? "fill-amber-500 text-amber-500" : "text-muted-foreground/30")" />
+                                                    }
+                                                </div>
+                                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                                    @rv.TravelerType
+                                                </BadgeCn>
+                                                <span class="text-[10px] text-muted-foreground">@rv.Date</span>
+                                            </div>
+                                            <p class="mt-1.5 text-sm font-medium">@rv.Title</p>
+                                            <p class="mt-0.5 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
+                                                @rv.Comment
+                                            </p>
+                                        </div>
+                                    </div>
+                                </button>
+
+                                @if (isExpanded)
+                                {
+                                    <div class="overflow-hidden">
+                                        <div class="px-4 pb-3 pl-[3.25rem]">
+                                            @* Stay details *@
+                                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                                <span class="flex items-center gap-1">
+                                                    <LucideIconCn Name="bed-double" Size="12" Class="size-3" />
+                                                    @rv.RoomType
+                                                </span>
+                                                <span class="flex items-center gap-1">
+                                                    <LucideIconCn Name="calendar-days" Size="12" Class="size-3" />
+                                                    @rv.CheckIn - @rv.CheckOut (@rv.StayDuration)
+                                                </span>
+                                            </div>
+
+                                            @* Full comment *@
+                                            <p class="mt-2 text-sm text-muted-foreground leading-relaxed">
+                                                @rv.Comment
+                                            </p>
+
+                                            @* Pros and Cons *@
+                                            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                                                @if (rv.Positives.Length > 0)
+                                                {
+                                                    <div class="rounded-md bg-emerald-500/5 p-2.5">
+                                                        <span class="text-[10px] font-medium text-emerald-600">
+                                                            What guests liked
+                                                        </span>
+                                                        <ul class="mt-1 space-y-0.5">
+                                                            @foreach (var pos in rv.Positives)
+                                                            {
+                                                                var p = pos;
+                                                                <li class="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                                                    <span class="mt-1.5 size-1 shrink-0 rounded-full bg-emerald-500"></span>
+                                                                    @p
+                                                                </li>
+                                                            }
+                                                        </ul>
+                                                    </div>
+                                                }
+                                                @if (rv.Negatives.Length > 0)
+                                                {
+                                                    <div class="rounded-md bg-amber-500/5 p-2.5">
+                                                        <span class="text-[10px] font-medium text-amber-600">
+                                                            Could improve
+                                                        </span>
+                                                        <ul class="mt-1 space-y-0.5">
+                                                            @foreach (var neg in rv.Negatives)
+                                                            {
+                                                                var n = neg;
+                                                                <li class="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                                                    <span class="mt-1.5 size-1 shrink-0 rounded-full bg-amber-500"></span>
+                                                                    @n
+                                                                </li>
+                                                            }
+                                                        </ul>
+                                                    </div>
+                                                }
+                                            </div>
+
+                                            @* Per-review category scores *@
+                                            <div class="mt-3 rounded-md bg-muted/50 p-2.5">
+                                                <span class="text-[10px] font-medium text-muted-foreground">
+                                                    Category scores
+                                                </span>
+                                                <div class="mt-1.5 grid grid-cols-5 gap-2">
+                                                    @foreach (var catScore in rv.Categories)
+                                                    {
+                                                        var cs = catScore;
+                                                        <div class="text-center">
+                                                            <span class="@Cn.Merge("text-sm font-medium tabular-nums", ScoreColor(cs.Score))">
+                                                                @cs.Score
+                                                            </span>
+                                                            <p class="mt-0.5 text-[10px] text-muted-foreground">
+                                                                @cs.Name
+                                                            </p>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </TabsContentCn>
+            </TabsCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private string _activeTab = "all";
+    private string? _expandedId;
+
+    private const string _hotelName = "The Linden Grand Hotel & Spa";
+    private const string _hotelLocation = "Zurich, Switzerland";
+    private const int _totalReviews = 1247;
+
+    private record CategoryScore(string Name, double Score, string IconName);
+    private record ReviewCategoryScore(string Name, int Score);
+    private record Review(
+        string Id,
+        string Author,
+        string Initials,
+        string Country,
+        string Date,
+        int Overall,
+        string TravelerType,
+        string StayDuration,
+        string RoomType,
+        string CheckIn,
+        string CheckOut,
+        ReviewCategoryScore[] Categories,
+        string Title,
+        string Comment,
+        string[] Positives,
+        string[] Negatives
+    );
+
+    private static readonly CategoryScore[] _hotelCategories =
+    [
+        new("Cleanliness", 4.7, "star"),
+        new("Location",    4.9, "map-pin"),
+        new("Service",     4.5, "users"),
+        new("Rooms",       4.3, "bed-double"),
+        new("Value",       4.0, "star"),
+    ];
+
+    private static readonly double _overallScore =
+        Math.Round(_hotelCategories.Sum(c => c.Score) / _hotelCategories.Length * 10.0) / 10.0;
+
+    private static readonly Review[] _reviews =
+    [
+        new(
+            "r1", "Emily Nakamura", "EN", "Japan", "Mar 18, 2026", 5,
+            "Couple", "4 nights", "Deluxe Suite", "Mar 14", "Mar 18",
+            [
+                new("Cleanliness", 5),
+                new("Location",    5),
+                new("Service",     5),
+                new("Rooms",       5),
+                new("Value",       4),
+            ],
+            "Flawless anniversary getaway",
+            "We stayed for our anniversary and everything was impeccable. The suite had a stunning lake view and the concierge arranged a private dinner on the terrace. Staff remembered our names from day one.",
+            ["Spectacular lake-facing suite", "Personalized concierge service", "Exceptional breakfast buffet"],
+            ["Premium pricing for the minibar"]
+        ),
+        new(
+            "r2", "Thomas Bergman", "TB", "Sweden", "Mar 10, 2026", 4,
+            "Business", "2 nights", "Executive Room", "Mar 8", "Mar 10",
+            [
+                new("Cleanliness", 5),
+                new("Location",    5),
+                new("Service",     4),
+                new("Rooms",       4),
+                new("Value",       3),
+            ],
+            "Excellent business stay near Bahnhofstrasse",
+            "Great location for meetings in the financial district. The executive lounge was quiet and well-stocked. WiFi was fast and reliable. Room was comfortable but the desk lamp could be brighter for late-night work.",
+            ["Walking distance to Paradeplatz", "Quiet executive lounge", "Reliable high-speed WiFi"],
+            ["Desk lighting insufficient", "Expensive room service"]
+        ),
+        new(
+            "r3", "Lina Vasquez", "LV", "Spain", "Feb 28, 2026", 4,
+            "Family", "6 nights", "Family Suite", "Feb 22", "Feb 28",
+            [
+                new("Cleanliness", 4),
+                new("Location",    4),
+                new("Service",     5),
+                new("Rooms",       4),
+                new("Value",       4),
+            ],
+            "Kids loved the pool and kids club",
+            "Traveled with two kids and the hotel made it seamless. The family suite was spacious with a connecting room. Kids club kept them entertained while we visited the old town. Breakfast buffet had great options for picky eaters.",
+            ["Supervised kids club included", "Spacious connecting rooms", "Family-friendly breakfast"],
+            ["Pool area crowded on weekends"]
+        ),
+        new(
+            "r4", "Rajesh Mehta", "RM", "India", "Feb 15, 2026", 5,
+            "Solo", "3 nights", "Superior Room", "Feb 12", "Feb 15",
+            [
+                new("Cleanliness", 5),
+                new("Location",    5),
+                new("Service",     5),
+                new("Rooms",       4),
+                new("Value",       5),
+            ],
+            "Perfect solo retreat with spa access",
+            "Booked a solo trip to decompress and this hotel delivered. The spa facilities were outstanding with a heated outdoor pool overlooking the Alps. Staff were attentive without being intrusive. Highly recommend the rooftop bar at sunset.",
+            ["World-class spa and pool", "Rooftop bar with mountain views", "Attentive yet discreet staff"],
+            []
+        ),
+    ];
+
+    private static readonly string[] _travelerTypes = ["Solo", "Couple", "Family", "Business", "Group"];
+
+    private static string ScoreColor(double score)
+    {
+        if (score >= 4.5) return "text-emerald-600";
+        if (score >= 3.5) return "text-foreground";
+        return "text-amber-600";
+    }
+}

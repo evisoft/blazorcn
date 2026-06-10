@@ -1,0 +1,194 @@
+@* ============================================================
+   Block: crud-announcement-board
+   Title: CrudAnnouncementBoard
+   Description: Announcement board with pinning, priority levels, and publish/draft status for team communication management
+   Source: original/blocks/crud/crud-announcement-board.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="megaphone" Size="16" Class="size-4 text-muted-foreground" />
+                    <h2 class="text-sm font-medium">Announcements</h2>
+                    <span class="text-xs text-muted-foreground">(@_items.Count)</span>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs"
+                          @onclick="@(() => _showAdd = !_showAdd)">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    New
+                </ButtonCn>
+            </div>
+        </div>
+
+        @if (_showAdd)
+        {
+            <div class="space-y-2 border-b bg-muted/30 px-4 py-3">
+                <InputCn Placeholder="Announcement title" Class="h-8 text-xs"
+                         @bind-Value="_newTitle" />
+                <TextareaCn Placeholder="Write your announcement..." Class="min-h-[60px] text-xs"
+                            @bind-Value="_newBody" />
+                <div class="flex gap-2">
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs"
+                              @onclick="@(() => HandleAdd("published"))">
+                        Publish
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs"
+                              @onclick="@(() => HandleAdd("draft"))">
+                        Save Draft
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-7 text-xs"
+                              @onclick="@(() => _showAdd = false)">
+                        Cancel
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        <div class="flex border-b">
+            @foreach (var f in new[] { "all", "published", "draft" })
+            {
+                var tab = f;
+                <button type="button"
+                        class="@Cn.Merge("flex-1 border-b-2 px-4 py-2 text-xs font-medium transition-colors", _filter == tab ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")"
+                        @onclick="@(() => _filter = tab)">
+                    @(tab.Substring(0, 1).ToUpperInvariant() + tab.Substring(1))
+                </button>
+            }
+        </div>
+
+        <div>
+            @{ var filtered = GetFiltered(); }
+            @if (filtered.Count == 0)
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No announcements
+                </div>
+            }
+            else
+            {
+                @for (var idx = 0; idx < filtered.Count; idx++)
+                {
+                    var item = filtered[idx];
+                    <div class="@Cn.Merge("border-b px-4 py-3 transition-colors hover:bg-muted/50", idx == filtered.Count - 1 ? "border-b-0" : "")">
+                        <div class="flex items-start gap-3">
+                            <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", GetPriorityColor(item.Priority))"></span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@item.Title</span>
+                                    @if (item.Pinned)
+                                    {
+                                        <LucideIconCn Name="pin" Size="12" Class="size-3 text-muted-foreground" />
+                                    }
+                                    @if (item.Status == "draft")
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="px-1.5 py-0 text-[10px]">
+                                            Draft
+                                        </BadgeCn>
+                                    }
+                                </div>
+                                <p class="mt-1 line-clamp-2 text-xs text-muted-foreground">@item.Body</p>
+                                <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span>@item.Author</span>
+                                    <span>@item.Date</span>
+                                </div>
+                            </div>
+                            <DropdownMenuCn>
+                                <DropdownMenuTriggerCn>
+                                    <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                        <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                    </ButtonCn>
+                                </DropdownMenuTriggerCn>
+                                <DropdownMenuContentCn Align="FloatingAlign.End">
+                                    <DropdownMenuItemCn @onclick="@(() => TogglePin(item.Id))">
+                                        @(item.Pinned ? "Unpin" : "Pin to top")
+                                    </DropdownMenuItemCn>
+                                    <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                                    <DropdownMenuItemCn Class="text-destructive"
+                                                        @onclick="@(() => HandleDelete(item.Id))">
+                                        <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                        Delete
+                                    </DropdownMenuItemCn>
+                                </DropdownMenuContentCn>
+                            </DropdownMenuCn>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class Announcement
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Body { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string Date { get; set; } = "";
+        public string Priority { get; set; } = "normal";
+        public bool Pinned { get; set; }
+        public string Status { get; set; } = "published";
+    }
+
+    private readonly List<Announcement> _items =
+    [
+        new() { Id = 1, Title = "System Maintenance Scheduled", Body = "Our servers will undergo maintenance on Saturday from 2:00 AM to 6:00 AM EST. Expect brief downtime.", Author = "IT Operations", Date = "Mar 22, 2026", Priority = "urgent", Pinned = true, Status = "published" },
+        new() { Id = 2, Title = "Q1 All-Hands Meeting", Body = "Join us for the quarterly all-hands this Friday at 3 PM in the main auditorium. Remote link will be shared via email.", Author = "HR Team", Date = "Mar 20, 2026", Priority = "normal", Pinned = true, Status = "published" },
+        new() { Id = 3, Title = "New PTO Policy Update", Body = "Starting April 1st, the updated PTO policy allows rollover of up to 5 unused days. Please review the full policy in the handbook.", Author = "People Ops", Date = "Mar 18, 2026", Priority = "normal", Pinned = false, Status = "published" },
+        new() { Id = 4, Title = "Office Kitchen Renovation", Body = "The 3rd floor kitchen will be closed for renovation next week. Please use the 2nd floor kitchen.", Author = "Facilities", Date = "Mar 15, 2026", Priority = "low", Pinned = false, Status = "published" },
+        new() { Id = 5, Title = "Security Training Reminder", Body = "Annual security awareness training is due by March 31st. Complete it in the learning portal.", Author = "Security Team", Date = "Mar 12, 2026", Priority = "urgent", Pinned = false, Status = "draft" },
+    ];
+
+    private bool _showAdd;
+    private string _newTitle = "";
+    private string _newBody = "";
+    private string _filter = "all";
+
+    private List<Announcement> GetFiltered()
+    {
+        var sorted = _items.OrderByDescending(a => a.Pinned).ToList();
+        return _filter == "all" ? sorted : sorted.Where(a => a.Status == _filter).ToList();
+    }
+
+    private void HandleAdd(string status)
+    {
+        if (string.IsNullOrWhiteSpace(_newTitle)) return;
+        var newId = _items.Count > 0 ? _items.Max(i => i.Id) + 1 : 1;
+        _items.Insert(0, new Announcement
+        {
+            Id = newId,
+            Title = _newTitle,
+            Body = _newBody,
+            Author = "You",
+            Date = "Mar 24, 2026",
+            Priority = "normal",
+            Pinned = false,
+            Status = status,
+        });
+        _newTitle = "";
+        _newBody = "";
+        _showAdd = false;
+    }
+
+    private void TogglePin(int id)
+    {
+        var item = _items.Find(i => i.Id == id);
+        if (item != null) item.Pinned = !item.Pinned;
+    }
+
+    private void HandleDelete(int id)
+    {
+        _items.RemoveAll(i => i.Id == id);
+    }
+
+    private static string GetPriorityColor(string priority) => priority switch
+    {
+        "urgent" => "bg-red-500",
+        "normal" => "bg-blue-500",
+        "low" => "bg-muted-foreground/40",
+        _ => "bg-muted-foreground/40",
+    };
+}

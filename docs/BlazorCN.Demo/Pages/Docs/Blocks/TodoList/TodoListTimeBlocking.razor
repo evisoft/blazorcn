@@ -1,0 +1,200 @@
+@* ============================================================
+   Block: todo-list-time-blocking
+   Title: TodoListTimeBlocking
+   Description: A time-blocked daily planner todo list block for React and Next.js with hour-slot scheduling, task assignment sidebar, and duration display built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-time-blocking.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="calendar" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Time Blocking</span>
+                <span class="text-muted-foreground text-xs">Tuesday, Apr 3</span>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_scheduledCount of @_slots.Count slots filled
+            </span>
+        </div>
+
+        <div class="flex flex-col sm:flex-row">
+            @* Schedule column *@
+            <div class="flex-1">
+                @for (int i = 0; i < _slots.Count; i++)
+                {
+                    var slot = _slots[i];
+                    var isLast = i == _slots.Count - 1;
+                    var task = slot.TaskId != null ? GetTask(slot.TaskId) : null;
+                    var isActive = _activeSlot == slot.Hour;
+                    var slotHour = slot.Hour;
+                    <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                        <span class="w-16 shrink-0 font-mono text-muted-foreground text-xs">
+                            @slot.Label
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            @if (task != null)
+                            {
+                                <div class="flex items-center gap-2">
+                                    <span class="size-1.5 shrink-0 rounded-full bg-foreground"></span>
+                                    <span class="truncate text-sm">@task.Text</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-mono text-xs">
+                                        @task.Duration
+                                    </BadgeCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost"
+                                              Size="ButtonSize.Sm"
+                                              Class="ml-auto h-5 w-5 shrink-0 p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100"
+                                              @onclick="@(() => UnassignTask(slotHour))"
+                                              aria-label="Remove task from slot">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3 text-muted-foreground" />
+                                    </ButtonCn>
+                                </div>
+                            }
+                            else if (isActive)
+                            {
+                                <div class="flex flex-col gap-1">
+                                    @if (_available.Count > 0)
+                                    {
+                                        @foreach (var t in _available)
+                                        {
+                                            var availTask = t;
+                                            <button type="button"
+                                                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted"
+                                                    @onclick="@(() => AssignTask(slotHour, availTask.Id))">
+                                                <span class="truncate text-xs">@availTask.Text</span>
+                                                <span class="shrink-0 font-mono text-muted-foreground text-xs">
+                                                    @availTask.Duration
+                                                </span>
+                                            </button>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted-foreground text-xs">
+                                            No unscheduled tasks
+                                        </span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <button type="button"
+                                        class="text-muted-foreground text-xs transition-colors hover:text-foreground"
+                                        @onclick="@(() => SetActiveSlot(slotHour))">
+                                    Available
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Sidebar: Unscheduled tasks *@
+            <div class="w-full border-t sm:w-56 sm:border-t-0 sm:border-l">
+                <div class="flex items-center gap-2 border-b px-4 py-2.5">
+                    <LucideIconCn Name="clock" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-xs">Unscheduled</span>
+                    <span class="ml-auto text-muted-foreground text-xs tabular-nums">
+                        @_available.Count
+                    </span>
+                </div>
+                <div>
+                    @for (int i = 0; i < _available.Count; i++)
+                    {
+                        var avTask = _available[i];
+                        var isLast = i == _available.Count - 1;
+                        <div class="@Cn.Merge("flex items-center gap-2 px-4 py-2", isLast ? "" : "border-b")">
+                            <span class="size-1.5 shrink-0 rounded-full bg-muted-foreground/40"></span>
+                            <span class="min-w-0 flex-1 truncate text-xs">@avTask.Text</span>
+                            <span class="shrink-0 font-mono text-muted-foreground text-xs">
+                                @avTask.Duration
+                            </span>
+                        </div>
+                    }
+                    @if (_available.Count == 0)
+                    {
+                        <div class="px-4 py-4 text-center text-muted-foreground text-xs">
+                            All tasks scheduled
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TaskItem(string Id, string Text, string Duration);
+    private record TimeSlot(int Hour, string Label, string? TaskId);
+
+    private static readonly TaskItem[] _allTasks =
+    [
+        new("t1", "Write API documentation", "1h"),
+        new("t2", "Code review for PR #87", "30m"),
+        new("t3", "Update onboarding flow", "2h"),
+        new("t4", "Debug payment webhook", "1h"),
+        new("t5", "Team retrospective prep", "30m"),
+        new("t6", "Morning standup", "15m"),
+        new("t7", "Sprint planning meeting", "1h"),
+        new("t8", "Lunch break", "1h"),
+    ];
+
+    private List<TimeSlot> _slots =
+    [
+        new(9,  "9:00 AM",  "t6"),
+        new(10, "10:00 AM", "t7"),
+        new(11, "11:00 AM", null),
+        new(12, "12:00 PM", "t8"),
+        new(13, "1:00 PM",  null),
+        new(14, "2:00 PM",  null),
+        new(15, "3:00 PM",  null),
+        new(16, "4:00 PM",  null),
+        new(17, "5:00 PM",  null),
+    ];
+
+    private List<TaskItem> _available =
+    [
+        new("t1", "Write API documentation", "1h"),
+        new("t2", "Code review for PR #87", "30m"),
+        new("t3", "Update onboarding flow", "2h"),
+        new("t4", "Debug payment webhook", "1h"),
+        new("t5", "Team retrospective prep", "30m"),
+    ];
+
+    private int? _activeSlot = null;
+
+    private int _scheduledCount => _slots.Count(s => s.TaskId != null);
+
+    private TaskItem? GetTask(string taskId)
+    {
+        return Array.Find(_allTasks, t => t.Id == taskId)
+            ?? _available.Find(t => t.Id == taskId);
+    }
+
+    private void AssignTask(int hour, string taskId)
+    {
+        var idx = _slots.FindIndex(s => s.Hour == hour);
+        if (idx >= 0)
+            _slots[idx] = _slots[idx] with { TaskId = taskId };
+        _available.RemoveAll(t => t.Id == taskId);
+        _activeSlot = null;
+    }
+
+    private void UnassignTask(int hour)
+    {
+        var idx = _slots.FindIndex(s => s.Hour == hour);
+        if (idx < 0) return;
+        var slot = _slots[idx];
+        if (slot.TaskId == null) return;
+        var task = GetTask(slot.TaskId);
+        if (task != null && !_available.Exists(t => t.Id == task.Id))
+            _available.Add(task);
+        _slots[idx] = slot with { TaskId = null };
+    }
+
+    private void SetActiveSlot(int hour)
+    {
+        _activeSlot = _activeSlot == hour ? null : hour;
+    }
+}

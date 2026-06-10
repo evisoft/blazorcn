@@ -1,0 +1,307 @@
+@* ============================================================
+   Block: stepper-retry-recovery
+   Title: StepperRetryRecovery
+   Description: A multi-step process stepper with error states, retry buttons, recovery indicators, and resilient workflow progression built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-retry-recovery.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Data sync pipeline</span>
+            <div class="flex items-center gap-3">
+                @if (_recoveredCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs">
+                        <LucideIconCn Name="shield-check" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                        <span class="text-emerald-600 dark:text-emerald-400">@_recoveredCount recovered</span>
+                    </span>
+                }
+                @if (_failedCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        <span class="text-red-600 dark:text-red-400">@_failedCount failed</span>
+                    </span>
+                }
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    <span class="tabular-nums">@_doneCount</span> of <span class="tabular-nums">@_steps.Count</span> complete
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Progress bar *@
+        <div class="border-b px-4 py-2.5">
+            <div class="flex gap-1">
+                @foreach (var step in _steps)
+                {
+                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/50">
+                        <div class="@Cn.Merge("h-full rounded-full transition-all duration-500", GetProgressBarClass(step.Status))"></div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Steps list *@
+        <div>
+            @foreach (var stepEntry in _steps.Select((s, i) => new { Step = s, Index = i }))
+            {
+                var idx = stepEntry.Index;
+                var step = stepEntry.Step;
+                var isExpanded = _expanded == idx;
+                var isLast = idx == _steps.Count - 1;
+                var config = GetStatusConfig(step.Status);
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpanded(idx))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+
+                        @* Status circle *@
+                        <div class="@Cn.Merge("flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200", GetCircleClass(step.Status))">
+                            @if (step.Status == StepStatus.Done)
+                            {
+                                <LucideIconCn Name="check" Size="14" Class="size-3.5" />
+                            }
+                            else if (step.Status == StepStatus.Recovered)
+                            {
+                                <LucideIconCn Name="shield-check" Size="14" Class="size-3.5" />
+                            }
+                            else if (step.Status == StepStatus.Failed)
+                            {
+                                <LucideIconCn Name="alert-circle" Size="14" Class="size-3.5" />
+                            }
+                            else if (step.Status == StepStatus.Retrying)
+                            {
+                                <LucideIconCn Name="loader" Size="14" Class="size-3.5 animate-spin" />
+                            }
+                            else
+                            {
+                                <span class="font-medium text-xs tabular-nums">@(idx + 1)</span>
+                            }
+                        </div>
+
+                        @* Label and status *@
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@step.Label</span>
+                                @if (step.Status == StepStatus.Recovered)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="bg-emerald-500/10 font-normal text-emerald-600 text-xs dark:text-emerald-400">Recovered</BadgeCn>
+                                }
+                            </div>
+                            <p class="mt-0.5 text-muted-foreground text-xs">@step.Description</p>
+                        </div>
+
+                        @* Status indicator *@
+                        <span class="@($"text-xs {config.LabelClass}")">@config.StatusLabel</span>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @* Expanded content *@
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-[3.75rem]">
+                            @* Error block for failed steps *@
+                            @if (step.Status == StepStatus.Failed && step.Error != null)
+                            {
+                                <div class="mb-3 rounded-md bg-red-500/10 p-3">
+                                    <div class="mb-1 flex items-center gap-2">
+                                        <LucideIconCn Name="alert-circle" Size="14" Class="size-3.5 text-red-600 dark:text-red-400" />
+                                        <span class="font-medium text-red-600 text-xs dark:text-red-400">Error</span>
+                                        @if (step.ErrorCode != null)
+                                        {
+                                            <span class="font-mono text-red-600/70 text-xs dark:text-red-400/70">@step.ErrorCode</span>
+                                        }
+                                    </div>
+                                    <p class="text-red-600/80 text-sm leading-relaxed dark:text-red-400/80">@step.Error</p>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-3 h-7 gap-1.5 border-red-500/20 text-xs hover:bg-red-500/10" OnClick="@(async () => await HandleRetry(idx))">
+                                        <LucideIconCn Name="refresh-cw" Size="12" Class="size-3" />
+                                        Retry step
+                                    </ButtonCn>
+                                </div>
+                            }
+
+                            @* Retrying state *@
+                            @if (step.Status == StepStatus.Retrying)
+                            {
+                                <div class="rounded-md bg-blue-500/10 p-3">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="loader" Size="14" Class="size-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                                        <span class="font-medium text-blue-600 text-xs dark:text-blue-400">Retrying authentication...</span>
+                                    </div>
+                                    <p class="mt-1 text-blue-600/70 text-xs dark:text-blue-400/70">Attempting to re-establish connection with identity provider</p>
+                                </div>
+                            }
+
+                            @* Completed / recovered details *@
+                            @if (step.Status == StepStatus.Done || step.Status == StepStatus.Recovered)
+                            {
+                                var fields = GetExpandedFields(step.Status, idx);
+                                <div class="space-y-2">
+                                    @foreach (var fld in fields)
+                                    {
+                                        <div class="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+                                            <span class="font-medium text-muted-foreground text-xs">@fld.Label</span>
+                                            <span class="font-mono text-xs">@fld.Value</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @* Active step details *@
+                            @if (step.Status == StepStatus.Active)
+                            {
+                                <div class="space-y-2">
+                                    @foreach (var fld in _stepContentSync)
+                                    {
+                                        <div class="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+                                            <span class="font-medium text-muted-foreground text-xs">@fld.Label</span>
+                                            <span class="font-mono text-xs">@fld.Value</span>
+                                        </div>
+                                    }
+                                    <ButtonCn Size="ButtonSize.Sm" Class="mt-2 h-7 text-xs" OnClick="HandleContinue">
+                                        Complete step
+                                    </ButtonCn>
+                                </div>
+                            }
+
+                            @* Pending message *@
+                            @if (step.Status == StepStatus.Pending)
+                            {
+                                <p class="text-muted-foreground text-xs">Waiting for previous steps to complete</p>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum StepStatus { Done, Failed, Retrying, Recovered, Pending, Active }
+
+    private record StepField(string Label, string Value);
+
+    private record StatusConfig(string DotClass, string LabelClass, string StatusLabel);
+
+    private class StepState
+    {
+        public string Label { get; set; } = "";
+        public string Description { get; set; } = "";
+        public StepStatus Status { get; set; }
+        public string? Error { get; set; }
+        public string? ErrorCode { get; set; }
+    }
+
+    private int? _expanded = 1;
+
+    private List<StepState> _steps =
+    [
+        new() { Label = "Connect", Description = "Establish connection to the remote server", Status = StepStatus.Done },
+        new() { Label = "Authenticate", Description = "Verify credentials and obtain access token", Status = StepStatus.Failed, Error = "Authentication timeout after 30s. The identity provider did not respond within the expected window.", ErrorCode = "AUTH_TIMEOUT_ERR" },
+        new() { Label = "Sync data", Description = "Transfer and reconcile records", Status = StepStatus.Pending },
+        new() { Label = "Verify", Description = "Run integrity checks on synced data", Status = StepStatus.Pending },
+    ];
+
+    private static readonly StepField[] _stepContentDone =
+    [
+        new("Endpoint", "api.acme.com:443"),
+        new("Protocol", "TLS 1.3"),
+        new("Latency", "24ms"),
+    ];
+
+    private static readonly StepField[] _stepContentRecovered =
+    [
+        new("Provider", "Okta (SAML 2.0)"),
+        new("Token", "eyJhbG...truncated"),
+        new("Expires", "In 3600 seconds"),
+    ];
+
+    private static readonly StepField[] _stepContentSync =
+    [
+        new("Records", "12,847 total"),
+        new("New", "342 records"),
+        new("Updated", "1,205 records"),
+    ];
+
+    private int _failedCount => _steps.Count(s => s.Status == StepStatus.Failed);
+    private int _recoveredCount => _steps.Count(s => s.Status == StepStatus.Recovered);
+    private int _doneCount => _steps.Count(s => s.Status == StepStatus.Done || s.Status == StepStatus.Recovered);
+
+    private void ToggleExpanded(int index)
+    {
+        _expanded = _expanded == index ? null : index;
+    }
+
+    private async Task HandleRetry(int index)
+    {
+        _steps[index].Status = StepStatus.Retrying;
+
+        await Task.Delay(1500);
+
+        _steps[index].Status = StepStatus.Recovered;
+        _steps[index].Error = null;
+        _steps[index].ErrorCode = null;
+
+        if (index + 1 < _steps.Count && _steps[index + 1].Status == StepStatus.Pending)
+        {
+            _steps[index + 1].Status = StepStatus.Active;
+        }
+
+        _expanded = index;
+        StateHasChanged();
+    }
+
+    private void HandleContinue()
+    {
+        var activeIndex = _steps.FindIndex(s => s.Status == StepStatus.Active);
+        if (activeIndex >= 0)
+        {
+            _steps[activeIndex].Status = StepStatus.Done;
+            if (activeIndex + 1 < _steps.Count)
+            {
+                _steps[activeIndex + 1].Status = StepStatus.Active;
+            }
+        }
+    }
+
+    private StepField[] GetExpandedFields(StepStatus status, int index)
+    {
+        if (status == StepStatus.Done && index == 0) return _stepContentDone;
+        if (status == StepStatus.Recovered) return _stepContentRecovered;
+        return [];
+    }
+
+    private string GetProgressBarClass(StepStatus status) => status switch
+    {
+        StepStatus.Done or StepStatus.Recovered => "w-full bg-emerald-500 dark:bg-emerald-600",
+        StepStatus.Failed => "w-full bg-red-500 dark:bg-red-600",
+        StepStatus.Retrying or StepStatus.Active => "w-1/2 bg-blue-500 dark:bg-blue-600",
+        _ => "w-0",
+    };
+
+    private string GetCircleClass(StepStatus status) => status switch
+    {
+        StepStatus.Done => "bg-emerald-500 text-white dark:bg-emerald-600",
+        StepStatus.Recovered => "bg-emerald-500 text-white dark:bg-emerald-600",
+        StepStatus.Failed => "bg-red-500/10 text-red-600 dark:text-red-400",
+        StepStatus.Retrying => "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+        StepStatus.Active => "bg-foreground text-background",
+        _ => "border border-muted-foreground/25 text-muted-foreground",
+    };
+
+    private StatusConfig GetStatusConfig(StepStatus status) => status switch
+    {
+        StepStatus.Done => new("bg-emerald-500", "text-emerald-600 dark:text-emerald-400", "Completed"),
+        StepStatus.Failed => new("bg-red-500", "text-red-600 dark:text-red-400", "Failed"),
+        StepStatus.Retrying => new("bg-blue-500", "text-blue-600 dark:text-blue-400", "Retrying..."),
+        StepStatus.Recovered => new("bg-emerald-500", "text-emerald-600 dark:text-emerald-400", "Recovered"),
+        StepStatus.Pending => new("bg-muted-foreground/30", "text-muted-foreground", "Pending"),
+        StepStatus.Active => new("bg-blue-500", "text-blue-600 dark:text-blue-400", "In progress"),
+        _ => new("", "", ""),
+    };
+}

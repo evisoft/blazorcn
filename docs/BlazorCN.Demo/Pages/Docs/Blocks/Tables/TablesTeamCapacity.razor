@@ -1,0 +1,185 @@
+@* ============================================================
+   Block: tables-team-capacity
+   Title: TablesTeamCapacity
+   Description: Team workload planning with utilization and availability for React dashboards built with shadcn/ui, Tailwind CSS, Next.js
+   Source: original/blocks/tables/tables-team-capacity.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h3 class="text-sm font-medium">Team Capacity</h3>
+                <p class="text-xs text-muted-foreground">
+                    Sprint 14 &middot; @_team.Length members &middot; Avg utilization @_avgUtilization%
+                </p>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var status in new[] { "available", "busy", "partial", "pto" })
+                {
+                    var st = status;
+                    var count = _team.Count(m => m.Availability == st);
+                    var cfg = _availabilityConfig[st];
+                    <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {cfg.DotClass}")"></span>
+                        <span>@count @cfg.Label.ToLower()</span>
+                    </div>
+                }
+            </div>
+        </div>
+        <TableCn>
+            <TableHeaderCn>
+                <TableRowCn Class="bg-muted/50">
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">Member</TableHeadCn>
+                    <TableHeadCn Class="w-16 text-xs font-medium text-muted-foreground">Status</TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">
+                        <button type="button" class="flex items-center gap-1" @onclick="@(() => HandleSort(SortKey.Utilization))">
+                            Utilization @GetSortIcon(SortKey.Utilization)
+                        </button>
+                    </TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">
+                        <button type="button" class="flex items-center gap-1" @onclick="@(() => HandleSort(SortKey.ActiveTasks))">
+                            Tasks @GetSortIcon(SortKey.ActiveTasks)
+                        </button>
+                    </TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground text-right">
+                        <button type="button" class="flex items-center gap-1 ml-auto" @onclick="@(() => HandleSort(SortKey.HoursLogged))">
+                            Hours @GetSortIcon(SortKey.HoursLogged)
+                        </button>
+                    </TableHeadCn>
+                </TableRowCn>
+            </TableHeaderCn>
+            <TableBodyCn>
+                @foreach (var member in GetSorted())
+                {
+                    var mem = member;
+                    var cfg = _availabilityConfig[mem.Availability];
+                    var rowClass = Cn.Merge("hover:bg-muted/50", mem.Availability == "pto" ? "opacity-50" : "");
+                    var barClass = Cn.Merge("h-1.5 rounded-full",
+                        mem.Utilization >= 90 ? "bg-red-500" :
+                        mem.Utilization >= 75 ? "bg-amber-500" : "bg-green-500");
+                    var pctClass = Cn.Merge("font-mono text-xs tabular-nums",
+                        mem.Utilization >= 90 ? "text-red-600" : "text-muted-foreground");
+                    var initials = string.Join("", mem.Name.Split(' ').Select(n => n[0]));
+
+                    <TableRowCn Class="@rowClass">
+                        <TableCellCn>
+                            <div class="flex items-center gap-2">
+                                <AvatarCn Class="size-7">
+                                    <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                                </AvatarCn>
+                                <div>
+                                    <p class="text-sm font-medium">@mem.Name</p>
+                                    <p class="text-xs text-muted-foreground">@mem.Role</p>
+                                </div>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div class="flex items-center gap-1.5">
+                                <span class="@($"size-1.5 rounded-full {cfg.DotClass}")"></span>
+                                <span class="text-xs">@cfg.Label</span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div class="flex items-center gap-2">
+                                <div class="h-1.5 w-20 rounded-full bg-muted">
+                                    <div class="@barClass" style="@($"width:{mem.Utilization}%")"></div>
+                                </div>
+                                <span class="@pctClass">@mem.Utilization%</span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm tabular-nums">@mem.ActiveTasks</span>
+                                <span class="text-xs text-muted-foreground">active</span>
+                                <span class="text-xs text-muted-foreground">&middot;</span>
+                                <span class="text-xs text-muted-foreground">@mem.CompletedTasks done</span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn Class="text-right">
+                            <span class="font-mono text-sm tabular-nums">@mem.HoursLogged</span>
+                            <span class="text-xs text-muted-foreground">/@mem.HoursCapacity h</span>
+                        </TableCellCn>
+                    </TableRowCn>
+                }
+            </TableBodyCn>
+        </TableCn>
+    </div>
+</section>
+
+@code {
+    private enum SortKey { Utilization, ActiveTasks, HoursLogged }
+
+    private record TeamMember(
+        string Id,
+        string Name,
+        string Role,
+        string Availability,
+        int Utilization,
+        int ActiveTasks,
+        int CompletedTasks,
+        int HoursLogged,
+        int HoursCapacity,
+        string Sprint
+    );
+
+    private record AvailabilityConfig(string Label, string DotClass);
+
+    private static readonly TeamMember[] _team =
+    [
+        new("1", "Sarah Chen",   "Senior Engineer",       "busy",      95, 8, 12, 38, 40, "Sprint 14"),
+        new("2", "Alex Kumar",   "Backend Engineer",      "available", 72, 5,  9, 29, 40, "Sprint 14"),
+        new("3", "Emma Wilson",  "Designer",              "partial",   60, 4,  6, 24, 40, "Sprint 14"),
+        new("4", "James Park",   "Frontend Engineer",     "available", 80, 6, 11, 32, 40, "Sprint 14"),
+        new("5", "Maya Patel",   "Engineering Manager",   "busy",      88, 3,  7, 35, 40, "Sprint 14"),
+        new("6", "Ryan Lee",     "QA Engineer",           "pto",        0, 0, 14,  0,  0, "Sprint 14"),
+        new("7", "Lina Torres",  "DevOps Engineer",       "available", 65, 4,  8, 26, 40, "Sprint 14"),
+    ];
+
+    private static readonly Dictionary<string, AvailabilityConfig> _availabilityConfig = new()
+    {
+        ["available"] = new("Available", "bg-green-500"),
+        ["busy"]      = new("Busy",      "bg-red-500"),
+        ["pto"]       = new("PTO",       "bg-slate-400"),
+        ["partial"]   = new("Partial",   "bg-amber-500"),
+    };
+
+    private SortKey _sortKey = SortKey.Utilization;
+    private bool _descending = true;
+
+    private int _avgUtilization =>
+        (int)Math.Round(
+            _team.Where(m => m.Availability != "pto").Average(m => m.Utilization));
+
+    private void HandleSort(SortKey key)
+    {
+        if (_sortKey == key)
+            _descending = !_descending;
+        else
+        {
+            _sortKey = key;
+            _descending = true;
+        }
+    }
+
+    private TeamMember[] GetSorted()
+    {
+        IEnumerable<TeamMember> q = _sortKey switch
+        {
+            SortKey.Utilization  => _descending ? _team.OrderByDescending(m => m.Utilization)  : _team.OrderBy(m => m.Utilization),
+            SortKey.ActiveTasks  => _descending ? _team.OrderByDescending(m => m.ActiveTasks)  : _team.OrderBy(m => m.ActiveTasks),
+            SortKey.HoursLogged  => _descending ? _team.OrderByDescending(m => m.HoursLogged)  : _team.OrderBy(m => m.HoursLogged),
+            _                    => _team.AsEnumerable(),
+        };
+        return q.ToArray();
+    }
+
+    private RenderFragment GetSortIcon(SortKey col)
+    {
+        if (_sortKey != col)
+            return @<text></text>;
+        return _descending
+            ? @<LucideChevronDownCn Size="12" Class="size-3" />
+            : @<LucideChevronUpCn   Size="12" Class="size-3" />;
+    }
+}

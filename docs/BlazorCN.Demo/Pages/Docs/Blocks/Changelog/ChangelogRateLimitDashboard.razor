@@ -1,0 +1,257 @@
+@* ============================================================
+   Block: changelog-rate-limit-dashboard
+   Title: ChangelogRateLimitDashboard
+   Description: A React changelog component for rate limiting changes built with Next.js, shadcn/ui, and Tailwind CSS showing tier-based limits, current usage, and configuration updates
+   Source: original/blocks/changelog/changelog-rate-limit-dashboard.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="gauge" Size="16" Class="size-4 text-muted-foreground" />
+                <h2 class="text-sm font-medium">Rate Limit Changes</h2>
+            </div>
+            <p class="mt-1 text-xs text-muted-foreground">
+                API rate limit configuration updates and tier adjustments
+            </p>
+        </div>
+
+        @* Changes list *@
+        <div>
+            @foreach (var ch in _changes)
+            {
+                var change = ch;
+                var isExpanded = _expandedId == change.Id;
+                var isLast = change.Id == _changes[^1].Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => ToggleChange(change.Id))">
+                        <div class="flex min-w-0 flex-1 flex-col gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-sm font-medium">@change.Endpoint</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                @RenderChangeTypeBadge(change.ChangeType)
+                                <span class="text-xs text-muted-foreground">@change.Timestamp</span>
+                                <span class="text-xs text-muted-foreground">•</span>
+                                <span class="text-xs text-muted-foreground">@change.Author</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                @foreach (var t in change.Tiers)
+                                {
+                                    var tier = t;
+                                    var limit = tier.After ?? tier.Before;
+                                    if (limit != null)
+                                    {
+                                        <div class="flex items-center gap-1.5 text-xs">
+                                            <span class="text-muted-foreground">@tier.Name:</span>
+                                            <span class="font-medium tabular-nums">@limit.Requests/@limit.Window</span>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t bg-muted/50 px-4 py-3">
+                            <p class="mb-3 text-xs text-muted-foreground">@change.Reason</p>
+
+                            <div class="mb-3">
+                                <span class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                                    Tier Limits
+                                </span>
+                                <div class="space-y-2">
+                                    @foreach (var t2 in change.Tiers)
+                                    {
+                                        var tier = t2;
+                                        <div class="rounded-md bg-background px-3 py-2">
+                                            <div class="mb-1.5 flex items-center justify-between">
+                                                <span class="text-xs font-medium">@tier.Name</span>
+                                                @if (tier.After != null)
+                                                {
+                                                    <div class="flex items-center gap-1">
+                                                        <span class="@Cn.Merge("font-medium tabular-nums text-xs", GetUsageColor(tier.CurrentUsage.Percentage))">
+                                                            @tier.CurrentUsage.Percentage%
+                                                        </span>
+                                                        <span class="text-xs text-muted-foreground">used</span>
+                                                    </div>
+                                                }
+                                            </div>
+
+                                            @if (tier.Before != null && tier.After != null)
+                                            {
+                                                <div class="grid grid-cols-2 gap-2 text-xs">
+                                                    <div>
+                                                        <span class="block text-muted-foreground">Before</span>
+                                                        <span class="mt-0.5 block font-mono">@tier.Before.Requests/@tier.Before.Window</span>
+                                                    </div>
+                                                    <div>
+                                                        <span class="block text-muted-foreground">After</span>
+                                                        <span class="mt-0.5 block font-mono">@tier.After.Requests/@tier.After.Window</span>
+                                                    </div>
+                                                </div>
+                                            }
+                                            else if (tier.Before == null && tier.After != null)
+                                            {
+                                                <div class="text-xs">
+                                                    <span class="block text-muted-foreground">New Limit</span>
+                                                    <span class="mt-0.5 block font-mono">@tier.After.Requests/@tier.After.Window</span>
+                                                </div>
+                                            }
+                                            else if (tier.Before != null && tier.After == null)
+                                            {
+                                                <div class="text-xs">
+                                                    <span class="block text-muted-foreground">Previous Limit</span>
+                                                    <span class="mt-0.5 block font-mono">@tier.Before.Requests/@tier.Before.Window</span>
+                                                </div>
+                                            }
+
+                                            @if (tier.After != null)
+                                            {
+                                                <div class="mt-2">
+                                                    <div class="flex items-center justify-between text-xs">
+                                                        <span class="text-muted-foreground">Current Usage</span>
+                                                        <span class="font-mono">@tier.CurrentUsage.Requests.ToString("N0") / @tier.After.Requests.ToString("N0")</span>
+                                                    </div>
+                                                    <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                                                        <div class="@Cn.Merge("h-full rounded-full transition-all", GetUsageBarColor(tier.CurrentUsage.Percentage))"
+                                                             style="@($"width:{Math.Min(tier.CurrentUsage.Percentage, 100)}%")">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="rounded-md bg-background px-3 py-2">
+                                <span class="block text-xs font-medium text-muted-foreground">
+                                    Impact
+                                </span>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@change.Impact</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record LimitWindow(int Requests, string Window);
+
+    private record TierUsage(int Requests, int Percentage);
+
+    private record TierEntry(string Name, LimitWindow? Before, LimitWindow? After, TierUsage CurrentUsage);
+
+    private record RateLimitChange(string Id, string Endpoint, string ChangeType, string Timestamp, string Author,
+        TierEntry[] Tiers, string Reason, string Impact);
+
+    private static readonly RateLimitChange[] _changes =
+    [
+        new("1", "/api/v1/search", "increase", "3 hours ago", "Alex Chen",
+            [
+                new("Free",       new(100, "hour"),   new(150, "hour"),   new(87, 58)),
+                new("Pro",        new(1000, "hour"),  new(2000, "hour"),  new(1240, 62)),
+                new("Enterprise", new(10000, "hour"), new(20000, "hour"), new(8420, 42)),
+            ],
+            "Increased limits due to high adoption and low abuse rates",
+            "Pro tier users were hitting 85% of limit regularly, this provides headroom"),
+
+        new("2", "/api/v1/export", "decrease", "Yesterday", "Maria Santos",
+            [
+                new("Free",       new(10, "day"),   new(5, "day"),   new(2, 40)),
+                new("Pro",        new(100, "day"),  new(50, "day"),  new(28, 56)),
+                new("Enterprise", new(1000, "day"), new(500, "day"), new(142, 28)),
+            ],
+            "Reduced export limits to manage server load during peak hours",
+            "Export operations were consuming 40% of compute resources"),
+
+        new("3", "/api/v1/ai/generate", "new", "2 days ago", "Jordan Lee",
+            [
+                new("Free",       null, new(10, "day"),   new(4, 40)),
+                new("Pro",        null, new(100, "day"),  new(56, 56)),
+                new("Enterprise", null, new(1000, "day"), new(234, 23)),
+            ],
+            "Added rate limits for new AI generation endpoint",
+            "Controls usage of computationally expensive AI operations"),
+
+        new("4", "/api/v1/webhooks", "increase", "5 days ago", "Sam Patel",
+            [
+                new("Free",       new(50, "hour"),   new(100, "hour"),   new(42, 42)),
+                new("Pro",        new(500, "hour"),  new(1000, "hour"),  new(620, 62)),
+                new("Enterprise", new(5000, "hour"), new(10000, "hour"), new(3840, 38)),
+            ],
+            "Doubled webhook delivery limits based on customer feedback",
+            "Allows real-time integrations to scale with higher event volumes"),
+
+        new("5", "/api/v1/upload", "decrease", "1 week ago", "Taylor Kim",
+            [
+                new("Free",       new(20, "hour"),   new(10, "hour"),  new(4, 40)),
+                new("Pro",        new(200, "hour"),  new(100, "hour"), new(58, 58)),
+                new("Enterprise", new(2000, "hour"), new(1000, "hour"), new(420, 42)),
+            ],
+            "Reduced upload rate limits to prevent storage abuse",
+            "Detected 12% of free tier uploads were spam or test data"),
+
+        new("6", "/api/v1/legacy/users", "removed", "2 weeks ago", "Alex Chen",
+            [
+                new("Free",       new(1000, "hour"),  null, new(0, 0)),
+                new("Pro",        new(5000, "hour"),  null, new(0, 0)),
+                new("Enterprise", new(50000, "hour"), null, new(0, 0)),
+            ],
+            "Deprecated legacy endpoint - users migrated to /api/v2/users",
+            "Final cleanup after 6-month deprecation period"),
+    ];
+
+    private string? _expandedId;
+
+    private void ToggleChange(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+
+    private static string GetUsageColor(int percentage)
+    {
+        if (percentage >= 90) return "text-red-500";
+        if (percentage >= 70) return "text-amber-500";
+        return "text-emerald-500";
+    }
+
+    private static string GetUsageBarColor(int percentage)
+    {
+        if (percentage >= 90) return "bg-red-500";
+        if (percentage >= 70) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    private RenderFragment RenderChangeTypeBadge(string changeType) => changeType switch
+    {
+        "increase" => @<span class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium bg-emerald-500/10 text-emerald-500">
+                          <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                          Increase
+                      </span>,
+        "decrease" => @<span class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium bg-red-500/10 text-red-500">
+                          <LucideIconCn Name="trending-down" Size="12" Class="size-3" />
+                          Decrease
+                      </span>,
+        "new"      => @<span class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium bg-blue-500/10 text-blue-500">
+                          <LucideIconCn Name="shield" Size="12" Class="size-3" />
+                          New
+                      </span>,
+        _          => @<span class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium bg-gray-500/10 text-gray-500">
+                          <LucideIconCn Name="shield" Size="12" Class="size-3" />
+                          Removed
+                      </span>,
+    };
+}

@@ -1,0 +1,182 @@
+@* ============================================================
+   Block: todo-list-eisenhower
+   Title: TodoListEisenhower
+   Description: An Eisenhower urgency-importance matrix todo list block for React and Next.js with four-quadrant task organization, drag-to-reclassify, and batch actions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-eisenhower.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Eisenhower Matrix</span>
+                <p class="text-muted-foreground text-xs">Prioritize by urgency and importance</p>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_totalDone of @_tasks.Count completed
+            </span>
+        </div>
+
+        @* Quadrant grid *@
+        <div class="grid grid-cols-1 sm:grid-cols-2">
+            @for (int qi = 0; qi < _quadrantOrder.Length; qi++)
+            {
+                var quadrant = _quadrantOrder[qi];
+                var config = _quadrantConfig[quadrant];
+                var quadrantTasks = _tasks.Where(t => t.Quadrant == quadrant).ToList();
+                var otherQuadrants = _quadrantOrder.Where(q => q != quadrant).Take(2).ToArray();
+                var showBorderRight = qi % 2 == 0;
+                var showBorderBottom = qi < 2;
+                var qLocal = quadrant;
+                <div class="@Cn.Merge(showBorderRight ? "sm:border-r" : "", showBorderBottom ? "border-b" : "")">
+                    @* Quadrant header *@
+                    <div class="flex items-center gap-2 border-b px-4 py-2.5">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", config.Dot)" />
+                        <span class="font-medium text-sm">@config.Label</span>
+                        <span class="text-muted-foreground text-xs">@config.Subtitle</span>
+                        <span class="ml-auto text-muted-foreground text-xs tabular-nums">
+                            @quadrantTasks.Count
+                        </span>
+                    </div>
+
+                    @* Tasks *@
+                    <div class="min-h-[120px]">
+                        @foreach (var task in quadrantTasks)
+                        {
+                            var taskId = task.Id;
+                            var taskCompleted = task.Completed;
+                            var taskText = task.Text;
+                            <div class="group flex items-center gap-2 border-b px-4 py-2 transition-colors last:border-b-0 hover:bg-muted/50">
+                                <span class="flex shrink-0 items-center">
+                                    <CheckboxCn Checked="@taskCompleted"
+                                                CheckedChanged="@((bool _) => ToggleTask(taskId))"
+                                                aria-label="@CheckboxLabel(taskText, taskCompleted)" />
+                                </span>
+                                <span class="@Cn.Merge("min-w-0 flex-1 text-sm", taskCompleted ? "text-muted-foreground line-through" : "")">
+                                    @taskText
+                                </span>
+                                <div class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                    @foreach (var target in otherQuadrants)
+                                    {
+                                        var tgt = target;
+                                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                                  Size="ButtonSize.Sm"
+                                                  Class="h-5 w-5 p-0"
+                                                  @onclick="@(() => MoveTask(taskId, tgt))"
+                                                  aria-label="@MoveLabel(tgt)">
+                                            <span class="@Cn.Merge("size-1.5 rounded-full", _quadrantConfig[tgt].Dot)" />
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @* Add input *@
+                    <div class="flex items-center gap-1 border-t px-4 py-2">
+                        <InputCn Value="@_inputs[qLocal]"
+                                 ValueChanged="@((string v) => { _inputs[qLocal] = v; })"
+                                 @onkeydown="@((KeyboardEventArgs e) => HandleKeyDown(e, qLocal))"
+                                 Placeholder="Add task..."
+                                 Class="h-7 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0" />
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.Sm"
+                                  Class="h-6 w-6 shrink-0 p-0"
+                                  @onclick="@(() => AddTask(qLocal))"
+                                  aria-label="@AddTaskLabel(qLocal)">
+                            <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum QuadrantType { DoFirst, Schedule, Delegate, Eliminate }
+
+    private record QuadrantInfo(string Label, string Subtitle, string Dot);
+
+    private record TaskItem(string Id, string Text, bool Completed, QuadrantType Quadrant);
+
+    private static readonly QuadrantType[] _quadrantOrder =
+    [
+        QuadrantType.DoFirst,
+        QuadrantType.Schedule,
+        QuadrantType.Delegate,
+        QuadrantType.Eliminate,
+    ];
+
+    private static readonly Dictionary<QuadrantType, QuadrantInfo> _quadrantConfig = new()
+    {
+        [QuadrantType.DoFirst]   = new("Do First",   "Urgent & Important",           "bg-emerald-500"),
+        [QuadrantType.Schedule]  = new("Schedule",   "Not Urgent & Important",        "bg-blue-500"),
+        [QuadrantType.Delegate]  = new("Delegate",   "Urgent & Not Important",        "bg-amber-500"),
+        [QuadrantType.Eliminate] = new("Eliminate",  "Not Urgent & Not Important",    "bg-muted-foreground/40"),
+    };
+
+    private List<TaskItem> _tasks =
+    [
+        new("1",  "Fix production database outage",   false, QuadrantType.DoFirst),
+        new("2",  "Respond to client escalation email", false, QuadrantType.DoFirst),
+        new("3",  "Deploy hotfix for auth regression",  true,  QuadrantType.DoFirst),
+        new("4",  "Plan Q3 product roadmap",            false, QuadrantType.Schedule),
+        new("5",  "Refactor authentication module",     false, QuadrantType.Schedule),
+        new("6",  "Write integration test suite",       false, QuadrantType.Schedule),
+        new("7",  "Update team meeting notes",          false, QuadrantType.Delegate),
+        new("8",  "Respond to vendor questionnaire",    true,  QuadrantType.Delegate),
+        new("9",  "Archive old Jira tickets",           false, QuadrantType.Eliminate),
+        new("10", "Reorganize shared drive folders",    false, QuadrantType.Eliminate),
+    ];
+
+    private Dictionary<QuadrantType, string> _inputs = new()
+    {
+        [QuadrantType.DoFirst]   = "",
+        [QuadrantType.Schedule]  = "",
+        [QuadrantType.Delegate]  = "",
+        [QuadrantType.Eliminate] = "",
+    };
+
+    private int _nextId = 11;
+
+    private int _totalDone => _tasks.Count(t => t.Completed);
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Completed = !_tasks[idx].Completed };
+    }
+
+    private void MoveTask(string id, QuadrantType to)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Quadrant = to };
+    }
+
+    private void AddTask(QuadrantType quadrant)
+    {
+        var text = _inputs[quadrant].Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        _tasks.Add(new TaskItem(_nextId.ToString(), text, false, quadrant));
+        _nextId++;
+        _inputs[quadrant] = "";
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e, QuadrantType quadrant)
+    {
+        if (e.Key == "Enter") AddTask(quadrant);
+    }
+
+    private static string CheckboxLabel(string text, bool completed) =>
+        $"Mark \"{text}\" as {(completed ? "incomplete" : "complete")}";
+
+    private string MoveLabel(QuadrantType target) =>
+        $"Move to {_quadrantConfig[target].Label}";
+
+    private string AddTaskLabel(QuadrantType quadrant) =>
+        $"Add task to {_quadrantConfig[quadrant].Label}";
+}

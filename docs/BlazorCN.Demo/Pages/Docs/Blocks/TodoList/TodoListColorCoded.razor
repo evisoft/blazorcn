@@ -1,0 +1,205 @@
+@* ============================================================
+   Block: todo-list-color-coded
+   Title: TodoListColorCoded
+   Description: A color-coded category todo list block for React and Next.js with color dot selectors, category filtering, and color legend built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-color-coded.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with color legend *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Color Categories</span>
+            <div class="flex items-center gap-2">
+                @foreach (var cat in _colorCategories)
+                {
+                    var catItem = cat;
+                    var count = _tasks.Count(t => t.Color == catItem.Id);
+                    <span class="flex items-center gap-1">
+                        <span class="@($"size-1.5 rounded-full {catItem.Dot}")"></span>
+                        <span class="text-muted-foreground text-[10px] tabular-nums">@count</span>
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Filter bar *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2">
+            <ButtonCn Variant="@(_filter == null ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                      Size="ButtonSize.Sm"
+                      Class="h-6 px-2 text-xs"
+                      @onclick="@(() => _filter = null)">
+                All
+            </ButtonCn>
+            @foreach (var cat in _colorCategories)
+            {
+                var catItem = cat;
+                <ButtonCn Variant="@(_filter == catItem.Id ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                          Size="ButtonSize.Sm"
+                          Class="h-6 gap-1 px-2 text-xs"
+                          @onclick="@(() => ToggleFilter(catItem.Id))">
+                    <span class="@($"size-2 rounded-full {catItem.Dot}")"></span>
+                    @catItem.Label
+                </ButtonCn>
+            }
+        </div>
+
+        @* Add task *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="flex items-center gap-1">
+                @foreach (var cat in _colorCategories)
+                {
+                    var catItem = cat;
+                    <button type="button"
+                            @onclick="@(() => _selectedColor = catItem.Id)"
+                            class="@GetDotButtonClass(catItem)"
+                            aria-label="@SelectCategoryLabel(catItem.Label)">
+                        @if (_selectedColor == catItem.Id)
+                        {
+                            <span class="size-1.5 rounded-full bg-white"></span>
+                        }
+                    </button>
+                }
+            </div>
+            <InputCn @bind-Value="_newTask"
+                     @onkeydown="HandleInputKeyDown"
+                     Placeholder="Add a task..."
+                     Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+            <ButtonCn Variant="ButtonVariant.Ghost"
+                      Size="ButtonSize.IconXs"
+                      @onclick="AddTask"
+                      Disabled="@(string.IsNullOrWhiteSpace(_newTask))"
+                      aria-label="Add task">
+                <LucideIconCn Name="plus" Size="16" Class="size-4" />
+            </ButtonCn>
+        </div>
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < FilteredTasks.Count; i++)
+            {
+                var task = FilteredTasks[i];
+                var isLast = i == FilteredTasks.Count - 1;
+                var taskId = task.Id;
+                var taskCat = _colorMap[task.Color];
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="group flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                        <span class="@($"size-2.5 shrink-0 rounded-full {taskCat.Dot}")"></span>
+                        <CheckboxCn Id="@($"color-todo-{task.Id}")"
+                                    Checked="@task.Completed"
+                                    CheckedChanged="@((bool _) => ToggleTask(taskId))" />
+                        <span class="@Cn.Merge("min-w-0 flex-1 cursor-pointer text-sm transition-all duration-200", task.Completed ? "text-muted-foreground line-through" : "text-foreground")"
+                              @onclick="@(() => ToggleTask(taskId))"
+                              @onkeydown="@((KeyboardEventArgs e) => HandleSpanKeyDown(e, taskId))"
+                              role="button"
+                              tabindex="0">
+                            @task.Text
+                        </span>
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.IconXs"
+                                  @onclick="@(() => DeleteTask(taskId))"
+                                  Class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                  aria-label="@DeleteLabel(task.Text)">
+                            <LucideIconCn Name="trash-2" Size="12" Class="size-3 text-muted-foreground" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">
+                @FilteredTasks.Count of @_tasks.Count tasks@GetFilterSuffix()
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ColorCategory(string Id, string Label, string Dot, string Bg, string Text);
+    private record TaskItem(string Id, string Text, string Color, bool Completed);
+
+    private static readonly ColorCategory[] _colorCategories =
+    [
+        new("red",    "Red",    "bg-red-500",     "bg-red-500/10",     "text-red-600 dark:text-red-400"),
+        new("orange", "Orange", "bg-orange-500",  "bg-orange-500/10",  "text-orange-600 dark:text-orange-400"),
+        new("yellow", "Yellow", "bg-yellow-500",  "bg-yellow-500/10",  "text-yellow-600 dark:text-yellow-400"),
+        new("green",  "Green",  "bg-emerald-500", "bg-emerald-500/10", "text-emerald-600 dark:text-emerald-400"),
+        new("blue",   "Blue",   "bg-blue-500",    "bg-blue-500/10",    "text-blue-600 dark:text-blue-400"),
+        new("purple", "Purple", "bg-purple-500",  "bg-purple-500/10",  "text-purple-600 dark:text-purple-400"),
+    ];
+
+    private static readonly Dictionary<string, ColorCategory> _colorMap =
+        _colorCategories.ToDictionary(c => c.Id);
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Fix critical production bug",   "red",    false),
+        new("2", "Update user dashboard design",  "blue",   false),
+        new("3", "Write quarterly report",        "orange", false),
+        new("4", "Plan team offsite agenda",      "green",  true),
+        new("5", "Review marketing campaign",     "purple", false),
+        new("6", "Prepare launch checklist",      "yellow", false),
+        new("7", "Merge feature branch",          "blue",   true),
+        new("8", "Order new monitors",            "green",  false),
+    ];
+
+    private string? _filter = null;
+    private string _newTask = "";
+    private string _selectedColor = "blue";
+    private int _nextId = 9;
+
+    private List<TaskItem> FilteredTasks =>
+        _filter != null ? _tasks.Where(t => t.Color == _filter).ToList() : _tasks;
+
+    private void ToggleFilter(string colorId)
+    {
+        _filter = _filter == colorId ? null : colorId;
+    }
+
+    private void AddTask()
+    {
+        var trimmed = _newTask.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        _tasks.Add(new TaskItem(_nextId.ToString(), trimmed, _selectedColor, false));
+        _nextId++;
+        _newTask = "";
+    }
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Completed = !_tasks[idx].Completed };
+    }
+
+    private void DeleteTask(string id)
+    {
+        _tasks.RemoveAll(t => t.Id == id);
+    }
+
+    private void HandleInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddTask();
+    }
+
+    private void HandleSpanKeyDown(KeyboardEventArgs e, string id)
+    {
+        if (e.Key == "Enter" || e.Key == " ") ToggleTask(id);
+    }
+
+    private string GetDotButtonClass(ColorCategory cat)
+    {
+        var ringColor = cat.Id == "green" ? "emerald" : cat.Id;
+        return _selectedColor == cat.Id
+            ? $"flex size-5 items-center justify-center rounded-full transition-all {cat.Dot} ring-2 ring-offset-1 ring-offset-background ring-{ringColor}-500/30"
+            : $"flex size-5 items-center justify-center rounded-full transition-all {cat.Dot} opacity-30 hover:opacity-60";
+    }
+
+    private string GetFilterSuffix() =>
+        _filter != null ? $" in {_colorMap[_filter].Label}" : "";
+
+    private static string DeleteLabel(string text) => $"Delete {text}";
+    private static string SelectCategoryLabel(string label) => $"Select {label} category";
+}

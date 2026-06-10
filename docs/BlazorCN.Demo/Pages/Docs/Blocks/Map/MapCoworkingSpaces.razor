@@ -1,0 +1,263 @@
+@* ============================================================
+   Block: map-coworking-spaces
+   Title: MapCoworkingSpaces
+   Description: Coworking space finder map block for Next.js with amenity badges, desk availability, pricing info markers, and space detail popups using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-coworking-spaces.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with filters *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Coworking Spaces</span>
+                <span class="ml-2 text-xs text-muted-foreground">
+                    @_filtered.Length of @_spaces.Length spaces
+                </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                @foreach (var amenity in _allAmenities)
+                {
+                    var am = amenity;
+                    var isActive = _activeFilters.Contains(am);
+                    var info = _amenityInfo[am];
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleFilter(am))"
+                        title="@info.Label"
+                        class="@Cn.Merge("flex size-7 items-center justify-center rounded-md transition-colors", isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        <LucideIconCn Name="@info.Icon" Size="14" Class="size-3.5" />
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + List *@
+        <div class="flex">
+            @* Map area — mock map since BlazorCN has no MapCn component *@
+            <div class="relative h-[500px] flex-1 bg-muted/30">
+                @* Map background grid *@
+                <div class="absolute inset-0 overflow-hidden">
+                    <svg class="h-full w-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <pattern id="cw-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1" />
+                            </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill="url(#cw-grid)" />
+                    </svg>
+                </div>
+
+                @* Map controls placeholder (bottom-right) *@
+                <div class="absolute bottom-3 right-3 z-10 flex flex-col gap-1">
+                    <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5 text-foreground" />
+                    </button>
+                    <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5 text-foreground" />
+                    </button>
+                </div>
+
+                @* Space markers *@
+                @foreach (var space in _filtered)
+                {
+                    var sp = space;
+                    var avail = _availConfig[sp.Availability];
+                    var leftPct = (int)Math.Round((sp.Longitude - (-0.134)) / ((-0.077) - (-0.134)) * 80 + 5);
+                    var topPct = (int)Math.Round((51.533 - sp.Latitude) / (51.533 - 51.511) * 80 + 5);
+                    <div class="absolute z-10" style="@($"left:{leftPct}%;top:{topPct}%")">
+                        <div class="relative">
+                            @* Marker content *@
+                            <button type="button"
+                                class="flex items-center gap-1 rounded-full border bg-card px-2 py-1 shadow-sm hover:bg-muted/50"
+                                @onclick="@(() => ToggleSelected(sp.Id))">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", avail.Dot)"></span>
+                                <span class="text-[10px] font-medium">@sp.HotDesk</span>
+                            </button>
+
+                            @* Popup for selected space *@
+                            @if (_selectedSpace == sp.Id)
+                            {
+                                <div class="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-64 rounded-md border bg-card p-3 shadow-md">
+                                    <div class="mb-1 flex items-center justify-between">
+                                        <span class="text-sm font-medium">@sp.Name</span>
+                                        <span class="flex items-center gap-0.5 text-xs">
+                                            <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                            @sp.Rating
+                                            <span class="text-muted-foreground">(@sp.Reviews)</span>
+                                        </span>
+                                    </div>
+                                    <p class="mb-2 text-xs text-muted-foreground">@sp.Address</p>
+
+                                    @* Availability *@
+                                    <div class="mb-2 flex items-center gap-2">
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", _availConfig[sp.Availability].Dot)"></span>
+                                        <span class="text-xs">@_availConfig[sp.Availability].Label</span>
+                                        <span class="text-xs text-muted-foreground">@sp.Available/@sp.Total desks</span>
+                                    </div>
+
+                                    @* Pricing *@
+                                    <div class="mb-2 space-y-1">
+                                        <div class="flex justify-between text-xs">
+                                            <span class="text-muted-foreground">Hot desk</span>
+                                            <span class="font-medium tabular-nums">@sp.HotDesk</span>
+                                        </div>
+                                        <div class="flex justify-between text-xs">
+                                            <span class="text-muted-foreground">Dedicated</span>
+                                            <span class="font-medium tabular-nums">@sp.DedicatedDesk</span>
+                                        </div>
+                                        <div class="flex justify-between text-xs">
+                                            <span class="text-muted-foreground">Private office</span>
+                                            <span class="font-medium tabular-nums">@sp.PrivateOffice</span>
+                                        </div>
+                                    </div>
+
+                                    @* Amenities *@
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach (var amenity in sp.Amenities)
+                                        {
+                                            var amInfo = _amenityInfo[amenity];
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-[10px] font-normal">
+                                                <LucideIconCn Name="@amInfo.Icon" Size="10" Class="size-2.5" />
+                                                @amInfo.Label
+                                            </BadgeCn>
+                                        }
+                                    </div>
+
+                                    @* Close button *@
+                                    <button type="button"
+                                        class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/50"
+                                        @onclick="@(() => _selectedSpace = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Space list *@
+            <div class="w-64 shrink-0 border-l">
+                <div class="max-h-[500px] overflow-y-auto">
+                    @for (var i = 0; i < _filtered.Length; i++)
+                    {
+                        var sp = _filtered[i];
+                        var isSelected = _selectedSpace == sp.Id;
+                        var isLast = i == _filtered.Length - 1;
+                        var avail = _availConfig[sp.Availability];
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(sp.Id))"
+                            class="@Cn.Merge("flex w-full items-start gap-2.5 px-4 py-3 text-left transition-colors hover:bg-muted/50", isLast ? "" : "border-b", isSelected ? "bg-muted/30" : "")">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-medium">@sp.Name</span>
+                                </div>
+                                <p class="mt-0.5 truncate text-[10px] text-muted-foreground">@sp.Address</p>
+                                <div class="mt-1.5 flex items-center gap-2">
+                                    <span class="flex items-center gap-0.5 text-[10px]">
+                                        <LucideIconCn Name="star" Size="10" Class="size-2.5 fill-amber-400 text-amber-400" />
+                                        @sp.Rating
+                                    </span>
+                                    <span class="flex items-center gap-1 text-[10px]">
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", avail.Dot)"></span>
+                                        <span class="text-muted-foreground">@sp.Available/@sp.Total</span>
+                                    </span>
+                                </div>
+                                <div class="mt-1.5 flex flex-wrap gap-1">
+                                    @foreach (var amenity in sp.Amenities.Take(4))
+                                    {
+                                        var amInfo = _amenityInfo[amenity];
+                                        <span class="text-muted-foreground">
+                                            <LucideIconCn Name="@amInfo.Icon" Size="12" Class="size-3" />
+                                        </span>
+                                    }
+                                    @if (sp.Amenities.Length > 4)
+                                    {
+                                        <span class="text-[10px] text-muted-foreground">+@(sp.Amenities.Length - 4)</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <span class="block text-sm font-semibold tabular-nums">@sp.HotDesk</span>
+                                <span class="block text-[10px] text-muted-foreground">hot desk</span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Space(
+        string Id, string Name, double Longitude, double Latitude,
+        double Rating, int Reviews,
+        string HotDesk, string DedicatedDesk, string PrivateOffice,
+        int Available, int Total, string Availability,
+        string[] Amenities, string Hours, string Address);
+
+    private record AmenityInfo(string Icon, string Label);
+    private record AvailInfo(string Dot, string Label);
+
+    private static readonly Space[] _spaces =
+    [
+        new("sp1", "The Hive Soho", -0.134, 51.5134, 4.8, 234,
+            "$25/day", "$450/mo", "$1,200/mo", 18, 45, "open",
+            ["wifi", "coffee", "meeting", "printing"], "7 AM - 10 PM", "42 Broadwick St, Soho"),
+        new("sp2", "WorkBar Shoreditch", -0.0775, 51.5245, 4.5, 189,
+            "$20/day", "$380/mo", "$950/mo", 4, 32, "limited",
+            ["wifi", "coffee", "monitors", "parking"], "8 AM - 9 PM", "15 Curtain Rd, Shoreditch"),
+        new("sp3", "Desk & Co Kings Cross", -0.1241, 51.5326, 4.7, 312,
+            "$30/day", "$520/mo", "$1,500/mo", 22, 60, "open",
+            ["wifi", "coffee", "meeting", "monitors", "printing", "parking"], "24/7", "8 Pancras Square, Kings Cross"),
+        new("sp4", "Pixel Space Clerkenwell", -0.105, 51.5225, 4.3, 97,
+            "$18/day", "$320/mo", "$800/mo", 0, 20, "full",
+            ["wifi", "coffee", "printing"], "8 AM - 8 PM", "55 Goswell Rd, Clerkenwell"),
+        new("sp5", "Canopy Covent Garden", -0.1237, 51.5117, 4.9, 428,
+            "$35/day", "$580/mo", "$1,800/mo", 8, 50, "open",
+            ["wifi", "coffee", "meeting", "monitors", "parking"], "6 AM - 11 PM", "27 Endell St, Covent Garden"),
+    ];
+
+    private static readonly string[] _allAmenities = ["wifi", "coffee", "meeting", "parking", "monitors", "printing"];
+
+    private static readonly Dictionary<string, AmenityInfo> _amenityInfo = new()
+    {
+        ["wifi"]     = new("wifi",           "Wi-Fi"),
+        ["coffee"]   = new("coffee",         "Coffee"),
+        ["meeting"]  = new("users",          "Meeting rooms"),
+        ["parking"]  = new("parking-circle", "Parking"),
+        ["monitors"] = new("monitor",        "Monitors"),
+        ["printing"] = new("printer",        "Printing"),
+    };
+
+    private static readonly Dictionary<string, AvailInfo> _availConfig = new()
+    {
+        ["open"]    = new("bg-emerald-500", "Open"),
+        ["limited"] = new("bg-amber-500",   "Limited"),
+        ["full"]    = new("bg-red-500",     "Full"),
+    };
+
+    private List<string> _activeFilters = [];
+    private string? _selectedSpace = null;
+
+    private Space[] _filtered => _activeFilters.Count == 0
+        ? _spaces
+        : _spaces.Where(s => _activeFilters.All(f => s.Amenities.Contains(f))).ToArray();
+
+    private void ToggleFilter(string amenity)
+    {
+        if (_activeFilters.Contains(amenity))
+            _activeFilters.Remove(amenity);
+        else
+            _activeFilters.Add(amenity);
+        _selectedSpace = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selectedSpace = _selectedSpace == id ? null : id;
+    }
+}

@@ -1,0 +1,246 @@
+@* ============================================================
+   Block: map-commute-calculator
+   Title: MapCommuteCalculator
+   Description: Commute time calculator map with draggable origin marker, destination markers, route lines with travel time labels, and a comparison panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-commute-calculator.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="car" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Commute Calculator</span>
+                <span class="text-xs text-muted-foreground">@_destinations.Length destinations</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                Drag home pin to update
+            </BadgeCn>
+        </div>
+
+        @* Map area — rendered as a styled mock since BlazorCN has no MapCn component *@
+        <div class="relative h-[420px] bg-muted/30">
+            @* Map background grid *@
+            <div class="absolute inset-0 overflow-hidden">
+                <svg class="h-full w-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <pattern id="commute-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#commute-grid)" />
+                </svg>
+            </div>
+
+            @* Route SVG lines *@
+            <svg class="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                @foreach (var dest in _destinations)
+                {
+                    var d = dest;
+                    var originX = LngToPercent(d.OriginLng);
+                    var originY = LatToPercent(d.OriginLat);
+                    var destX = LngToPercent(d.Lng);
+                    var destY = LatToPercent(d.Lat);
+                    var strokeW = _highlighted == d.Id ? 5 : 3;
+                    var opacity = (_highlighted == null || _highlighted == d.Id) ? "0.8" : "0.25";
+                    <line
+                        x1="@($"{originX}%")"
+                        y1="@($"{originY}%")"
+                        x2="@($"{destX}%")"
+                        y2="@($"{destY}%")"
+                        stroke="@d.RouteColor"
+                        stroke-width="@strokeW"
+                        stroke-opacity="@opacity"
+                        stroke-linecap="round" />
+                }
+            </svg>
+
+            @* Map controls placeholder (bottom-right) *@
+            <div class="absolute bottom-3 right-3 z-10 flex flex-col gap-1">
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+            </div>
+
+            @* Origin marker — home pin *@
+            @{
+                var originLeftPct = LngToPercent(_originLng);
+                var originTopPct = LatToPercent(_originLat);
+            }
+            <div class="absolute z-20 -translate-x-1/2 -translate-y-1/2" style="@($"left:{originLeftPct}%;top:{originTopPct}%")">
+                <div class="flex size-8 items-center justify-center rounded-full border-2 border-white bg-foreground shadow-lg">
+                    <LucideIconCn Name="home" Size="16" Class="size-4 text-background" />
+                </div>
+                <div class="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-foreground/80 px-1.5 py-0.5 text-[10px] text-background">
+                    Home
+                </div>
+            </div>
+
+            @* Destination markers *@
+            @foreach (var dest in _destinations)
+            {
+                var d = dest;
+                var leftPct = LngToPercent(d.Lng);
+                var topPct = LatToPercent(d.Lat);
+                <div class="absolute z-10 -translate-x-1/2 -translate-y-1/2" style="@($"left:{leftPct}%;top:{topPct}%")">
+                    <div class="relative">
+                        <button type="button"
+                            class="flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md"
+                            style="@($"background-color:{d.RouteColor}")"
+                            @onclick="@(() => ToggleSelected(d.Id))">
+                            <LucideIconCn Name="briefcase" Size="14" Class="size-3.5 text-white" />
+                        </button>
+
+                        @* Tooltip label *@
+                        <div class="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-foreground/85 px-1.5 py-0.5 text-[10px] text-background opacity-0 transition-opacity group-hover:opacity-100">
+                            <span class="font-medium">@d.Name</span>
+                            <span class="ml-1 text-background/70">@d.TravelTime</span>
+                        </div>
+
+                        @* Popup card *@
+                        @if (_selected == d.Id)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-56 rounded-md border bg-card p-3 shadow-md">
+                                <div class="mb-1.5 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@d.Name</p>
+                                        <p class="text-xs text-muted-foreground">@d.Address</p>
+                                    </div>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@d.Type</BadgeCn>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-lg font-semibold tabular-nums @(TimeColor(d.TravelMinutes))">
+                                        @d.TravelTime
+                                    </span>
+                                    <span class="text-xs text-muted-foreground">@d.Distance by car</span>
+                                </div>
+                                @* Close button *@
+                                <button type="button"
+                                    class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/50"
+                                    @onclick="@(() => _selected = null)">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Comparison panel *@
+        <div>
+            @{
+                var sortedDests = _destinations.OrderBy(d => d.TravelMinutes).ToArray();
+            }
+            @for (var i = 0; i < sortedDests.Length; i++)
+            {
+                var dest = sortedDests[i];
+                var isLast = i == sortedDests.Length - 1;
+                var d = dest;
+                <button
+                    type="button"
+                    @onclick="@(() => ToggleHighlighted(d.Id))"
+                    class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                    <span class="size-2 shrink-0 rounded-full" style="@($"background-color:{d.RouteColor}")"></span>
+                    <div class="min-w-0 flex-1">
+                        <span class="text-sm font-medium">@d.Name</span>
+                        <p class="mt-0.5 truncate text-xs text-muted-foreground">@d.Address</p>
+                    </div>
+                    <div class="flex items-center gap-3 text-right">
+                        <div>
+                            <span class="text-sm font-semibold tabular-nums @(TimeColor(d.TravelMinutes))">@d.TravelTime</span>
+                            <p class="text-xs text-muted-foreground">@d.Distance</p>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", _highlighted == d.Id ? "rotate-90" : "")" />
+                    </div>
+                </button>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                Under 15 min
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                15 - 20 min
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                Over 20 min
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                Avg: @_avgMinutes min
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Destination(
+        string Id, string Name, string Type, string Address,
+        string TravelTime, int TravelMinutes, string Distance,
+        string RouteColor,
+        double Lng, double Lat,
+        double OriginLng, double OriginLat);
+
+    private static readonly Destination[] _destinations =
+    [
+        new("d1", "Salesforce Tower", "Office", "415 Mission St, San Francisco",
+            "12 min", 12, "2.1 mi", "#22c55e",
+            -122.3967, 37.7897, -122.4194, 37.7749),
+        new("d2", "Google SF Office", "Office", "345 Spear St, San Francisco",
+            "14 min", 14, "2.4 mi", "#3b82f6",
+            -122.3932, 37.7903, -122.4194, 37.7749),
+        new("d3", "UCSF Medical Center", "Hospital", "505 Parnassus Ave, San Francisco",
+            "18 min", 18, "3.6 mi", "#eab308",
+            -122.4584, 37.7631, -122.4194, 37.7749),
+        new("d4", "Presidio National Park", "Recreation", "103 Montgomery St, Presidio",
+            "25 min", 25, "5.2 mi", "#ef4444",
+            -122.4573, 37.7989, -122.4194, 37.7749),
+    ];
+
+    // Default origin: San Francisco city center
+    private double _originLng = -122.4194;
+    private double _originLat = 37.7749;
+
+    private string? _selected = null;
+    private string? _highlighted = null;
+
+    // Map viewport bounds (approximate, derived from data range)
+    private const double LngMin = -122.475;
+    private const double LngMax = -122.380;
+    private const double LatMin = 37.750;
+    private const double LatMax = 37.805;
+
+    private int LngToPercent(double lng)
+        => (int)Math.Round((lng - LngMin) / (LngMax - LngMin) * 90 + 5);
+
+    private int LatToPercent(double lat)
+        => (int)Math.Round((LatMax - lat) / (LatMax - LatMin) * 90 + 5);
+
+    private int _avgMinutes => (int)Math.Round(_destinations.Average(d => d.TravelMinutes));
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private void ToggleHighlighted(string id)
+    {
+        _highlighted = _highlighted == id ? null : id;
+    }
+
+    private static string TimeColor(int minutes)
+    {
+        if (minutes <= 15) return "text-emerald-600 dark:text-emerald-400";
+        if (minutes <= 20) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+}

@@ -1,0 +1,182 @@
+@* ============================================================
+   Block: music-audio-effects
+   Title: MusicAudioEffects
+   Description: An audio effects chain block for React and Next.js with draggable effect pedals, on/off toggles, wet/dry knobs, and parameter sliders built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-audio-effects.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="sliders-horizontal" Size="16" Class="size-4 text-muted-foreground" />
+                    <span class="font-medium text-sm">Effects Chain</span>
+                </div>
+                <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                    <span>@ActiveCount active</span>
+                    <span>&middot;</span>
+                    <span>@_effects.Count total</span>
+                </div>
+            </div>
+        </div>
+
+        @* Effects list *@
+        <div>
+            @for (var i = 0; i < _effects.Count; i++)
+            {
+                var idx = i;
+                var effect = _effects[idx];
+                var isLast = idx == _effects.Count - 1;
+                var isExpanded = _expanded.TryGetValue(effect.Id, out var exp) ? exp : effect.Enabled;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="flex items-center gap-3 px-4 py-3">
+                        @* Drag handle (visual only — no DnD runtime in Blazor) *@
+                        <div class="cursor-grab text-muted-foreground/40 active:cursor-grabbing">
+                            <LucideIconCn Name="grip-vertical" Size="16" Class="size-4" />
+                        </div>
+
+                        @* Expand/collapse button *@
+                        <button type="button"
+                                class="min-w-0 flex-1 text-left"
+                                @onclick="@(() => ToggleExpanded(effect.Id, isExpanded))">
+                            <div class="flex items-center gap-2">
+                                <span class="@($"size-1.5 rounded-full {(effect.Enabled ? "bg-emerald-500" : "bg-muted-foreground/30")}")"></span>
+                                <span class="@Cn.Merge("font-medium text-sm", !effect.Enabled ? "text-muted-foreground" : "")">
+                                    @effect.Name
+                                </span>
+                                @if (effect.Enabled)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                        @effect.WetDry% wet
+                                    </BadgeCn>
+                                }
+                            </div>
+                        </button>
+
+                        <SwitchCn Checked="@effect.Enabled"
+                                  CheckedChanged="@((bool v) => ToggleEffect(effect.Id))"
+                                  aria-label="@($"Toggle {effect.Name}")" />
+                    </div>
+
+                    @if (isExpanded && effect.Enabled)
+                    {
+                        <div class="px-4 pb-3 pl-11">
+                            @* Wet/Dry *@
+                            <div class="mb-3">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
+                                        <LucideIconCn Name="volume-2" Size="12" Class="size-3" />
+                                        Wet/Dry
+                                    </span>
+                                    <span class="font-mono text-muted-foreground text-xs tabular-nums">@effect.WetDry%</span>
+                                </div>
+                                <SliderCn Value="@((double)effect.WetDry)"
+                                          ValueChanged="@((double v) => UpdateWetDry(effect.Id, (int)v))"
+                                          Min="0"
+                                          Max="100"
+                                          Step="1"
+                                          Class="w-full" />
+                            </div>
+
+                            @* Parameters *@
+                            @for (var pi = 0; pi < effect.Params.Count; pi++)
+                            {
+                                var pIdx = pi;
+                                var param = effect.Params[pIdx];
+                                var isLastParam = pIdx == effect.Params.Count - 1;
+                                <div class="@(isLastParam ? "" : "mb-3")">
+                                    <div class="mb-1.5 flex items-center justify-between">
+                                        <span class="font-medium text-muted-foreground text-xs">@param.Name</span>
+                                        <span class="font-mono text-muted-foreground text-xs tabular-nums">@param.Value@param.Unit</span>
+                                    </div>
+                                    <SliderCn Value="@((double)param.Value)"
+                                              ValueChanged="@((double v) => UpdateParam(effect.Id, pIdx, (int)v))"
+                                              Min="@((double)param.Min)"
+                                              Max="@((double)param.Max)"
+                                              Step="1"
+                                              Class="w-full" />
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Drag to reorder signal chain &middot; Toggle effects on/off
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private class EffectParam
+    {
+        public string Name { get; set; } = "";
+        public int Min { get; set; }
+        public int Max { get; set; }
+        public int Value { get; set; }
+        public string Unit { get; set; } = "";
+    }
+
+    private class AudioEffect
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public bool Enabled { get; set; }
+        public int WetDry { get; set; }
+        public List<EffectParam> Params { get; set; } = new();
+    }
+
+    private List<AudioEffect> _effects =
+    [
+        new AudioEffect { Id = "reverb",     Name = "Reverb",     Enabled = true,  WetDry = 40,  Params = [new EffectParam { Name = "Decay",     Min = 0,   Max = 10,   Value = 3,   Unit = "s"  }, new EffectParam { Name = "Pre-Delay", Min = 0,   Max = 100, Value = 20,  Unit = "ms" }] },
+        new AudioEffect { Id = "delay",      Name = "Delay",      Enabled = true,  WetDry = 30,  Params = [new EffectParam { Name = "Time",      Min = 0,   Max = 1000, Value = 375, Unit = "ms" }, new EffectParam { Name = "Feedback",  Min = 0,   Max = 100, Value = 45,  Unit = "%" }]  },
+        new AudioEffect { Id = "chorus",     Name = "Chorus",     Enabled = false, WetDry = 50,  Params = [new EffectParam { Name = "Rate",      Min = 0,   Max = 20,   Value = 4,   Unit = "Hz" }, new EffectParam { Name = "Depth",     Min = 0,   Max = 100, Value = 60,  Unit = "%" }]  },
+        new AudioEffect { Id = "distortion", Name = "Distortion", Enabled = false, WetDry = 25,  Params = [new EffectParam { Name = "Drive",     Min = 0,   Max = 100,  Value = 55,  Unit = "%" }, new EffectParam { Name = "Tone",      Min = 0,   Max = 100, Value = 70,  Unit = "%" }]  },
+        new AudioEffect { Id = "compressor", Name = "Compressor", Enabled = true,  WetDry = 100, Params = [new EffectParam { Name = "Threshold", Min = -60, Max = 0,    Value = -18, Unit = "dB" }, new EffectParam { Name = "Ratio",     Min = 1,   Max = 20,  Value = 4,   Unit = ":1" }] },
+    ];
+
+    private Dictionary<string, bool> _expanded = new();
+
+    private int ActiveCount => _effects.Count(e => e.Enabled);
+
+    private void ToggleExpanded(string id, bool currentlyExpanded)
+    {
+        _expanded[id] = !currentlyExpanded;
+    }
+
+    private void ToggleEffect(string id)
+    {
+        var effect = _effects.FirstOrDefault(e => e.Id == id);
+        if (effect is not null)
+        {
+            effect.Enabled = !effect.Enabled;
+            // If we just disabled it, collapse it too
+            if (!effect.Enabled)
+                _expanded[id] = false;
+        }
+    }
+
+    private void UpdateWetDry(string id, int value)
+    {
+        var effect = _effects.FirstOrDefault(e => e.Id == id);
+        if (effect is not null)
+            effect.WetDry = value;
+    }
+
+    private void UpdateParam(string id, int paramIndex, int value)
+    {
+        var effect = _effects.FirstOrDefault(e => e.Id == id);
+        if (effect is not null && paramIndex < effect.Params.Count)
+            effect.Params[paramIndex].Value = value;
+    }
+}

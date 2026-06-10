@@ -1,0 +1,248 @@
+@* ============================================================
+   Block: map-open-houses
+   Title: MapOpenHouses
+   Description: Interactive open house event map with time slot markers, today and upcoming day filters, RSVP indicators, and event detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-open-houses.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with day filters *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="calendar" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Open Houses</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length events</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                @foreach (var d in _days)
+                {
+                    var day = d;
+                    <button
+                        type="button"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _dayFilter == day ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                        @onclick="@(() => SetDayFilter(day))">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", DayColor(day))"></span>
+                        @DayLabel(day)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map area — rendered as a styled mock since BlazorCN has no MapCn component *@
+        <div class="relative h-[500px] bg-muted/30">
+            @* Map background grid to suggest a map tile *@
+            <div class="absolute inset-0 overflow-hidden">
+                <svg class="h-full w-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <pattern id="oh-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#oh-grid)" />
+                </svg>
+            </div>
+
+            @* Map controls placeholder (bottom-right) *@
+            <div class="absolute bottom-3 right-3 z-10 flex flex-col gap-1">
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="locate" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+            </div>
+
+            @* Open house markers *@
+            @foreach (var oh in _filtered)
+            {
+                var item = oh;
+                var isFull = item.RsvpCount >= item.Capacity;
+                @* Convert lat/lng to approximate CSS positions within the viewport *@
+                @* Longitude range: ~-122.455 to ~-122.405, Latitude range: ~37.745 to ~37.810 *@
+                var leftPct = (int)Math.Round((item.Longitude - (-122.455)) / ((-122.405) - (-122.455)) * 80 + 5);
+                var topPct = (int)Math.Round((37.810 - item.Latitude) / (37.810 - 37.745) * 80 + 5);
+                <div class="absolute z-10" style="@($"left:{leftPct}%;top:{topPct}%")">
+                    <div class="relative">
+                        @* Marker button *@
+                        <button
+                            type="button"
+                            class="relative"
+                            @onclick="@(() => ToggleSelected(item.Id))">
+                            @* Circle marker *@
+                            <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md", isFull ? "bg-muted-foreground" : DayColor(item.Day))">
+                                <svg viewBox="0 0 16 16" fill="none" class="size-3.5 text-white" aria-hidden="true">
+                                    <path d="M8 1L1 7h2v6h4V9h2v4h4V7h2L8 1z" fill="currentColor" />
+                                </svg>
+                            </div>
+                            @* Time label below marker *@
+                            <span class="absolute left-1/2 top-full mt-0.5 -translate-x-1/2 whitespace-nowrap rounded bg-background/90 px-1 py-0.5 text-[9px] font-medium shadow-sm">
+                                @item.Time.Split(" - ")[0]
+                            </span>
+                        </button>
+
+                        @* Popup card *@
+                        @if (_selected == item.Id)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-64 rounded-md border bg-card p-3 shadow-md">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@item.Price</p>
+                                        <p class="text-xs text-muted-foreground">@item.Address</p>
+                                    </div>
+                                    @if (isFull)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal text-red-600 dark:text-red-400">Full</BadgeCn>
+                                    }
+                                    else
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">Open</BadgeCn>
+                                    }
+                                </div>
+                                <div class="mb-2 flex items-center gap-2">
+                                    <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                        @item.Time
+                                    </span>
+                                </div>
+                                <div class="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span>@item.Bedrooms bd</span>
+                                    <span>@item.Bathrooms ba</span>
+                                    <span>@item.Sqft.ToString("N0") sqft</span>
+                                </div>
+                                <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="user" Size="12" Class="size-3" />
+                                    <span>@item.HostName · @item.HostAgency</span>
+                                </div>
+                                <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                    <span>@item.RsvpCount/@item.Capacity RSVPs</span>
+                                    <div class="flex-1">
+                                        <div class="h-1 rounded-full bg-muted">
+                                            <div
+                                                class="h-1 rounded-full bg-emerald-500"
+                                                style="@($"width:{Math.Min((double)item.RsvpCount / item.Capacity * 100, 100):F1}%")">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="border-t pt-2">
+                                    <p class="mb-1 text-xs font-medium text-muted-foreground">Highlights</p>
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach (var h in item.Highlights)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs font-normal">@h</BadgeCn>
+                                        }
+                                    </div>
+                                </div>
+                                @if (!isFull)
+                                {
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="mt-2 h-7 w-full text-xs">RSVP</ButtonCn>
+                                }
+                                @* Close button *@
+                                <button type="button"
+                                    class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/50"
+                                    @onclick="@(() => _selected = null)">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var d in _days)
+            {
+                var day = d;
+                var cnt = _openHouses.Count(oh => oh.Day == day);
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", DayColor(day))"></span>
+                    @DayLabel(day) (@cnt)
+                </span>
+            }
+            <span class="ml-auto text-xs text-muted-foreground">
+                @_openHouses.Sum(oh => oh.RsvpCount) total RSVPs
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record OpenHouse(
+        string Id, string Address, string Price, string Time, string Day,
+        string HostName, string HostAgency, int RsvpCount, int Capacity,
+        int Bedrooms, int Bathrooms, int Sqft, string[] Highlights,
+        double Longitude, double Latitude);
+
+    private static readonly string[] _days = ["today", "tomorrow", "weekend"];
+
+    private static readonly OpenHouse[] _openHouses =
+    [
+        new("oh1", "2145 Pacific Heights Dr, San Francisco", "$1.85M", "10:00 AM - 12:00 PM", "today",
+            "Sarah Chen", "Compass Real Estate", 18, 25, 4, 3, 2650,
+            ["Panoramic Bay view", "Renovated kitchen", "Garden"],
+            -122.436, 37.792),
+        new("oh2", "830 Divisadero St, San Francisco", "$1.25M", "1:00 PM - 3:00 PM", "today",
+            "James Park", "Sotheby's International", 12, 20, 3, 2, 1890,
+            ["Victorian charm", "In-unit laundry", "Roof deck"],
+            -122.438, 37.776),
+        new("oh3", "455 Marina Blvd, San Francisco", "$2.4M", "11:00 AM - 1:00 PM", "today",
+            "Lisa Rodriguez", "Coldwell Banker", 22, 25, 5, 4, 3400,
+            ["Marina views", "Home office", "2-car garage"],
+            -122.4375, 37.804),
+        new("oh4", "1620 Haight St, San Francisco", "$895K", "10:00 AM - 12:00 PM", "tomorrow",
+            "David Kim", "Redfin", 8, 15, 2, 1, 1100,
+            ["Near Golden Gate Park", "Original hardwood", "Skylight"],
+            -122.4525, 37.77),
+        new("oh5", "3200 Scott St, San Francisco", "$1.65M", "2:00 PM - 4:00 PM", "tomorrow",
+            "Maria Santos", "Keller Williams", 5, 20, 3, 2, 2100,
+            ["Cow Hollow", "Open floor plan", "New HVAC"],
+            -122.4415, 37.798),
+        new("oh6", "78 Noe St, San Francisco", "$1.15M", "12:00 PM - 2:00 PM", "weekend",
+            "Tom Bradley", "Douglas Elliman", 14, 20, 3, 2, 1650,
+            ["Noe Valley", "Updated bathrooms", "Back patio"],
+            -122.4315, 37.7515),
+        new("oh7", "920 Potrero Ave, San Francisco", "$780K", "11:00 AM - 1:00 PM", "weekend",
+            "Rachel Green", "Compass Real Estate", 6, 15, 2, 1, 950,
+            ["Mission District", "Corner unit", "Pet friendly"],
+            -122.407, 37.757),
+    ];
+
+    private string _dayFilter = "today";
+    private string? _selected = null;
+
+    private OpenHouse[] _filtered => _openHouses.Where(oh => oh.Day == _dayFilter).ToArray();
+
+    private void SetDayFilter(string day)
+    {
+        _dayFilter = day;
+        _selected = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static string DayColor(string day) => day switch
+    {
+        "today" => "bg-emerald-500",
+        "tomorrow" => "bg-blue-500",
+        "weekend" => "bg-violet-500",
+        _ => "bg-muted-foreground",
+    };
+
+    private static string DayLabel(string day) => day switch
+    {
+        "today" => "Today",
+        "tomorrow" => "Tomorrow",
+        "weekend" => "This Weekend",
+        _ => day,
+    };
+}

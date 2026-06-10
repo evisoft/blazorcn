@@ -1,0 +1,176 @@
+@* ============================================================
+   Block: tables-api-rate-limits
+   Title: TablesApiRateLimits
+   Description: API rate limit table with usage tracking, progress bars, and throttle indicators for React dashboards. Built with Next.js, shadcn/ui, Tailwind CSS.
+   Source: original/blocks/tables/tables-api-rate-limits.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h3 class="text-sm font-medium">API Rate Limits</h3>
+                <p class="text-xs text-muted-foreground">@_rateLimits.Length endpoints monitored</p>
+            </div>
+            @if (_throttledCount > 0)
+            {
+                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal border-red-200 text-red-700 gap-1">
+                    <LucideIconCn Name="alert-triangle" Size="10" Class="size-2.5" />
+                    @_throttledCount throttled
+                </BadgeCn>
+            }
+        </div>
+        <TableCn>
+            <TableHeaderCn>
+                <TableRowCn Class="bg-muted/50">
+                    <TableHeadCn Class="w-16 font-medium text-xs">Method</TableHeadCn>
+                    <TableHeadCn Class="font-medium text-xs">Endpoint</TableHeadCn>
+                    <TableHeadCn Class="w-16 font-medium text-xs text-right">Limit</TableHeadCn>
+                    <TableHeadCn Class="w-16 font-medium text-xs text-right">
+                        <button type="button" class="flex items-center gap-1 ml-auto" @onclick="@(() => HandleSort("used"))">
+                            Used
+                            @if (_sortKey == "used")
+                            {
+                                @if (_sortDir == "desc")
+                                {
+                                    <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="chevron-up" Size="12" Class="size-3" />
+                                }
+                            }
+                        </button>
+                    </TableHeadCn>
+                    <TableHeadCn Class="font-medium text-xs">Usage</TableHeadCn>
+                    <TableHeadCn Class="w-20 font-medium text-xs text-right">
+                        <button type="button" class="flex items-center gap-1 ml-auto" @onclick="@(() => HandleSort("remaining"))">
+                            Left
+                            @if (_sortKey == "remaining")
+                            {
+                                @if (_sortDir == "desc")
+                                {
+                                    <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="chevron-up" Size="12" Class="size-3" />
+                                }
+                            }
+                        </button>
+                    </TableHeadCn>
+                    <TableHeadCn Class="w-16 font-medium text-xs text-right">Reset</TableHeadCn>
+                </TableRowCn>
+            </TableHeaderCn>
+            <TableBodyCn>
+                @foreach (var ep in SortedData)
+                {
+                    var pct = (int)Math.Round((double)ep.Used / ep.Limit * 100);
+                    var remaining = ep.Limit - ep.Used;
+                    var status = GetThrottleStatus(ep.Used, ep.Limit);
+                    <TableRowCn Class="@Cn.Merge("hover:bg-muted/50", status == "throttled" ? "bg-red-500/5" : "")">
+                        <TableCellCn>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("text-[10px] font-mono font-normal", GetMethodStyle(ep.Method))">
+                                @ep.Method
+                            </BadgeCn>
+                        </TableCellCn>
+                        <TableCellCn Class="font-mono text-sm">@ep.Endpoint</TableCellCn>
+                        <TableCellCn Class="text-right font-mono text-xs text-muted-foreground tabular-nums">
+                            @ep.Limit.ToString("N0")
+                        </TableCellCn>
+                        <TableCellCn Class="text-right font-mono text-xs tabular-nums">
+                            @ep.Used.ToString("N0")
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div class="flex items-center gap-2">
+                                <div class="h-1.5 w-20 rounded-full bg-muted">
+                                    <div class="@Cn.Merge("h-1.5 rounded-full", status == "throttled" ? "bg-red-500" : status == "warning" ? "bg-amber-500" : "bg-green-500")"
+                                         style="@($"width: {Math.Min(pct, 100)}%")">
+                                    </div>
+                                </div>
+                                <span class="@Cn.Merge("font-mono text-xs tabular-nums", status == "throttled" ? "text-red-600 font-medium" : status == "warning" ? "text-amber-600" : "text-muted-foreground")">
+                                    @(pct)%
+                                </span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn Class="text-right">
+                            <span class="@Cn.Merge("font-mono text-xs tabular-nums", remaining <= 0 ? "text-red-600 font-medium" : remaining < 50 ? "text-amber-600" : "text-muted-foreground")">
+                                @remaining
+                            </span>
+                        </TableCellCn>
+                        <TableCellCn Class="text-right font-mono text-xs text-muted-foreground">
+                            @ep.ResetIn
+                        </TableCellCn>
+                    </TableRowCn>
+                }
+            </TableBodyCn>
+        </TableCn>
+    </div>
+</section>
+
+@code {
+    private record RateLimit(string Id, string Endpoint, string Method, int Limit, int Used, string Window, string ResetIn, string Plan);
+
+    private static readonly RateLimit[] _rateLimits =
+    [
+        new("1", "/api/users",    "GET",    1000, 423, "1 hour", "34m", "Pro"),
+        new("2", "/api/users",    "POST",    100,  87, "1 hour", "34m", "Pro"),
+        new("3", "/api/search",   "GET",     500, 498, "1 hour", "12m", "Pro"),
+        new("4", "/api/exports",  "POST",     50,  50, "1 hour", "48m", "Pro"),
+        new("5", "/api/webhooks", "POST",    200,  45, "1 hour", "34m", "Pro"),
+        new("6", "/api/uploads",  "POST",    100,  72, "1 hour", "22m", "Pro"),
+        new("7", "/api/analytics","GET",     300, 156, "1 hour", "34m", "Pro"),
+        new("8", "/api/billing",  "GET",     200,  12, "1 hour", "34m", "Pro"),
+    ];
+
+    private static readonly int _throttledCount =
+        _rateLimits.Count(r => GetThrottleStatus(r.Used, r.Limit) == "throttled");
+
+    private string _sortKey = "remaining";
+    private string _sortDir = "asc";
+
+    private IEnumerable<RateLimit> SortedData
+    {
+        get
+        {
+            if (_sortKey == "remaining")
+            {
+                return _sortDir == "asc"
+                    ? _rateLimits.OrderBy(r => r.Limit - r.Used)
+                    : _rateLimits.OrderByDescending(r => r.Limit - r.Used);
+            }
+            return _sortDir == "asc"
+                ? _rateLimits.OrderBy(r => r.Used)
+                : _rateLimits.OrderByDescending(r => r.Used);
+        }
+    }
+
+    private void HandleSort(string key)
+    {
+        if (_sortKey == key)
+            _sortDir = _sortDir == "desc" ? "asc" : "desc";
+        else
+        {
+            _sortKey = key;
+            _sortDir = "asc";
+        }
+    }
+
+    private static string GetThrottleStatus(int used, int limit)
+    {
+        var pct = (double)used / limit * 100;
+        if (pct >= 100) return "throttled";
+        if (pct >= 80) return "warning";
+        return "normal";
+    }
+
+    private static string GetMethodStyle(string method) => method switch
+    {
+        "GET"    => "bg-blue-500/10 text-blue-700",
+        "POST"   => "bg-green-500/10 text-green-700",
+        "PUT"    => "bg-amber-500/10 text-amber-700",
+        "DELETE" => "bg-red-500/10 text-red-700",
+        "PATCH"  => "bg-purple-500/10 text-purple-700",
+        _        => "",
+    };
+}

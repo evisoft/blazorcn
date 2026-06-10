@@ -1,0 +1,286 @@
+@* ============================================================
+   Block: map-last-mile-delivery
+   Title: MapLastMileDelivery
+   Description: Interactive last-mile delivery status map with package markers, delivery route paths, ETA badges, and a delivery status timeline built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-last-mile-delivery.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="package" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Route #4821</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    @_deliveredCount/@_deliveries.Length stops
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_deliveredCount delivered
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>1 in transit
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-muted-foreground/40"></span>
+                    @_pendingCount pending
+                </span>
+            </div>
+        </div>
+
+        @* Map + Timeline *@
+        <div class="flex">
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Route lines (SVG overlay) *@
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                        @{
+                            var completedPoints = string.Join(" ", _completedRoute.Select(c =>
+                            {
+                                var p = GetMarkerPosition(c[0], c[1]);
+                                return $"{p.X:F1}%,{p.Y:F1}%";
+                            }));
+                            var remainingPoints = string.Join(" ", _remainingRoute.Select(c =>
+                            {
+                                var p = GetMarkerPosition(c[0], c[1]);
+                                return $"{p.X:F1}%,{p.Y:F1}%";
+                            }));
+                        }
+                        @((MarkupString)$"<polyline points=\"{completedPoints}\" fill=\"none\" stroke=\"#22c55e\" stroke-width=\"3\" stroke-opacity=\"0.8\" />")
+                        @((MarkupString)$"<polyline points=\"{remainingPoints}\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"3\" stroke-opacity=\"0.5\" stroke-dasharray=\"6 4\" />")
+                    </svg>
+
+                    @* Delivery stop markers *@
+                    @foreach (var delivery in _deliveries)
+                    {
+                        var d = delivery;
+                        var pos = GetMarkerPosition(d.Longitude, d.Latitude);
+                        var isSelected = _selectedStop == d.Id;
+                        <div class="absolute -translate-x-1/2 -translate-y-1/2" style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                            <button type="button"
+                                    class="relative"
+                                    title="@d.Recipient"
+                                    @onclick="@(() => ToggleStop(d.Id))">
+                                @if (d.Status == "delivered")
+                                {
+                                    <div class="flex size-5 items-center justify-center rounded-full bg-emerald-500 shadow-sm">
+                                        <LucideIconCn Name="check-circle-2" Size="12" Class="size-3 text-white" />
+                                    </div>
+                                }
+                                else if (d.Status == "in-transit")
+                                {
+                                    <div class="flex size-5 items-center justify-center rounded-full border-2 border-blue-500 bg-background shadow-sm">
+                                        <LucideIconCn Name="circle-dot" Size="12" Class="size-3 text-blue-500" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="flex size-5 items-center justify-center rounded-full border border-border bg-background shadow-sm">
+                                        <LucideIconCn Name="package" Size="10" Class="size-2.5 text-muted-foreground" />
+                                    </div>
+                                }
+                            </button>
+
+                            @if (isSelected)
+                            {
+                                var cfg = GetStatusConfig(d.Status);
+                                <div class="absolute left-1/2 top-full z-50 mt-1 w-52 -translate-x-1/2 rounded-lg border bg-card p-2.5 shadow-lg">
+                                    <div class="mb-2">
+                                        <p class="text-sm font-medium">@d.Recipient</p>
+                                        <p class="text-xs text-muted-foreground">@d.Address</p>
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                        <span class="flex items-center gap-1">
+                                            <LucideIconCn Name="package" Size="12" Class="size-3" />
+                                            @d.Packages package@(d.Packages != 1 ? "s" : "")
+                                        </span>
+                                        <span>·</span>
+                                        <span class="@($"font-medium {cfg.Color}")">@cfg.Label</span>
+                                    </div>
+                                    @if (d.Status == "delivered" && d.TimeDelivered != null)
+                                    {
+                                        <div class="rounded-md bg-muted/50 p-2">
+                                            <span class="text-xs text-muted-foreground">
+                                                Delivered at @d.TimeDelivered
+                                            </span>
+                                        </div>
+                                    }
+                                    @if (d.Status != "delivered")
+                                    {
+                                        <div class="flex items-center gap-1 text-xs">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground" />
+                                            <span class="text-muted-foreground">ETA:</span>
+                                            <span class="font-medium tabular-nums">@d.Eta</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* Courier marker *@
+                    @{
+                        var courierPos = GetMarkerPosition(-73.988, 40.726);
+                    }
+                    <div class="absolute -translate-x-1/2 -translate-y-1/2" style="@($"left:{courierPos.X:F1}%;top:{courierPos.Y:F1}%")">
+                        <div class="flex size-8 items-center justify-center rounded-full border-2 border-white bg-blue-500 shadow-lg"
+                             title="Courier - Mike T.">
+                            <LucideIconCn Name="truck" Size="16" Class="size-4 text-white" />
+                        </div>
+                    </div>
+                </div>
+                <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                    Map view — Lower East Side, NYC
+                </div>
+            </div>
+
+            @* Timeline *@
+            <div class="w-64 border-l">
+                <div class="border-b px-4 py-3">
+                    <span class="text-sm font-medium">Delivery Timeline</span>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @_deliveredPackages/@_totalPackages packages delivered
+                    </p>
+                </div>
+                <div class="max-h-[440px] overflow-y-auto">
+                    @for (var idx = 0; idx < _deliveries.Length; idx++)
+                    {
+                        var d = _deliveries[idx];
+                        var cfg = GetStatusConfig(d.Status);
+                        var isLast = idx == _deliveries.Length - 1;
+                        <div class="@($"relative flex gap-3 px-4 py-3{(isLast ? "" : " border-b")}")">
+                            @* Timeline dot and line *@
+                            <div class="flex flex-col items-center">
+                                <span class="@($"mt-0.5 size-2 shrink-0 rounded-full {cfg.Dot}")"></span>
+                                @if (!isLast)
+                                {
+                                    <div class="mt-1 w-px flex-1 bg-border"></div>
+                                }
+                            </div>
+                            @* Content *@
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-medium">@d.Recipient</span>
+                                    @if (d.Status == "delivered" && d.TimeDelivered != null)
+                                    {
+                                        <span class="text-xs text-muted-foreground tabular-nums">@d.TimeDelivered</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-xs text-muted-foreground tabular-nums">@d.Eta</span>
+                                    }
+                                </div>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@d.Address</p>
+                                <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>
+                                        @d.Packages pkg@(d.Packages != 1 ? "s" : "")
+                                    </span>
+                                    <span>·</span>
+                                    <span class="@cfg.Color">@cfg.Label</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                <LucideIconCn Name="map-pin" Size="12" Class="size-3" />
+                @_deliveries.Length stops
+            </span>
+            <span class="text-xs text-muted-foreground">·</span>
+            <span class="text-xs text-muted-foreground">@_totalPackages total packages</span>
+            <span class="text-xs text-muted-foreground">·</span>
+            <span class="text-xs text-muted-foreground">Est. completion: 11:15 AM</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Delivery(
+        string Id,
+        string Address,
+        string Recipient,
+        string Status,
+        string Eta,
+        int Packages,
+        string? TimeDelivered,
+        double Longitude,
+        double Latitude
+    );
+
+    private record StatusConfig(string Label, string Dot, string Color);
+
+    private static readonly Delivery[] _deliveries =
+    [
+        new("p1", "88 Delancey St",    "Alex Rivera",   "delivered",  "--",    2, "9:12 AM", -73.990, 40.718),
+        new("p2", "152 Rivington St",  "Jordan Cho",    "delivered",  "--",    1, "9:34 AM", -73.983, 40.720),
+        new("p3", "201 Allen St",      "Taylor Brooks", "delivered",  "--",    3, "9:58 AM", -73.989, 40.723),
+        new("p4", "75 E Houston St",   "Morgan Lee",    "in-transit", "3 min", 1, null,      -73.993, 40.725),
+        new("p5", "310 Bowery",        "Casey Park",    "pending",    "14 min",2, null,      -73.992, 40.728),
+        new("p6", "42 Bond St",        "Drew Nakamura", "pending",    "22 min",1, null,      -73.993, 40.726),
+        new("p7", "180 Lafayette St",  "Quinn Foster",  "pending",    "33 min",4, null,      -73.998, 40.722),
+        new("p8", "55 Spring St",      "Riley Okafor",  "pending",    "42 min",1, null,      -73.997, 40.722),
+    ];
+
+    private static readonly double[][] _completedRoute =
+    [
+        [-73.990, 40.718],
+        [-73.983, 40.720],
+        [-73.989, 40.723],
+        [-73.988, 40.726],
+    ];
+
+    private static readonly double[][] _remainingRoute =
+    [
+        [-73.988, 40.726],
+        [-73.993, 40.725],
+        [-73.992, 40.728],
+        [-73.993, 40.726],
+        [-73.998, 40.722],
+        [-73.997, 40.722],
+    ];
+
+    private int _deliveredCount => Array.FindAll(_deliveries, d => d.Status == "delivered").Length;
+    private int _pendingCount   => Array.FindAll(_deliveries, d => d.Status == "pending").Length;
+    private int _totalPackages  => _deliveries.Sum(d => d.Packages);
+    private int _deliveredPackages => _deliveries.Where(d => d.Status == "delivered").Sum(d => d.Packages);
+
+    private string? _selectedStop = null;
+
+    private void ToggleStop(string id)
+    {
+        _selectedStop = _selectedStop == id ? null : id;
+    }
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "delivered"  => new StatusConfig("Delivered",  "bg-emerald-500",      "text-emerald-600 dark:text-emerald-400"),
+        "in-transit" => new StatusConfig("In Transit", "bg-blue-500",         "text-blue-600 dark:text-blue-400"),
+        "pending"    => new StatusConfig("Pending",    "bg-muted-foreground/40", "text-muted-foreground"),
+        _            => new StatusConfig(status,       "bg-muted",            "text-muted-foreground"),
+    };
+
+    // Map lon/lat to CSS percentage positions.
+    // Viewport: lon [-74.005, -73.975], lat [40.714, 40.734]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.005, lonMax = -73.975;
+        const double latMin = 40.714,  latMax = 40.734;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

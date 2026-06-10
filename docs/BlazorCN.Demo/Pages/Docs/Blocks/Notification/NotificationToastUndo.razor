@@ -1,0 +1,125 @@
+@* ============================================================
+   Block: notification-toast-undo
+   Title: NotificationToastUndo
+   Description: An undo action toast notification block for React and Next.js with countdown timer bar, AnimatePresence undo success state, and staggered entrance animations built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/notification/notification-toast-undo.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="undo" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Undo Actions</span>
+            </div>
+            <p class="mt-1 text-muted-foreground text-sm">
+                Destructive actions can be reversed before the countdown expires.
+            </p>
+        </div>
+
+        @* Toast items *@
+        @foreach (var t in _toastItems)
+        {
+            var item = t;
+            var isUndone = _undone.ContainsKey(item.Id) && _undone[item.Id];
+            var secondsLeft = _remaining.ContainsKey(item.Id) ? _remaining[item.Id] : CountdownSeconds;
+            var progress = (secondsLeft * 100) / CountdownSeconds;
+            var isLast = item.Id == _toastItems[_toastItems.Length - 1].Id;
+
+            <div class="@(isLast ? "" : "border-b")">
+                @if (isUndone)
+                {
+                    <div class="flex items-center gap-3 px-4 py-3">
+                        <span class="flex size-5 items-center justify-center rounded-full bg-emerald-500/10">
+                            <LucideIconCn Name="check-circle" Size="14" Class="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                        </span>
+                        <span class="text-sm">Action reversed successfully</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="px-4 py-3">
+                        <div class="flex items-center gap-3">
+                            <LucideIconCn Name="@item.IconName" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0 flex-1">
+                                <span class="font-medium text-sm">@item.Label</span>
+                                <p class="mt-0.5 text-muted-foreground text-xs">@item.Description</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-muted-foreground text-xs tabular-nums">@(secondsLeft)s</span>
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" OnClick="@(() => HandleUndo(item.Id))">
+                                    <LucideIconCn Name="undo" Size="12" Class="size-3" />
+                                    Undo
+                                </ButtonCn>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
+                            <div class="h-full rounded-full bg-foreground transition-all duration-300 ease-out"
+                                 style="@($"width:{progress}%")">
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private const int CountdownSeconds = 5;
+
+    private record ToastItem(string Id, string IconName, string Label, string Description);
+
+    private static readonly ToastItem[] _toastItems =
+    [
+        new("delete",  "trash-2", "Item deleted",           "Invoice #1042 has been moved to trash."),
+        new("archive", "archive", "Conversation archived",  "Support ticket #387 has been archived."),
+    ];
+
+    private Dictionary<string, bool> _undone = new();
+    private Dictionary<string, int>  _remaining = new();
+    private Dictionary<string, System.Threading.Timer> _timers = new();
+
+    protected override void OnInitialized()
+    {
+        foreach (var item in _toastItems)
+        {
+            _remaining[item.Id] = CountdownSeconds;
+            var id = item.Id;
+            _timers[id] = new System.Threading.Timer(async _ =>
+            {
+                var current = _remaining.ContainsKey(id) ? _remaining[id] : 0;
+                if (current <= 0) return;
+                var next = current - 1;
+                _remaining[id] = next;
+                if (next <= 0)
+                {
+                    _timers[id].Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                }
+                await InvokeAsync(StateHasChanged);
+            }, null, 1000, 1000);
+        }
+    }
+
+    private void HandleUndo(string id)
+    {
+        if (_timers.ContainsKey(id))
+        {
+            _timers[id].Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        }
+        _undone[id] = true;
+    }
+
+    public void Dispose()
+    {
+        foreach (var timer in _timers.Values)
+        {
+            timer.Dispose();
+        }
+    }
+}

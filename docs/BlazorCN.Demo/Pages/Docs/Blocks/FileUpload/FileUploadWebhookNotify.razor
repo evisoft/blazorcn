@@ -1,0 +1,173 @@
+@* ============================================================
+   Block: file-upload-webhook-notify
+   Title: FileUploadWebhookNotify
+   Description: File upload with webhook notification setup block for React and Next.js with event selection, webhook URL configuration, test delivery, and delivery log using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-webhook-notify.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">Webhook notifications</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">
+                Receive HTTP callbacks when file upload events occur
+            </p>
+        </div>
+
+        @* Uploaded file *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+            <div class="min-w-0 flex-1">
+                <span class="block truncate font-medium text-sm">@_uploadedFileName</span>
+                <span class="text-muted-foreground text-xs">@_uploadedFileSize</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                <LucideIconCn Name="check-circle-2" Size="12" Class="size-3 text-emerald-500" />
+                Uploaded
+            </BadgeCn>
+        </div>
+
+        @* Webhook URL *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <span class="shrink-0 font-medium text-muted-foreground text-xs">Endpoint</span>
+            <InputCn @bind-Value="_webhookUrl"
+                     Placeholder="https://your-api.com/webhook"
+                     Class="h-8 border-0 bg-transparent px-0 font-mono text-xs shadow-none focus-visible:ring-0" />
+            <ButtonCn Variant="ButtonVariant.Outline"
+                      Size="ButtonSize.Sm"
+                      Class="h-7 shrink-0 gap-1.5 text-xs"
+                      OnClick="TestWebhook"
+                      Disabled="@(_testing || string.IsNullOrEmpty(_webhookUrl))">
+                @if (_testing)
+                {
+                    <LucideIconCn Name="loader-2" Size="12" Class="size-3 animate-spin" />
+                    <span>Testing</span>
+                }
+                else
+                {
+                    <LucideIconCn Name="send" Size="12" Class="size-3" />
+                    <span>Test</span>
+                }
+            </ButtonCn>
+        </div>
+
+        @* Events selection *@
+        <div class="border-b">
+            <div class="border-b px-4 py-2">
+                <span class="text-muted-foreground text-xs">
+                    Events · @_enabledCount of @_events.Length enabled
+                </span>
+            </div>
+            @for (int i = 0; i < _events.Length; i++)
+            {
+                var idx = i;
+                var evt = _events[idx];
+                var isLast = idx == _events.Length - 1;
+                <span role="button"
+                      tabindex="0"
+                      @onclick="@(() => ToggleEvent(evt.Id))"
+                      class="@Cn.Merge("flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                    <SwitchCn Checked="@evt.Enabled"
+                               OnCheckedChange="@(() => ToggleEvent(evt.Id))" />
+                    <div class="min-w-0 flex-1">
+                        <span class="block font-medium text-sm">@evt.Label</span>
+                        <span class="text-muted-foreground text-xs">@evt.Description</span>
+                    </div>
+                    <span class="shrink-0 font-mono text-muted-foreground text-xs">@evt.Id</span>
+                </span>
+            }
+        </div>
+
+        @* Delivery log *@
+        <div>
+            <div class="border-b px-4 py-2">
+                <span class="text-muted-foreground text-xs">Recent deliveries</span>
+            </div>
+            @for (int i = 0; i < _deliveries.Count; i++)
+            {
+                var idx = i;
+                var delivery = _deliveries[idx];
+                var isLast = idx == _deliveries.Count - 1;
+                var dotClass = delivery.Status == "success" ? "bg-emerald-500" : delivery.Status == "failed" ? "bg-red-500" : "bg-amber-500";
+                var codeClass = delivery.StatusCode >= 400 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400";
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5", isLast ? "" : "border-b")">
+                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", dotClass)"></span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono text-xs">@delivery.Event</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary"
+                                     Class="@Cn.Merge("font-mono text-xs font-normal", codeClass)">
+                                @delivery.StatusCode
+                            </BadgeCn>
+                        </div>
+                        <span class="text-muted-foreground text-xs">
+                            @delivery.Timestamp · @delivery.Duration
+                        </span>
+                    </div>
+                    @if (delivery.Status == "success")
+                    {
+                        <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5 shrink-0 text-emerald-500" />
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="x-circle" Size="14" Class="size-3.5 shrink-0 text-red-500" />
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record WebhookEvent(string Id, string Label, string Description, bool Enabled);
+    private record DeliveryLog(string Id, string Event, int StatusCode, string Status, string Timestamp, string Duration);
+
+    private static readonly WebhookEvent[] _initialEvents =
+    [
+        new("upload_complete",      "Upload complete",      "File successfully uploaded to storage",  true),
+        new("processing_started",   "Processing started",   "File processing pipeline initiated",     true),
+        new("processing_complete",  "Processing complete",  "All processing steps finished",          true),
+        new("processing_failed",    "Processing failed",    "Processing encountered an error",        true),
+        new("file_deleted",         "File deleted",         "File removed from storage",              false),
+        new("quota_exceeded",       "Quota exceeded",       "Storage quota limit reached",            false),
+    ];
+
+    private WebhookEvent[] _events = _initialEvents.Select(e => e).ToArray();
+
+    private List<DeliveryLog> _deliveries =
+    [
+        new("d1", "upload_complete",     200, "success", "2 min ago",  "124ms"),
+        new("d2", "processing_started",  200, "success", "2 min ago",  "89ms"),
+        new("d3", "processing_complete", 200, "success", "1 min ago",  "156ms"),
+        new("d4", "upload_complete",     500, "failed",  "45 min ago", "2,340ms"),
+        new("d5", "processing_failed",   200, "success", "1 hr ago",   "201ms"),
+    ];
+
+    private string _webhookUrl = "https://api.acme.com/webhooks/file-events";
+    private bool _testing = false;
+    private string _uploadedFileName = "quarterly-metrics.xlsx";
+    private string _uploadedFileSize = "1.4 MB";
+
+    private int _enabledCount => _events.Count(e => e.Enabled);
+
+    private void ToggleEvent(string id)
+    {
+        _events = _events.Select(e => e.Id == id ? e with { Enabled = !e.Enabled } : e).ToArray();
+    }
+
+    private async Task TestWebhook()
+    {
+        _testing = true;
+        await Task.Delay(1200);
+        var newDelivery = new DeliveryLog(
+            $"d-test-{_deliveries.Count}",
+            "test_ping",
+            200,
+            "success",
+            "Just now",
+            "98ms");
+        _deliveries.Insert(0, newDelivery);
+        _testing = false;
+    }
+}

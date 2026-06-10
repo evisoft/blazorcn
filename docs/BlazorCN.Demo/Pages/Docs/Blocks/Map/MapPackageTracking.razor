@@ -1,0 +1,285 @@
+@* ============================================================
+   Block: map-package-tracking
+   Title: MapPackageTracking
+   Description: Interactive package tracking map with origin and destination markers, transit route path, status checkpoints, and a package detail timeline panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-package-tracking.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="package" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Package Tracking</span>
+                <span class="font-mono text-xs text-muted-foreground">@_packageInfo.TrackingId</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_packageInfo.Service
+                </BadgeCn>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs text-blue-600 dark:text-blue-400">
+                    In Transit
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Timeline sidebar *@
+            <div class="w-72 shrink-0 border-r">
+                @* Package summary *@
+                <div class="space-y-1.5 border-b px-3 py-2.5">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">From</span>
+                        <span class="font-medium">@_packageInfo.Origin</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">To</span>
+                        <span class="font-medium">@_packageInfo.Destination</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">ETA</span>
+                        <span class="font-medium">@_packageInfo.EstimatedDelivery</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-muted-foreground">Weight</span>
+                        <span class="font-medium">@_packageInfo.Weight</span>
+                    </div>
+                </div>
+
+                @* Timeline *@
+                <div class="px-1">
+                    @foreach (var checkpoint in _checkpoints)
+                    {
+                        var cp = checkpoint;
+                        var isLast = Array.IndexOf(_checkpoints, cp) == _checkpoints.Length - 1;
+                        var isSelected = _selectedId == cp.Id;
+                        <button
+                            type="button"
+                            class="@Cn.Merge("flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "", !isLast ? "border-b" : "")"
+                            @onclick="@(() => SelectCheckpoint(cp))">
+                            <div class="mt-0.5 shrink-0">
+                                @if (cp.Status == "completed")
+                                {
+                                    <LucideIconCn Name="check-circle-2" Size="16" Class="@Cn.Merge("size-4", GetStatusDotClass(cp.Status))" />
+                                }
+                                else if (cp.Status == "current")
+                                {
+                                    <LucideIconCn Name="circle-dot" Size="16" Class="@Cn.Merge("size-4", GetStatusDotClass(cp.Status))" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="circle" Size="16" Class="@Cn.Merge("size-4", GetStatusDotClass(cp.Status))" />
+                                }
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@cp.Location</span>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@cp.Description</p>
+                                <span class="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                                    <LucideIconCn Name="clock" Size="10" Class="size-2.5" />
+                                    @cp.Timestamp
+                                </span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Route lines (SVG overlay) *@
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                        @* Completed route *@
+                        @{
+                            var completedPts = _completedCoords
+                                .Select(c => GetMarkerPosition(c[0], c[1]))
+                                .Select(p => $"{p.X:F1}%,{p.Y:F1}%");
+                            var completedPoints = string.Join(" ", completedPts);
+                        }
+                        @if (_completedCoords.Length >= 2)
+                        {
+                            @((MarkupString)$"<polyline points=\"{completedPoints}\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"3\" stroke-opacity=\"0.9\" />")
+                        }
+
+                        @* Upcoming route *@
+                        @{
+                            var upcomingPts = _upcomingCoords
+                                .Select(c => GetMarkerPosition(c[0], c[1]))
+                                .Select(p => $"{p.X:F1}%,{p.Y:F1}%");
+                            var upcomingPoints = string.Join(" ", upcomingPts);
+                        }
+                        @if (_upcomingCoords.Length >= 2)
+                        {
+                            @((MarkupString)$"<polyline points=\"{upcomingPoints}\" fill=\"none\" stroke=\"#9ca3af\" stroke-width=\"2\" stroke-opacity=\"0.5\" stroke-dasharray=\"6 4\" />")
+                        }
+                    </svg>
+
+                    @* Checkpoint markers *@
+                    @foreach (var checkpoint in _checkpoints)
+                    {
+                        var cp = checkpoint;
+                        var pos = GetMarkerPosition(cp.Lng, cp.Lat);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                            <button
+                                type="button"
+                                class="relative"
+                                title="@($"{cp.Location} · {cp.Timestamp}")"
+                                @onclick="@(() => TogglePopup(cp))">
+                                @if (cp.Status == "current")
+                                {
+                                    <div class="flex size-7 items-center justify-center rounded-full border-2 border-white bg-blue-500 shadow-md">
+                                        <LucideIconCn Name="truck" Size="14" Class="size-3.5 text-white" />
+                                    </div>
+                                }
+                                else if (cp.Status == "completed")
+                                {
+                                    <div class="flex size-5 items-center justify-center rounded-full border-2 border-white bg-emerald-500 shadow-md">
+                                        <span class="text-[8px] font-bold text-white">✓</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="size-4 rounded-full border-2 border-muted-foreground/30 bg-background shadow-sm"></div>
+                                }
+                            </button>
+
+                            @if (_popupCheckpointId == cp.Id)
+                            {
+                                <div class="absolute left-1/2 top-full z-50 mt-1 w-52 -translate-x-1/2 rounded-lg border bg-card p-2.5 shadow-lg">
+                                    <div class="mb-1 flex items-center gap-2">
+                                        <LucideIconCn Name="map-pin" Size="12" Class="size-3 text-muted-foreground" />
+                                        <span class="text-sm font-medium">@cp.Location</span>
+                                    </div>
+                                    <p class="mb-2 text-xs text-muted-foreground">@cp.Description</p>
+                                    <div class="flex items-center justify-between">
+                                        <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            @cp.Timestamp
+                                        </span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal capitalize">
+                                            @cp.Status
+                                        </BadgeCn>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                    Map view — United States
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @(_checkpoints.Count(c => c.Status == "completed")) completed
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>1 in transit
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-muted-foreground/30"></span>
+                @(_checkpoints.Count(c => c.Status == "upcoming")) upcoming
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">@_packageInfo.Carrier</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record PackageInfo(
+        string TrackingId,
+        string Carrier,
+        string Service,
+        string Weight,
+        string EstimatedDelivery,
+        string Origin,
+        string Destination
+    );
+
+    private record Checkpoint(
+        string Id,
+        string Location,
+        string Description,
+        string Timestamp,
+        string Status,
+        double Lng,
+        double Lat
+    );
+
+    private static readonly PackageInfo _packageInfo = new(
+        TrackingId: "PKG-2026-84729",
+        Carrier: "SwiftShip Express",
+        Service: "Priority 2-Day",
+        Weight: "4.2 lbs",
+        EstimatedDelivery: "Mar 31, 2026",
+        Origin: "Los Angeles, CA",
+        Destination: "New York, NY"
+    );
+
+    private static readonly Checkpoint[] _checkpoints =
+    [
+        new("c1", "Los Angeles, CA",   "Package picked up from sender",      "Mar 28, 8:14 AM",  "completed", -118.2437, 34.0522),
+        new("c2", "Phoenix, AZ",       "Arrived at regional sort facility",   "Mar 28, 6:42 PM",  "completed", -112.074,  33.4484),
+        new("c3", "Albuquerque, NM",   "Departed transit hub",                "Mar 29, 2:18 AM",  "completed", -106.6504, 35.0844),
+        new("c4", "Oklahoma City, OK", "In transit to next facility",         "Mar 29, 3:55 PM",  "current",   -97.5164,  35.4676),
+        new("c5", "Nashville, TN",     "Scheduled arrival at hub",            "Mar 30 (est.)",    "upcoming",  -86.7816,  36.1627),
+        new("c6", "New York, NY",      "Out for delivery",                    "Mar 31 (est.)",    "upcoming",  -74.006,   40.7128),
+    ];
+
+    // Completed route: completed + current checkpoints
+    private static readonly double[][] _completedCoords = _checkpoints
+        .Where(c => c.Status == "completed" || c.Status == "current")
+        .Select(c => new double[] { c.Lng, c.Lat })
+        .ToArray();
+
+    // Upcoming route: current + upcoming checkpoints
+    private static readonly double[][] _upcomingCoords = _checkpoints
+        .Where(c => c.Status == "current" || c.Status == "upcoming")
+        .Select(c => new double[] { c.Lng, c.Lat })
+        .ToArray();
+
+    private string _selectedId = "c4";
+    private string? _popupCheckpointId = null;
+
+    private void SelectCheckpoint(Checkpoint cp)
+    {
+        _selectedId = cp.Id;
+        _popupCheckpointId = cp.Id;
+    }
+
+    private void TogglePopup(Checkpoint cp)
+    {
+        _selectedId = cp.Id;
+        _popupCheckpointId = _popupCheckpointId == cp.Id ? null : cp.Id;
+    }
+
+    private static string GetStatusDotClass(string status) => status switch
+    {
+        "completed" => "text-emerald-500",
+        "current"   => "text-blue-500",
+        _           => "text-muted-foreground/40",
+    };
+
+    // Map longitude/latitude to CSS percentage positions.
+    // Viewport: lon [-122, -70], lat [30, 45]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -122.0, lonMax = -70.0;
+        const double latMin = 30.0,   latMax = 45.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

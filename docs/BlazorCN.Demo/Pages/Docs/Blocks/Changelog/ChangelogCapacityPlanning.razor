@@ -1,0 +1,195 @@
+@* ============================================================
+   Block: changelog-capacity-planning
+   Title: ChangelogCapacityPlanning
+   Description: Resource utilization trends per release with capacity planning insights. Built with React, Next.js, shadcn/ui, and Tailwind CSS for infrastructure monitoring dashboards.
+   Source: original/blocks/changelog/changelog-capacity-planning.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="server" Size="16" Class="size-4 text-muted-foreground" />
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-medium">Capacity Planning</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Resource utilization trends per release
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @* Filter *@
+        <div class="border-b p-4">
+            <span class="text-xs font-medium text-muted-foreground">Filter by Resource Type</span>
+            <div class="mt-2 flex flex-wrap gap-2">
+                <ButtonCn Variant="@(_selectedType == null ? ButtonVariant.Default : ButtonVariant.Outline)"
+                          Size="ButtonSize.Sm"
+                          Class="h-7 text-xs"
+                          OnClick="@(() => _selectedType = null)">
+                    All Resources
+                </ButtonCn>
+                @foreach (var type in _resourceTypes)
+                {
+                    var t = type;
+                    <ButtonCn Variant="@(_selectedType == t ? ButtonVariant.Default : ButtonVariant.Outline)"
+                              Size="ButtonSize.Sm"
+                              Class="h-7 gap-1.5 text-xs capitalize"
+                              OnClick="@(() => _selectedType = t)">
+                        <LucideIconCn Name="@GetResourceIconName(t)" Size="12" Class="size-3" />
+                        @t
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Releases *@
+        <div>
+            @foreach (var release in _releases)
+            {
+                var metrics = _selectedType == null
+                    ? release.Metrics
+                    : release.Metrics.Where(m => m.ResourceType == _selectedType).ToArray();
+                if (metrics.Length == 0) continue;
+
+                <div class="border-b p-4 last:border-0">
+                    <div class="mb-3 flex items-center justify-between">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-sm font-medium">@release.Version</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs">
+                                    @metrics.Length metrics
+                                </BadgeCn>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@release.Date</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        @foreach (var metric in metrics)
+                        {
+                            var delta = metric.Current - metric.Previous;
+                            var trendColorClass = metric.Trend == "up"
+                                ? "text-red-500"
+                                : metric.Trend == "down"
+                                    ? "text-emerald-500"
+                                    : "text-muted-foreground";
+
+                            <div class="rounded-md border bg-background p-3">
+                                <div class="mb-2 flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="@GetResourceIconName(metric.ResourceType)" Size="14" Class="size-3.5 text-muted-foreground" />
+                                        <span class="text-xs font-medium">@metric.Resource</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("font-mono text-sm font-semibold tabular-nums", GetUtilizationColor(metric.Current))">
+                                            @metric.Current@metric.Unit
+                                        </span>
+                                        <div class="@Cn.Merge("flex items-center gap-0.5 text-xs", trendColorClass)">
+                                            <LucideIconCn Name="@GetTrendIconName(metric.Trend)" Size="12" Class="size-3" />
+                                            <span class="font-mono tabular-nums">@(delta > 0 ? "+" : "")@delta@metric.Unit</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="relative">
+                                    <div class="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                                        <div class="@Cn.Merge("h-full", GetProgressColor(metric.Current))" style="@($"width:{metric.Current}%")"></div>
+                                    </div>
+                                    <div class="mt-1 flex justify-between text-xs text-muted-foreground">
+                                        <span>Previous: @metric.Previous@metric.Unit</span>
+                                        <span>100@metric.Unit</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(release.Notes))
+                    {
+                        <div class="mt-3 rounded-md bg-muted/50 p-2.5">
+                            <p class="text-xs text-muted-foreground">@release.Notes</p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CapacityMetric(string Resource, string ResourceType, int Current, int Previous, string Unit, string Trend);
+    private record Release(string Id, string Version, string Date, CapacityMetric[] Metrics, string Notes);
+
+    private string? _selectedType = null;
+
+    private static readonly string[] _resourceTypes = ["cpu", "memory", "storage", "network"];
+
+    private static readonly Release[] _releases =
+    [
+        new("1", "v2.8.0", "2026-03-28",
+        [
+            new("Application Servers", "cpu",     68, 72, "%", "down"),
+            new("Database Memory",     "memory",  82, 78, "%", "up"),
+            new("Object Storage",      "storage", 64, 61, "%", "up"),
+            new("CDN Bandwidth",       "network", 45, 48, "%", "down"),
+        ],
+        "Query optimization reduced DB load; storage growth from new media uploads"),
+
+        new("2", "v2.7.5", "2026-03-21",
+        [
+            new("Application Servers", "cpu",    72, 71, "%", "up"),
+            new("Database Memory",     "memory", 78, 75, "%", "up"),
+            new("Object Storage",      "storage",61, 58, "%", "up"),
+        ],
+        "Steady growth across all resources; no scaling action required"),
+
+        new("3", "v2.7.0", "2026-03-14",
+        [
+            new("Application Servers", "cpu",    71, 69, "%", "up"),
+            new("Database Memory",     "memory", 75, 73, "%", "up"),
+            new("Redis Cache",         "memory", 56, 52, "%", "up"),
+            new("Object Storage",      "storage",58, 55, "%", "up"),
+        ],
+        "New caching layer introduced; improved cache hit ratio"),
+
+        new("4", "v2.6.2", "2026-03-07",
+        [
+            new("Application Servers", "cpu",    69, 74, "%", "down"),
+            new("Database Memory",     "memory", 73, 71, "%", "up"),
+        ],
+        "Performance improvements reduced CPU utilization by 7%"),
+    ];
+
+    private static string GetResourceIconName(string resourceType) => resourceType switch
+    {
+        "cpu"     => "cpu",
+        "memory"  => "database",
+        "storage" => "hard-drive",
+        "network" => "network",
+        _         => "server",
+    };
+
+    private static string GetTrendIconName(string trend) => trend switch
+    {
+        "up"   => "trending-up",
+        "down" => "trending-down",
+        _      => "minus",
+    };
+
+    private static string GetUtilizationColor(int value)
+    {
+        if (value >= 85) return "text-red-500";
+        if (value >= 70) return "text-amber-500";
+        return "text-emerald-500";
+    }
+
+    private static string GetProgressColor(int value)
+    {
+        if (value >= 85) return "bg-red-500";
+        if (value >= 70) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+}

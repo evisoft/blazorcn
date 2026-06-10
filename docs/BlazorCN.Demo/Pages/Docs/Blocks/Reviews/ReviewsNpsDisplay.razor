@@ -1,0 +1,310 @@
+@* ============================================================
+   Block: reviews-nps-display
+   Title: ReviewsNpsDisplay
+   Description: A React Net Promoter Score dashboard for Next.js with animated score gauge, promoter/passive/detractor segmentation, monthly trend sparkline, and response drill-down built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-nps-display.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="grid md:grid-cols-2 md:divide-x">
+
+            @* Left panel: Gauge + Segments *@
+            <div class="flex flex-col">
+                <div class="flex items-center justify-between border-b px-4 py-3">
+                    <span class="font-medium text-sm">Net Promoter Score</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs tabular-nums">
+                        @_total responses
+                    </BadgeCn>
+                </div>
+
+                <div class="flex flex-1 flex-col items-center justify-center px-4 py-6">
+                    @* Gauge *@
+                    <div class="relative flex items-center justify-center">
+                        <svg width="160" height="130" viewBox="0 0 160 140" role="img" aria-label="@($"NPS score: {_npsScore}, rated {GetScoreLabel(_npsScore)}")">
+                            <title>NPS Score Gauge</title>
+                            <circle cx="80" cy="80" r="58" fill="none" class="stroke-muted/40"
+                                    stroke-width="10"
+                                    stroke-dasharray="@($"{_arcLength} {_circumference}")"
+                                    stroke-dashoffset="0"
+                                    stroke-linecap="round"
+                                    transform="rotate(135 80 80)" />
+                            <circle cx="80" cy="80" r="58" fill="none"
+                                    class="@GetStrokeColor(_npsScore)"
+                                    stroke-width="10"
+                                    stroke-dasharray="@($"{_arcLength} {_circumference}")"
+                                    stroke-dashoffset="@(_arcLength - _arcLength * ((_npsScore + 100.0) / 200.0))"
+                                    stroke-linecap="round"
+                                    transform="rotate(135 80 80)" />
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center pt-2">
+                            <span class="@($"font-semibold text-3xl tabular-nums {GetScoreColor(_npsScore)}")">
+                                @(_npsScore > 0 ? $"+{_npsScore}" : _npsScore.ToString())
+                            </span>
+                            <span class="text-muted-foreground text-xs">@GetScoreLabel(_npsScore)</span>
+                        </div>
+                    </div>
+
+                    @* Segmented distribution bar *@
+                    <div class="mt-4 w-full max-w-xs">
+                        <div class="flex h-2 overflow-hidden rounded-full">
+                            @foreach (var seg in _segments)
+                            {
+                                var segCopy = seg;
+                                <TooltipProviderCn>
+                                    <TooltipCn>
+                                        <TooltipTriggerCn>
+                                            <button type="button"
+                                                    class="@($"{GetDotClass(segCopy.Key)} transition-opacity hover:opacity-80")"
+                                                    style="@($"width:{segCopy.Pct}%")"
+                                                    @onclick="@(() => ToggleCategory(segCopy.Key))">
+                                            </button>
+                                        </TooltipTriggerCn>
+                                        <TooltipContentCn>
+                                            <span class="text-xs">@GetLabel(segCopy.Key): @segCopy.Count (@segCopy.Pct%)</span>
+                                        </TooltipContentCn>
+                                    </TooltipCn>
+                                </TooltipProviderCn>
+                            }
+                        </div>
+                    </div>
+
+                    @* Segment legend *@
+                    <div class="mt-3 flex items-center gap-4">
+                        @foreach (var seg in _segments)
+                        {
+                            var segCopy = seg;
+                            <button type="button"
+                                    class="@($"flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors {(_activeCategory == segCopy.Key ? "bg-muted" : "hover:bg-muted/50")}")"
+                                    @onclick="@(() => ToggleCategory(segCopy.Key))">
+                                <span class="@($"size-1.5 rounded-full {GetDotClass(segCopy.Key)}")" />
+                                <span class="@(_activeCategory == segCopy.Key ? "font-medium" : "text-muted-foreground")">
+                                    @segCopy.Pct%
+                                </span>
+                                <span class="text-muted-foreground tabular-nums">(@segCopy.Count)</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @* Trend sparkline *@
+                <div class="border-t px-4 py-3">
+                    <span class="text-muted-foreground text-xs">6-month trend</span>
+                    <div class="mt-2">
+                        @{
+                            var sparkData = _monthlyTrend;
+                            var sparkMax = sparkData.Max(d => d.Score);
+                            var sparkMin = sparkData.Min(d => d.Score);
+                            var sparkRange = sparkMax - sparkMin == 0 ? 1 : sparkMax - sparkMin;
+                            const int sparkWidth = 200;
+                            const int sparkHeight = 48;
+                            const int sparkPad = 4;
+                            var sparkPoints = sparkData.Select((d, i) =>
+                            {
+                                var x2 = sparkPad + (i / (double)(sparkData.Length - 1)) * (sparkWidth - sparkPad * 2);
+                                var y2 = sparkHeight - sparkPad - ((d.Score - sparkMin) / (double)sparkRange) * (sparkHeight - sparkPad * 2);
+                                return $"{x2:F2},{y2:F2}";
+                            }).ToArray();
+                            var lastScore = sparkData[^1].Score;
+                            var prevScore = sparkData[^2].Score;
+                            var delta = lastScore - prevScore;
+                        }
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1">
+                                <svg width="100%" height="48" viewBox="0 0 200 48" preserveAspectRatio="none" aria-hidden="true">
+                                    <polyline fill="none"
+                                              class="@GetStrokeColor(lastScore)"
+                                              stroke-width="2"
+                                              stroke-linejoin="round"
+                                              points="@string.Join(" ", sparkPoints)" />
+                                    @for (var si = 0; si < sparkData.Length; si++)
+                                    {
+                                        var idx = si;
+                                        var cx = sparkPad + (idx / (double)(sparkData.Length - 1)) * (sparkWidth - sparkPad * 2);
+                                        var cy = sparkHeight - sparkPad - ((sparkData[idx].Score - sparkMin) / (double)sparkRange) * (sparkHeight - sparkPad * 2);
+                                        var isLast = idx == sparkData.Length - 1;
+                                        var circleClass = isLast
+                                            ? $"{GetStrokeColor(lastScore)} fill-card"
+                                            : "fill-muted-foreground/40";
+                                        var r = isLast ? 3.5 : 2.0;
+                                        var sw = isLast ? 2 : 0;
+                                        <circle cx="@cx.ToString("F2")" cy="@cy.ToString("F2")" r="@r.ToString("F1")" class="@circleClass" stroke-width="@sw" />
+                                    }
+                                </svg>
+                                <div class="mt-1 flex justify-between">
+                                    @foreach (var md in _monthlyTrend)
+                                    {
+                                        <span class="text-muted-foreground text-[10px]">@md.Month</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end pb-3">
+                                <span class="@($"font-medium text-xs tabular-nums {(delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}")">
+                                    @(delta >= 0 ? "+" : "")@delta pts
+                                </span>
+                                <span class="text-muted-foreground text-[10px]">vs last mo.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* Right panel: Response list *@
+            <div class="flex flex-col">
+                <div class="flex items-center justify-between border-b px-4 py-3 md:border-b">
+                    <span class="font-medium text-sm">
+                        @(_activeCategory == "all" ? "Recent Responses" : GetLabel(_activeCategory))
+                    </span>
+                    @if (_activeCategory != "all")
+                    {
+                        <button type="button"
+                                class="text-muted-foreground text-xs transition-colors hover:text-foreground"
+                                @onclick="@(() => _activeCategory = "all")">
+                            Show all
+                        </button>
+                    }
+                </div>
+
+                <div class="flex-1 overflow-y-auto">
+                    @{
+                        var filtered = _activeCategory == "all"
+                            ? _responses
+                            : _responses.Where(r => r.Category == _activeCategory).ToArray();
+                    }
+                    @for (var ri = 0; ri < filtered.Length; ri++)
+                    {
+                        var resp = filtered[ri];
+                        var isNotLast = ri < filtered.Length - 1;
+                        <div class="@(isNotLast ? "border-b" : "")">
+                            <div class="px-4 py-3">
+                                <div class="flex items-center gap-2.5">
+                                    <AvatarCn Class="size-7">
+                                        <AvatarFallbackCn Class="text-[10px]">@resp.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-sm">@resp.Author</span>
+                                            <span class="flex items-center gap-1.5 rounded-md bg-muted/50 px-1.5 py-0.5 text-xs tabular-nums">
+                                                <span class="@($"size-1.5 rounded-full {GetDotClass(resp.Category)}")" />
+                                                @resp.Score
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-col items-end gap-0.5">
+                                        <span class="text-muted-foreground text-[10px]">@resp.Date</span>
+                                        <span class="text-muted-foreground text-[10px]">@resp.Channel</span>
+                                    </div>
+                                </div>
+                                <p class="mt-1.5 text-muted-foreground text-sm leading-relaxed">@resp.Comment</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @* Footer stats *@
+                <div class="flex items-center gap-3 border-t px-4 py-2.5">
+                    <span class="text-muted-foreground text-[10px]">
+                        Avg. score:&#160;<span class="font-medium text-foreground tabular-nums">@((_responses.Sum(r => r.Score) / (double)_total).ToString("F1"))</span>
+                    </span>
+                    <span class="text-muted-foreground/30">|</span>
+                    <span class="text-muted-foreground text-[10px]">
+                        Response rate:&#160;<span class="font-medium text-foreground tabular-nums">34%</span>
+                    </span>
+                    <span class="text-muted-foreground/30">|</span>
+                    <span class="text-muted-foreground text-[10px]">
+                        Survey period:&#160;<span class="font-medium text-foreground">Mar 15 - 22</span>
+                    </span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+@code {
+    private record NpsResponse(string Id, string Author, string Initials, int Score, string Category, string Comment, string Date, string Channel);
+    private record MonthlyNps(string Month, int Score, int Responses);
+    private record Segment(string Key, int Count, int Pct);
+
+    private static readonly NpsResponse[] _responses =
+    [
+        new("nps-1", "Rebecca Liu",      "RL", 10, "promoter",  "Already recommended to three teams. Workflow automation saves us 10+ hours per week.",          "Mar 22, 2026", "In-app"),
+        new("nps-2", "Nathan Brooks",    "NB",  9, "promoter",  "Best developer experience in this category. Comprehensive docs and an intuitive API.",            "Mar 21, 2026", "Email"),
+        new("nps-3", "Fatima Al-Hassan", "FA",  7, "passive",   "Solid product overall. A few rough edges in reporting but nothing critical.",                     "Mar 20, 2026", "In-app"),
+        new("nps-4", "Chris Donovan",    "CD",  4, "detractor", "Frequent downtime last month disrupted operations. Support response times slipping.",             "Mar 19, 2026", "Email"),
+        new("nps-5", "Maya Johansson",   "MJ", 10, "promoter",  "Migrated from a competitor and the difference is night and day across the board.",               "Mar 18, 2026", "In-app"),
+        new("nps-6", "Daniel Park",      "DP",  8, "passive",   "Good for the price. Would like more integrations before I can fully recommend.",                  "Mar 17, 2026", "Survey"),
+        new("nps-7", "Sophie Laurent",   "SL",  9, "promoter",  "Flawless onboarding. Our team was productive within the first day.",                             "Mar 16, 2026", "In-app"),
+        new("nps-8", "Omar Hassan",      "OH",  3, "detractor", "Missing basic features that competitors offer. Roadmap keeps slipping.",                          "Mar 15, 2026", "Email"),
+    ];
+
+    private static readonly MonthlyNps[] _monthlyTrend =
+    [
+        new("Oct", 28, 142),
+        new("Nov", 34, 158),
+        new("Dec", 31, 131),
+        new("Jan", 38, 167),
+        new("Feb", 42, 184),
+        new("Mar", 50, 198),
+    ];
+
+    private static readonly int _promoters   = _responses.Count(r => r.Category == "promoter");
+    private static readonly int _passives    = _responses.Count(r => r.Category == "passive");
+    private static readonly int _detractors  = _responses.Count(r => r.Category == "detractor");
+    private static readonly int _total       = _responses.Length;
+    private static readonly int _npsScore    = (int)Math.Round((_promoters - _detractors) / (double)_total * 100);
+
+    private static readonly int _promoterPct  = (int)Math.Round(_promoters  / (double)_total * 100);
+    private static readonly int _passivePct   = (int)Math.Round(_passives   / (double)_total * 100);
+    private static readonly int _detractorPct = (int)Math.Round(_detractors / (double)_total * 100);
+
+    // Gauge geometry
+    private const double _radius         = 58.0;
+    private static readonly double _circumference = 2 * Math.PI * _radius;
+    private static readonly double _arcLength     = _circumference * 0.75;
+
+    private static readonly Segment[] _segments =
+    [
+        new("promoter",  _promoters,  _promoterPct),
+        new("passive",   _passives,   _passivePct),
+        new("detractor", _detractors, _detractorPct),
+    ];
+
+    private string _activeCategory = "all";
+
+    private void ToggleCategory(string key)
+    {
+        _activeCategory = _activeCategory == key ? "all" : key;
+    }
+
+    private static string GetScoreColor(int score) =>
+        score >= 50 ? "text-emerald-600 dark:text-emerald-400"
+        : score >= 0 ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
+
+    private static string GetScoreLabel(int score) =>
+        score >= 70 ? "Excellent"
+        : score >= 50 ? "Great"
+        : score >= 30 ? "Good"
+        : score >= 0  ? "Needs work"
+        : "Critical";
+
+    private static string GetStrokeColor(int score) =>
+        score >= 50 ? "stroke-emerald-500" : score >= 0 ? "stroke-amber-500" : "stroke-red-500";
+
+    private static string GetDotClass(string category) => category switch
+    {
+        "promoter"  => "bg-emerald-500",
+        "passive"   => "bg-amber-500",
+        "detractor" => "bg-red-500",
+        _           => "bg-muted",
+    };
+
+    private static string GetLabel(string category) => category switch
+    {
+        "promoter"  => "Promoters",
+        "passive"   => "Passives",
+        "detractor" => "Detractors",
+        _           => category,
+    };
+}

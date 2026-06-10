@@ -1,0 +1,153 @@
+@* ============================================================
+   Block: comments-voting
+   Title: CommentsVoting
+   Description: A Reddit-style comment section with upvote/downvote for React and Next.js featuring score display, vote buttons, and best comment sorting built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-voting.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header with sort select *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h2 class="text-sm font-medium">Discussion</h2>
+                <p class="mt-0.5 text-xs text-muted-foreground">@_comments.Length comments</p>
+            </div>
+            <SelectCn @bind-Value="_sortBy">
+                <SelectTriggerCn Class="h-7 w-32 text-xs">
+                    <SelectValueCn />
+                </SelectTriggerCn>
+                <SelectContentCn>
+                    <SelectItemCn Value="top">Top</SelectItemCn>
+                    <SelectItemCn Value="new">New</SelectItemCn>
+                    <SelectItemCn Value="controversial">Controversial</SelectItemCn>
+                </SelectContentCn>
+            </SelectCn>
+        </div>
+
+        @* Comment list *@
+        <div class="divide-y">
+            @foreach (var comment in GetSorted())
+            {
+                var c = comment;
+                <div class="p-4">
+                    @RenderVotableComment(c)
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record CommentData(string Id, string Author, string Avatar, string Content, string Timestamp, int Score, int ReplyCount);
+
+    private static readonly CommentData[] _comments =
+    [
+        new("1", "DevMaster2024", "", "The key insight here is that React Server Components let you fetch data at the component level without waterfalls. This fundamentally changes how we think about data loading.", "2h ago", 156, 12),
+        new("2", "CodeCraftsman", "", "I disagree. While RSC are powerful, they add complexity that many teams don't need. Client components with good caching work fine for most use cases.", "1h ago", -8, 23),
+        new("3", "TechLead_SF", "", "We migrated our dashboard to App Router last month. Performance improved by 40% and our Lighthouse score went from 78 to 95. The streaming capabilities alone are worth it.", "3h ago", 89, 7),
+        new("4", "JuniorDev_Learning", "", "Can someone explain the difference between 'use client' and 'use server'? The docs are confusing.", "30m ago", 34, 18),
+    ];
+
+    private string _sortBy = "top";
+
+    // Per-comment vote state: "up", "down", or null (stored as string)
+    private readonly Dictionary<string, string?> _voteState = new();
+    // Per-comment score delta from initial
+    private readonly Dictionary<string, int> _scoreDelta = new();
+
+    private string? GetVoteState(string id) => _voteState.TryGetValue(id, out var v) ? v : null;
+    private int GetScore(CommentData c) => c.Score + (_scoreDelta.TryGetValue(c.Id, out var d) ? d : 0);
+
+    private void HandleVote(string id, int initialScore, string type)
+    {
+        var current = GetVoteState(id);
+        int delta = _scoreDelta.TryGetValue(id, out var d) ? d : 0;
+
+        if (current == type)
+        {
+            // Un-vote
+            delta += type == "up" ? -1 : 1;
+            _voteState[id] = null;
+        }
+        else if (current == null)
+        {
+            delta += type == "up" ? 1 : -1;
+            _voteState[id] = type;
+        }
+        else
+        {
+            // Switch vote
+            delta += type == "up" ? 2 : -2;
+            _voteState[id] = type;
+        }
+
+        _scoreDelta[id] = delta;
+    }
+
+    private IEnumerable<CommentData> GetSorted()
+    {
+        return _sortBy switch
+        {
+            "top" => _comments.OrderByDescending(c => GetScore(c)),
+            "controversial" => _comments.OrderBy(c => Math.Abs(GetScore(c))),
+            _ => _comments.AsEnumerable(),
+        };
+    }
+
+    private static string GetInitials(string author) => author.Length >= 2 ? author[..2].ToUpperInvariant() : author.ToUpperInvariant();
+
+    private static string GetScoreColor(int score) =>
+        score > 0 ? "text-emerald-600 dark:text-emerald-400"
+        : score < 0 ? "text-red-600 dark:text-red-400"
+        : "text-muted-foreground";
+
+    private RenderFragment RenderVotableComment(CommentData comment) => __builder =>
+    {
+        var id = comment.Id;
+        var voteState = GetVoteState(id);
+        var score = GetScore(comment);
+        var initials = GetInitials(comment.Author);
+        var scoreColor = GetScoreColor(score);
+        var upClass = Cn.Merge("size-6", voteState == "up" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground");
+        var downClass = Cn.Merge("size-6", voteState == "down" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "text-muted-foreground");
+
+        <div class="flex gap-3">
+            @* Vote column *@
+            <div class="flex shrink-0 flex-col items-center gap-1">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon" Class="@upClass" OnClick="@(() => HandleVote(id, comment.Score, "up"))">
+                    <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                </ButtonCn>
+                <span class="@($"text-xs font-medium tabular-nums {scoreColor}")">@score</span>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon" Class="@downClass" OnClick="@(() => HandleVote(id, comment.Score, "down"))">
+                    <LucideIconCn Name="arrow-down" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+
+            @* Comment body *@
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                    <AvatarCn Class="size-6">
+                        <AvatarImageCn Src="@comment.Avatar" Alt="@comment.Author" />
+                        <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                    </AvatarCn>
+                    <span class="text-xs font-medium">@comment.Author</span>
+                    <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                    <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                </div>
+                <p class="mt-2 text-sm leading-relaxed">@comment.Content</p>
+                <div class="mt-2 flex items-center gap-3">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs">
+                        <LucideIconCn Name="message-circle" Size="12" Class="size-3" />
+                        @comment.ReplyCount replies
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-2 text-xs">
+                        Share
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+    };
+}

@@ -1,0 +1,161 @@
+@* ============================================================
+   Block: todo-list-habit-tracker
+   Title: TodoListHabitTracker
+   Description: A weekly habit tracking grid todo list block for React and Next.js with day columns, streak counts, and completion rates built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-habit-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Weekly Habits</span>
+                <p class="text-muted-foreground text-xs">Mar 31 — Apr 6</p>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @TotalCompleted of @TotalCells checked
+            </span>
+        </div>
+
+        @* Grid header (days) *@
+        <div class="flex items-center border-b px-4 py-2">
+            <div class="w-36 shrink-0"></div>
+            @foreach (var day in _days)
+            {
+                <div class="flex flex-1 items-center justify-center">
+                    <span class="font-medium text-muted-foreground text-xs">@day</span>
+                </div>
+            }
+            <div class="w-14 shrink-0 text-center">
+                <span class="font-medium text-muted-foreground text-xs">Streak</span>
+            </div>
+        </div>
+
+        @* Habit rows *@
+        <div>
+            @for (int idx = 0; idx < _habits.Length; idx++)
+            {
+                var habit = _habits[idx];
+                var isLast = idx == _habits.Length - 1;
+                var streak = GetStreak(habit.Id);
+                <div class="@Cn.Merge("flex items-center px-4 py-2.5 transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                    <div class="w-36 shrink-0">
+                        <span class="text-sm">@habit.Name</span>
+                    </div>
+                    @foreach (var d in _days)
+                    {
+                        var capturedHabitId = habit.Id;
+                        var capturedDay = d;
+                        var cellKey = $"{capturedHabitId}-{capturedDay}";
+                        var isChecked = _completions.TryGetValue(cellKey, out bool cv) && cv;
+                        <div class="flex flex-1 items-center justify-center">
+                            <span class="flex items-center">
+                                <CheckboxCn Checked="@isChecked"
+                                            CheckedChanged="@((bool _) => Toggle(capturedHabitId, capturedDay))"
+                                            aria-label="@($"{habit.Name} on {capturedDay}")" />
+                            </span>
+                        </div>
+                    }
+                    <div class="flex w-14 shrink-0 items-center justify-center gap-1">
+                        @if (streak > 0)
+                        {
+                            <LucideIconCn Name="flame" Size="12" Class="size-3 text-amber-500" />
+                        }
+                        <span class="font-medium text-xs tabular-nums">@streak</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Daily completion rates *@
+        <div class="flex items-center border-t px-4 py-2.5">
+            <div class="w-36 shrink-0">
+                <span class="text-muted-foreground text-xs">Completion</span>
+            </div>
+            @foreach (var day in _days)
+            {
+                var rate = GetDayRate(day);
+                <div class="flex flex-1 items-center justify-center">
+                    <span class="@Cn.Merge("font-medium text-xs tabular-nums", rate == 100 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                        @(rate)%
+                    </span>
+                </div>
+            }
+            <div class="w-14 shrink-0"></div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Habit(string Id, string Name, string Emoji);
+
+    private static readonly string[] _days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    private static readonly Habit[] _habits =
+    [
+        new("h1", "Morning run", "🏃"),
+        new("h2", "Read 30 min", "📖"),
+        new("h3", "Meditate", "🧘"),
+        new("h4", "No social media", "📵"),
+        new("h5", "Write journal", "✍️"),
+        new("h6", "Drink 2L water", "💧"),
+    ];
+
+    private Dictionary<string, bool> _completions = new()
+    {
+        ["h1-Mon"] = true,
+        ["h1-Tue"] = true,
+        ["h1-Wed"] = true,
+        ["h2-Mon"] = true,
+        ["h2-Tue"] = false,
+        ["h2-Wed"] = true,
+        ["h3-Mon"] = true,
+        ["h3-Tue"] = true,
+        ["h3-Wed"] = true,
+        ["h4-Mon"] = false,
+        ["h4-Tue"] = true,
+        ["h4-Wed"] = true,
+        ["h5-Mon"] = true,
+        ["h5-Tue"] = true,
+        ["h5-Wed"] = false,
+        ["h6-Mon"] = true,
+        ["h6-Tue"] = true,
+        ["h6-Wed"] = true,
+        ["h1-Thu"] = false,
+        ["h2-Thu"] = false,
+        ["h3-Thu"] = false,
+        ["h4-Thu"] = false,
+        ["h5-Thu"] = false,
+        ["h6-Thu"] = false,
+    };
+
+    private int TotalCompleted => _completions.Values.Count(v => v);
+    private int TotalCells => _habits.Length * _days.Length;
+
+    private int GetStreak(string habitId)
+    {
+        int streak = 0;
+        for (int i = _days.Length - 1; i >= 0; i--)
+        {
+            var key = $"{habitId}-{_days[i]}";
+            if (_completions.TryGetValue(key, out bool val) && val)
+                streak++;
+            else if (streak > 0)
+                break;
+        }
+        return streak;
+    }
+
+    private int GetDayRate(string day)
+    {
+        int completed = _habits.Count(h => _completions.TryGetValue($"{h.Id}-{day}", out bool v) && v);
+        return _habits.Length > 0 ? (int)Math.Round((double)completed / _habits.Length * 100) : 0;
+    }
+
+    private void Toggle(string habitId, string day)
+    {
+        var key = $"{habitId}-{day}";
+        _completions[key] = !(_completions.TryGetValue(key, out bool v) && v);
+    }
+}

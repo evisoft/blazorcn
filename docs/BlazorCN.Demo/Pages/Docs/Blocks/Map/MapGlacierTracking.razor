@@ -1,0 +1,279 @@
+@* ============================================================
+   Block: map-glacier-tracking
+   Title: MapGlacierTracking
+   Description: Interactive glacier retreat tracking map with glacier boundary markers, historical extent routes, melt rate data, and glacier detail cards built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-glacier-tracking.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="mountain-snow" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Glacier Retreat Tracker</span>
+                <span class="text-xs text-muted-foreground">@_glaciers.Length glaciers</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button
+                    type="button"
+                    @onclick="@(() => _showHistorical = !_showHistorical)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _showHistorical ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    Historical extent
+                </button>
+                @foreach (var sevVal in new[] { "slow", "moderate", "rapid" })
+                {
+                    var sev = sevVal;
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", SeverityColor(sev))" />
+                        @SeverityCount(sev)
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Map + Sidebar *@
+        <div class="flex">
+            @* Map placeholder *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Subtle grid background to suggest a map *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Global Glacier Monitor
+                </div>
+
+                @* Historical extent lines (dashed) *@
+                @if (_showHistorical)
+                {
+                    @foreach (var gItem in _glaciers)
+                    {
+                        var g = gItem;
+                        var hx = MapLonToPercent(g.Longitude) * 100;
+                        var hy = MapLatToPercent(g.Latitude) * 100;
+                        <div class="absolute pointer-events-none" style="@($"left:{hx:F2}%; top:{hy:F2}%; transform:translate(-50%,-50%)")">
+                            <div class="rounded-full opacity-25 border-2 border-dashed size-8" style="@($"border-color:{SeverityLineColor(g.Severity)}")"></div>
+                        </div>
+                    }
+                }
+
+                @* Current extent lines *@
+                @foreach (var gItem in _glaciers)
+                {
+                    var g = gItem;
+                    var cx = MapLonToPercent(g.Longitude) * 100;
+                    var cy = MapLatToPercent(g.Latitude) * 100;
+                    var isActive = _selected == g.Id;
+                    <div class="absolute pointer-events-none" style="@($"left:{cx:F2}%; top:{cy:F2}%; transform:translate(-50%,-50%)")">
+                        <div class="rounded-full @(isActive ? "opacity-90" : "opacity-40") size-5 border" style="@($"border-color:{SeverityLineColor(g.Severity)}; background-color:{SeverityLineColor(g.Severity)}20")"></div>
+                    </div>
+                }
+
+                @* Markers *@
+                @foreach (var gItem in _glaciers)
+                {
+                    var glacier = gItem;
+                    var leftPct = MapLonToPercent(glacier.Longitude) * 100;
+                    var topPct = MapLatToPercent(glacier.Latitude) * 100;
+                    <div class="absolute" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%); z-index:10")">
+                        @* Marker button *@
+                        <button
+                            type="button"
+                            @onclick="@(() => _selected = (_selected == glacier.Id ? null : glacier.Id))"
+                            class="@Cn.Merge("flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md", SeverityColor(glacier.Severity))">
+                            <LucideIconCn Name="mountain-snow" Size="12" Class="size-3 text-white" />
+                        </button>
+
+                        @* Tooltip *@
+                        <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@glacier.Name</span>
+                                <span class="text-muted-foreground">-@(glacier.MeltRateM)m/yr</span>
+                            </div>
+                        </div>
+
+                        @* Popup *@
+                        @if (_selected == glacier.Id)
+                        {
+                            <div class="absolute left-1/2 top-full z-10 mt-7 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <div class="mb-2">
+                                    <p class="text-sm font-medium">@glacier.Name</p>
+                                    <p class="text-xs text-muted-foreground">@glacier.Region, @glacier.Country</p>
+                                </div>
+                                <div class="mb-2 flex items-center gap-2">
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@(SeverityLabel(glacier.Severity)) retreat</BadgeCn>
+                                    <span class="text-xs text-muted-foreground">@(glacier.ElevationM.ToString("N0"))m elev.</span>
+                                </div>
+                                <div class="space-y-1 border-t pt-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Current area</span>
+                                        <span class="text-xs font-medium tabular-nums">@(glacier.AreaKm2) km²</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Area lost</span>
+                                        <span class="text-xs font-medium tabular-nums text-red-600 dark:text-red-400">-@(glacier.AreaLostKm2) km²</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs text-muted-foreground">Retreat rate</span>
+                                        <span class="text-xs tabular-nums">@(glacier.MeltRateM) m/yr</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm">
+                        <LucideIconCn Name="compass" Size="14" Class="size-3.5 text-muted-foreground" />
+                    </button>
+                </div>
+            </div>
+
+            @* Detail sidebar *@
+            @if (_activeGlacier != null)
+            {
+                var ag = _activeGlacier;
+                <div class="w-64 shrink-0 border-l">
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            <LucideIconCn Name="mountain-snow" Size="16" Class="size-4 text-muted-foreground" />
+                            <span class="text-sm font-medium">@ag.Name</span>
+                        </div>
+                        <p class="mt-0.5 text-xs text-muted-foreground">@ag.Region, @ag.Country</p>
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@(SeverityLabel(ag.Severity)) melt</BadgeCn>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">Since @ag.ReferenceYear</BadgeCn>
+                        </div>
+                    </div>
+
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-2xl font-semibold tabular-nums text-red-600 dark:text-red-400">-@ag.AreaLostKm2</span>
+                            <span class="text-xs text-muted-foreground">km² lost</span>
+                        </div>
+                        <p class="mt-1 text-xs text-muted-foreground">@ag.AreaKm2 km² remaining of original extent</p>
+                    </div>
+
+                    <div class="px-4 py-3">
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <LucideIconCn Name="trending-down" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs text-muted-foreground">Retreat rate</span>
+                                </div>
+                                <span class="text-xs font-medium tabular-nums">@ag.MeltRateM m/yr</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <LucideIconCn Name="ruler" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs text-muted-foreground">Elevation</span>
+                                </div>
+                                <span class="text-xs font-medium tabular-nums">@(ag.ElevationM.ToString("N0")) m</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <LucideIconCn Name="thermometer-snowflake" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs text-muted-foreground">Ice volume</span>
+                                </div>
+                                <span class="text-xs font-medium tabular-nums">@ag.IceVolumeKm3 km³</span>
+                            </div>
+                        </div>
+                        <p class="mt-3 text-xs text-muted-foreground">Last measured @ag.LastMeasured</p>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="h-0.5 w-4 rounded bg-muted-foreground/60" />
+                Current extent
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="h-0.5 w-4 rounded border border-dashed border-muted-foreground/60" />
+                Historical extent
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                @(_glaciers.Sum(g => g.AreaLostKm2).ToString("F1")) km² total loss tracked
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record GlacierItem(
+        string Id,
+        string Name,
+        string Region,
+        string Country,
+        string Severity,
+        double AreaKm2,
+        double AreaLostKm2,
+        int MeltRateM,
+        int ReferenceYear,
+        int ElevationM,
+        double IceVolumeKm3,
+        string LastMeasured,
+        double Longitude,
+        double Latitude
+    );
+
+    private static readonly GlacierItem[] _glaciers =
+    [
+        new("gl1", "Aletsch Glacier", "Bernese Alps", "Switzerland", "moderate", 78.0, 12.4, 32, 1973, 3140, 11.7, "3 days ago", 8.04, 46.47),
+        new("gl2", "Columbia Glacier", "Chugach Mountains", "United States", "rapid", 910.0, 180.5, 105, 1980, 980, 140.0, "1 day ago", -147.08, 61.15),
+        new("gl3", "Gangotri Glacier", "Garhwal Himalaya", "India", "moderate", 143.0, 8.2, 18, 1962, 4255, 22.1, "5 days ago", 79.08, 30.95),
+        new("gl4", "Jakobshavn Isbrae", "West Greenland", "Greenland", "rapid", 4920.0, 580.0, 145, 1950, 1210, 6500.0, "2 days ago", -49.75, 69.18),
+        new("gl5", "Fox Glacier", "Westland Tai Poutini", "New Zealand", "slow", 32.6, 2.1, 8, 1990, 2600, 3.8, "7 days ago", 170.16, -43.53),
+        new("gl6", "Perito Moreno", "Southern Patagonia", "Argentina", "slow", 250.0, 3.5, 4, 1985, 1490, 45.0, "4 days ago", -73.04, -50.45),
+    ];
+
+    // Bounding box covering all glacier locations with padding
+    private const double _lonMin = -150.0;
+    private const double _lonMax = 175.0;
+    private const double _latMin = -55.0;
+    private const double _latMax = 72.0;
+
+    private string? _selected = "gl1";
+    private bool _showHistorical = true;
+
+    private GlacierItem? _activeGlacier => _selected != null
+        ? System.Array.Find(_glaciers, g => g.Id == _selected)
+        : null;
+
+    private static string SeverityColor(string severity) => severity switch
+    {
+        "slow" => "bg-emerald-500",
+        "moderate" => "bg-amber-500",
+        "rapid" => "bg-red-500",
+        _ => "bg-muted-foreground",
+    };
+
+    private static string SeverityLineColor(string severity) => severity switch
+    {
+        "slow" => "#22c55e",
+        "moderate" => "#eab308",
+        "rapid" => "#ef4444",
+        _ => "#888888",
+    };
+
+    private static string SeverityLabel(string severity) => severity switch
+    {
+        "slow" => "Slow",
+        "moderate" => "Moderate",
+        "rapid" => "Rapid",
+        _ => severity,
+    };
+
+    private int SeverityCount(string severity) => _glaciers.Count(g => g.Severity == severity);
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+}

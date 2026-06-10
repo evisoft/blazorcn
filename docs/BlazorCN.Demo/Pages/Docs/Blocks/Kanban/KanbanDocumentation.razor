@@ -1,0 +1,223 @@
+@* ============================================================
+   Block: kanban-documentation
+   Title: KanbanDocumentation
+   Description: React kanban documentation tracker for Next.js with shadcn/ui Command palette search, real-time filtering by doc titles and API names, and four-column writing pipeline using Tailwind CSS
+   Source: original/blocks/kanban/kanban-documentation.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="book" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Documentation</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_docs.Length pages
+                </BadgeCn>
+            </div>
+            <PopoverCn Open="@_open" OpenChanged="@HandleOpenChanged">
+                <PopoverTriggerCn Class="flex h-7 items-center gap-1.5 rounded-md border bg-muted/50 px-2.5 text-muted-foreground text-xs transition-colors hover:bg-muted">
+                    <LucideIconCn Name="search" Size="12" Class="size-3" />
+                    Search docs
+                </PopoverTriggerCn>
+                <PopoverContentCn Class="w-72 p-0" Align="FloatingAlign.End">
+                    <CommandCn Class="border-0">
+                        <CommandInputCn Placeholder="Search titles, API names, sections..." Value="@_search" ValueChanged="@HandleSearchChanged" />
+                        <CommandListCn>
+                            @if (!HasMatches())
+                            {
+                                <CommandEmptyCn>No matching docs.</CommandEmptyCn>
+                            }
+                            @if (_search.Trim().Length > 0 && GetMatchedIds().Count > 0)
+                            {
+                                <CommandGroupCn Heading="Documentation">
+                                    @foreach (var d in _docs)
+                                    {
+                                        var docItem = d;
+                                        @if (GetMatchedIds().Contains(docItem.Id))
+                                        {
+                                            <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                                <LucideIconCn Name="file-text" Size="14" Class="size-3.5 text-muted-foreground" />
+                                                <div class="min-w-0 flex-1">
+                                                    <span class="block truncate text-sm">@docItem.Title</span>
+                                                    <span class="font-mono text-muted-foreground text-xs">
+                                                        @docItem.ApiName
+                                                    </span>
+                                                </div>
+                                            </CommandItemCn>
+                                        }
+                                    }
+                                </CommandGroupCn>
+                            }
+                            <CommandGroupCn Heading="Quick Actions">
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="globe" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Move to Live
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="user-pen" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Assign reviewer
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => ClosePopover())">
+                                    <LucideIconCn Name="code" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Add code example
+                                </CommandItemCn>
+                            </CommandGroupCn>
+                        </CommandListCn>
+                    </CommandCn>
+                </PopoverContentCn>
+            </PopoverCn>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var colDocs = GetColumnDocs(column.Id);
+                <div>
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+                        <span class="text-muted-foreground">
+                            <LucideIconCn Name="@column.IconName" Size="14" Class="size-3.5" />
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@colDocs.Length</span>
+                    </div>
+                    <div class="p-2">
+                        <div class="flex flex-col gap-1.5">
+                            @foreach (var doc in colDocs)
+                            {
+                                var docCard = doc;
+                                var matchedIds = GetMatchedIds();
+                                var isMatch = matchedIds.Count == 0 || matchedIds.Contains(docCard.Id);
+                                var isDimmed = matchedIds.Count > 0 && !matchedIds.Contains(docCard.Id);
+                                var dotClass = GetPriorityDot(docCard.Priority);
+                                <div class="@Cn.Merge("rounded-md border bg-card p-2.5 transition-all hover:bg-muted/50", (isMatch && matchedIds.Count > 0) ? "ring-2 ring-foreground" : "", isDimmed ? "opacity-30" : "")">
+                                    <div class="mb-1 flex items-start gap-2">
+                                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", dotClass)"></span>
+                                        <span class="min-w-0 flex-1 font-medium text-sm leading-tight">
+                                            @docCard.Title
+                                        </span>
+                                    </div>
+                                    <div class="mb-1.5 pl-3.5">
+                                        <span class="font-mono text-muted-foreground text-xs">
+                                            @docCard.ApiName
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center gap-2 pl-3.5">
+                                        <span class="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                            @docCard.Section
+                                        </span>
+                                        <span class="text-muted-foreground/40">·</span>
+                                        <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground">
+                                            @docCard.AuthorInitials
+                                        </span>
+                                    </div>
+                                </div>
+                            }
+                            @if (colDocs.Length == 0)
+                            {
+                                <div class="py-8 text-center text-muted-foreground/60 text-xs">
+                                    No docs
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @(_docs.Count(d => d.Status == "live")) live · @(_docs.Count(d => d.Priority == "high")) high priority
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Updated 6 min ago</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Doc(string Id, string Title, string Status, string Section, string ApiName, string Author, string AuthorInitials, string Priority);
+    private record ColumnDef(string Id, string Title, string IconName);
+
+    private bool _open = false;
+    private string _search = "";
+
+    private static readonly Doc[] _docs =
+    [
+        new("d1",  "Authentication Overview",       "planned",          "Getting Started", "/api/auth",       "Elena Torres",  "ET", "high"),
+        new("d2",  "Rate Limiting Reference",        "planned",          "API Reference",   "/api/limits",     "Dev Kumar",     "DK", "medium"),
+        new("d3",  "Webhook Events Guide",           "planned",          "Integrations",    "/api/webhooks",   "Alex Park",     "AP", "high"),
+        new("d4",  "User Management API",            "writing",          "API Reference",   "/api/users",      "Elena Torres",  "ET", "high"),
+        new("d5",  "SDK Installation Guide",         "writing",          "Getting Started", "sdk.init()",      "Jordan Hayes",  "JH", "medium"),
+        new("d6",  "Pagination Patterns",            "writing",          "API Reference",   "?cursor=",        "Dev Kumar",     "DK", "low"),
+        new("d7",  "OAuth2 Scopes Reference",        "technical-review", "Security",        "/api/oauth/token","Alex Park",     "AP", "high"),
+        new("d8",  "Error Handling Best Practices",  "technical-review", "Guides",          "ErrorCode",       "Jordan Hayes",  "JH", "medium"),
+        new("d9",  "File Upload API",                "technical-review", "API Reference",   "/api/files",      "Elena Torres",  "ET", "medium"),
+        new("d10", "Quickstart Tutorial",            "live",             "Getting Started", "createClient()",  "Dev Kumar",     "DK", "high"),
+        new("d11", "Billing API Reference",          "live",             "API Reference",   "/api/billing",    "Alex Park",     "AP", "medium"),
+        new("d12", "Migration Guide v2 to v3",       "live",             "Guides",          "migrate()",       "Jordan Hayes",  "JH", "low"),
+    ];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("planned",          "Planned",          "file-text"),
+        new("writing",          "Writing",          "pen-line"),
+        new("technical-review", "Technical Review", "eye"),
+        new("live",             "Live",             "globe"),
+    ];
+
+    private Doc[] GetColumnDocs(string status) =>
+        _docs.Where(d => d.Status == status).ToArray();
+
+    private static string GetPriorityDot(string priority) => priority switch
+    {
+        "high"   => "bg-red-500",
+        "medium" => "bg-amber-500",
+        _        => "bg-zinc-400",
+    };
+
+    private HashSet<string> GetMatchedIds()
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return [];
+        var query = _search.Trim().ToLower();
+        var ids = new HashSet<string>();
+        foreach (var doc in _docs)
+        {
+            if (doc.Title.ToLower().Contains(query) ||
+                doc.ApiName.ToLower().Contains(query) ||
+                doc.Section.ToLower().Contains(query))
+            {
+                ids.Add(doc.Id);
+            }
+        }
+        return ids;
+    }
+
+    private bool HasMatches()
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return GetMatchedIds().Count > 0;
+    }
+
+    private async Task HandleOpenChanged(bool value)
+    {
+        _open = value;
+        if (!value) _search = "";
+        await Task.CompletedTask;
+    }
+
+    private async Task HandleSearchChanged(string value)
+    {
+        _search = value;
+        await Task.CompletedTask;
+    }
+
+    private void ClosePopover()
+    {
+        _open = false;
+        _search = "";
+    }
+}

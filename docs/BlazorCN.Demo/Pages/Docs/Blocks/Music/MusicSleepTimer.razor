@@ -1,0 +1,225 @@
+@* ============================================================
+   Block: music-sleep-timer
+   Title: MusicSleepTimer
+   Description: A music sleep timer block for React and Next.js with preset duration buttons, large countdown display, end-of-track option, fade-out toggle, and cancel action built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-sleep-timer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="moon" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Sleep Timer</span>
+            </div>
+            <p class="mt-1 text-muted-foreground text-sm">
+                Music will stop playing after the selected time.
+            </p>
+        </div>
+
+        @* Countdown Display *@
+        <div class="border-b px-4 py-6">
+            @if (_timerState == "running")
+            {
+                <div class="text-center">
+                    <div class="flex items-baseline justify-center gap-1">
+                        <span class="font-semibold text-4xl tabular-nums">@DisplayMinutes</span>
+                        <span class="text-muted-foreground text-sm">:</span>
+                        <span class="font-semibold text-4xl tabular-nums">@DisplaySeconds.ToString("D2")</span>
+                    </div>
+                    <p class="mt-1 text-muted-foreground text-xs">remaining</p>
+                    @* Progress bar *@
+                    <div class="mx-auto mt-3 h-1 w-48 overflow-hidden rounded-full bg-muted">
+                        <div class="h-full rounded-full bg-foreground" style="@($"width:{Progress:F1}%")"></div>
+                    </div>
+                </div>
+            }
+            else if (_timerState == "end-of-track")
+            {
+                <div class="text-center">
+                    <LucideIconCn Name="music" Size="32" Class="mx-auto size-8 text-muted-foreground" />
+                    <p class="mt-2 font-medium text-sm">End of Current Track</p>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        Playback will stop when this song ends
+                    </p>
+                </div>
+            }
+            else
+            {
+                <div class="text-center">
+                    <LucideIconCn Name="timer" Size="32" Class="mx-auto size-8 text-muted-foreground/40" />
+                    <p class="mt-2 text-muted-foreground text-sm">Select a duration to start</p>
+                </div>
+            }
+        </div>
+
+        @* Preset Buttons *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">Presets</span>
+            <div class="flex flex-wrap gap-2">
+                @foreach (var preset in _presets)
+                {
+                    var p = preset;
+                    <ButtonCn Variant="ButtonVariant.Outline"
+                              Size="ButtonSize.Sm"
+                              Class="h-8 text-xs"
+                              OnClick="@(() => StartTimer(p.Minutes))"
+                              Disabled="@(_timerState == "running")">
+                        @p.Label
+                    </ButtonCn>
+                }
+                <ButtonCn Variant="@(_timerState == "end-of-track" ? ButtonVariant.Default : ButtonVariant.Outline)"
+                          Size="ButtonSize.Sm"
+                          Class="h-8 text-xs"
+                          OnClick="HandleEndOfTrack">
+                    End of track
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Custom Duration *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <span class="shrink-0 font-medium text-muted-foreground text-xs">Custom</span>
+            <div class="flex flex-1 items-center gap-2">
+                <input type="number"
+                       min="1"
+                       max="480"
+                       placeholder="Minutes"
+                       value="@_customMinutes"
+                       @onchange="@((ChangeEventArgs e) => _customMinutes = e.Value?.ToString() ?? "")"
+                       class="h-8 w-20 rounded-md border bg-transparent px-2 font-mono text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                       disabled="@(_timerState == "running")" />
+                <ButtonCn Variant="ButtonVariant.Outline"
+                          Size="ButtonSize.Sm"
+                          Class="h-8 text-xs"
+                          OnClick="HandleCustomStart"
+                          Disabled="@(_timerState == "running" || string.IsNullOrEmpty(_customMinutes))">
+                    Start
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Fade Out Toggle *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Fade out</span>
+                <p class="text-muted-foreground text-xs">Gradually lower volume before stopping</p>
+            </div>
+            <SwitchCn @bind-Value="_fadeOut" />
+        </div>
+
+        @* Cancel / Footer *@
+        <div class="px-4 py-3">
+            @if (_timerState != "idle")
+            {
+                <ButtonCn Variant="ButtonVariant.Outline"
+                          Size="ButtonSize.Sm"
+                          Class="h-8 w-full gap-1.5 text-xs text-red-500 hover:bg-red-500/10 hover:text-red-500"
+                          OnClick="CancelTimer">
+                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                    Cancel Timer
+                </ButtonCn>
+            }
+            else
+            {
+                <p class="text-center text-muted-foreground text-xs">
+                    Timer runs in background &middot; Works with screen off
+                </p>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Preset(string Label, int Minutes);
+
+    private static readonly Preset[] _presets =
+    [
+        new("15 min", 15),
+        new("30 min", 30),
+        new("45 min", 45),
+        new("1 hr",   60),
+    ];
+
+    private string _timerState = "idle";  // "idle" | "running" | "end-of-track"
+    private int _totalSeconds = 0;
+    private int _remainingSeconds = 0;
+    private bool _fadeOut = true;
+    private string _customMinutes = "";
+    private System.Threading.Timer? _timer;
+
+    private int DisplayMinutes => _remainingSeconds / 60;
+    private int DisplaySeconds => _remainingSeconds % 60;
+    private double Progress => _totalSeconds > 0 ? ((double)(_totalSeconds - _remainingSeconds) / _totalSeconds) * 100.0 : 0.0;
+
+    private void StartTimer(int minutes)
+    {
+        StopInternalTimer();
+        var seconds = minutes * 60;
+        _totalSeconds = seconds;
+        _remainingSeconds = seconds;
+        _timerState = "running";
+        _timer = new System.Threading.Timer(Tick, null, 1000, 1000);
+    }
+
+    private void Tick(object? state)
+    {
+        if (_remainingSeconds <= 1)
+        {
+            StopInternalTimer();
+            _remainingSeconds = 0;
+            _totalSeconds = 0;
+            _timerState = "idle";
+        }
+        else
+        {
+            _remainingSeconds--;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void StopInternalTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void CancelTimer()
+    {
+        StopInternalTimer();
+        _timerState = "idle";
+        _remainingSeconds = 0;
+        _totalSeconds = 0;
+        _customMinutes = "";
+    }
+
+    private void HandleEndOfTrack()
+    {
+        if (_timerState == "end-of-track")
+        {
+            _timerState = "idle";
+        }
+        else
+        {
+            CancelTimer();
+            _timerState = "end-of-track";
+        }
+    }
+
+    private void HandleCustomStart()
+    {
+        if (int.TryParse(_customMinutes, out int mins) && mins > 0 && mins <= 480)
+        {
+            StartTimer(mins);
+            _customMinutes = "";
+        }
+    }
+
+    public void Dispose()
+    {
+        StopInternalTimer();
+    }
+}

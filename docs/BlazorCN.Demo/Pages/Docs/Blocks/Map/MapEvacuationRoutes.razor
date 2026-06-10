@@ -1,0 +1,332 @@
+@* ============================================================
+   Block: map-evacuation-routes
+   Title: MapEvacuationRoutes
+   Description: Interactive evacuation route planner map with route lines, shelter markers, danger zone overlays, assembly point markers, and evacuation detail panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-evacuation-routes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Evacuation routes</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_activeRoutes active
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="triangle-alert" Size="12" Class="size-3" />
+                    @_dangerZones.Length danger zones
+                </span>
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Routes</span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var route in _routes)
+                    {
+                        var rt = route;
+                        var statusDotClass = GetStatusDot(rt.Status);
+                        var badgeClass = rt.Type == "alternate" ? "text-[10px] font-normal border-dashed" : "text-[10px] font-normal";
+                        var btnClass = Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedRoute == rt.Id ? "bg-muted/50" : "");
+                        <button
+                            type="button"
+                            class="@btnClass"
+                            @onclick="@(() => _selectedRoute = rt.Id)">
+                            <span class="@Cn.Merge("size-2 shrink-0 rounded-full", statusDotClass)"></span>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@rt.Name</span>
+                                <div class="mt-0.5 flex items-center gap-2">
+                                    <span class="text-xs text-muted-foreground">@rt.EstimatedTime</span>
+                                    <span class="text-xs text-muted-foreground">·</span>
+                                    <span class="text-xs text-muted-foreground">@rt.Distance</span>
+                                </div>
+                            </div>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@badgeClass">
+                                @(rt.Type == "primary" ? "Primary" : "Alt")
+                            </BadgeCn>
+                        </button>
+                    }
+                </div>
+
+                <div class="border-t px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Shelters</span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var shelter in _shelters)
+                    {
+                        var sh = shelter;
+                        var occupancy = (int)Math.Round((double)sh.Current / sh.Capacity * 100);
+                        var barClass = occupancy > 80 ? "h-1 rounded-full bg-red-500"
+                            : occupancy > 50 ? "h-1 rounded-full bg-amber-500"
+                            : "h-1 rounded-full bg-emerald-500";
+                        <button
+                            type="button"
+                            class="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => HandleShelterClick(sh))">
+                            <LucideIconCn Name="users" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0 flex-1">
+                                <span class="text-xs font-medium">@sh.Name</span>
+                                <div class="mt-0.5 flex items-center gap-1">
+                                    <div class="h-1 w-16 rounded-full bg-muted">
+                                        <div class="@barClass" style="@($"width:{occupancy}%")"></div>
+                                    </div>
+                                    <span class="text-[10px] tabular-nums text-muted-foreground">@(occupancy)%</span>
+                                </div>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* SVG overlay: danger zones + evacuation routes *@
+                    <svg class="absolute inset-0 h-full w-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                        @* Danger zone circles *@
+                        @foreach (var dz in _dangerZones)
+                        {
+                            var circlePoints = GenerateCirclePoints(dz.CenterLng, dz.CenterLat, dz.RadiusKm, 48);
+                            var dzPts = string.Join(" ", circlePoints.Select(p => $"{p.X}%,{p.Y}%"));
+                            @((MarkupString)$"<polygon points=\"{dzPts}\" fill=\"#ef4444\" fill-opacity=\"0.15\" stroke=\"#ef4444\" stroke-width=\"2\" stroke-opacity=\"0.35\" />")
+                        }
+                        @* Evacuation routes *@
+                        @foreach (var route in _routes)
+                        {
+                            var routePts = string.Join(" ", route.Coordinates.Select(c => {
+                                var p = GetPosition(c[0], c[1]);
+                                return $"{p.X}%,{p.Y}%";
+                            }));
+                            var color = route.Status == "blocked" ? "#6b7280"
+                                : route.Type == "primary" ? "#22c55e"
+                                : "#f59e0b";
+                            var strokeW = _selectedRoute == route.Id ? 4 : 3;
+                            var opacity = route.Status == "blocked" ? 0.3 : 0.8;
+                            var dashAttr = route.Type == "alternate" ? " stroke-dasharray=\"8 4\"" : "";
+                            @((MarkupString)$"<polyline points=\"{routePts}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{strokeW}\" stroke-opacity=\"{opacity.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\"{dashAttr} />")
+                        }
+                    </svg>
+
+                    @* Shelter markers *@
+                    @foreach (var shelter in _shelters)
+                    {
+                        var sh = shelter;
+                        var shPos = GetPosition(sh.Longitude, sh.Latitude);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{shPos.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%;top:{shPos.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%")">
+                            <button
+                                type="button"
+                                title="@sh.Name"
+                                @onclick="@(() => HandleShelterClick(sh))">
+                                <div class="flex size-7 items-center justify-center rounded-full border-2 border-white bg-blue-500 shadow-md">
+                                    <LucideIconCn Name="users" Size="14" Class="size-3.5 text-white" />
+                                </div>
+                            </button>
+                        </div>
+                    }
+
+                    @* Assembly point markers *@
+                    @foreach (var ap in _assemblyPoints)
+                    {
+                        var apPos = GetPosition(ap.Longitude, ap.Latitude);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{apPos.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%;top:{apPos.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%")"
+                            title="@ap.Name">
+                            <div class="flex size-6 items-center justify-center rounded-full border-2 border-white bg-emerald-500 shadow-md">
+                                <LucideIconCn Name="map-pin" Size="12" Class="size-3 text-white" />
+                            </div>
+                        </div>
+                    }
+
+                    @* Shelter popup *@
+                    @if (_popupShelter != null)
+                    {
+                        var ps = _popupShelter;
+                        var psPos = GetPosition(ps.Longitude, ps.Latitude);
+                        <div
+                            class="absolute z-50"
+                            style="@($"left:{psPos.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%;top:{psPos.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%")">
+                            <div class="ml-4 mt-2 w-52 rounded-lg border bg-card p-3 shadow-lg">
+                                <div class="mb-1 flex items-start justify-between gap-1">
+                                    <p class="text-sm font-medium">@ps.Name</p>
+                                    <button
+                                        type="button"
+                                        class="text-muted-foreground hover:text-foreground"
+                                        @onclick="@(() => _popupShelter = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@ps.Address</p>
+                                <div class="mt-2 space-y-1.5">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Capacity</span>
+                                        <span class="tabular-nums font-medium">@ps.Current / @ps.Capacity</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Available</span>
+                                        <span class="tabular-nums font-medium">@(ps.Capacity - ps.Current) spots</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded absolute bottom-2 left-1/2 -translate-x-1/2">
+                    Map view — New Orleans, LA
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                Primary route
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                Alternate route
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                Danger zone
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                Shelter
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                @(_shelters.Sum(s => s.Capacity - s.Current)) shelter spots available
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EvacuationRoute(
+        string Id,
+        string Name,
+        string Type,
+        string Status,
+        string EstimatedTime,
+        string Distance,
+        double[][] Coordinates
+    );
+
+    private record Shelter(
+        string Id,
+        string Name,
+        int Capacity,
+        int Current,
+        string Address,
+        double Longitude,
+        double Latitude
+    );
+
+    private record AssemblyPoint(
+        string Id,
+        string Name,
+        double Longitude,
+        double Latitude
+    );
+
+    private record DangerZone(
+        string Id,
+        string Name,
+        double CenterLng,
+        double CenterLat,
+        double RadiusKm
+    );
+
+    private static readonly EvacuationRoute[] _routes =
+    [
+        new("rt1", "I-10 West Corridor",  "primary",   "active",    "25 min", "12.4 mi", [[-90.072, 29.951], [-90.085, 29.955], [-90.11, 29.958], [-90.14, 29.962], [-90.175, 29.965], [-90.21, 29.968]]),
+        new("rt2", "US-90 North Route",   "primary",   "congested", "40 min", "15.8 mi", [[-90.072, 29.951], [-90.068, 29.965], [-90.065, 29.98], [-90.06, 29.998], [-90.055, 30.015], [-90.05, 30.035]]),
+        new("rt3", "Hwy 23 South Alt",    "alternate", "active",    "35 min", "18.2 mi", [[-90.072, 29.951], [-90.078, 29.94], [-90.082, 29.925], [-90.085, 29.908], [-90.088, 29.89], [-90.09, 29.87]]),
+        new("rt4", "Causeway Bridge",     "alternate", "blocked",   "N/A",    "24.1 mi", [[-90.072, 29.951], [-90.075, 29.96], [-90.08, 29.975], [-90.085, 29.99], [-90.09, 30.01]]),
+    ];
+
+    private static readonly Shelter[] _shelters =
+    [
+        new("s1", "Jefferson Parish Civic Center", 800, 312, "6541 West Park Ave, Harahan",    -90.21,  29.968),
+        new("s2", "Northshore High School",         500, 145, "100 Panther Dr, Slidell",        -90.05,  30.035),
+        new("s3", "Belle Chasse Community Center",  350,  89, "8398 Hwy 23, Belle Chasse",      -90.09,  29.87),
+    ];
+
+    private static readonly AssemblyPoint[] _assemblyPoints =
+    [
+        new("a1", "City Park Staging", -90.095, 29.985),
+        new("a2", "Superdome Lot B",   -90.082, 29.951),
+        new("a3", "Lakefront Arena",   -90.065, 30.015),
+    ];
+
+    private static readonly DangerZone[] _dangerZones =
+    [
+        new("dz1", "Flood Zone A",      -90.06,  29.935, 1.5),
+        new("dz2", "Industrial Hazard", -90.045, 29.95,  0.8),
+    ];
+
+    private string _selectedRoute = "rt1";
+    private Shelter? _popupShelter = null;
+
+    private int _activeRoutes => Array.FindAll(_routes, r => r.Status != "blocked").Length;
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "active"    => "bg-emerald-500",
+        "congested" => "bg-amber-500",
+        "blocked"   => "bg-red-500",
+        _           => "bg-muted",
+    };
+
+    private void HandleShelterClick(Shelter shelter)
+    {
+        _popupShelter = _popupShelter?.Id == shelter.Id ? null : shelter;
+    }
+
+    // Map viewport: lon [-90.22, -90.03], lat [29.85, 30.06]
+    private const double LonMin = -90.22, LonMax = -90.03;
+    private const double LatMin = 29.85, LatMax = 30.06;
+
+    private static (double X, double Y) GetPosition(double lng, double lat)
+    {
+        var x = (lng - LonMin) / (LonMax - LonMin) * 100.0;
+        var y = (1.0 - (lat - LatMin) / (LatMax - LatMin)) * 100.0;
+        x = Math.Clamp(x, 2, 98);
+        y = Math.Clamp(y, 2, 98);
+        return (x, y);
+    }
+
+    private static List<(double X, double Y)> GenerateCirclePoints(double centerLng, double centerLat, double radiusKm, int points = 48)
+    {
+        const double earthRadiusKm = 6371.0;
+        var result = new List<(double X, double Y)>();
+        for (var i = 0; i <= points; i++)
+        {
+            var angle = (double)i / points * 2.0 * Math.PI;
+            var latOffset = radiusKm / earthRadiusKm * (180.0 / Math.PI);
+            var lngOffset = radiusKm / (earthRadiusKm * Math.Cos(centerLat * Math.PI / 180.0)) * (180.0 / Math.PI);
+            var lng = centerLng + lngOffset * Math.Cos(angle);
+            var lat = centerLat + latOffset * Math.Sin(angle);
+            var pos = GetPosition(lng, lat);
+            result.Add(pos);
+        }
+        return result;
+    }
+}

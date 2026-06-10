@@ -1,0 +1,579 @@
+@* ============================================================
+   Block: chat-emoji-picker
+   Title: ChatEmojiPicker
+   Description: React chat block with a rich emoji picker panel for Next.js featuring categorized emoji grid with icon tabs, search filtering, recently used row, skin tone selector, emoji preview with name and shortcode, and floating emoji reactions using TypeScript, shadcn/ui, Tailwind CSS, and Framer Motion
+   Source: original/blocks/chat/chat-emoji-picker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="smile" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Team Chat</span>
+            <span class="text-muted-foreground text-xs">Notifications</span>
+            <span class="ml-auto text-muted-foreground text-xs tabular-nums">
+                @_messages.Count messages
+            </span>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto py-2">
+            @for (var idx = 0; idx < _messages.Count; idx++)
+            {
+                var msg = _messages[idx];
+                var grouped = !IsNewGroup(idx);
+                var msgId = msg.Id;
+
+                <div class="@Cn.Merge("group relative flex gap-2 px-4 transition-colors hover:bg-accent", grouped ? "py-0.5" : "mt-3 first:mt-0")">
+
+                    @* Avatar column *@
+                    <div class="w-8 shrink-0 pt-0.5">
+                        @if (!grouped)
+                        {
+                            <AvatarCn Class="size-8">
+                                <AvatarFallbackCn Class="text-xs font-medium">@msg.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                        }
+                        @if (grouped)
+                        {
+                            <span class="hidden text-[10px] text-muted-foreground group-hover:inline">
+                                @msg.Timestamp
+                            </span>
+                        }
+                    </div>
+
+                    @* Body *@
+                    <div class="min-w-0 flex-1">
+                        @if (!grouped)
+                        {
+                            <div class="flex items-baseline gap-2">
+                                <span class="font-medium text-sm">@msg.Sender</span>
+                                <span class="text-muted-foreground text-xs">@msg.Timestamp</span>
+
+                                @* Quick reaction on hover *@
+                                <div class="ml-auto opacity-0 transition-opacity group-hover:opacity-100">
+                                    <PopoverCn Open="@(_reactionPopoverId == msgId)" OpenChanged="@(open => _reactionPopoverId = open ? msgId : null)">
+                                        <PopoverTriggerCn Class="size-6 text-muted-foreground inline-flex items-center justify-center rounded-md hover:text-foreground">
+                                            <LucideIconCn Name="smile" Size="14" Class="size-3.5" />
+                                        </PopoverTriggerCn>
+                                        <PopoverContentCn Side="FloatingSide.Top" Align="FloatingAlign.End" Class="w-auto p-1">
+                                            <div class="flex items-center gap-0.5">
+                                                @foreach (var qr in _quickReactions)
+                                                {
+                                                    var emoji = qr;
+                                                    var capturedId = msgId;
+                                                    <button type="button"
+                                                            @onclick="@(() => ToggleReaction(capturedId, emoji))"
+                                                            class="flex size-8 items-center justify-center rounded-md text-lg transition-colors hover:bg-muted/50">
+                                                        @emoji
+                                                    </button>
+                                                }
+                                            </div>
+                                        </PopoverContentCn>
+                                    </PopoverCn>
+                                </div>
+                            </div>
+                        }
+                        <div class="text-sm leading-relaxed">@msg.Content</div>
+
+                        @* Reactions *@
+                        @if (msg.Reactions.Count > 0)
+                        {
+                            <div class="mt-1.5 flex flex-wrap items-center gap-1">
+                                @foreach (var reaction in msg.Reactions)
+                                {
+                                    var r = reaction;
+                                    var capturedId2 = msgId;
+                                    <button type="button"
+                                            @onclick="@(() => ToggleReaction(capturedId2, r.Emoji))"
+                                            class="@Cn.Merge("flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-muted/50", r.Reacted ? "border-blue-500/30 bg-blue-500/10" : "")">
+                                        <span>@r.Emoji</span>
+                                        <span class="tabular-nums text-muted-foreground">@r.Count</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @* Floating reaction animation (CSS-only, no Framer Motion) *@
+                    @if (_floatingReaction != null && _floatingReaction.Id == msgId)
+                    {
+                        <span class="pointer-events-none absolute right-8 bottom-4 text-xl animate-float-up">
+                            @_floatingReaction.Emoji
+                        </span>
+                    }
+
+                </div>
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-end gap-2">
+                @* Emoji picker popover *@
+                <PopoverCn Open="@_emojiOpen" OpenChanged="@(v => _emojiOpen = v)">
+                    <PopoverTriggerCn Class="size-7 shrink-0 text-muted-foreground inline-flex items-center justify-center rounded-md hover:text-foreground">
+                        <LucideIconCn Name="smile" Size="16" Class="size-4" />
+                    </PopoverTriggerCn>
+                    <PopoverContentCn Side="FloatingSide.Top" Align="FloatingAlign.Start" Class="w-80 p-0">
+
+                        @* Picker header: search + skin tones *@
+                        <div class="flex items-center gap-2 border-b px-3 py-2">
+                            <LucideIconCn Name="search" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                            <input value="@_emojiSearch"
+                                   @oninput="@((e) => _emojiSearch = e.Value?.ToString() ?? "")"
+                                   placeholder="Search emoji..."
+                                   class="h-6 flex-1 border-0 bg-transparent px-0 text-xs shadow-none outline-none focus-visible:ring-0 placeholder:text-muted-foreground/70" />
+                            <div class="flex items-center gap-0.5">
+                                @for (var ti = 0; ti < _skinTones.Length; ti++)
+                                {
+                                    var toneIdx = ti;
+                                    var tone = _skinTones[ti];
+                                    <button type="button"
+                                            @onclick="@(() => _skinTone = toneIdx)"
+                                            aria-label="@($"Skin tone {tone.Id}")"
+                                            class="@Cn.Merge("size-4 rounded-full transition-all", tone.Color, _skinTone == toneIdx ? "ring-2 ring-foreground ring-offset-1 ring-offset-background" : "opacity-60 hover:opacity-100")">
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        @* Recently used *@
+                        @if (string.IsNullOrWhiteSpace(_emojiSearch) && _recentEmojis.Count > 0)
+                        {
+                            <div class="border-b px-3 py-2">
+                                <span class="mb-1 block font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+                                    Recently Used
+                                </span>
+                                <div class="flex gap-0.5">
+                                    @foreach (var emoji in _recentEmojis)
+                                    {
+                                        var e = emoji;
+                                        <button type="button"
+                                                @onclick="@(() => InsertEmoji(e))"
+                                                @onmouseenter="@(() => _hoveredEmoji = e)"
+                                                @onmouseleave="@(() => _hoveredEmoji = null)"
+                                                class="flex size-7 items-center justify-center rounded-md text-base transition-colors hover:bg-muted/50">
+                                            @e.Char
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @* Emoji grid *@
+                        <div class="h-48 overflow-y-auto px-3 py-2">
+                            @if (!string.IsNullOrWhiteSpace(_emojiSearch))
+                            {
+                                var searchResults = GetSearchResults();
+                                <span class="mb-1 block font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+                                    Search Results
+                                </span>
+                                @if (searchResults.Length == 0)
+                                {
+                                    <p class="py-4 text-center text-muted-foreground text-xs">No emoji found</p>
+                                }
+                                else
+                                {
+                                    <div class="grid grid-cols-8 gap-0.5">
+                                        @foreach (var emoji in searchResults)
+                                        {
+                                            var e = emoji;
+                                            <button type="button"
+                                                    @onclick="@(() => InsertEmoji(e))"
+                                                    @onmouseenter="@(() => _hoveredEmoji = e)"
+                                                    @onmouseleave="@(() => _hoveredEmoji = null)"
+                                                    class="flex size-7 items-center justify-center rounded-md text-base transition-colors hover:bg-muted/50">
+                                                @e.Char
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                var currentCategory = GetCurrentCategory();
+                                <span class="mb-1 block font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+                                    @currentCategory.Label
+                                </span>
+                                <div class="grid grid-cols-8 gap-0.5">
+                                    @foreach (var emoji in currentCategory.Emojis)
+                                    {
+                                        var e = emoji;
+                                        <button type="button"
+                                                @onclick="@(() => InsertEmoji(e))"
+                                                @onmouseenter="@(() => _hoveredEmoji = e)"
+                                                @onmouseleave="@(() => _hoveredEmoji = null)"
+                                                class="flex size-7 items-center justify-center rounded-md text-base transition-colors hover:bg-muted/50">
+                                            @e.Char
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        @* Preview bar *@
+                        <div class="flex items-center gap-2 border-t px-3 py-2">
+                            @if (_hoveredEmoji != null)
+                            {
+                                <span class="text-xl">@_hoveredEmoji.Char</span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="block truncate font-medium text-xs">@_hoveredEmoji.Name</span>
+                                    <span class="block truncate font-mono text-[10px] text-muted-foreground">@_hoveredEmoji.Shortcode</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted-foreground text-xs">Hover over an emoji to preview</span>
+                            }
+                        </div>
+
+                        @* Category tabs at bottom *@
+                        <div class="flex items-center justify-between border-t px-2 py-1">
+                            @foreach (var cat in _emojiCategories)
+                            {
+                                var c = cat;
+                                <button type="button"
+                                        @onclick="@(() => { _activeCategory = c.Id; _emojiSearch = ""; })"
+                                        aria-label="@c.Label"
+                                        class="@Cn.Merge("flex size-7 items-center justify-center rounded-md transition-colors", _activeCategory == c.Id && string.IsNullOrWhiteSpace(_emojiSearch) ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")">
+                                    <LucideIconCn Name="@c.IconName" Size="14" Class="size-3.5" />
+                                </button>
+                            }
+                        </div>
+
+                    </PopoverContentCn>
+                </PopoverCn>
+
+                @* Message input *@
+                <div class="relative min-w-0 flex-1 rounded-md border bg-background">
+                    <textarea @bind="_input"
+                              @bind:event="oninput"
+                              @onkeydown="HandleKeyDown"
+                              placeholder="Type a message..."
+                              rows="1"
+                              class="max-h-32 min-h-0 w-full resize-none border-0 bg-transparent pr-10 text-sm shadow-none outline-none placeholder:text-muted-foreground/50 focus-visible:ring-0"></textarea>
+                    <button type="button"
+                            @onclick="HandleSubmit"
+                            disabled="@(!CanSubmit)"
+                            class="absolute top-1/2 right-1 size-7 -translate-y-1/2 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record EmojiItem(string Char, string Name, string Shortcode);
+    private record EmojiCategory(string Id, string Label, string IconName, EmojiItem[] Emojis);
+    private record SkinTone(string Id, string Color, string Modifier);
+
+    private class Reaction
+    {
+        public string Emoji { get; set; } = "";
+        public int Count { get; set; }
+        public bool Reacted { get; set; }
+    }
+
+    private class ChatMessage
+    {
+        public string Id { get; set; } = "";
+        public string Sender { get; set; } = "";
+        public string Initials { get; set; } = "";
+        public string Content { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+        public List<Reaction> Reactions { get; set; } = new();
+    }
+
+    private class FloatingReactionState
+    {
+        public string Id { get; set; } = "";
+        public string Emoji { get; set; } = "";
+    }
+
+    private static readonly SkinTone[] _skinTones =
+    [
+        new("default",     "bg-yellow-400", ""),
+        new("light",       "bg-amber-200",  "\U0001F3FB"),
+        new("medium-light","bg-amber-300",  "\U0001F3FC"),
+        new("medium",      "bg-amber-500",  "\U0001F3FD"),
+        new("medium-dark", "bg-amber-700",  "\U0001F3FE"),
+        new("dark",        "bg-amber-900",  "\U0001F3FF"),
+    ];
+
+    private static readonly EmojiCategory[] _emojiCategories =
+    [
+        new("smileys", "Smileys", "smile",
+        [
+            new("\U0001F600","Grinning Face",":grinning:"),
+            new("\U0001F603","Smiley",":smiley:"),
+            new("\U0001F604","Smile",":smile:"),
+            new("\U0001F601","Beaming Face",":grin:"),
+            new("\U0001F606","Squinting Face",":laughing:"),
+            new("\U0001F605","Sweat Smile",":sweat_smile:"),
+            new("\U0001F602","Joy",":joy:"),
+            new("\U0001F923","ROFL",":rofl:"),
+            new("\U0001F60A","Blush",":blush:"),
+            new("\U0001F607","Innocent",":innocent:"),
+            new("\U0001F609","Wink",":wink:"),
+            new("\U0001F60C","Relieved",":relieved:"),
+            new("\U0001F60D","Heart Eyes",":heart_eyes:"),
+            new("\U0001F970","Smiling Hearts",":smiling_hearts:"),
+            new("\U0001F618","Kissing Heart",":kissing_heart:"),
+            new("\U0001F61C","Stuck Out Tongue Wink",":stuck_out_tongue_winking:"),
+            new("\U0001F61D","Stuck Out Tongue Closed",":stuck_out_tongue_closed:"),
+            new("\U0001F914","Thinking",":thinking:"),
+            new("\U0001F910","Zipper Mouth",":zipper_mouth:"),
+            new("\U0001F928","Raised Eyebrow",":raised_eyebrow:"),
+            new("\U0001F644","Rolling Eyes",":rolling_eyes:"),
+            new("\U0001F62C","Grimacing",":grimacing:"),
+            new("\U0001F60F","Smirk",":smirk:"),
+            new("\U0001F611","Expressionless",":expressionless:"),
+        ]),
+        new("hearts", "Hearts", "heart",
+        [
+            new("❤️","Red Heart",":heart:"),
+            new("\U0001F9E1","Orange Heart",":orange_heart:"),
+            new("\U0001F49B","Yellow Heart",":yellow_heart:"),
+            new("\U0001F49A","Green Heart",":green_heart:"),
+            new("\U0001F499","Blue Heart",":blue_heart:"),
+            new("\U0001F49C","Purple Heart",":purple_heart:"),
+            new("\U0001F5A4","Black Heart",":black_heart:"),
+            new("\U0001F90D","White Heart",":white_heart:"),
+            new("\U0001F498","Cupid",":cupid:"),
+            new("\U0001F496","Sparkling Heart",":sparkling_heart:"),
+            new("\U0001F493","Heartbeat",":heartbeat:"),
+            new("\U0001F49E","Revolving Hearts",":revolving_hearts:"),
+        ]),
+        new("animals", "Animals", "cat",
+        [
+            new("\U0001F436","Dog Face",":dog:"),
+            new("\U0001F431","Cat Face",":cat:"),
+            new("\U0001F42D","Mouse Face",":mouse:"),
+            new("\U0001F439","Hamster",":hamster:"),
+            new("\U0001F430","Rabbit Face",":rabbit:"),
+            new("\U0001F43B","Bear",":bear:"),
+            new("\U0001F43C","Panda",":panda:"),
+            new("\U0001F428","Koala",":koala:"),
+            new("\U0001F42F","Tiger",":tiger:"),
+            new("\U0001F981","Lion",":lion:"),
+            new("\U0001F984","Unicorn",":unicorn:"),
+            new("\U0001F41D","Honeybee",":bee:"),
+        ]),
+        new("food", "Food", "utensils",
+        [
+            new("\U0001F34E","Red Apple",":apple:"),
+            new("\U0001F34A","Tangerine",":tangerine:"),
+            new("\U0001F34B","Lemon",":lemon:"),
+            new("\U0001F34C","Banana",":banana:"),
+            new("\U0001F349","Watermelon",":watermelon:"),
+            new("\U0001F353","Strawberry",":strawberry:"),
+            new("\U0001F355","Pizza",":pizza:"),
+            new("\U0001F354","Hamburger",":hamburger:"),
+            new("\U0001F37F","Popcorn",":popcorn:"),
+            new("☕","Coffee",":coffee:"),
+            new("\U0001F370","Shortcake",":cake:"),
+            new("\U0001F369","Doughnut",":doughnut:"),
+        ]),
+        new("activities", "Activities", "music",
+        [
+            new("⚽","Soccer Ball",":soccer:"),
+            new("\U0001F3C0","Basketball",":basketball:"),
+            new("\U0001F3C8","Football",":football:"),
+            new("\U0001F3BE","Tennis",":tennis:"),
+            new("\U0001F3B5","Musical Note",":musical_note:"),
+            new("\U0001F3A8","Artist Palette",":art:"),
+            new("\U0001F3AE","Video Game",":video_game:"),
+            new("\U0001F3AF","Bullseye",":dart:"),
+            new("\U0001F3C6","Trophy",":trophy:"),
+            new("\U0001F3B3","Bowling",":bowling:"),
+            new("\U0001F3B2","Game Die",":game_die:"),
+            new("♟️","Chess Pawn",":chess_pawn:"),
+        ]),
+        new("travel", "Travel", "globe",
+        [
+            new("\U0001F680","Rocket",":rocket:"),
+            new("✈️","Airplane",":airplane:"),
+            new("\U0001F697","Car",":car:"),
+            new("\U0001F682","Locomotive",":steam_locomotive:"),
+            new("\U0001F6A2","Ship",":ship:"),
+            new("\U0001F3D6️","Beach",":beach:"),
+            new("\U0001F3D4️","Mountain Snow",":mountain_snow:"),
+            new("\U0001F30D","Globe Europe",":earth_africa:"),
+            new("\U0001F30E","Globe Americas",":earth_americas:"),
+            new("\U0001F3E0","House",":house:"),
+            new("\U0001F3EB","School",":school:"),
+            new("\U0001F3E2","Office",":office:"),
+        ]),
+        new("objects", "Objects", "cpu",
+        [
+            new("\U0001F4BB","Laptop",":computer:"),
+            new("\U0001F4F1","Mobile Phone",":iphone:"),
+            new("⌨️","Keyboard",":keyboard:"),
+            new("\U0001F4A1","Light Bulb",":bulb:"),
+            new("\U0001F50D","Magnifying Glass",":mag:"),
+            new("\U0001F512","Lock",":lock:"),
+            new("\U0001F4CE","Paperclip",":paperclip:"),
+            new("✏️","Pencil",":pencil2:"),
+            new("\U0001F4DA","Books",":books:"),
+            new("\U0001F4E7","Email",":email:"),
+            new("\U0001F4C5","Calendar",":calendar:"),
+            new("⏰","Alarm Clock",":alarm_clock:"),
+        ]),
+    ];
+
+    private static readonly string[] _quickReactions =
+    [
+        "\U0001F44D",
+        "❤️",
+        "\U0001F602",
+        "\U0001F62E",
+        "\U0001F622",
+        "\U0001F525",
+    ];
+
+    private List<ChatMessage> _messages =
+    [
+        new() {
+            Id = "m1", Sender = "Jake Wilson", Initials = "JW",
+            Content = "Just deployed the new notification system to production!",
+            Timestamp = "2:10 PM",
+            Reactions =
+            [
+                new Reaction { Emoji = "\U0001F680", Count = 3, Reacted = false },
+                new Reaction { Emoji = "\U0001F525", Count = 2, Reacted = true },
+            ]
+        },
+        new() {
+            Id = "m2", Sender = "Mia Chang", Initials = "MC",
+            Content = "Nice work Jake! Did you test the email fallback? Last time it silently failed.",
+            Timestamp = "2:12 PM",
+            Reactions = [ new Reaction { Emoji = "\U0001F44D", Count = 1, Reacted = false } ]
+        },
+        new() {
+            Id = "m3", Sender = "Jake Wilson", Initials = "JW",
+            Content = "Yes, learned my lesson. Email, SMS, and push all verified. Even added retry logic with exponential backoff this time.",
+            Timestamp = "2:14 PM",
+            Reactions = []
+        },
+        new() {
+            Id = "m4", Sender = "Priya Patel", Initials = "PP",
+            Content = "The retry logic is clutch. We had a similar issue last quarter where transient failures caused missed notifications for 2 hours.",
+            Timestamp = "2:18 PM",
+            Reactions = [ new Reaction { Emoji = "\U0001F4AF", Count = 2, Reacted = true } ]
+        },
+        new() {
+            Id = "m5", Sender = "Mia Chang", Initials = "MC",
+            Content = "Can we get a quick rundown of the retry intervals? Want to make sure it matches our SLA requirements.",
+            Timestamp = "2:20 PM",
+            Reactions = []
+        },
+        new() {
+            Id = "m6", Sender = "Jake Wilson", Initials = "JW",
+            Content = "Sure. First retry at 1s, then 5s, 30s, 2min, 10min. Max 5 attempts. After that it hits the dead letter queue and alerts on-call.",
+            Timestamp = "2:22 PM",
+            Reactions =
+            [
+                new Reaction { Emoji = "\U0001F44D", Count = 4, Reacted = true },
+                new Reaction { Emoji = "❤️", Count = 1, Reacted = false },
+            ]
+        },
+    ];
+
+    private string _input = "";
+    private bool _emojiOpen = false;
+    private string _activeCategory = "smileys";
+    private string _emojiSearch = "";
+    private int _skinTone = 0;
+    private EmojiItem? _hoveredEmoji = null;
+    private List<EmojiItem> _recentEmojis =
+    [
+        new("\U0001F44D", "Thumbs Up", ":thumbsup:"),
+        new("\U0001F602", "Joy", ":joy:"),
+        new("❤️", "Red Heart", ":heart:"),
+        new("\U0001F525", "Fire", ":fire:"),
+        new("\U0001F680", "Rocket", ":rocket:"),
+    ];
+    private string? _reactionPopoverId = null;
+    private FloatingReactionState? _floatingReaction = null;
+
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(_input);
+
+    private bool IsNewGroup(int idx)
+    {
+        if (idx == 0) return true;
+        return _messages[idx].Sender != _messages[idx - 1].Sender;
+    }
+
+    private EmojiCategory GetCurrentCategory()
+    {
+        foreach (var c in _emojiCategories)
+            if (c.Id == _activeCategory) return c;
+        return _emojiCategories[0];
+    }
+
+    private EmojiItem[] GetSearchResults()
+    {
+        var term = _emojiSearch.Trim().ToLowerInvariant();
+        var results = new System.Collections.Generic.List<EmojiItem>();
+        foreach (var cat in _emojiCategories)
+            foreach (var e in cat.Emojis)
+                if (e.Name.ToLowerInvariant().Contains(term))
+                    results.Add(e);
+        return results.ToArray();
+    }
+
+    private void InsertEmoji(EmojiItem emoji)
+    {
+        _input += emoji.Char;
+        var filtered = _recentEmojis.FindAll(e => e.Char != emoji.Char);
+        filtered.Insert(0, emoji);
+        _recentEmojis = filtered.Count > 8 ? filtered.GetRange(0, 8) : filtered;
+    }
+
+    private void ToggleReaction(string messageId, string emoji)
+    {
+        var msg = _messages.Find(m => m.Id == messageId);
+        if (msg == null) return;
+
+        var existing = msg.Reactions.Find(r => r.Emoji == emoji);
+        if (existing != null)
+        {
+            var newReacted = !existing.Reacted;
+            var newCount = newReacted ? existing.Count + 1 : existing.Count - 1;
+            if (newCount <= 0)
+                msg.Reactions.Remove(existing);
+            else
+            {
+                existing.Reacted = newReacted;
+                existing.Count = newCount;
+            }
+        }
+        else
+        {
+            msg.Reactions.Add(new Reaction { Emoji = emoji, Count = 1, Reacted = true });
+        }
+
+        _floatingReaction = new FloatingReactionState { Id = messageId, Emoji = emoji };
+        _reactionPopoverId = null;
+    }
+
+    private void HandleSubmit()
+    {
+        if (!CanSubmit) return;
+        _input = "";
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            HandleSubmit();
+        }
+    }
+}

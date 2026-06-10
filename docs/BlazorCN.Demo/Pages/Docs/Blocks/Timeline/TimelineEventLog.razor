@@ -1,0 +1,145 @@
+@* ============================================================
+   Block: timeline-event-log
+   Title: TimelineEventLog
+   Description: React server log timeline with severity colors built with Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/timeline/timeline-event-log.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Event Log</span>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_counts.Info
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_counts.Warn
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_counts.Error
+                </span>
+            </div>
+        </div>
+
+        @* Timeline *@
+        <div>
+            @foreach (var evt in _events)
+            {
+                var idx = System.Array.IndexOf(_events, evt);
+                var isLast = idx == _events.Length - 1;
+                var isExpanded = _expanded == evt.Id;
+                var cfg = GetConfig(evt.Severity);
+                var severityClass = evt.Severity == Severity.Error
+                    ? "w-10 shrink-0 pt-px font-mono text-[10px] font-semibold text-red-600 dark:text-red-400"
+                    : evt.Severity == Severity.Warn
+                        ? "w-10 shrink-0 pt-px font-mono text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+                        : "w-10 shrink-0 pt-px font-mono text-[10px] font-semibold text-muted-foreground";
+                var chevronClass = isExpanded
+                    ? "mt-0.5 size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200 rotate-90"
+                    : "mt-0.5 size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200";
+                var evtId = evt.Id;
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => ToggleExpand(evtId))"
+                            class="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                        @* Timeline dot + line *@
+                        <div class="relative flex shrink-0 items-center pt-1">
+                            <span class="@($"size-2 rounded-full {cfg.Dot}")"></span>
+                            @if (!isLast)
+                            {
+                                <div class="absolute top-5 bottom-[-14px] left-[3px] w-px bg-border"></div>
+                            }
+                        </div>
+
+                        @* Timestamp *@
+                        <span class="w-24 shrink-0 pt-px font-mono text-muted-foreground text-xs">@evt.Timestamp</span>
+
+                        @* Severity label *@
+                        <span class="@severityClass">@cfg.Label</span>
+
+                        @* Service + Message *@
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 shrink-0 font-mono text-[10px] font-normal">@evt.Service</BadgeCn>
+                            </div>
+                            <p class="mt-1 text-sm leading-snug">@evt.Message</p>
+                        </div>
+
+                        @if (evt.Detail != null)
+                        {
+                            <LucideIconCn Name="chevron-right" Size="14" Class="@chevronClass" />
+                        }
+                    </button>
+
+                    @if (isExpanded && evt.Detail != null)
+                    {
+                        <div class="px-4 pb-3 pl-[52px]">
+                            <div class="rounded-md bg-zinc-950 p-3">
+                                <p class="font-mono text-xs leading-relaxed text-zinc-300">@evt.Detail</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum Severity { Info, Warn, Error }
+
+    private record LogEvent(string Id, Severity Severity, string Service, string Message, string Timestamp, string? Detail = null);
+
+    private record SeverityConfig(string Dot, string Label);
+
+    private static SeverityConfig GetConfig(Severity sev) => sev switch
+    {
+        Severity.Info => new SeverityConfig("bg-emerald-500", "INFO"),
+        Severity.Warn => new SeverityConfig("bg-amber-500", "WARN"),
+        Severity.Error => new SeverityConfig("bg-red-500", "ERR"),
+        _ => new SeverityConfig("bg-emerald-500", "INFO"),
+    };
+
+    private static readonly LogEvent[] _events =
+    [
+        new("1", Severity.Error, "api-gateway", "Connection pool exhausted — 0 available connections", "14:32:18.442",
+            "PgPool: All 20 connections in use. 14 queries waiting. Oldest connection held for 45s by query: SELECT * FROM analytics WHERE created_at > $1. Consider increasing pool_size or adding read replicas."),
+        new("2", Severity.Warn, "auth-service", "Rate limit threshold at 85% for IP 203.0.113.77", "14:32:16.891",
+            "Sliding window: 85/100 requests in last 60s. Source: 203.0.113.77. Endpoint: POST /api/auth/login. Pattern matches credential stuffing heuristic. Auto-block at 100%."),
+        new("3", Severity.Info, "deploy-agent", "Rolling update started — 0/3 replicas updated", "14:32:14.203"),
+        new("4", Severity.Error, "webhook-worker", "Stripe webhook delivery failed after 3 retries", "14:32:11.667",
+            "Event: invoice.payment_succeeded (evt_1OxQW2...). Endpoint returned 503 on all 3 attempts. Backoff: 1s, 5s, 25s. Moved to dead letter queue. Manual retry required via admin panel."),
+        new("5", Severity.Info, "deploy-agent", "Replica 1/3 updated — health check passed", "14:32:09.518"),
+        new("6", Severity.Warn, "cache-service", "Redis memory usage at 78% — eviction policy active", "14:32:07.334",
+            "Memory: 3.12 GB / 4 GB. Policy: allkeys-lru. 847 keys evicted in last 5 min. Top namespace: session:* (1.4 GB, 23K keys). Consider increasing maxmemory or reducing TTL."),
+        new("7", Severity.Info, "scheduler", "Cron job 'daily-report' completed in 4.2s", "14:32:05.110"),
+        new("8", Severity.Error, "email-service", "SMTP connection timeout after 30s to smtp.provider.com", "14:32:02.887",
+            "Timeout connecting to smtp.provider.com:587. DNS resolution: 12ms. TCP handshake: timeout at 30s. Failover to backup SMTP provider initiated. 3 emails queued for retry."),
+        new("9", Severity.Info, "deploy-agent", "Replica 2/3 updated — health check passed", "14:31:59.441"),
+        new("10", Severity.Warn, "api-gateway", "P99 latency spike to 1,240ms on /api/search", "14:31:56.203",
+            "Baseline P99: 180ms. Current P99: 1,240ms. Affected endpoint: GET /api/search. Correlated with connection pool saturation. 23 requests in-flight. Consider query optimization or caching."),
+        new("11", Severity.Info, "deploy-agent", "Replica 3/3 updated — rolling update complete", "14:31:52.778"),
+        new("12", Severity.Info, "api-gateway", "Connection pool recovered — 12 available connections", "14:31:48.112"),
+    ];
+
+    private record CountsRecord(int Info, int Warn, int Error);
+
+    private CountsRecord _counts = new(
+        _events.Count(e => e.Severity == Severity.Info),
+        _events.Count(e => e.Severity == Severity.Warn),
+        _events.Count(e => e.Severity == Severity.Error)
+    );
+
+    private string? _expanded = "1";
+
+    private void ToggleExpand(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+}

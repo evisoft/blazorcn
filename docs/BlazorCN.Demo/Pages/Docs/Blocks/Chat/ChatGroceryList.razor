@@ -1,0 +1,235 @@
+@* ============================================================
+   Block: chat-grocery-list
+   Title: ChatGroceryList
+   Description: React shared grocery list chat block for Next.js with checkable items, category grouping, contributor avatars, item counts, and real-time collaboration using shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-grocery-list.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <LucideIconCn Name="shopping-cart" Size="16" Class="size-4 text-muted-foreground" />
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Weekly Groceries</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-muted-foreground text-xs">
+                        @(_checkedCount)/@(_totalCount) items
+                    </span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">3 contributors</span>
+                </div>
+            </div>
+            <div class="flex -space-x-1.5">
+                @foreach (var p in _participants)
+                {
+                    var participant = p;
+                    <AvatarCn Class="size-6 ring-2 ring-card">
+                        <AvatarFallbackCn Class="@Cn.Merge("text-white text-[8px]", participant.Color)">
+                            @participant.Initials
+                        </AvatarFallbackCn>
+                    </AvatarCn>
+                }
+            </div>
+        </div>
+
+        @* Tab toggle *@
+        <div class="flex border-b">
+            <button
+                type="button"
+                @onclick="@(() => _showList = true)"
+                class="@Cn.Merge("flex-1 py-2 text-center text-xs font-medium transition-colors", _showList ? "border-b-2 border-foreground text-foreground" : "text-muted-foreground hover:text-foreground")">
+                List
+            </button>
+            <button
+                type="button"
+                @onclick="@(() => _showList = false)"
+                class="@Cn.Merge("flex-1 py-2 text-center text-xs font-medium transition-colors", !_showList ? "border-b-2 border-foreground text-foreground" : "text-muted-foreground hover:text-foreground")">
+                Chat
+            </button>
+        </div>
+
+        @* Content *@
+        <div class="flex-1 overflow-y-auto">
+            @if (_showList)
+            {
+                <div>
+                    @foreach (var cat in _categoryOrder)
+                    {
+                        var category = cat;
+                        var catItems = _items.Where(i => i.Category == category).ToList();
+                        if (catItems.Count == 0) continue;
+                        var config = _categoryConfig[category];
+
+                        <div>
+                            <div class="flex items-center gap-2 bg-muted/30 px-4 py-2">
+                                <LucideIconCn Name="@config.IconName" Size="14" Class="size-3.5 text-muted-foreground" />
+                                <span class="font-medium text-muted-foreground text-xs">
+                                    @config.Label
+                                </span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto h-4 px-1.5 font-mono text-[10px]">
+                                    @catItems.Count
+                                </BadgeCn>
+                            </div>
+                            @for (var i = 0; i < catItems.Count; i++)
+                            {
+                                var idx = i;
+                                var item = catItems[idx];
+                                var contributor = _participantMap.TryGetValue(item.AddedBy, out var c) ? c : null;
+                                <div
+                                    role="button"
+                                    tabindex="0"
+                                    @onclick="@(() => HandleToggle(item.Id))"
+                                    @onkeydown="@((KeyboardEventArgs e) => HandleItemKeyDown(e, item.Id))"
+                                    class="@Cn.Merge("flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", idx < catItems.Count - 1 ? "border-b" : "")">
+                                    <div
+                                        class="@Cn.Merge("flex size-4 shrink-0 items-center justify-center rounded border transition-colors", item.Checked ? "border-foreground bg-foreground" : "border-muted-foreground/30")"
+                                        aria-hidden="true">
+                                        @if (item.Checked)
+                                        {
+                                            <LucideIconCn Name="check" Size="12" Class="size-3 text-background" />
+                                        }
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <span class="@Cn.Merge("text-sm", item.Checked ? "text-muted-foreground line-through" : "")">
+                                            @item.Name
+                                        </span>
+                                    </div>
+                                    <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                                        @item.Quantity
+                                    </span>
+                                    @if (contributor != null)
+                                    {
+                                        <AvatarCn Class="size-5">
+                                            <AvatarFallbackCn Class="@Cn.Merge("text-white text-[7px]", contributor.Color)">
+                                                @contributor.Initials
+                                            </AvatarFallbackCn>
+                                        </AvatarCn>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="flex flex-col gap-3 px-4 py-3">
+                    @foreach (var msg in _chatMessages)
+                    {
+                        var message = msg;
+                        var isMe = message.Sender == "me";
+                        <div class="@(isMe ? "flex flex-col items-end" : "flex flex-col items-start")">
+                            <div class="mb-0.5 flex items-center gap-1.5 px-1">
+                                <span class="font-medium text-xs">@message.SenderName</span>
+                                <span class="text-muted-foreground text-[10px]">@message.Timestamp</span>
+                            </div>
+                            <div class="@Cn.Merge("max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed", isMe ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted/50")">
+                                @message.Content
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon" Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="plus" Size="16" Class="size-4" />
+                </ButtonCn>
+                <InputCn
+                    @bind-Value="_input"
+                    Placeholder="@(_showList ? "Add an item..." : "Type a message...")"
+                    Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Disabled="@(string.IsNullOrWhiteSpace(_input))" OnClick="@HandleSubmit" Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private bool _showList = true;
+    private string _input = "";
+
+    private int _checkedCount => _items.Count(i => i.Checked);
+    private int _totalCount => _items.Count;
+
+    private record Participant(string Name, string Initials, string Color);
+    private record GroceryItem(string Id, string Name, string Quantity, string Category, string AddedBy, bool Checked);
+    private record ChatMessage(string Id, string Sender, string SenderName, string Content, string Timestamp);
+    private record CategoryConfig(string Label, string IconName);
+
+    private static readonly Participant[] _participants =
+    [
+        new("You",  "YO", "bg-blue-600"),
+        new("Alex", "AR", "bg-violet-600"),
+        new("Sam",  "SN", "bg-emerald-600"),
+    ];
+
+    private static readonly Dictionary<string, Participant> _participantMap = new()
+    {
+        ["you"]  = new("You",  "YO", "bg-blue-600"),
+        ["alex"] = new("Alex", "AR", "bg-violet-600"),
+        ["sam"]  = new("Sam",  "SN", "bg-emerald-600"),
+    };
+
+    private static readonly Dictionary<string, CategoryConfig> _categoryConfig = new()
+    {
+        ["produce"] = new("Produce",       "leaf"),
+        ["dairy"]   = new("Dairy",         "milk"),
+        ["pantry"]  = new("Pantry",        "warehouse"),
+        ["meat"]    = new("Meat & Seafood", "shopping-cart"),
+        ["frozen"]  = new("Frozen",        "shopping-cart"),
+    };
+
+    private static readonly string[] _categoryOrder = ["produce", "dairy", "pantry", "meat", "frozen"];
+
+    private List<GroceryItem> _items =
+    [
+        new("1",  "Avocados",        "3",       "produce", "alex", false),
+        new("2",  "Baby spinach",    "1 bag",   "produce", "you",  true),
+        new("3",  "Cherry tomatoes", "1 pint",  "produce", "sam",  false),
+        new("4",  "Bananas",         "1 bunch", "produce", "alex", false),
+        new("5",  "Greek yogurt",    "2",       "dairy",   "you",  false),
+        new("6",  "Oat milk",        "1",       "dairy",   "sam",  true),
+        new("7",  "Parmesan cheese", "1 block", "dairy",   "alex", false),
+        new("8",  "Olive oil",       "1 bottle","pantry",  "you",  false),
+        new("9",  "Brown rice",      "2 lbs",   "pantry",  "sam",  true),
+        new("10", "Chicken thighs",  "2 lbs",   "meat",    "alex", false),
+        new("11", "Salmon fillets",  "4",       "meat",    "you",  false),
+        new("12", "Frozen berries",  "1 bag",   "frozen",  "sam",  false),
+    ];
+
+    private static readonly ChatMessage[] _chatMessages =
+    [
+        new("c1", "them", "Alex", "I added avocados and chicken thighs. Can someone grab parmesan too?", "10:15 AM"),
+        new("c2", "me",   "You",  "Got it. I also added salmon and olive oil. Are we still doing meal prep Sunday?", "10:18 AM"),
+        new("c3", "them", "Sam",  "Yes! I added frozen berries and brown rice. Already picked up the oat milk.", "10:22 AM"),
+        new("c4", "them", "Alex", "Nice. I'll check off spinach — grabbed it on my way home.", "10:25 AM"),
+    ];
+
+    private void HandleToggle(string id)
+    {
+        _items = _items.Select(item => item.Id == id ? item with { Checked = !item.Checked } : item).ToList();
+    }
+
+    private void HandleItemKeyDown(KeyboardEventArgs e, string id)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            HandleToggle(id);
+        }
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

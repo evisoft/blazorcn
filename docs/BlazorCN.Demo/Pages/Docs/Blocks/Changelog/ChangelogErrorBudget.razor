@@ -1,0 +1,155 @@
+@* ============================================================
+   Block: changelog-error-budget
+   Title: ChangelogErrorBudget
+   Description: A React error budget changelog block for Next.js with budget remaining bars, burn rate indicators, incident impact tracking, and per-release consumption metrics built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/changelog/changelog-error-budget.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="gauge" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Error Budget</span>
+            </div>
+            <span class="text-muted-foreground text-xs">March 2026 window</span>
+        </div>
+
+        @* Budget remaining *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-4">
+                <div class="flex items-baseline gap-1">
+                    <span class="@Cn.Merge("font-semibold text-2xl tabular-nums", _budgetColor)">
+                        @TotalBudgetRemaining%
+                    </span>
+                    <span class="text-muted-foreground text-xs">remaining</span>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    SLO: 99.95%
+                </BadgeCn>
+                <div class="ml-auto flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="trending-down" Size="12" Class="size-3 text-red-500" />
+                    <span>Burning fast</span>
+                </div>
+            </div>
+            <div class="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                <div class="@Cn.Merge("h-full rounded-full", _budgetBarColor)" style="@($"width:{TotalBudgetRemaining}%")"></div>
+            </div>
+            <div class="mt-1.5 flex items-center justify-between text-muted-foreground text-xs">
+                <span>0%</span>
+                <span>Budget consumed: @((100 - TotalBudgetRemaining).ToString("F1"))%</span>
+                <span>100%</span>
+            </div>
+        </div>
+
+        @* Release rows *@
+        @foreach (var item in _releasesWithIndex)
+        {
+            var release = item.Release;
+            var isLast = item.Index == _releases.Length - 1;
+            var burnConfig = _burnRateConfig[release.BurnRate];
+            var consumptionBarClass = release.BurnRate == "critical" ? "bg-red-500" : release.BurnRate == "elevated" ? "bg-amber-500" : "bg-emerald-500";
+            var badgeClass = release.BurnRate == "critical"
+                ? "text-[10px] font-normal border-0 bg-red-500/10 text-red-600 dark:text-red-400"
+                : release.BurnRate == "elevated"
+                    ? "text-[10px] font-normal border-0 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    : "text-[10px] font-normal";
+            var barWidth = Math.Min(release.BudgetConsumed * 3, 100);
+            <div class="@Cn.Merge("px-4 py-3", !isLast ? "border-b" : "")">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        @if (release.BurnRate == "critical")
+                        {
+                            <LucideIconCn Name="flame" Size="16" Class="size-4 text-red-500" />
+                        }
+                        else if (release.BurnRate == "elevated")
+                        {
+                            <LucideIconCn Name="alert-triangle" Size="16" Class="size-4 text-amber-500" />
+                        }
+                        else
+                        {
+                            <span class="size-1.5 rounded-full bg-emerald-500 ml-1 mr-1.5"></span>
+                        }
+                        <span class="font-medium text-sm">@release.Version</span>
+                        <span class="text-muted-foreground text-xs">@release.Date</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="@Cn.Merge("font-mono text-xs", burnConfig.Text)">@release.BurnMultiplier</span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@badgeClass">
+                            @burnConfig.Label
+                        </BadgeCn>
+                    </div>
+                </div>
+
+                @* Consumption bar *@
+                <div class="mt-2 flex items-center gap-3">
+                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div class="@Cn.Merge("h-full rounded-full", consumptionBarClass)" style="@($"width:{barWidth:F1}%")"></div>
+                    </div>
+                    <span class="w-12 text-right font-mono text-muted-foreground text-xs tabular-nums">-@(release.BudgetConsumed)%</span>
+                </div>
+
+                @* Details *@
+                <div class="mt-1.5 flex items-center gap-3 text-muted-foreground text-xs">
+                    <span>@release.Incidents incident@(release.Incidents != 1 ? "s" : "")</span>
+                    <span class="text-muted-foreground/40">&middot;</span>
+                    <span>@release.Downtime downtime</span>
+                    @if (release.Incidents > 0)
+                    {
+                        <span class="text-muted-foreground/40">&middot;</span>
+                        <span class="truncate">@release.TopCause</span>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                30-day rolling window · Budget resets Apr 1 · Alert at 20% remaining
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record BurnRateConfig(string Dot, string Text, string Label);
+    private record Release(string Id, string Version, string Date, double BudgetConsumed, double BudgetRemaining, string BurnRate, string BurnMultiplier, int Incidents, string Downtime, string TopCause);
+    private record ReleaseWithIndex(Release Release, int Index);
+
+    private static readonly Dictionary<string, BurnRateConfig> _burnRateConfig = new()
+    {
+        ["normal"] = new("bg-emerald-500", "text-emerald-600 dark:text-emerald-400", "Normal"),
+        ["elevated"] = new("bg-amber-500", "text-amber-600 dark:text-amber-400", "Elevated"),
+        ["critical"] = new("bg-red-500", "text-red-600 dark:text-red-400", "Critical"),
+    };
+
+    private const double TotalBudgetRemaining = 34.2;
+
+    private static readonly Release[] _releases =
+    [
+        new("r1", "v6.3.0", "Mar 28, 2026", 18.4, 34.2, "critical", "3.2x", 2, "14 min", "Database connection pool exhaustion during peak traffic"),
+        new("r2", "v6.2.1", "Mar 21, 2026", 8.7, 52.6, "elevated", "1.8x", 1, "6 min", "CDN cache invalidation causing origin overload"),
+        new("r3", "v6.2.0", "Mar 14, 2026", 3.1, 61.3, "normal", "0.7x", 0, "0 min", "No incidents"),
+        new("r4", "v6.1.2", "Mar 7, 2026", 12.2, 64.4, "elevated", "2.1x", 1, "9 min", "Memory leak in background job processor"),
+        new("r5", "v6.1.0", "Feb 28, 2026", 5.6, 76.6, "normal", "1.0x", 0, "0 min", "No incidents"),
+    ];
+
+    private IEnumerable<ReleaseWithIndex> _releasesWithIndex =>
+        _releases.Select((r, i) => new ReleaseWithIndex(r, i));
+
+    private string _budgetColor =>
+        TotalBudgetRemaining >= 50
+            ? "text-emerald-600 dark:text-emerald-400"
+            : TotalBudgetRemaining >= 20
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-red-600 dark:text-red-400";
+
+    private string _budgetBarColor =>
+        TotalBudgetRemaining >= 50
+            ? "bg-emerald-500"
+            : TotalBudgetRemaining >= 20
+                ? "bg-amber-500"
+                : "bg-red-500";
+}

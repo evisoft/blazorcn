@@ -1,0 +1,264 @@
+@* ============================================================
+   Block: reviews-approval-workflow
+   Title: ReviewsApprovalWorkflow
+   Description: A multi-column review moderation pipeline for React and Next.js with pending, approved, and rejected columns, drag-style card transitions, bulk actions, and status badges built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-approval-workflow.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    <div class="space-y-3">
+        @* Header *@
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-sm font-medium">Review Moderation</h2>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    @_reviews.Count total reviews across all stages
+                </p>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                @(GetColumnReviews("pending").Count) pending
+            </BadgeCn>
+        </div>
+
+        @* Three-column pipeline *@
+        <div class="grid grid-cols-1 gap-2 md:grid-cols-3">
+            @foreach (var col in _columns)
+            {
+                var colKey = col.Key;
+                var columnReviews = GetColumnReviews(colKey);
+                var selectedInCol = GetSelectedInColumn(colKey);
+                var allInColSelected = columnReviews.Count > 0 && columnReviews.All(r => _selected.Contains(r.Id));
+
+                <div class="flex flex-col overflow-hidden rounded-lg border bg-card">
+                    @* Column header *@
+                    <div class="flex items-center justify-between border-b px-3 py-2.5">
+                        <div class="flex items-center gap-2">
+                            <span class="@($"size-1.5 rounded-full {col.DotColor}")"></span>
+                            <span class="text-xs font-medium">@col.Label</span>
+                            <span class="text-[10px] text-muted-foreground tabular-nums">
+                                @columnReviews.Count
+                            </span>
+                        </div>
+                        @if (columnReviews.Count > 0)
+                        {
+                            <span class="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground"
+                                  @onclick="@(() => ToggleAllInColumn(colKey))">
+                                @(allInColSelected ? "Deselect all" : "Select all")
+                            </span>
+                        }
+                    </div>
+
+                    @* Bulk actions bar *@
+                    @if (selectedInCol.Count > 0)
+                    {
+                        <div class="flex items-center justify-between border-b bg-muted/30 px-3 py-1.5">
+                            <span class="text-[10px] text-muted-foreground">
+                                @selectedInCol.Count selected
+                            </span>
+                            <div class="flex items-center gap-1">
+                                @if (colKey != "approved")
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-5 gap-1 px-1.5 text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                                              @onclick="@(() => UpdateStatus(selectedInCol.Select(r => r.Id).ToList(), "approved"))">
+                                        <LucideIconCn Name="check" Size="10" Class="size-2.5" />
+                                        Approve
+                                    </ButtonCn>
+                                }
+                                @if (colKey != "rejected")
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                              Class="h-5 gap-1 px-1.5 text-[10px] text-red-600 hover:text-red-700 dark:text-red-400"
+                                              @onclick="@(() => UpdateStatus(selectedInCol.Select(r => r.Id).ToList(), "rejected"))">
+                                        <LucideIconCn Name="x" Size="10" Class="size-2.5" />
+                                        Reject
+                                    </ButtonCn>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @* Review cards *@
+                    <div class="flex-1 space-y-0 divide-y">
+                        @foreach (var review in columnReviews)
+                        {
+                            var isSelected = _selected.Contains(review.Id);
+                            var reviewId = review.Id;
+
+                            <div class="@Cn.Merge("px-3 py-2.5 transition-colors", isSelected ? "bg-muted/30" : "")">
+                                @* Checkbox + title row *@
+                                <div class="flex items-start gap-2">
+                                    <span class="mt-0.5 flex shrink-0 cursor-pointer items-center">
+                                        <CheckboxCn Checked="@isSelected"
+                                                    CheckedChanged="@((bool _) => ToggleSelect(reviewId))" />
+                                    </span>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="truncate text-xs font-medium">@review.Title</span>
+                                            <div class="flex shrink-0 items-center gap-0.5">
+                                                @for (int i = 0; i < 5; i++)
+                                                {
+                                                    var starIndex = i;
+                                                    <LucideIconCn Name="star"
+                                                                  Size="10"
+                                                                  Class="@Cn.Merge("size-2.5", starIndex < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                                }
+                                            </div>
+                                        </div>
+                                        <p class="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
+                                            @review.Excerpt
+                                        </p>
+                                        <div class="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                            <span class="flex items-center gap-0.5">
+                                                @review.Author.Name
+                                                @if (review.Author.IsVerified)
+                                                {
+                                                    <LucideIconCn Name="shield-check" Size="10" Class="size-2.5 text-blue-500" />
+                                                }
+                                            </span>
+                                            <span aria-hidden="true">-</span>
+                                            <span>@review.Product</span>
+                                            <span aria-hidden="true">-</span>
+                                            <span>@review.Submitted</span>
+                                        </div>
+
+                                        @* Flag reason *@
+                                        @if (!string.IsNullOrEmpty(review.FlagReason))
+                                        {
+                                            <div class="mt-1.5 flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5">
+                                                <LucideIconCn Name="circle-dot" Size="10" Class="size-2.5 text-amber-600 dark:text-amber-400" />
+                                                <span class="text-[10px] text-amber-600 dark:text-amber-400">
+                                                    @review.FlagReason
+                                                </span>
+                                            </div>
+                                        }
+
+                                        @* Inline actions for pending *@
+                                        @if (colKey == "pending")
+                                        {
+                                            <div class="mt-2 flex items-center gap-1">
+                                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                                          Class="h-5 gap-1 px-2 text-[10px]"
+                                                          @onclick="@(() => UpdateStatus(new List<string> { reviewId }, "approved"))">
+                                                    <LucideIconCn Name="check" Size="10" Class="size-2.5" />
+                                                    Approve
+                                                </ButtonCn>
+                                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                                          Class="h-5 gap-1 px-2 text-[10px]"
+                                                          @onclick="@(() => UpdateStatus(new List<string> { reviewId }, "rejected"))">
+                                                    <LucideIconCn Name="x" Size="10" Class="size-2.5" />
+                                                    Reject
+                                                </ButtonCn>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (columnReviews.Count == 0)
+                        {
+                            <div class="px-3 py-6 text-center text-[10px] text-muted-foreground">
+                                @col.EmptyMessage
+                            </div>
+                        }
+                    </div>
+
+                    @* Column footer *@
+                    <div class="border-t px-3 py-2">
+                        <span class="text-[10px] text-muted-foreground tabular-nums">
+                            @(columnReviews.Sum(r => r.WordCount)) words total
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class ReviewAuthor
+    {
+        public string Name { get; set; } = "";
+        public string Initials { get; set; } = "";
+        public bool IsVerified { get; set; }
+    }
+
+    private class ModerationReview
+    {
+        public string Id { get; set; } = "";
+        public ReviewAuthor Author { get; set; } = new();
+        public int Rating { get; set; }
+        public string Title { get; set; } = "";
+        public string Excerpt { get; set; } = "";
+        public string Product { get; set; } = "";
+        public string Submitted { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string? FlagReason { get; set; }
+        public int WordCount { get; set; }
+    }
+
+    private class ColumnConfig
+    {
+        public string Key { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string DotColor { get; set; } = "";
+        public string EmptyMessage { get; set; } = "";
+    }
+
+    private static readonly ColumnConfig[] _columns =
+    [
+        new() { Key = "pending",  Label = "Pending Review", DotColor = "bg-amber-500",  EmptyMessage = "No reviews awaiting moderation" },
+        new() { Key = "approved", Label = "Approved",       DotColor = "bg-emerald-500", EmptyMessage = "No approved reviews" },
+        new() { Key = "rejected", Label = "Rejected",       DotColor = "bg-red-500",     EmptyMessage = "No rejected reviews" },
+    ];
+
+    private List<ModerationReview> _reviews =
+    [
+        new() { Id = "r1", Author = new() { Name = "Sarah Chen",    Initials = "SC", IsVerified = true  }, Rating = 5, Title = "Excellent developer experience",      Excerpt = "Clean API, great documentation, and the component library saved us weeks of development time on our dashboard project.",                                              Product = "Dashboard Pro",       Submitted = "2 hr ago",    Status = "pending",  WordCount = 142 },
+        new() { Id = "r2", Author = new() { Name = "Marcus Johnson", Initials = "MJ", IsVerified = true  }, Rating = 4, Title = "Solid library with minor rough edges", Excerpt = "The core components are excellent. A few edge cases with form validation needed workarounds but overall great quality.",                                                    Product = "Form Builder",        Submitted = "4 hr ago",    Status = "pending",  WordCount = 98  },
+        new() { Id = "r3", Author = new() { Name = "Elena Petrov",   Initials = "EP", IsVerified = false }, Rating = 2, Title = "Missing critical features",            Excerpt = "The library looks polished but lacks essential data table patterns for enterprise use cases we need.",                                                                        Product = "Table Components",    Submitted = "6 hr ago",    Status = "pending",  FlagReason = "Low rating - manual review suggested",     WordCount = 67  },
+        new() { Id = "r4", Author = new() { Name = "David Kim",      Initials = "DK", IsVerified = true  }, Rating = 5, Title = "Best component library for React",     Excerpt = "We migrated from a custom design system and the transition was seamless. TypeScript support is first-class throughout.",                                                    Product = "Component Library",   Submitted = "Yesterday",   Status = "approved", WordCount = 203 },
+        new() { Id = "r5", Author = new() { Name = "Priya Sharma",   Initials = "PS", IsVerified = true  }, Rating = 4, Title = "Great for rapid prototyping",           Excerpt = "The copy-paste model is refreshing. No dependency bloat, full control over styling and behavior.",                                                                          Product = "UI Kit",              Submitted = "Yesterday",   Status = "approved", WordCount = 115 },
+        new() { Id = "r6", Author = new() { Name = "Alex Turner",    Initials = "AT", IsVerified = false }, Rating = 1, Title = "Spam content flagged",                  Excerpt = "This review contained promotional links and unrelated content that violates community guidelines.",                                                                          Product = "Auth Module",         Submitted = "2 days ago",  Status = "rejected", FlagReason = "Spam detected by automated filter",        WordCount = 12  },
+        new() { Id = "r7", Author = new() { Name = "Jordan Lee",     Initials = "JL", IsVerified = false }, Rating = 1, Title = "Inappropriate language detected",       Excerpt = "This review violated community guidelines and was removed during automated pre-screening.",                                                                                  Product = "Chart Components",    Submitted = "3 days ago",  Status = "rejected", FlagReason = "Language policy violation",                 WordCount = 8   },
+    ];
+
+    private HashSet<string> _selected = new();
+
+    private List<ModerationReview> GetColumnReviews(string status) =>
+        _reviews.Where(r => r.Status == status).ToList();
+
+    private List<ModerationReview> GetSelectedInColumn(string status) =>
+        GetColumnReviews(status).Where(r => _selected.Contains(r.Id)).ToList();
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Add(id))
+            _selected.Remove(id);
+    }
+
+    private void ToggleAllInColumn(string status)
+    {
+        var columnIds = GetColumnReviews(status).Select(r => r.Id).ToList();
+        var allSelected = columnIds.All(id => _selected.Contains(id));
+        if (allSelected)
+        {
+            foreach (var id in columnIds)
+                _selected.Remove(id);
+        }
+        else
+        {
+            foreach (var id in columnIds)
+                _selected.Add(id);
+        }
+    }
+
+    private void UpdateStatus(List<string> ids, string newStatus)
+    {
+        foreach (var review in _reviews.Where(r => ids.Contains(r.Id)))
+            review.Status = newStatus;
+        foreach (var id in ids)
+            _selected.Remove(id);
+    }
+}

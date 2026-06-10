@@ -1,0 +1,168 @@
+@* ============================================================
+   Block: todo-list-multi-board
+   Title: TodoListMultiBoard
+   Description: A tabbed multi-board todo list block for React and Next.js with independent task lists per tab, badge counts, and smooth transitions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-multi-board.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <TabsCn Value="@_activeBoard" ValueChanged="@((string v) => SetActiveBoard(v))">
+            @* Tab header *@
+            <div class="border-b px-4 pt-3">
+                <TabsListCn Class="w-full justify-start gap-0">
+                    @foreach (var board in _boards)
+                    {
+                        var remaining = board.Tasks.Count(t => !t.Completed);
+                        <TabsTriggerCn Value="@board.Id" Class="gap-1.5 text-xs">
+                            @board.Name
+                            <span class="rounded-full bg-muted px-1.5 py-0.5 font-normal text-muted-foreground text-[10px] tabular-nums">@remaining</span>
+                        </TabsTriggerCn>
+                    }
+                </TabsListCn>
+            </div>
+
+            @foreach (var board in _boards)
+            {
+                var boardId = board.Id;
+                <TabsContentCn Value="@board.Id" Class="mt-0">
+                    @* Add task *@
+                    <div class="flex items-center gap-2 border-b px-4 py-2">
+                        <InputCn @bind-Value="_newTask"
+                                 @onkeydown="HandleInputKeyDown"
+                                 Placeholder="@($"Add to {board.Name}...")"
+                                 Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.IconXs"
+                                  @onclick="AddTask"
+                                  Disabled="@(string.IsNullOrWhiteSpace(_newTask) || _activeBoard != boardId)"
+                                  aria-label="Add task">
+                            <LucideIconCn Name="plus" Size="16" Class="size-4" />
+                        </ButtonCn>
+                    </div>
+
+                    @* Task list *@
+                    <div>
+                        @for (int i = 0; i < board.Tasks.Count; i++)
+                        {
+                            var task = board.Tasks[i];
+                            var isLast = i == board.Tasks.Count - 1;
+                            var taskId = task.Id;
+                            var bid = boardId;
+                            <div class="@(isLast ? "" : "border-b")">
+                                <div class="group flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                                    <CheckboxCn Id="@($"board-{boardId}-{task.Id}")"
+                                                Checked="@task.Completed"
+                                                CheckedChanged="@((bool _) => ToggleTask(bid, taskId))" />
+                                    <span class="@Cn.Merge("min-w-0 flex-1 cursor-pointer text-sm transition-all duration-200", task.Completed ? "text-muted-foreground line-through" : "text-foreground")"
+                                          @onclick="@(() => ToggleTask(bid, taskId))"
+                                          @onkeydown="@((KeyboardEventArgs e) => HandleSpanKeyDown(e, bid, taskId))"
+                                          role="button"
+                                          tabindex="0">
+                                        @task.Text
+                                    </span>
+                                    <ButtonCn Variant="ButtonVariant.Ghost"
+                                              Size="ButtonSize.IconXs"
+                                              @onclick="@(() => DeleteTask(bid, taskId))"
+                                              Class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                              aria-label="@DeleteLabel(task.Text)">
+                                        <LucideIconCn Name="trash-2" Size="12" Class="size-3 text-muted-foreground" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @* Footer *@
+                    <div class="border-t px-4 py-3">
+                        <span class="text-muted-foreground text-xs">
+                            @board.Tasks.Count(t => t.Completed) of @board.Tasks.Count completed
+                        </span>
+                    </div>
+                </TabsContentCn>
+            }
+        </TabsCn>
+    </div>
+</section>
+
+@code {
+    private record TaskItem(string Id, string Text, bool Completed);
+    private record BoardData(string Id, string Name, List<TaskItem> Tasks);
+
+    private int _nextId = 20;
+
+    private List<BoardData> _boards =
+    [
+        new("personal", "Personal",
+        [
+            new("p1", "Schedule dentist appointment", false),
+            new("p2", "Renew gym membership", true),
+            new("p3", "Read two chapters of current book", false),
+            new("p4", "Plan weekend hiking trip", false),
+            new("p5", "Order birthday gift for Sarah", true),
+        ]),
+        new("work", "Work",
+        [
+            new("w1", "Prepare quarterly report", false),
+            new("w2", "Review team performance goals", false),
+            new("w3", "Schedule 1-on-1 meetings", true),
+            new("w4", "Submit expense report", false),
+            new("w5", "Update project roadmap", false),
+            new("w6", "Fix critical login bug", true),
+        ]),
+        new("shopping", "Shopping",
+        [
+            new("s1", "Avocados and spinach", true),
+            new("s2", "Whole grain bread", false),
+            new("s3", "Olive oil and balsamic vinegar", false),
+            new("s4", "Ground coffee beans", false),
+        ]),
+    ];
+
+    private string _activeBoard = "personal";
+    private string _newTask = "";
+
+    private void SetActiveBoard(string v)
+    {
+        _activeBoard = v;
+        _newTask = "";
+    }
+
+    private void AddTask()
+    {
+        var trimmed = _newTask.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        var board = _boards.Find(b => b.Id == _activeBoard);
+        if (board is null) return;
+        board.Tasks.Add(new TaskItem(_nextId.ToString(), trimmed, false));
+        _nextId++;
+        _newTask = "";
+    }
+
+    private void ToggleTask(string boardId, string taskId)
+    {
+        var board = _boards.Find(b => b.Id == boardId);
+        if (board is null) return;
+        var idx = board.Tasks.FindIndex(t => t.Id == taskId);
+        if (idx >= 0)
+            board.Tasks[idx] = board.Tasks[idx] with { Completed = !board.Tasks[idx].Completed };
+    }
+
+    private void DeleteTask(string boardId, string taskId)
+    {
+        var board = _boards.Find(b => b.Id == boardId);
+        board?.Tasks.RemoveAll(t => t.Id == taskId);
+    }
+
+    private void HandleInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddTask();
+    }
+
+    private void HandleSpanKeyDown(KeyboardEventArgs e, string boardId, string taskId)
+    {
+        if (e.Key == "Enter" || e.Key == " ") ToggleTask(boardId, taskId);
+    }
+
+    private static string DeleteLabel(string text) => $"Delete {text}";
+}

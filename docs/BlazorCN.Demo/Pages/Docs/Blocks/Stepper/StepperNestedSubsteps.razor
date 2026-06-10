@@ -1,0 +1,287 @@
+@* ============================================================
+   Block: stepper-nested-substeps
+   Title: StepperNestedSubsteps
+   Description: A hierarchical stepper wizard with main steps that expand to reveal nested sub-steps with independent progress tracking built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-nested-substeps.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">CI/CD pipeline</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs tabular-nums">
+                @_currentGlobal of @_totalSubSteps complete
+            </BadgeCn>
+        </div>
+
+        @* Main step indicators *@
+        <div class="flex items-center gap-1 border-b px-4 py-3">
+            @foreach (var stepEntry in _mainSteps.Select((s, i) => new { Step = s, MIdx = i }))
+            {
+                var mIdx = stepEntry.MIdx;
+                var mainStep = stepEntry.Step;
+                var status = GetMainStepStatus(mIdx);
+                var (completed, total) = GetMainStepProgress(mIdx);
+                var isLast = mIdx == _mainSteps.Length - 1;
+
+                <div class="flex flex-1 items-center last:flex-none">
+                    <div class="flex flex-col items-center gap-1">
+                        <div class="@Cn.Merge("flex size-6 items-center justify-center rounded-full text-xs transition-all duration-200", status == "completed" ? "bg-emerald-500 text-white dark:bg-emerald-600" : status == "active" ? "bg-foreground text-background" : "border border-muted-foreground/25 text-muted-foreground")">
+                            @if (status == "completed")
+                            {
+                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                            }
+                            else
+                            {
+                                <span class="font-medium tabular-nums">@(mIdx + 1)</span>
+                            }
+                        </div>
+                        <span class="@Cn.Merge("text-center font-medium text-xs", status == "active" ? "text-foreground" : "text-muted-foreground")">
+                            @mainStep.Label
+                        </span>
+                        <span class="text-muted-foreground/60 text-xs tabular-nums">
+                            @completed/@total
+                        </span>
+                    </div>
+
+                    @if (!isLast)
+                    {
+                        <div class="mx-2 mb-8 h-px flex-1">
+                            <div class="@Cn.Merge("h-full rounded-full transition-colors duration-300", status == "completed" ? "bg-emerald-500 dark:bg-emerald-600" : "bg-muted-foreground/20")">
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Expandable main steps with sub-steps *@
+        <div>
+            @foreach (var mainEntry in _mainSteps.Select((s, i) => new { Step = s, MIdx = i }))
+            {
+                var mIdx = mainEntry.MIdx;
+                var mainStep = mainEntry.Step;
+                var isExpanded = _expandedSteps.Contains(mIdx);
+                var status = GetMainStepStatus(mIdx);
+                var (completed, total) = GetMainStepProgress(mIdx);
+                var isLast = mIdx == _mainSteps.Length - 1;
+
+                <div class="@((isLast && !isExpanded) ? "" : "border-b")">
+                    @* Main step row *@
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpand(mIdx))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", status == "completed" ? "bg-emerald-500" : status == "active" ? "bg-foreground" : "bg-muted-foreground/30")">
+                        </span>
+
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@mainStep.Label</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">@mainStep.Description</p>
+                        </div>
+
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("font-normal text-xs tabular-nums", status == "completed" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "")">
+                            @completed/@total
+                        </BadgeCn>
+
+                        @if (isExpanded)
+                        {
+                            <LucideIconCn Name="chevron-down" Size="16" Class="size-4 shrink-0 text-muted-foreground/60" />
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="chevron-right" Size="16" Class="size-4 shrink-0 text-muted-foreground/60" />
+                        }
+                    </button>
+
+                    @* Sub-steps *@
+                    @if (isExpanded)
+                    {
+                        <div class="pb-1">
+                            @foreach (var subEntry in mainStep.SubSteps.Select((s, i) => new { SubStep = s, SIdx = i }))
+                            {
+                                var sIdx = subEntry.SIdx;
+                                var subStep = subEntry.SubStep;
+                                var globalIdx = GetGlobalIndex(mIdx, sIdx);
+                                var isSubCompleted = globalIdx < _currentGlobal;
+                                var isSubActive = globalIdx == _currentGlobal;
+                                var isSubUpcoming = globalIdx > _currentGlobal;
+
+                                <div>
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => HandleSubStepClick(mIdx, sIdx))"
+                                        disabled="@isSubUpcoming"
+                                        class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-2 pl-9 text-left transition-colors", isSubUpcoming ? "cursor-default opacity-40" : isSubActive ? "bg-muted/30" : "cursor-pointer hover:bg-muted/50")">
+
+                                        @* Connecting line segment *@
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex w-4 justify-center">
+                                                <div class="@Cn.Merge("size-1.5 rounded-full", isSubCompleted ? "bg-emerald-500 dark:bg-emerald-600" : isSubActive ? "bg-foreground" : "bg-muted-foreground/30")">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <span class="@Cn.Merge("text-sm", isSubActive ? "font-medium text-foreground" : isSubCompleted ? "text-muted-foreground" : "text-muted-foreground/60")">
+                                            @subStep.Label
+                                        </span>
+
+                                        <div class="ml-auto">
+                                            @if (isSubCompleted)
+                                            {
+                                                <LucideIconCn Name="check" Size="14" Class="size-3.5 text-emerald-500 dark:text-emerald-400" />
+                                            }
+                                            @if (isSubActive)
+                                            {
+                                                <span class="size-1.5 rounded-full bg-foreground"></span>
+                                            }
+                                        </div>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer navigation *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <div class="min-w-0 flex-1">
+                <span class="text-muted-foreground text-xs">@_mainSteps[ActiveMainIdx].Label</span>
+                <span class="mx-1.5 text-muted-foreground/40 text-xs">/</span>
+                <span class="text-xs">@_mainSteps[ActiveMainIdx].SubSteps[ActiveSubIdx].Label</span>
+            </div>
+            <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" OnClick="HandleContinue" Disabled="@(_currentGlobal == _totalSubSteps - 1)">
+                @(_currentGlobal == _totalSubSteps - 1 ? "Finish" : "Next")
+                @if (_currentGlobal < _totalSubSteps - 1)
+                {
+                    <LucideIconCn Name="chevron-right" Size="12" Class="size-3" />
+                }
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SubStepItem(string Id, string Label);
+    private record MainStepItem(string Id, string Label, string Description, SubStepItem[] SubSteps);
+
+    private int _currentGlobal = 3;
+    private HashSet<int> _expandedSteps = [1];
+
+    private static readonly MainStepItem[] _mainSteps =
+    [
+        new("setup", "Setup", "Install tools and configure environment",
+        [
+            new("install-deps", "Install dependencies"),
+            new("configure-env", "Configure environment"),
+        ]),
+        new("build", "Build", "Compile, bundle, and optimize the project",
+        [
+            new("compile", "Compile source"),
+            new("bundle", "Bundle assets"),
+            new("optimize", "Optimize output"),
+        ]),
+        new("test", "Test", "Run unit and end-to-end test suites",
+        [
+            new("unit-tests", "Unit tests"),
+            new("e2e-tests", "End-to-end tests"),
+        ]),
+        new("deploy", "Deploy", "Stage and release to production",
+        [
+            new("stage", "Deploy to staging"),
+            new("production", "Deploy to production"),
+        ]),
+    ];
+
+    private static readonly int _totalSubSteps = _mainSteps.Sum(s => s.SubSteps.Length);
+
+    private int ActiveMainIdx => GetMainAndSub(_currentGlobal).MainIdx;
+    private int ActiveSubIdx => GetMainAndSub(_currentGlobal).SubIdx;
+
+    private int GetGlobalIndex(int mainIdx, int subIdx)
+    {
+        var idx = 0;
+        for (var m = 0; m < mainIdx; m++)
+        {
+            idx += _mainSteps[m].SubSteps.Length;
+        }
+        return idx + subIdx;
+    }
+
+    private (int MainIdx, int SubIdx) GetMainAndSub(int globalIdx)
+    {
+        var count = 0;
+        for (var m = 0; m < _mainSteps.Length; m++)
+        {
+            if (globalIdx < count + _mainSteps[m].SubSteps.Length)
+            {
+                return (m, globalIdx - count);
+            }
+            count += _mainSteps[m].SubSteps.Length;
+        }
+        return (_mainSteps.Length - 1, _mainSteps[_mainSteps.Length - 1].SubSteps.Length - 1);
+    }
+
+    private (int Completed, int Total) GetMainStepProgress(int mainIdx)
+    {
+        var startIdx = GetGlobalIndex(mainIdx, 0);
+        var total = _mainSteps[mainIdx].SubSteps.Length;
+        var completed = 0;
+        for (var i = 0; i < total; i++)
+        {
+            if (startIdx + i < _currentGlobal)
+            {
+                completed++;
+            }
+        }
+        return (completed, total);
+    }
+
+    private string GetMainStepStatus(int mainIdx)
+    {
+        var (completed, total) = GetMainStepProgress(mainIdx);
+        if (completed == total) return "completed";
+        var (activeMainIdx, _) = GetMainAndSub(_currentGlobal);
+        if (mainIdx == activeMainIdx) return "active";
+        if (GetGlobalIndex(mainIdx, 0) > _currentGlobal) return "upcoming";
+        return "active";
+    }
+
+    private void ToggleExpand(int mainIdx)
+    {
+        if (_expandedSteps.Contains(mainIdx))
+        {
+            _expandedSteps.Remove(mainIdx);
+        }
+        else
+        {
+            _expandedSteps.Add(mainIdx);
+        }
+    }
+
+    private void HandleSubStepClick(int mainIdx, int subIdx)
+    {
+        var globalIdx = GetGlobalIndex(mainIdx, subIdx);
+        if (globalIdx <= _currentGlobal)
+        {
+            _currentGlobal = globalIdx;
+        }
+    }
+
+    private void HandleContinue()
+    {
+        if (_currentGlobal < _totalSubSteps - 1)
+        {
+            var nextGlobal = _currentGlobal + 1;
+            _currentGlobal = nextGlobal;
+
+            // Auto-expand the main step containing the next sub-step
+            var (mainIdx, _) = GetMainAndSub(nextGlobal);
+            _expandedSteps.Add(mainIdx);
+        }
+    }
+}

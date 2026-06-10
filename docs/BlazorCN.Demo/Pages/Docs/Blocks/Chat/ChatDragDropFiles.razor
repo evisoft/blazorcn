@@ -1,0 +1,180 @@
+@* ============================================================
+   Block: chat-drag-drop-files
+   Title: ChatDragDropFiles
+   Description: React chat block with drag and drop file upload overlay for Next.js featuring a dashed drop zone, file preview cards, and simulated upload state using TypeScript, shadcn/ui, Tailwind CSS, and framer-motion
+   Source: original/blocks/chat/chat-drag-drop-files.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8">
+                <AvatarFallbackCn Class="text-[10px]">NK</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Nora Kim</span>
+                <p class="text-muted-foreground text-xs">Design</p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                      @onclick="ToggleDrag">
+                @(_isDragging ? "Simulate drop" : "Simulate drag")
+            </ButtonCn>
+        </div>
+
+        @* Messages *@
+        <div class="relative flex-1 overflow-y-auto py-2">
+            @for (int i = 0; i < _messages.Length; i++)
+            {
+                var msg = _messages[i];
+                var idx = i;
+                var prev = idx > 0 ? _messages[idx - 1] : null;
+                var showAvatar = prev == null || prev.Sender != msg.Sender;
+
+                <div class="group flex gap-2 px-3 py-1 hover:bg-accent/50">
+                    <div class="w-8 shrink-0 pt-0.5">
+                        @if (showAvatar)
+                        {
+                            <AvatarCn Class="size-8">
+                                <AvatarFallbackCn Class="text-[10px]">@msg.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                        }
+                        else
+                        {
+                            <span class="hidden items-center justify-center text-[10px] text-muted-foreground group-hover:flex h-full">
+                                @msg.Time.Replace(" PM", "").Replace(" AM", "")
+                            </span>
+                        }
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        @if (showAvatar)
+                        {
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@msg.Sender</span>
+                                <span class="text-[10px] text-muted-foreground">@msg.Time</span>
+                            </div>
+                        }
+                        <p class="text-sm leading-relaxed">@msg.Content</p>
+                    </div>
+                </div>
+            }
+
+            @* Drag overlay *@
+            @if (_isDragging)
+            {
+                <div class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/90 backdrop-blur-sm">
+                    <div class="absolute inset-3 rounded-lg border-2 border-dashed border-muted-foreground/30"></div>
+                    <LucideIconCn Name="upload-cloud" Size="32" Class="size-8 text-muted-foreground" />
+                    <div class="text-center">
+                        <p class="font-medium text-sm">Drop files here to share</p>
+                        <p class="mt-0.5 text-muted-foreground text-xs">
+                            Images, PDFs, spreadsheets, and more
+                        </p>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* File previews *@
+        @if (_droppedFiles.Count > 0)
+        {
+            <div class="overflow-hidden border-t">
+                <div class="flex gap-2 overflow-x-auto px-3 py-3">
+                    @foreach (var file in _droppedFiles)
+                    {
+                        var fileItem = file;
+                        <div class="flex shrink-0 items-center gap-2 rounded-md bg-muted/50 py-2 pr-2 pl-3">
+                            <LucideIconCn Name="@GetFileIconName(fileItem.Type)" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0">
+                                <p class="truncate font-medium text-xs">@fileItem.Name</p>
+                                <p class="text-muted-foreground text-[10px]">@fileItem.Size</p>
+                            </div>
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon"
+                                      Class="size-5 shrink-0 text-muted-foreground hover:text-foreground"
+                                      @onclick="@(() => RemoveFile(fileItem.Id))">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </ButtonCn>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Toolbar *@
+        <div class="border-t px-3 py-3">
+            <form @onsubmit="HandleSubmit" class="flex items-end gap-2 rounded-lg border bg-background px-3 py-2">
+                <textarea @bind="_input" @bind:event="oninput"
+                          placeholder="@(_droppedFiles.Count > 0 ? "Add a message to your files..." : "Type a message...")"
+                          rows="1"
+                          class="min-h-0 max-h-32 resize-none border-0 bg-transparent p-0 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 flex-1 min-w-0 outline-none"></textarea>
+                <ButtonCn type="submit" Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost"
+                          Disabled="@(string.IsNullOrWhiteSpace(_input) && _droppedFiles.Count == 0)"
+                          Class="size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Sender, string Initials, string Content, string Time);
+
+    private record DroppedFile(string Id, string Name, string Size, string Type);
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("1", "Nora Kim", "NK", "Hey, can you share the design assets for the landing page?",                             "4:01 PM"),
+        new("2", "You",      "YO", "Sure! Let me grab them from the shared drive.",                                          "4:02 PM"),
+        new("3", "Nora Kim", "NK", "I need the hero mockup, the icon set, and the color spec spreadsheet if you have it.",   "4:03 PM"),
+        new("4", "You",      "YO", "Got them all. I'll drag and drop them into the chat.",                                   "4:04 PM"),
+        new("5", "Nora Kim", "NK", "Perfect, just drop them whenever you're ready.",                                         "4:05 PM"),
+        new("6", "You",      "YO", "Also, the client asked for the brand guidelines PDF — I'll include that too.",            "4:06 PM"),
+        new("7", "Nora Kim", "NK", "Great, that saves me a trip to Confluence. Thanks!",                                     "4:07 PM"),
+    ];
+
+    private static readonly DroppedFile[] _sampleFiles =
+    [
+        new("f1", "hero-mockup-v3.png",  "3.2 MB", "image"),
+        new("f2", "brand-guidelines.pdf", "1.8 MB", "pdf"),
+        new("f3", "color-spec.xlsx",      "420 KB", "spreadsheet"),
+    ];
+
+    private bool _isDragging = false;
+    private List<DroppedFile> _droppedFiles = [];
+    private string _input = "";
+
+    private void ToggleDrag()
+    {
+        if (_isDragging)
+        {
+            _isDragging = false;
+            _droppedFiles = [.. _sampleFiles];
+        }
+        else
+        {
+            _isDragging = true;
+            _droppedFiles = [];
+        }
+    }
+
+    private void RemoveFile(string id)
+    {
+        _droppedFiles = _droppedFiles.Where(f => f.Id != id).ToList();
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input) && _droppedFiles.Count == 0) return;
+        _input = "";
+        _droppedFiles = [];
+    }
+
+    private static string GetFileIconName(string type) => type switch
+    {
+        "image"       => "image",
+        "pdf"         => "file-text",
+        "spreadsheet" => "file-spreadsheet",
+        _             => "file",
+    };
+}

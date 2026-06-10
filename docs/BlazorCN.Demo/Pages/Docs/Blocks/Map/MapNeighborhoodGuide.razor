@@ -1,0 +1,276 @@
+@* ============================================================
+   Block: map-neighborhood-guide
+   Title: MapNeighborhoodGuide
+   Description: React neighborhood amenities guide block for Next.js with categorized POI markers, walkability scores, area detail cards, and interactive category filters using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-neighborhood-guide.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Pacific Heights</span>
+                <span class="ml-2 text-xs text-muted-foreground">San Francisco, CA</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-muted-foreground">Walk</span>
+                    <span class="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">@_walkScore</span>
+                </div>
+                <span class="text-xs text-muted-foreground">·</span>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-muted-foreground">Transit</span>
+                    <span class="text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">@_transitScore</span>
+                </div>
+            </div>
+        </div>
+
+        @* Category filters *@
+        <div class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2.5">
+            @foreach (var cat in _categories)
+            {
+                var category = cat;
+                var isActive = _activeCategories.Contains(category.Id);
+                <button
+                    type="button"
+                    @onclick="@(() => ToggleCategory(category.Id))"
+                    class="@Cn.Merge("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors", isActive ? category.Color : "bg-muted/50 text-muted-foreground")">
+                    <span>@category.Emoji</span>
+                    <span class="font-medium">@category.Label</span>
+                    <span class="tabular-nums opacity-60">@(_pois.Count(p => p.Category == category.Id))</span>
+                </button>
+            }
+        </div>
+
+        <div class="flex flex-col md:flex-row">
+            @* POI list *@
+            <div class="w-full border-b md:w-64 md:shrink-0 md:border-b-0 md:border-r">
+                <div class="max-h-[300px] overflow-y-auto md:max-h-[424px]">
+                    @{
+                        var visiblePois = _pois.Where(p => _activeCategories.Contains(p.Category)).ToList();
+                    }
+                    @foreach (var poi in visiblePois)
+                    {
+                        var poiItem = poi;
+                        var cat = _categories.FirstOrDefault(c => c.Id == poiItem.Category);
+                        var isSelected = _selected == poiItem.Id;
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(poiItem.Id))"
+                            class="@Cn.Merge("flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/50", isSelected ? "bg-muted/50" : "")">
+                            <span class="@Cn.Merge("size-2 shrink-0 rounded-full", _markerDotColors.GetValueOrDefault(poiItem.Category, "bg-muted"))" />
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-medium">@poiItem.Name</p>
+                                <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <span>@(cat?.Emoji)</span>
+                                    <span class="tabular-nums">@poiItem.Distance</span>
+                                    <span>·</span>
+                                    <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                    <span class="tabular-nums">@poiItem.Rating</span>
+                                </div>
+                            </div>
+                            <LucideIconCn Name="chevron-right" Size="14" Class="size-3.5 shrink-0 text-muted-foreground/40" />
+                        </button>
+                    }
+                    @if (!visiblePois.Any())
+                    {
+                        <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                            No places match the selected filters
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map — Map/MapMarker/MarkerPopup etc. are Next.js registry components with no BlazorCN
+               equivalent; rendered as a styled static map placeholder with absolute-positioned
+               dot markers and optional popups. *@
+            <div class="relative h-[350px] flex-1 md:h-[460px] bg-muted/30">
+                @* Map background grid lines *@
+                <div class="absolute inset-0 overflow-hidden opacity-20">
+                    <div class="grid h-full grid-cols-8 grid-rows-8">
+                        @for (int gi = 0; gi < 64; gi++)
+                        {
+                            <div class="border border-border/50"></div>
+                        }
+                    </div>
+                </div>
+
+                @* Road-like lines *@
+                <div class="absolute inset-0 opacity-30">
+                    <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[50%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[70%] h-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+                </div>
+
+                @* Map label *@
+                <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Pacific Heights, San Francisco
+                </div>
+
+                @* Map zoom controls *@
+                <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="compass" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+
+                @* POI markers *@
+                @{
+                    var mapVisible = _pois.Where(p => _activeCategories.Contains(p.Category)).ToList();
+                }
+                @foreach (var poi in mapVisible)
+                {
+                    var poiItem = poi;
+                    var isSelected = _selected == poiItem.Id;
+                    var pos = GetMarkerPosition(poiItem);
+                    var cat = _categories.FirstOrDefault(c => c.Id == poiItem.Category);
+                    <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-50%)")">
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(poiItem.Id))"
+                            class="group relative flex flex-col items-center">
+                            @* Dot marker *@
+                            <div class="@Cn.Merge("size-3 rounded-full border-2 border-white shadow-md", _markerDotColors.GetValueOrDefault(poiItem.Category, "bg-muted"))"></div>
+                            @* Hover tooltip *@
+                            <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block" style="z-index:20">
+                                <p class="font-medium text-center">@poiItem.Name</p>
+                                <p class="text-[10px] opacity-70 text-center">@poiItem.Address</p>
+                            </div>
+                        </button>
+
+                        @* Popup (shown when selected) *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg" style="z-index:10">
+                                <p class="text-sm font-medium">@poiItem.Name</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">@poiItem.Address</p>
+                                <div class="mt-2 flex items-center gap-2">
+                                    <div class="flex items-center gap-1">
+                                        <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                        <span class="text-xs font-medium tabular-nums">@poiItem.Rating</span>
+                                    </div>
+                                    <span class="text-xs text-muted-foreground">·</span>
+                                    <span class="text-xs text-muted-foreground tabular-nums">@poiItem.Distance</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto text-[10px] font-normal">
+                                        @(cat?.Label)
+                                    </BadgeCn>
+                                </div>
+                                @* Close button *@
+                                <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">@(_pois.Count(p => _activeCategories.Contains(p.Category))) places shown</span>
+            <div class="ml-auto flex items-center gap-3">
+                @foreach (var cat in _categories)
+                {
+                    var category = cat;
+                    <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", category.DotColor)"></span>
+                        @(_pois.Count(p => p.Category == category.Id))
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Category(string Id, string Label, string Emoji, string Color, string DotColor);
+
+    private record Poi(
+        string Id,
+        string Name,
+        string Category,
+        double Rating,
+        string Distance,
+        string Address,
+        double Lng,
+        double Lat
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly Category[] _categories =
+    [
+        new("school", "Schools", "🏫", "bg-blue-500/10 text-blue-700 dark:text-blue-300", "bg-blue-500"),
+        new("park", "Parks", "🌳", "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", "bg-emerald-500"),
+        new("restaurant", "Dining", "🍽️", "bg-amber-500/10 text-amber-700 dark:text-amber-300", "bg-amber-500"),
+        new("shop", "Shops", "🛍️", "bg-violet-500/10 text-violet-700 dark:text-violet-300", "bg-violet-500"),
+        new("transit", "Transit", "🚇", "bg-rose-500/10 text-rose-700 dark:text-rose-300", "bg-rose-500"),
+    ];
+
+    private static readonly Poi[] _pois =
+    [
+        new("p1",  "Lincoln Elementary",      "school",     4.5, "0.3 mi", "847 California St",   -122.4118, 37.7919),
+        new("p2",  "Pacific Heights Academy", "school",     4.7, "0.6 mi", "2120 Buchanan St",    -122.4312, 37.7895),
+        new("p3",  "Lafayette Park",          "park",       4.8, "0.2 mi", "2000 Washington St",  -122.4286, 37.7918),
+        new("p4",  "Alta Plaza Park",         "park",       4.6, "0.5 mi", "2600 Jackson St",     -122.4374, 37.7914),
+        new("p5",  "SPQR Restaurant",         "restaurant", 4.6, "0.1 mi", "1911 Fillmore St",    -122.4336, 37.7878),
+        new("p6",  "Nopalito",                "restaurant", 4.4, "0.4 mi", "306 Broderick St",    -122.4398, 37.7862),
+        new("p7",  "The Snug",                "restaurant", 4.3, "0.3 mi", "2301 Fillmore St",    -122.4336, 37.7910),
+        new("p8",  "Browser Books",           "shop",       4.9, "0.2 mi", "2195 Fillmore St",    -122.4336, 37.7890),
+        new("p9",  "Fillmore Bakeshop",       "shop",       4.5, "0.3 mi", "1890 Fillmore St",    -122.4336, 37.7872),
+        new("p10", "Fillmore Station",        "transit",    3.8, "0.4 mi", "Fillmore & Geary",    -122.4336, 37.7844),
+        new("p11", "Van Ness Station",        "transit",    3.6, "0.7 mi", "Van Ness & Market",   -122.4194, 37.7752),
+    ];
+
+    private static readonly Dictionary<string, string> _markerDotColors = new()
+    {
+        ["school"]     = "bg-blue-500",
+        ["park"]       = "bg-emerald-500",
+        ["restaurant"] = "bg-amber-500",
+        ["shop"]       = "bg-violet-500",
+        ["transit"]    = "bg-rose-500",
+    };
+
+    private const int _walkScore = 94;
+    private const int _transitScore = 87;
+
+    private HashSet<string> _activeCategories = new(new[] { "school", "park", "restaurant", "shop", "transit" });
+
+    private string? _selected = null;
+
+    private void ToggleCategory(string id)
+    {
+        if (_activeCategories.Contains(id))
+            _activeCategories.Remove(id);
+        else
+            _activeCategories.Add(id);
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    // Map bounding box: lon [-122.445, -122.408], lat [37.773, 37.795]
+    private static MarkerPos GetMarkerPosition(Poi poi)
+    {
+        const double lonMin = -122.445;
+        const double lonMax = -122.408;
+        const double latMin = 37.773;
+        const double latMax = 37.795;
+        var left = (poi.Lng - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - poi.Lat) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

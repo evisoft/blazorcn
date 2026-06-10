@@ -1,0 +1,206 @@
+@* ============================================================
+   Block: todo-list-standup
+   Title: TodoListStandup
+   Description: A daily standup format todo list block for React and Next.js with yesterday, today, and blockers sections, add inputs, and read-only summary toggle built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-standup.tsx
+   ============================================================ *@
+
+@inject IJSRuntime JS
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Daily Standup</span>
+                <p class="text-muted-foreground text-xs">Thursday, Apr 3</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" @onclick="CopyAll">
+                    @if (_copied)
+                    {
+                        <LucideIconCn Name="clipboard-check" Size="12" Class="size-3" />
+                        @:Copied
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="clipboard-copy" Size="12" Class="size-3" />
+                        @:Copy
+                    }
+                </ButtonCn>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-muted-foreground text-xs">Summary</span>
+                    <SwitchCn Checked="@_readOnly" CheckedChanged="@SetReadOnly" aria-label="Toggle read-only summary mode" />
+                </div>
+            </div>
+        </div>
+
+        @* Sections *@
+        @foreach (var s in _sectionOrder)
+        {
+            var sec = s;
+            var sectionItems = _items.Where(i => i.Section == sec).ToList();
+            var label = GetLabel(sec);
+            var iconName = GetIconName(sec);
+            var dot = GetDot(sec);
+            var bg = GetBg(sec);
+            var iconClass = sec == StandupSection.Blockers ? "size-3.5 text-red-500" : "size-3.5 text-muted-foreground";
+            var isLastSection = sec == StandupSection.Blockers;
+            <div>
+                @* Section header *@
+                <div class="@Cn.Merge("flex items-center gap-2 border-b px-4 py-2", bg)">
+                    <LucideIconCn Name="@iconName" Size="14" Class="@iconClass" />
+                    <span class="font-medium text-xs">@label</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs tabular-nums">@sectionItems.Count</BadgeCn>
+                </div>
+
+                @* Items *@
+                @foreach (var it in sectionItems)
+                {
+                    var item = it;
+                    <div class="@Cn.Merge("group flex items-center gap-3 border-b px-4 py-2.5 transition-colors hover:bg-muted/50", bg)">
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", dot)" />
+                        <span class="min-w-0 flex-1 text-sm">@item.Text</span>
+                        @if (!_readOnly)
+                        {
+                            <ButtonCn Variant="ButtonVariant.Ghost"
+                                      Size="ButtonSize.Sm"
+                                      Class="h-5 w-5 shrink-0 p-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                      @onclick="@(() => RemoveItem(item.Id))"
+                                      aria-label="@RemoveItemLabel(item.Text)">
+                                <LucideIconCn Name="x" Size="12" Class="size-3 text-muted-foreground" />
+                            </ButtonCn>
+                        }
+                    </div>
+                }
+
+                @* Add input (hidden in read-only mode) *@
+                @if (!_readOnly)
+                {
+                    var addLabel = GetAddLabel(sec);
+                    var placeholder = sec == StandupSection.Blockers ? "Add blocker..." : $"Add {label.ToLower()} item...";
+                    <div class="@Cn.Merge("flex items-center gap-2 px-4 py-2", isLastSection ? "" : "border-b", bg)">
+                        <input value="@GetInput(sec)"
+                               @oninput="@((ChangeEventArgs e) => SetInput(sec, e.Value?.ToString() ?? string.Empty))"
+                               @onkeydown="@((KeyboardEventArgs e) => HandleKeyDown(e, sec))"
+                               placeholder="@placeholder"
+                               class="h-7 w-full border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0 outline-none" />
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.Sm"
+                                  Class="h-6 w-6 shrink-0 p-0"
+                                  @onclick="@(() => AddItem(sec))"
+                                  aria-label="@addLabel">
+                            <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                        </ButtonCn>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private enum StandupSection { Yesterday, Today, Blockers }
+
+    private record StandupItem(string Id, string Text, StandupSection Section);
+
+    private static readonly StandupSection[] _sectionOrder =
+        [StandupSection.Yesterday, StandupSection.Today, StandupSection.Blockers];
+
+    private List<StandupItem> _items =
+    [
+        new("y1", "Completed API endpoint for user preferences", StandupSection.Yesterday),
+        new("y2", "Reviewed and merged billing module PR", StandupSection.Yesterday),
+        new("y3", "Fixed flaky E2E test in checkout flow", StandupSection.Yesterday),
+        new("t1", "Start building notification center UI", StandupSection.Today),
+        new("t2", "Pair programming session on search indexing", StandupSection.Today),
+        new("t3", "Write migration script for new schema", StandupSection.Today),
+        new("b1", "Staging environment is down since yesterday morning", StandupSection.Blockers),
+        new("b2", "Waiting on design handoff for settings page", StandupSection.Blockers),
+    ];
+
+    private string _inputYesterday = "";
+    private string _inputToday = "";
+    private string _inputBlockers = "";
+    private bool _readOnly = false;
+    private bool _copied = false;
+
+    private string GetInput(StandupSection sec) => sec switch
+    {
+        StandupSection.Yesterday => _inputYesterday,
+        StandupSection.Today => _inputToday,
+        _ => _inputBlockers,
+    };
+
+    private void SetInput(StandupSection sec, string value)
+    {
+        switch (sec)
+        {
+            case StandupSection.Yesterday: _inputYesterday = value; break;
+            case StandupSection.Today: _inputToday = value; break;
+            default: _inputBlockers = value; break;
+        }
+    }
+
+    private static string GetLabel(StandupSection sec) => sec switch
+    {
+        StandupSection.Yesterday => "Yesterday",
+        StandupSection.Today => "Today",
+        _ => "Blockers",
+    };
+
+    private static string GetIconName(StandupSection sec) => sec switch
+    {
+        StandupSection.Yesterday => "check-circle-2",
+        StandupSection.Today => "list-todo",
+        _ => "alert-circle",
+    };
+
+    private static string GetDot(StandupSection sec) => sec switch
+    {
+        StandupSection.Yesterday => "bg-emerald-500",
+        StandupSection.Today => "bg-blue-500",
+        _ => "bg-red-500",
+    };
+
+    private static string GetBg(StandupSection sec) =>
+        sec == StandupSection.Blockers ? "bg-red-500/5" : "";
+
+    private static string RemoveItemLabel(string text) => $"Remove \"{text}\"";
+
+    private static string GetAddLabel(StandupSection sec) =>
+        $"Add {GetLabel(sec).ToLower()} item";
+
+    private void SetReadOnly(bool value) => _readOnly = value;
+
+    private void AddItem(StandupSection sec)
+    {
+        var text = GetInput(sec).Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        var id = $"{sec.ToString().ToLower()}-{_items.Count + 1}";
+        _items.Add(new StandupItem(id, text, sec));
+        SetInput(sec, "");
+    }
+
+    private void RemoveItem(string id) => _items.RemoveAll(i => i.Id == id);
+
+    private void HandleKeyDown(KeyboardEventArgs e, StandupSection sec)
+    {
+        if (e.Key == "Enter") AddItem(sec);
+    }
+
+    private async Task CopyAll()
+    {
+        var parts = _sectionOrder.Select(sec =>
+        {
+            var secItems = _items.Where(i => i.Section == sec).ToList();
+            return $"{GetLabel(sec)}:\n{string.Join("\n", secItems.Select(i => $"- {i.Text}"))}";
+        });
+        var text = string.Join("\n\n", parts);
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

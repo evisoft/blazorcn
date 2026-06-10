@@ -1,0 +1,240 @@
+@* ============================================================
+   Block: reviews-helpful-votes
+   Title: ReviewsHelpfulVotes
+   Description: A review list with interactive helpful voting for React and Next.js featuring animated vote counts, user vote state tracking, auto-sorting by helpfulness score, verified badges, and vote percentage indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-helpful-votes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">Community Reviews</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_reviews.Length reviews
+                </BadgeCn>
+            </div>
+            <button type="button"
+                    @onclick="@(() => _sortAsc = !_sortAsc)"
+                    class="flex items-center gap-1 text-muted-foreground text-xs transition-colors hover:text-foreground">
+                @if (_sortAsc)
+                {
+                    <LucideIconCn Name="chevron-up" Size="12" Class="size-3" />
+                }
+                else
+                {
+                    <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                }
+                <span>Most helpful</span>
+            </button>
+        </div>
+
+        @* Aggregate stats *@
+        <div class="flex items-center gap-4 border-b bg-muted/20 px-4 py-2.5">
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="thumbs-up" Size="12" Class="size-3 text-muted-foreground" />
+                <span class="font-medium text-xs tabular-nums">@TotalVotes</span>
+                <span class="text-muted-foreground text-xs">total votes cast</span>
+            </div>
+            <span class="text-muted-foreground/30">|</span>
+            <span class="text-muted-foreground text-xs">Click thumbs to mark reviews as helpful</span>
+        </div>
+
+        @* Review list *@
+        <div>
+            @foreach (var item in SortedReviews)
+            {
+                var review = item;
+                var isLast = review.Id == SortedReviews.Last().Id;
+                var userVote = _userVotes.TryGetValue(review.Id, out var uv) ? uv : null;
+                var totalRevVotes = review.Helpful + review.NotHelpful;
+                var helpfulPct = totalRevVotes > 0 ? (int)Math.Round((double)review.Helpful / totalRevVotes * 100) : 0;
+
+                <div class="@Cn.Merge(!isLast ? "border-b" : "")">
+                    <div class="px-4 py-3.5">
+                        @* Author row *@
+                        <div class="flex items-center gap-2.5">
+                            <AvatarCn Class="size-7">
+                                <AvatarFallbackCn Class="text-[10px]">@review.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium text-sm">@review.Author</span>
+                                    @if (review.Verified)
+                                    {
+                                        <span class="flex items-center gap-0.5 text-emerald-600">
+                                            <LucideIconCn Name="check-circle-2" Size="12" Class="size-3" />
+                                            <span class="text-[10px]">Verified</span>
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <span class="text-muted-foreground text-xs">@review.Date</span>
+                        </div>
+
+                        @* Rating stars *@
+                        <div class="mt-2 flex items-center gap-1">
+                            <div class="flex items-center gap-0.5">
+                                @for (int si = 0; si < 5; si++)
+                                {
+                                    var starIdx = si;
+                                    <LucideIconCn Name="star" Size="14" Class="@Cn.Merge("size-3.5", starIdx < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/20")" />
+                                }
+                            </div>
+                            @if (review.Verified && !string.IsNullOrEmpty(review.PurchaseDate))
+                            {
+                                <span class="ml-1.5 text-muted-foreground text-[10px]">Purchased @review.PurchaseDate</span>
+                            }
+                        </div>
+
+                        @* Content *@
+                        <p class="mt-2 font-medium text-sm">@review.Title</p>
+                        <p class="mt-1 text-muted-foreground text-sm leading-relaxed">@review.Body</p>
+
+                        @* Vote row *@
+                        <div class="mt-3 flex items-center justify-between">
+                            <div class="flex items-center gap-1.5">
+                                <span class="mr-0.5 text-muted-foreground text-xs">Helpful?</span>
+                                <ButtonCn Variant="@(userVote == "helpful" ? ButtonVariant.Default : ButtonVariant.Ghost)"
+                                          Size="ButtonSize.Sm"
+                                          Class="@Cn.Merge("h-7 gap-1 px-2.5 text-xs", userVote == "helpful" ? "bg-emerald-600 hover:bg-emerald-700" : "")"
+                                          @onclick="@(() => Vote(review.Id, "helpful"))">
+                                    <LucideIconCn Name="thumbs-up" Size="12" Class="size-3" />
+                                    <span class="tabular-nums">@review.Helpful</span>
+                                </ButtonCn>
+                                <ButtonCn Variant="@(userVote == "notHelpful" ? ButtonVariant.Default : ButtonVariant.Ghost)"
+                                          Size="ButtonSize.Sm"
+                                          Class="@Cn.Merge("h-7 gap-1 px-2.5 text-xs", userVote == "notHelpful" ? "bg-red-600 hover:bg-red-700" : "")"
+                                          @onclick="@(() => Vote(review.Id, "notHelpful"))">
+                                    <LucideIconCn Name="thumbs-down" Size="12" Class="size-3" />
+                                    <span class="tabular-nums">@review.NotHelpful</span>
+                                </ButtonCn>
+                            </div>
+
+                            @* Helpfulness bar *@
+                            <div class="flex items-center gap-2">
+                                <div class="h-1 w-16 overflow-hidden rounded-full bg-muted">
+                                    <div class="h-full rounded-full bg-emerald-500/60" style="@($"width:{helpfulPct}%")"></div>
+                                </div>
+                                <span class="font-medium text-[10px] tabular-nums text-muted-foreground">@helpfulPct%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">Sorted by net helpfulness score</span>
+            <div class="flex items-center gap-1.5">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                <span class="text-muted-foreground text-[10px]">
+                    @_reviews.Count(r => r.Verified) of @_reviews.Length verified
+                </span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ReviewItem(
+        string Id,
+        string Author,
+        string Initials,
+        int Rating,
+        string Date,
+        string Title,
+        string Body,
+        int Helpful,
+        int NotHelpful,
+        bool Verified,
+        string PurchaseDate
+    );
+
+    private ReviewItem[] _reviews =
+    [
+        new("rev-001", "Sarah Chen", "SC", 5, "Mar 12, 2026",
+            "Exactly what our team needed for production",
+            "We integrated this into our dashboard within an hour. The API is clean, the TypeScript types are comprehensive, and the documentation covers every edge case. Performance has been rock solid across 50k daily active users with zero downtime in three months.",
+            47, 2, true, "Feb 2026"),
+        new("rev-002", "Marcus Rivera", "MR", 4, "Mar 8, 2026",
+            "Great product with a minor learning curve",
+            "The core functionality is excellent and handles our analytics pipeline perfectly. Configuration took longer than expected due to the advanced options, but once set up the system just works. Support team resolved our custom webhook issue in under four hours.",
+            34, 5, true, "Jan 2026"),
+        new("rev-003", "Emily Tanaka", "ET", 5, "Feb 28, 2026",
+            "Best migration experience we have had",
+            "We evaluated four alternatives before choosing this. Migration from our previous tool took under a day thanks to the import wizard. The combination of features, sub-100ms latency, and pricing is unmatched. Our engineering team unanimously approved renewal.",
+            29, 1, true, "Dec 2025"),
+        new("rev-004", "David Okafor", "DO", 3, "Feb 20, 2026",
+            "Solid foundation but missing granular permissions",
+            "Core functionality works well for our use case. The API rate limits are generous and uptime has been consistent. However, we need more granular permission controls for our multi-tenant setup and better CSV export options. The roadmap looks promising and the team ships weekly.",
+            18, 7, false, ""),
+        new("rev-005", "Lisa Park", "LP", 5, "Feb 15, 2026",
+            "Transformed our review cycle from days to hours",
+            "Cut our review processing time by sixty percent. The automation rules engine alone justifies the cost — we set up seventeen trigger conditions that handle ninety percent of incoming reviews automatically. Our team of twelve adopted it within the first week with minimal onboarding.",
+            22, 0, true, "Jan 2026"),
+        new("rev-006", "Raj Patel", "RP", 4, "Feb 10, 2026",
+            "Reliable and well-documented API",
+            "The REST API is clean and consistent across all endpoints. We built our custom integration in three days using the TypeScript SDK. The webhook system handles our real-time notification pipeline without issues. Would love to see GraphQL support in a future release.",
+            15, 3, true, "Jan 2026"),
+    ];
+
+    private Dictionary<string, string?> _userVotes = new();
+    private bool _sortAsc = false;
+
+    private ReviewItem[] SortedReviews =>
+        _sortAsc
+            ? [.. _reviews.OrderBy(r => r.Helpful - r.NotHelpful)]
+            : [.. _reviews.OrderByDescending(r => r.Helpful - r.NotHelpful)];
+
+    private int TotalVotes => _reviews.Sum(r => r.Helpful + r.NotHelpful);
+
+    private void Vote(string id, string type)
+    {
+        _userVotes.TryGetValue(id, out var currentVote);
+
+        if (currentVote == type)
+        {
+            // Undo vote
+            _userVotes[id] = null;
+            _reviews = _reviews.Select(r =>
+            {
+                if (r.Id != id) return r;
+                return type == "helpful"
+                    ? r with { Helpful = r.Helpful - 1 }
+                    : r with { NotHelpful = r.NotHelpful - 1 };
+            }).ToArray();
+            return;
+        }
+
+        if (currentVote != null)
+        {
+            // Switching vote
+            _reviews = _reviews.Select(r =>
+            {
+                if (r.Id != id) return r;
+                var updated = currentVote == "helpful"
+                    ? r with { Helpful = r.Helpful - 1 }
+                    : r with { NotHelpful = r.NotHelpful - 1 };
+                return type == "helpful"
+                    ? updated with { Helpful = updated.Helpful + 1 }
+                    : updated with { NotHelpful = updated.NotHelpful + 1 };
+            }).ToArray();
+        }
+        else
+        {
+            // New vote
+            _reviews = _reviews.Select(r =>
+            {
+                if (r.Id != id) return r;
+                return type == "helpful"
+                    ? r with { Helpful = r.Helpful + 1 }
+                    : r with { NotHelpful = r.NotHelpful + 1 };
+            }).ToArray();
+        }
+
+        _userVotes[id] = type;
+    }
+}

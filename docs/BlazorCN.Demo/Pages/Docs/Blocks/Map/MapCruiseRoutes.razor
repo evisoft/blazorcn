@@ -1,0 +1,292 @@
+@* ============================================================
+   Block: map-cruise-routes
+   Title: MapCruiseRoutes
+   Description: Interactive cruise route map with port markers, colored route lines between ports, ship position indicator, and day-by-day itinerary panel built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-cruise-routes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="ship" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Caribbean Cruise</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                    Day @_currentDay of @_totalDays
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>@_ports.Length ports</span>
+                <span class="text-muted-foreground">·</span>
+                <span>@_totalDays days</span>
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Itinerary sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Itinerary</span>
+                </div>
+                <div class="max-h-[440px] divide-y overflow-y-auto">
+                    @foreach (var portItem in _ports)
+                    {
+                        var port = portItem;
+                        var isPast = port.Day < _currentDay;
+                        var isCurrent = port.Day == _currentDay;
+                        var isExpanded = _expandedDay == port.Day;
+                        <div>
+                            <button
+                                type="button"
+                                @onclick="@(() => { _expandedDay = (isExpanded ? (int?)null : port.Day); _selectedPort = port.Id; _popupPort = port; })"
+                                class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedPort == port.Id ? "bg-muted/50" : "")">
+                                <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full text-[10px] font-semibold", isCurrent ? "bg-foreground text-background" : isPast ? "bg-muted text-muted-foreground" : "border bg-background text-foreground")">
+                                    @port.Day
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <span class="@Cn.Merge("text-sm font-medium", isPast ? "text-muted-foreground" : "")">
+                                        @port.Name
+                                    </span>
+                                    <p class="text-[10px] text-muted-foreground">@port.Country</p>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="bg-muted/30 px-3 pb-2.5 pl-13">
+                                    <div class="space-y-1 pl-10">
+                                        <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            @port.ArrivalTime - @port.DepartureTime
+                                        </div>
+                                        <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <LucideIconCn Name="anchor" Size="12" Class="size-3" />
+                                            @port.DockDuration
+                                        </div>
+                                        @if (port.Excursions.Length > 0)
+                                        {
+                                            <div class="flex flex-wrap gap-1 pt-1">
+                                                @foreach (var exc in port.Excursions)
+                                                {
+                                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">@exc</BadgeCn>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Subtle grid background to suggest a map *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Caribbean Sea
+                </div>
+
+                @* Completed route lines *@
+                @for (var i = 0; i < _completedRoute.Length - 1; i++)
+                {
+                    var a = _completedRoute[i];
+                    var b = _completedRoute[i + 1];
+                    var x1 = MapLonToPercent(a[0]) * 100;
+                    var y1 = MapLatToPercent(a[1]) * 100;
+                    var x2 = MapLonToPercent(b[0]) * 100;
+                    var y2 = MapLatToPercent(b[1]) * 100;
+                    <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                        @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\"><line x1=\"{x1:F2}%\" y1=\"{y1:F2}%\" x2=\"{x2:F2}%\" y2=\"{y2:F2}%\" stroke=\"#22c55e\" stroke-width=\"3\" stroke-opacity=\"0.8\" /></svg>")
+                    </div>
+                }
+
+                @* Remaining route lines *@
+                @for (var i = 0; i < _remainingRoute.Length - 1; i++)
+                {
+                    var a = _remainingRoute[i];
+                    var b = _remainingRoute[i + 1];
+                    var x1 = MapLonToPercent(a[0]) * 100;
+                    var y1 = MapLatToPercent(a[1]) * 100;
+                    var x2 = MapLonToPercent(b[0]) * 100;
+                    var y2 = MapLatToPercent(b[1]) * 100;
+                    <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                        @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\"><line x1=\"{x1:F2}%\" y1=\"{y1:F2}%\" x2=\"{x2:F2}%\" y2=\"{y2:F2}%\" stroke=\"#94a3b8\" stroke-width=\"2\" stroke-opacity=\"0.5\" stroke-dasharray=\"6 4\" /></svg>")
+                    </div>
+                }
+
+                @* Port markers *@
+                @foreach (var portItem in _ports)
+                {
+                    var port = portItem;
+                    var isPast = port.Day < _currentDay;
+                    var isCurrent = port.Day == _currentDay;
+                    var leftPct = MapLonToPercent(port.Lng) * 100;
+                    var topPct = MapLatToPercent(port.Lat) * 100;
+                    <div class="absolute" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%)")">
+                        @* Marker button *@
+                        <button
+                            type="button"
+                            @onclick="@(() => { _popupPort = (_popupPort?.Id == port.Id ? null : port); _selectedPort = port.Id; })"
+                            class="@Cn.Merge("flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md", isCurrent ? "bg-foreground" : isPast ? "bg-emerald-500" : "bg-muted-foreground/50")">
+                            <LucideIconCn Name="anchor" Size="12" Class="size-3 text-white" />
+                        </button>
+
+                        @* Marker tooltip *@
+                        <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@port.Name</span>
+                                <span>Day @port.Day</span>
+                            </div>
+                        </div>
+
+                        @* Popup *@
+                        @if (_popupPort?.Id == port.Id)
+                        {
+                            <div class="absolute left-1/2 top-full z-10 mt-7 w-52 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <button
+                                    type="button"
+                                    @onclick="@(() => _popupPort = null)"
+                                    class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted/50">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                                <div class="mb-2 flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@port.Name</p>
+                                        <p class="text-xs text-muted-foreground">@port.Country</p>
+                                    </div>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">Day @port.Day</BadgeCn>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Arrival</span>
+                                        <span class="font-medium tabular-nums">@port.ArrivalTime</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Departure</span>
+                                        <span class="font-medium tabular-nums">@port.DepartureTime</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Duration</span>
+                                        <span class="font-medium">@port.DockDuration</span>
+                                    </div>
+                                </div>
+                                @if (port.Excursions.Length > 0)
+                                {
+                                    <div class="mt-2 border-t pt-2">
+                                        <p class="mb-1 text-xs font-medium text-muted-foreground">Excursions</p>
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach (var exc in port.Excursions)
+                                            {
+                                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">@exc</BadgeCn>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Ship position marker *@
+                <div class="absolute" style="@ShipStyle()">
+                    <div class="relative">
+                        <div class="absolute inset-0 animate-ping rounded-full bg-blue-500/30"></div>
+                        <div class="relative flex size-5 items-center justify-center rounded-full bg-blue-500 shadow-lg">
+                            <LucideIconCn Name="ship" Size="12" Class="size-3 text-white" />
+                        </div>
+                    </div>
+                    <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                        Current position
+                    </div>
+                </div>
+
+                @* Controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_portsVisited visited
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-muted-foreground/50"></span>
+                @_portsRemaining upcoming
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                Currently docked in @(_ports.FirstOrDefault(p => p.Day == _currentDay)?.Name)
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Port(
+        string Id,
+        string Name,
+        string Country,
+        int Day,
+        string ArrivalTime,
+        string DepartureTime,
+        string DockDuration,
+        string[] Excursions,
+        double Lng,
+        double Lat,
+        bool IsSeaDay
+    );
+
+    private static readonly Port[] _ports =
+    [
+        new("p1", "Miami", "United States", 1, "-", "5:00 PM", "Embarkation", ["South Beach Tour", "Everglades Airboat"], -80.1918, 25.7617, false),
+        new("p2", "Nassau", "Bahamas", 3, "8:00 AM", "5:00 PM", "9 hours", ["Atlantis Aquaventure", "Snorkeling Reef Tour"], -77.3505, 25.0343, false),
+        new("p3", "San Juan", "Puerto Rico", 5, "7:00 AM", "6:00 PM", "11 hours", ["Old San Juan Walk", "El Yunque Rainforest"], -66.1057, 18.4655, false),
+        new("p4", "Charlotte Amalie", "US Virgin Islands", 6, "8:00 AM", "5:00 PM", "9 hours", ["Magens Bay Beach", "Coral World Ocean Park"], -64.9307, 18.3358, false),
+        new("p5", "Cozumel", "Mexico", 8, "9:00 AM", "7:00 PM", "10 hours", ["Mayan Ruins of Tulum", "Beach Snorkel Tour"], -86.9223, 20.4318, false),
+        new("p6", "Miami", "United States", 10, "7:00 AM", "-", "Disembarkation", [], -80.1918, 25.7617, false),
+    ];
+
+    private const int _currentDay = 5;
+
+    private static readonly double[][] _routeCoordinates = _ports.Select(p => new[] { p.Lng, p.Lat }).ToArray();
+
+    private static readonly double[] _shipPosition = [-66.1057, 18.4655];
+
+    // Bounding box for the visible map area (with padding)
+    private const double _lonMin = -90.0;
+    private const double _lonMax = -60.0;
+    private const double _latMin = 14.0;
+    private const double _latMax = 30.0;
+
+    private string? _selectedPort;
+    private Port? _popupPort;
+    private int? _expandedDay = _currentDay;
+
+    private int _totalDays => _ports[_ports.Length - 1].Day;
+    private int _portsVisited => _ports.Count(p => p.Day <= _currentDay && !p.IsSeaDay);
+    private int _portsRemaining => _ports.Count(p => p.Day > _currentDay && !p.IsSeaDay);
+
+    private int _completedIndex => Array.FindIndex(_ports, p => p.Day >= _currentDay);
+
+    private double[][] _completedRoute => _routeCoordinates[..(_completedIndex + 1)];
+    private double[][] _remainingRoute => _routeCoordinates[_completedIndex..];
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+
+    private string ShipStyle()
+    {
+        var left = MapLonToPercent(_shipPosition[0]) * 100;
+        var top = MapLatToPercent(_shipPosition[1]) * 100;
+        return $"left:{left:F2}%; top:{top:F2}%; transform:translate(-50%,-50%)";
+    }
+}

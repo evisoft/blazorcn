@@ -1,0 +1,185 @@
+@* ============================================================
+   Block: checkout-item-variants
+   Title: CheckoutItemVariants
+   Description: A React and Next.js checkout block with inline variant selectors for size and color on each cart item, live price updates, and order summary using shadcn/ui Select, Button, and Tailwind CSS
+   Source: original/blocks/checkout/checkout-item-variants.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Your Cart</span>
+            <span class="text-muted-foreground text-xs">
+                @_items.Count @(_items.Count == 1 ? "item" : "items")
+            </span>
+        </div>
+
+        @* Cart items *@
+        <div>
+            @{
+                var itemList = _items.ToList();
+            }
+            @foreach (var it in itemList)
+            {
+                var item = it;
+                var isLast = itemList.IndexOf(item) == itemList.Count - 1;
+                var unitPrice = GetItemPrice(item);
+                <div class="@Cn.Merge("px-4 py-4", isLast ? "" : "border-b")">
+                    <div class="flex items-start gap-3">
+                        @* Thumbnail placeholder *@
+                        <div class="flex size-12 shrink-0 items-center justify-center rounded-md bg-muted/50 font-mono text-muted-foreground text-xs">
+                            @item.Image
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <span class="font-medium text-sm">@item.Name</span>
+                                    <p class="mt-0.5 text-muted-foreground text-xs">
+                                        $@unitPrice.ToString("F2") each
+                                    </p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold text-sm tabular-nums">
+                                        $@((unitPrice * item.Quantity).ToString("F2"))
+                                    </span>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0 text-muted-foreground" @onclick="@(() => RemoveItem(item.Id))">
+                                        <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+
+                            @* Variant selectors *@
+                            <div class="mt-3 flex flex-wrap items-center gap-2">
+                                <SelectCn Value="@item.SelectedSize" ValueChanged="@((string v) => UpdateSize(item.Id, v))">
+                                    <SelectTriggerCn Class="h-7 w-[90px] text-xs">
+                                        <SelectValueCn />
+                                    </SelectTriggerCn>
+                                    <SelectContentCn>
+                                        @foreach (var size in item.Sizes)
+                                        {
+                                            <SelectItemCn Value="@size" Class="text-xs">@size</SelectItemCn>
+                                        }
+                                    </SelectContentCn>
+                                </SelectCn>
+                                <SelectCn Value="@item.SelectedColor" ValueChanged="@((string v) => UpdateColor(item.Id, v))">
+                                    <SelectTriggerCn Class="h-7 w-[110px] text-xs">
+                                        <SelectValueCn />
+                                    </SelectTriggerCn>
+                                    <SelectContentCn>
+                                        @foreach (var color in item.Colors)
+                                        {
+                                            <SelectItemCn Value="@color" Class="text-xs">@color</SelectItemCn>
+                                        }
+                                    </SelectContentCn>
+                                </SelectCn>
+
+                                @* Quantity controls *@
+                                <div class="ml-auto flex items-center gap-1">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="size-7 p-0" @onclick="@(() => UpdateQuantity(item.Id, Math.Max(1, item.Quantity - 1)))">
+                                        <LucideIconCn Name="minus" Size="12" Class="size-3" />
+                                    </ButtonCn>
+                                    <span class="w-6 text-center font-medium text-xs tabular-nums">
+                                        @item.Quantity
+                                    </span>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="size-7 p-0" @onclick="@(() => UpdateQuantity(item.Id, item.Quantity + 1))">
+                                        <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Order summary *@
+        <div class="border-t bg-muted/30 px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-muted-foreground text-xs">Subtotal</span>
+                <span class="text-sm tabular-nums">$@_subtotal.ToString("F2")</span>
+            </div>
+            <div class="mt-1 flex items-center justify-between">
+                <span class="text-muted-foreground text-xs">Shipping</span>
+                <span class="text-sm tabular-nums">$@_shipping.ToString("F2")</span>
+            </div>
+            <div class="mt-2 flex items-center justify-between border-t pt-2">
+                <span class="font-medium text-sm">Total</span>
+                <span class="font-semibold text-lg tabular-nums">$@_total.ToString("F2")</span>
+            </div>
+        </div>
+
+        @* Checkout button *@
+        <div class="border-t px-4 py-3">
+            <ButtonCn Class="w-full">Proceed to Payment</ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CartItem(
+        string Id,
+        string Name,
+        string Image,
+        string[] Sizes,
+        string[] Colors,
+        string SelectedSize,
+        string SelectedColor,
+        int Quantity,
+        double BasePrice,
+        Dictionary<string, double> PriceModifiers);
+
+    private List<CartItem> _items =
+    [
+        new("1", "Merino Wool Crewneck", "MW",
+            ["XS", "S", "M", "L", "XL"],
+            ["Charcoal", "Navy", "Oatmeal", "Burgundy"],
+            "M", "Charcoal", 1, 89.0,
+            new Dictionary<string, double> { ["XL"] = 10, ["Burgundy"] = 5 }),
+        new("2", "Slim Fit Chinos", "SC",
+            ["28", "30", "32", "34", "36"],
+            ["Khaki", "Olive", "Slate", "Black"],
+            "32", "Olive", 2, 68.0,
+            new Dictionary<string, double> { ["36"] = 5, ["Slate"] = 0 }),
+        new("3", "Canvas Sneakers", "CS",
+            ["8", "9", "10", "11", "12"],
+            ["White", "Off-White", "Black", "Navy"],
+            "10", "White", 1, 55.0,
+            new Dictionary<string, double> { ["12"] = 5, ["Navy"] = 8 }),
+    ];
+
+    private const double _shipping = 8.5;
+
+    private double GetItemPrice(CartItem item)
+    {
+        var price = item.BasePrice;
+        if (item.PriceModifiers.TryGetValue(item.SelectedSize, out var sizeMod))
+            price += sizeMod;
+        if (item.PriceModifiers.TryGetValue(item.SelectedColor, out var colorMod))
+            price += colorMod;
+        return price;
+    }
+
+    private double _subtotal => _items.Sum(i => GetItemPrice(i) * i.Quantity);
+    private double _total => _subtotal + _shipping;
+
+    private void UpdateSize(string id, string size)
+    {
+        _items = _items.Select(i => i.Id == id ? i with { SelectedSize = size } : i).ToList();
+    }
+
+    private void UpdateColor(string id, string color)
+    {
+        _items = _items.Select(i => i.Id == id ? i with { SelectedColor = color } : i).ToList();
+    }
+
+    private void UpdateQuantity(string id, int newQty)
+    {
+        _items = _items.Select(i => i.Id == id ? i with { Quantity = newQty } : i).ToList();
+    }
+
+    private void RemoveItem(string id)
+    {
+        _items = _items.Where(i => i.Id != id).ToList();
+    }
+}

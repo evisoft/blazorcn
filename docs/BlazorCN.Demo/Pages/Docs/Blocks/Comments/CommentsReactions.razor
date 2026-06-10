@@ -1,0 +1,184 @@
+@* ============================================================
+   Block: comments-reactions
+   Title: CommentsReactions
+   Description: A comment section with emoji reactions for React and Next.js featuring inline emoji picker, reaction counts, and user lists built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-reactions.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Comments</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">Click emoji to react</p>
+        </div>
+
+        <div class="divide-y">
+            @foreach (var comment in _comments)
+            {
+                var c = comment;
+                <div class="p-4">
+                    @RenderComment(c)
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record EmojiOption(string Emoji, string Label);
+    private record Reaction(string Emoji, string Label, List<string> Users);
+    private record CommentData(string Id, string Author, string Avatar, string Content, string Timestamp, Reaction[] InitialReactions);
+
+    private static readonly EmojiOption[] _availableEmojis =
+    [
+        new("👍", "thumbs up"),
+        new("❤️", "heart"),
+        new("😂", "laugh"),
+        new("🎉", "celebrate"),
+        new("🤔", "thinking"),
+        new("👀", "eyes"),
+    ];
+
+    private static readonly CommentData[] _comments =
+    [
+        new("1", "Emma Rodriguez", "", "Just deployed this to production and the performance improvements are incredible. Load times cut in half!", "1 hour ago",
+        [
+            new Reaction("🎉", "celebrate", ["John", "Sarah", "Mike"]),
+            new Reaction("👍", "thumbs up", ["Alex", "Chris"]),
+            new Reaction("❤️", "heart", ["Maya"]),
+        ]),
+        new("2", "Tyler Brooks", "", "Quick tip: make sure to enable strict mode in your TypeScript config for better type safety with these components.", "3 hours ago",
+        [
+            new Reaction("👍", "thumbs up", ["Emma", "Jordan", "Sam"]),
+            new Reaction("🤔", "thinking", ["Alex"]),
+        ]),
+        new("3", "Priya Sharma", "", "The documentation is so well written. Every example works out of the box.", "5 hours ago",
+        [
+            new Reaction("❤️", "heart", ["Taylor", "Morgan"]),
+            new Reaction("👍", "thumbs up", ["Casey"]),
+        ]),
+    ];
+
+    // Per-comment mutable reactions list keyed by comment id
+    private readonly Dictionary<string, List<Reaction>> _reactions = new();
+    // Per-comment popover open state
+    private readonly Dictionary<string, bool> _showPicker = new();
+
+    protected override void OnInitialized()
+    {
+        foreach (var c in _comments)
+        {
+            _reactions[c.Id] = [.. c.InitialReactions];
+            _showPicker[c.Id] = false;
+        }
+    }
+
+    private List<Reaction> GetReactions(string id) =>
+        _reactions.TryGetValue(id, out var r) ? r : [];
+
+    private bool GetShowPicker(string id) =>
+        _showPicker.TryGetValue(id, out var v) && v;
+
+    private void SetShowPicker(string id, bool value)
+    {
+        _showPicker[id] = value;
+    }
+
+    private void AddReaction(string commentId, string emoji, string label)
+    {
+        var list = GetReactions(commentId);
+        var existing = list.Find(r => r.Emoji == emoji);
+        if (existing != null)
+        {
+            if (existing.Users.Contains("You"))
+            {
+                existing.Users.Remove("You");
+                if (existing.Users.Count == 0)
+                    list.Remove(existing);
+            }
+            else
+            {
+                existing.Users.Add("You");
+            }
+        }
+        else
+        {
+            list.Add(new Reaction(emoji, label, ["You"]));
+        }
+        _showPicker[commentId] = false;
+    }
+
+    private static string GetInitials(string author)
+    {
+        var parts = author.Split(' ');
+        var initials = "";
+        foreach (var p in parts)
+        {
+            if (p.Length > 0) initials += char.ToUpper(p[0]);
+        }
+        return initials;
+    }
+
+    private RenderFragment RenderComment(CommentData comment) => __builder =>
+    {
+        var initials = GetInitials(comment.Author);
+        var reactions = GetReactions(comment.Id);
+        var showPicker = GetShowPicker(comment.Id);
+        var cId = comment.Id;
+
+        <div class="flex gap-3">
+            <AvatarCn Class="size-8 shrink-0">
+                <AvatarImageCn Src="@comment.Avatar" Alt="@comment.Author" />
+                <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-baseline gap-2">
+                    <span class="text-sm font-medium">@comment.Author</span>
+                    <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                </div>
+                <p class="mt-1 text-sm leading-relaxed text-foreground">@comment.Content</p>
+
+                <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                    @foreach (var reaction in reactions)
+                    {
+                        var r = reaction;
+                        <button type="button"
+                                @onclick="@(() => AddReaction(cId, r.Emoji, r.Label))"
+                                class="group relative inline-flex h-6 items-center gap-1 rounded-full bg-muted/50 px-2 text-xs transition-colors hover:bg-muted">
+                            <span>@r.Emoji</span>
+                            <span class="tabular-nums text-muted-foreground">@r.Users.Count</span>
+                            <div class="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100">
+                                @string.Join(", ", r.Users)
+                            </div>
+                        </button>
+                    }
+
+                    <PopoverCn Open="@showPicker" OpenChanged="@((bool v) => SetShowPicker(cId, v))">
+                        <PopoverTriggerCn>
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 w-6 rounded-full p-0">
+                                <LucideIconCn Name="smile" Size="14" Class="size-3.5 text-muted-foreground" />
+                            </ButtonCn>
+                        </PopoverTriggerCn>
+                        <PopoverContentCn Class="w-auto p-2" Align="FloatingAlign.Start">
+                            <div class="flex gap-1">
+                                @foreach (var item in _availableEmojis)
+                                {
+                                    var emoji = item.Emoji;
+                                    var label = item.Label;
+                                    <button type="button"
+                                            @onclick="@(() => AddReaction(cId, emoji, label))"
+                                            class="flex size-8 items-center justify-center rounded-md text-lg transition-colors hover:bg-muted"
+                                            aria-label="@label">
+                                        @emoji
+                                    </button>
+                                }
+                            </div>
+                        </PopoverContentCn>
+                    </PopoverCn>
+                </div>
+            </div>
+        </div>
+    };
+}

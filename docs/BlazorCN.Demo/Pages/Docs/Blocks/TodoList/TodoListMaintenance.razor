@@ -1,0 +1,161 @@
+@* ============================================================
+   Block: todo-list-maintenance
+   Title: TodoListMaintenance
+   Description: A maintenance schedule tracker block for React and Next.js with recurring tasks, overdue highlighting, category grouping, and next-due tracking built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-maintenance.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="wrench" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Maintenance Schedule</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @if (_overdueCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @_overdueCount overdue
+                    </span>
+                }
+                @if (_dueSoonCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                        <span class="size-1.5 rounded-full bg-amber-500"></span>
+                        @_dueSoonCount due soon
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Categories *@
+        <div>
+            @for (int ci = 0; ci < _categories.Length; ci++)
+            {
+                var category = _categories[ci];
+                var catIndex = ci;
+                var categoryTasks = _tasks.Where(t => t.Category == category).ToArray();
+                var isExpanded = _expandedCategory.Contains(category);
+                var isLastCategory = catIndex == _categories.Length - 1;
+                <div class="@((isLastCategory && !isExpanded) ? "" : "border-b last:border-b-0")">
+                    <button type="button"
+                            @onclick="@(() => ToggleCategory(category))"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        <span class="font-medium text-sm">@category</span>
+                        <span class="ml-auto text-muted-foreground text-xs tabular-nums">
+                            @categoryTasks.Length tasks
+                        </span>
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        @for (int ti = 0; ti < categoryTasks.Length; ti++)
+                        {
+                            var task = categoryTasks[ti];
+                            var taskIndex = ti;
+                            var isCompleted = _completed.Contains(task.Id);
+                            var cfg = _statusConfig[task.Status];
+                            var isLastTask = taskIndex == categoryTasks.Length - 1;
+                            var taskId = task.Id;
+                            <div class="@((isLastTask && isLastCategory) ? "" : "border-b")">
+                                <span class="flex w-full cursor-pointer items-start gap-3 px-4 py-2.5 pl-11 transition-colors hover:bg-muted/50"
+                                      @onclick="@(() => Toggle(taskId))"
+                                      @onkeydown="@((KeyboardEventArgs e) => HandleTaskKeyDown(e, taskId))"
+                                      role="button"
+                                      tabindex="0">
+                                    <CheckboxCn Checked="@isCompleted"
+                                                CheckedChanged="@((bool _) => Toggle(taskId))"
+                                                Class="mt-0.5" />
+                                    <div class="min-w-0 flex-1">
+                                        <span class="@Cn.Merge("font-medium text-sm transition-all duration-200", isCompleted ? "text-muted-foreground line-through" : "")">
+                                            @task.Title
+                                        </span>
+                                        <div class="mt-1 flex flex-wrap items-center gap-2">
+                                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                                <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                                                Last: @task.LastCompleted
+                                            </span>
+                                            <span class="text-muted-foreground text-xs">·</span>
+                                            <span class="@Cn.Merge("text-xs", (task.Status == MaintStatus.Overdue && !isCompleted) ? "text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                                                Due: @task.NextDue
+                                            </span>
+                                            <span class="text-muted-foreground text-xs">·</span>
+                                            <span class="text-muted-foreground text-xs">@task.Frequency</span>
+                                        </div>
+                                    </div>
+                                    @if (!isCompleted)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary"
+                                                 Class="@Cn.Merge("shrink-0 font-normal text-xs", cfg.BadgeClass)">
+                                            @cfg.Label
+                                        </BadgeCn>
+                                    }
+                                </span>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum MaintStatus { Overdue, DueSoon, OnSchedule }
+
+    private record MaintenanceTask(string Id, string Title, string Category, string LastCompleted, string NextDue, MaintStatus Status, string Frequency);
+
+    private record StatusCfg(string Label, string DotColor, string BadgeClass);
+
+    private static readonly MaintenanceTask[] _tasks =
+    [
+        new("mt1", "Rotate SSL certificates",              "Security", "Mar 1, 2026",  "Mar 31, 2026", MaintStatus.Overdue,     "Monthly"),
+        new("mt2", "Vacuum and analyze PostgreSQL tables",  "Database", "Mar 25, 2026", "Apr 1, 2026",  MaintStatus.Overdue,     "Weekly"),
+        new("mt3", "Review and rotate API keys",           "Security", "Jan 3, 2026",  "Apr 3, 2026",  MaintStatus.DueSoon,     "Quarterly"),
+        new("mt4", "Test disaster recovery procedure",     "Backups",  "Mar 15, 2026", "Apr 5, 2026",  MaintStatus.DueSoon,     "Monthly"),
+        new("mt5", "Update server OS packages",            "Server",   "Mar 28, 2026", "Apr 11, 2026", MaintStatus.OnSchedule,  "Bi-weekly"),
+        new("mt6", "Verify automated backup integrity",    "Backups",  "Mar 30, 2026", "Apr 13, 2026", MaintStatus.OnSchedule,  "Bi-weekly"),
+        new("mt7", "Run database index optimization",      "Database", "Mar 20, 2026", "Apr 17, 2026", MaintStatus.OnSchedule,  "Monthly"),
+        new("mt8", "Review server access logs",            "Server",   "Mar 22, 2026", "Apr 19, 2026", MaintStatus.OnSchedule,  "Monthly"),
+    ];
+
+    private static readonly Dictionary<MaintStatus, StatusCfg> _statusConfig = new()
+    {
+        [MaintStatus.Overdue]    = new("Overdue",     "bg-red-500",     "bg-red-500/10 text-red-600 dark:text-red-400"),
+        [MaintStatus.DueSoon]    = new("Due Soon",    "bg-amber-500",   "bg-amber-500/10 text-amber-600 dark:text-amber-400"),
+        [MaintStatus.OnSchedule] = new("On Schedule", "bg-emerald-500", "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"),
+    };
+
+    private static readonly string[] _categories = ["Server", "Database", "Security", "Backups"];
+
+    private HashSet<string> _completed = [];
+    private HashSet<string> _expandedCategory = ["Server", "Database", "Security", "Backups"];
+
+    private int _overdueCount => _tasks.Count(t => t.Status == MaintStatus.Overdue && !_completed.Contains(t.Id));
+    private int _dueSoonCount => _tasks.Count(t => t.Status == MaintStatus.DueSoon && !_completed.Contains(t.Id));
+
+    private void Toggle(string id)
+    {
+        if (_completed.Contains(id))
+            _completed.Remove(id);
+        else
+            _completed.Add(id);
+    }
+
+    private void ToggleCategory(string cat)
+    {
+        if (_expandedCategory.Contains(cat))
+            _expandedCategory.Remove(cat);
+        else
+            _expandedCategory.Add(cat);
+    }
+
+    private void HandleTaskKeyDown(KeyboardEventArgs e, string id)
+    {
+        if (e.Key == "Enter" || e.Key == " ") Toggle(id);
+    }
+}

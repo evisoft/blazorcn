@@ -1,0 +1,275 @@
+@* ============================================================
+   Block: features-scanner-beam-sweep-grid
+   Title: FeaturesScannerBeamSweepGrid
+   Description: A scanner beam sweep grid features section for React and Next.js with an auto-sweeping horizontal beam, a four-by-two cell grid, hover-to-pause interaction, and an animated detail swap for the active cell built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/features/features-scanner-beam-sweep-grid.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div>
+        @* Headline *@
+        <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div class="max-w-xl">
+                <span class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Observability surface
+                </span>
+                <h2 class="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                    Auto-scanning every capability.
+                </h2>
+                <p class="mt-3 text-base leading-relaxed text-muted-foreground">
+                    A thin beam sweeps eight signals in sequence. Hover a cell to lock the scanner on it —
+                    the detail panel below follows whichever signal holds the beam.
+                </p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button
+                    type="button"
+                    @onclick="@(() => _isPaused = !_isPaused)"
+                    aria-pressed="@_isPaused"
+                    class="@(Cn.Merge(
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                        _isPaused ? "bg-foreground text-background" : "bg-background text-foreground hover:bg-muted/60"
+                    ))"
+                >
+                    <span class="@(Cn.Merge("size-1.5 rounded-full", _isPaused ? "bg-background" : "bg-foreground"))" />
+                    @(_isPaused ? "Scanner paused" : "Scanner running")
+                </button>
+            </div>
+        </div>
+
+        @* Scanner grid *@
+        <div
+            class="relative mt-10 overflow-hidden rounded-2xl border bg-card p-3"
+            @onmouseenter="@(() => _isPaused = true)"
+            @onmouseleave="@(() => _isPaused = false)"
+        >
+            @* Scanner beam *@
+            <div
+                aria-hidden="true"
+                class="pointer-events-none absolute inset-x-3 z-10 h-[2px] bg-foreground shadow-[0_0_12px_rgba(0,0,0,0.2)] transition-all duration-500"
+                style="@($"top:{BeamTop}; opacity:{(_isPaused ? "0.4" : "1")}")"
+            />
+
+            <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
+                @foreach (var sig in _signals)
+                {
+                    var signal = sig;
+                    var i = Array.IndexOf(_signals, signal);
+                    var isActive = i == _activeIndex;
+                    var meta = _statusMeta[signal.Status];
+                    <button
+                        type="button"
+                        aria-pressed="@isActive"
+                        aria-label="@($"{signal.Title}, {signal.CurrentValue}{signal.Unit}, status {meta.Label}")"
+                        @onclick="@(() => { _activeIndex = i; _isPaused = true; })"
+                        @onfocus="@(() => { _activeIndex = i; _isPaused = true; })"
+                        class="@(Cn.Merge(
+                            "relative flex h-40 cursor-pointer flex-col justify-between overflow-hidden rounded-xl border p-4 text-left transition-colors",
+                            isActive ? "border-foreground/30 bg-background ring-1 ring-foreground/20" : "bg-muted/30 hover:bg-muted/60"
+                        ))"
+                    >
+                        <div class="flex items-start justify-between">
+                            <span class="flex size-7 items-center justify-center rounded-md border bg-background">
+                                <LucideIconCn Name="@signal.IconName" Size="14" Class="@(Cn.Merge("size-3.5 transition-colors", isActive ? "text-foreground" : "text-muted-foreground"))" />
+                            </span>
+                            <span class="@(Cn.Merge("flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium", meta.Bg, meta.Text))">
+                                <span class="@(Cn.Merge("size-1 rounded-full", meta.Dot))" />
+                                @meta.Label
+                            </span>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                @signal.Title
+                            </div>
+                            <div class="mt-1 flex items-baseline gap-1">
+                                <span class="font-mono text-lg font-semibold text-foreground tabular-nums">
+                                    @signal.CurrentValue
+                                </span>
+                                <span class="font-mono text-[10px] text-muted-foreground">
+                                    @signal.Unit
+                                </span>
+                            </div>
+                        </div>
+                        <div class="@(Cn.Merge("text-foreground/70", isActive ? "text-foreground" : ""))">
+                            @RenderSparkline(signal.Sparkline)
+                        </div>
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Active detail card *@
+        @{
+            var activeSignal = _signals[_activeIndex];
+            var statusMeta = _statusMeta[activeSignal.Status];
+            var signalNum = (_activeIndex + 1).ToString().PadLeft(2, '0');
+        }
+        <div class="mt-6 overflow-hidden rounded-2xl border bg-card transition-all duration-300">
+            <div class="grid grid-cols-1 gap-6 p-6 md:grid-cols-[1fr_auto] md:gap-8 md:p-8">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="flex size-7 items-center justify-center rounded-md border bg-background">
+                            <LucideIconCn Name="@activeSignal.IconName" Size="14" Class="size-3.5 text-foreground" />
+                        </span>
+                        <span class="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                            Signal @signalNum / @_signals.Length
+                        </span>
+                        <span class="@(Cn.Merge("ml-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium", statusMeta.Bg, statusMeta.Text))">
+                            <span class="@(Cn.Merge("size-1 rounded-full", statusMeta.Dot))" />
+                            @statusMeta.Label
+                        </span>
+                    </div>
+                    <h3 class="mt-3 text-xl font-semibold leading-tight text-foreground md:text-2xl">
+                        @activeSignal.Title
+                    </h3>
+                    <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
+                        @activeSignal.Description
+                    </p>
+                    <div class="mt-5 flex flex-wrap gap-2">
+                        <span class="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground">
+                            <LucideIconCn Name="bell" Size="12" Class="size-3" />
+                            Alerts on threshold
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground">
+                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                            7d baseline
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex flex-row items-end justify-between gap-4 border-t pt-4 md:flex-col md:items-end md:border-t-0 md:border-l md:pt-0 md:pl-8">
+                    <div class="text-right">
+                        <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Current
+                        </div>
+                        <div class="mt-1 flex items-baseline justify-end gap-1">
+                            <span class="font-mono text-3xl font-semibold text-foreground tabular-nums">
+                                @activeSignal.CurrentValue
+                            </span>
+                            <span class="font-mono text-sm text-muted-foreground">
+                                @activeSignal.Unit
+                            </span>
+                        </div>
+                        <div class="mt-1 font-mono text-[10px] text-muted-foreground">
+                            Threshold @activeSignal.Threshold
+                        </div>
+                    </div>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="w-full sm:w-[190px]">
+                        Open runbook
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private int _activeIndex = 0;
+    private bool _isPaused = false;
+    private System.Threading.Timer? _timer;
+
+    private const int SweepIntervalMs = 2500;
+    private const int Cols = 4;
+
+    private string BeamTop
+    {
+        get
+        {
+            var row = _activeIndex / Cols;
+            // Each row is approximately half the container height minus padding.
+            // With h-40 cards (160px) + gap-2 (8px) in a p-3 wrapper.
+            // Row 0 centers on ~86px from top of card area; row 1 adds one row height (~168px).
+            var rowPx = row * 168;
+            return $"{86 + rowPx}px";
+        }
+    }
+
+    private RenderFragment RenderSparkline(double[] values)
+    {
+        var min = values.Min();
+        var max = values.Max();
+        var range = (max - min) == 0 ? 1.0 : (max - min);
+        var pts = string.Join(" ", values.Select((v, idx) =>
+        {
+            var x = (idx / (double)(values.Length - 1)) * 100;
+            var y = 100 - ((v - min) / range) * 100;
+            return $"{x:F1},{y:F1}";
+        }));
+        return builder =>
+        {
+            builder.OpenElement(0, "svg");
+            builder.AddAttribute(1, "aria-hidden", "true");
+            builder.AddAttribute(2, "viewBox", "0 0 100 100");
+            builder.AddAttribute(3, "preserveAspectRatio", "none");
+            builder.AddAttribute(4, "class", "h-8 w-full");
+            builder.OpenElement(5, "polyline");
+            builder.AddAttribute(6, "points", pts);
+            builder.AddAttribute(7, "fill", "none");
+            builder.AddAttribute(8, "stroke", "currentColor");
+            builder.AddAttribute(9, "stroke-width", "2");
+            builder.AddAttribute(10, "stroke-linecap", "round");
+            builder.AddAttribute(11, "stroke-linejoin", "round");
+            builder.AddAttribute(12, "class", "text-foreground/80");
+            builder.AddAttribute(13, "vector-effect", "non-scaling-stroke");
+            builder.CloseElement();
+            builder.CloseElement();
+        };
+    }
+
+    protected override void OnInitialized()
+    {
+        _timer = new System.Threading.Timer(_ =>
+        {
+            if (!_isPaused)
+            {
+                _activeIndex = (_activeIndex + 1) % _signals.Length;
+                InvokeAsync(StateHasChanged);
+            }
+        }, null, SweepIntervalMs, SweepIntervalMs);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+
+    private record Signal(string Id, string IconName, string Title, string Unit, string CurrentValue, string Threshold, string Status, string Description, double[] Sparkline);
+    private record StatusMeta(string Label, string Dot, string Text, string Bg);
+
+    private static readonly Signal[] _signals =
+    [
+        new Signal("cpu", "cpu", "CPU utilization", "%", "42", "< 85", "nominal",
+            "Per-core usage across the fleet, sampled at 1-second resolution and rolled up per region. The scanner highlights any node that crosses 85% for more than 30 seconds.",
+            [32, 38, 42, 40, 44, 42, 39, 41, 43, 42]),
+        new Signal("memory", "hard-drive", "Memory pressure", "GB", "68", "< 96", "nominal",
+            "RSS plus cache minus kernel free, computed the same way the OOM killer does. Spikes trigger a heap dump that lands in object storage before any process dies.",
+            [52, 60, 64, 62, 68, 66, 70, 68, 67, 68]),
+        new Signal("network", "network", "Egress throughput", "Gbps", "2.4", "< 8", "nominal",
+            "Sustained egress across all VPCs. We decompose per destination so a single noisy neighbor shows up as an obvious spike instead of hiding inside the aggregate.",
+            [1.8, 2.0, 2.2, 2.1, 2.4, 2.3, 2.5, 2.4, 2.3, 2.4]),
+        new Signal("disk", "database", "Disk IOPS", "k", "14.6", "< 20", "watch",
+            "IOPS on every attached volume, with a burst budget gauge so you can tell the difference between sustained pressure and a brief spike. Watch state triggers at 70% of cap.",
+            [8, 10, 12, 13, 14, 15, 14, 14, 15, 14.6]),
+        new Signal("logs", "file-text", "Error log rate", "/min", "12", "< 50", "nominal",
+            "Error-level lines per minute across every service. We strip request IDs before counting so a single bad request does not inflate the error rate into alert territory.",
+            [6, 8, 10, 12, 14, 12, 10, 11, 12, 12]),
+        new Signal("traces", "git-branch", "Trace latency p95", "ms", "240", "< 500", "nominal",
+            "p95 end-to-end trace latency for every user-facing route. The scanner flags any route whose p95 moves more than 30% outside its 7-day rolling baseline.",
+            [180, 200, 210, 220, 230, 240, 235, 238, 241, 240]),
+        new Signal("errors", "triangle-alert", "Error budget burn", "%", "73", "< 80", "watch",
+            "Percent of the monthly error budget consumed. We show a burn rate in addition to absolute spend so a fast burn triggers a page even when absolute spend is still fine.",
+            [40, 48, 55, 60, 64, 68, 70, 71, 72, 73]),
+        new Signal("uptime", "activity", "Uptime (7d)", "%", "99.98", ">= 99.95", "nominal",
+            "Rolling 7-day uptime across every public endpoint. Failures are weighted by user impact so a 3am regional blip does not read the same as a 10am global outage.",
+            [99.96, 99.97, 99.98, 99.98, 99.97, 99.98, 99.99, 99.98, 99.97, 99.98]),
+    ];
+
+    private static readonly Dictionary<string, StatusMeta> _statusMeta = new()
+    {
+        ["nominal"] = new StatusMeta("Nominal", "bg-emerald-500", "text-emerald-600 dark:text-emerald-400", "bg-emerald-500/10"),
+        ["watch"]   = new StatusMeta("Watch",   "bg-amber-500",   "text-amber-600 dark:text-amber-400",   "bg-amber-500/10"),
+        ["alert"]   = new StatusMeta("Alert",   "bg-red-500",     "text-red-600 dark:text-red-400",       "bg-red-500/10"),
+    };
+}

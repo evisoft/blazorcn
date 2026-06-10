@@ -1,0 +1,185 @@
+@* ============================================================
+   Block: chat-nutrition-tracker
+   Title: ChatNutritionTracker
+   Description: A nutrition tracker chat block for React and Next.js with food log cards, macro breakdowns, daily goals, and meal suggestions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-nutrition-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="utensils" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Nutrition Tracker</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="flame" Size="12" Class="size-3 text-amber-500" />
+                <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                    846 / 2,100 cal
+                </span>
+            </div>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="space-y-3">
+                @foreach (var msg in _messages)
+                {
+                    var message = msg;
+                    <div class="flex gap-3">
+                        <AvatarCn Class="mt-0.5 size-7 shrink-0">
+                            <AvatarFallbackCn Class="@Cn.Merge("text-[10px]", message.Color)">@message.Initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-baseline gap-2">
+                                <span class="font-medium text-sm">@message.Sender</span>
+                                <span class="text-muted-foreground text-[10px]">@message.Timestamp</span>
+                            </div>
+
+                            @if (message.Type == "text")
+                            {
+                                <p class="mt-0.5 text-sm leading-relaxed">@message.Content</p>
+                            }
+
+                            @if (message.Type == "food-log" && message.Meal != null)
+                            {
+                                var meal = message.Meal;
+                                <div class="mt-1.5 rounded-md border bg-muted/30 p-2.5">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="apple" Size="14" Class="size-3.5 text-muted-foreground" />
+                                        <span class="font-medium text-xs">@meal.Label</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-mono text-[10px] font-normal">
+                                            @meal.Total.Calories cal
+                                        </BadgeCn>
+                                    </div>
+                                    <div class="mt-2 space-y-1">
+                                        @foreach (var food in meal.Foods)
+                                        {
+                                            var f = food;
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-xs">@f.Name</span>
+                                                <span class="text-muted-foreground text-[10px]">@f.Portion · @f.Macros.Protein@("g") P</span>
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="mt-2 flex items-center gap-3 border-t pt-2 text-[10px] text-muted-foreground">
+                                        <span>P: @meal.Total.Protein@("g")</span>
+                                        <span>C: @meal.Total.Carbs@("g")</span>
+                                        <span>F: @meal.Total.Fat@("g")</span>
+                                    </div>
+                                </div>
+                            }
+
+                            @if (message.Type == "daily-summary" && message.Summary != null)
+                            {
+                                var summary = message.Summary;
+                                <div class="mt-1.5 rounded-md border bg-muted/30 p-2.5">
+                                    <span class="font-medium text-xs">Daily Progress</span>
+                                    <div class="mt-2 space-y-1.5">
+                                        @RenderMacroBar("Protein", summary.Consumed.Protein, summary.Goal.Protein, "bg-blue-500")
+                                        @RenderMacroBar("Carbs", summary.Consumed.Carbs, summary.Goal.Carbs, "bg-amber-500")
+                                        @RenderMacroBar("Fat", summary.Consumed.Fat, summary.Goal.Fat, "bg-rose-500")
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="utensils" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <InputCn
+                    @bind-Value="_input"
+                    Placeholder="Log a meal or ask for suggestions..."
+                    Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0"
+                    @onkeydown="@HandleKeyDown" />
+                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Disabled="@(string.IsNullOrWhiteSpace(_input))" OnClick="@HandleSend" Class="size-8 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string _input = "";
+
+    private record MacroData(int Calories, int Protein, int Carbs, int Fat);
+    private record FoodEntry(string Name, string Portion, MacroData Macros);
+    private record MealData(string Label, FoodEntry[] Foods, MacroData Total);
+    private record SummaryData(MacroData Consumed, MacroData Goal);
+    private record ChatMessage(string Id, string Sender, string Initials, string Color, string Timestamp, string Type, string? Content = null, MealData? Meal = null, SummaryData? Summary = null);
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("m1", "NutriBot", "NB",
+            "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+            "8:15 AM", "text",
+            Content: "Good morning! Ready to log your meals today? Your protein goal is 140g. Let's hit it!"),
+        new("m2", "You", "YO",
+            "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+            "8:32 AM", "food-log",
+            Meal: new MealData("Breakfast",
+                [
+                    new FoodEntry("Greek yogurt", "200g", new MacroData(130, 20, 8, 2)),
+                    new FoodEntry("Granola", "40g", new MacroData(180, 4, 28, 6)),
+                    new FoodEntry("Blueberries", "80g", new MacroData(46, 1, 11, 0)),
+                ],
+                new MacroData(356, 25, 47, 8))),
+        new("m3", "NutriBot", "NB",
+            "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+            "8:33 AM", "text",
+            Content: "Great start! 25g protein already. You're on pace for your daily goal. High-protein lunch recommended."),
+        new("m4", "You", "YO",
+            "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+            "12:45 PM", "food-log",
+            Meal: new MealData("Lunch",
+                [
+                    new FoodEntry("Grilled chicken breast", "180g", new MacroData(280, 52, 0, 6)),
+                    new FoodEntry("Brown rice", "150g", new MacroData(170, 4, 36, 1)),
+                    new FoodEntry("Steamed broccoli", "120g", new MacroData(40, 3, 7, 0)),
+                ],
+                new MacroData(490, 59, 43, 7))),
+        new("m5", "NutriBot", "NB",
+            "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+            "12:46 PM", "daily-summary",
+            Summary: new SummaryData(
+                new MacroData(846, 84, 90, 15),
+                new MacroData(2100, 140, 250, 70))),
+        new("m6", "NutriBot", "NB",
+            "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+            "12:46 PM", "text",
+            Content: "You've hit 60% of your protein goal with 2 meals left. A salmon dinner would perfectly round out your macros."),
+    ];
+
+    private RenderFragment RenderMacroBar(string label, int current, int goal, string color) =>
+        @<div class="flex items-center gap-2">
+            <span class="w-10 text-muted-foreground text-[10px]">@label</span>
+            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div class="@Cn.Merge("h-full rounded-full", color)"
+                     style="@($"width:{Math.Min((int)Math.Round((double)current / goal * 100), 100)}%")">
+                </div>
+            </div>
+            <span class="w-14 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+                @current/@goal@("g")
+            </span>
+        </div>;
+
+    private void HandleSend()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") HandleSend();
+    }
+}

@@ -1,0 +1,166 @@
+@* ============================================================
+   Block: crud-knowledge-base
+   Title: CrudKnowledgeBase
+   Description: Knowledge base article manager with hierarchical categories, versioning, contributor tracking, and search
+   Source: original/blocks/crud/crud-knowledge-base.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideBookMarkedCn Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Knowledge Base</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_articles.Count articles · @_articles.Count(a => a.Status == "published") published
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucidePlusCn Size="14" Class="size-3.5" />
+                    New Article
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideSearchCn Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search knowledge base..."
+                         Value="@_search"
+                         ValueChanged="@((string v) => _search = v)" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var s in _filters)
+                {
+                    var filterVal = s;
+                    <button type="button"
+                            @onclick="@(() => _filter = filterVal)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == filterVal ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @char.ToUpper(filterVal[0]).ToString()@filterVal.Substring(1)
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @foreach (var article in Filtered)
+            {
+                var art = article;
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", GetStatusColor(art.Status))"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@art.Title</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="px-1.5 py-0 text-[10px]">
+                                    @art.Category
+                                </BadgeCn>
+                                <span class="font-mono text-[10px] text-muted-foreground">@art.Version</span>
+                            </div>
+                            <p class="mt-0.5 line-clamp-1 text-xs text-muted-foreground">@art.Excerpt</p>
+                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span>@art.Author</span>
+                                <span>·</span>
+                                <span>@art.Subcategory</span>
+                                <span>·</span>
+                                <span>Updated @art.LastUpdated</span>
+                                <span>·</span>
+                                <span class="tabular-nums">@art.Contributors contributors</span>
+                                @if (art.Views > 0)
+                                {
+                                    <span>·</span>
+                                    <span class="tabular-nums">@art.Views.ToString("N0") views</span>
+                                }
+                            </div>
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideMoreHorizontalCn Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                                @if (art.Status != "published")
+                                {
+                                    var artId = art.Id;
+                                    <DropdownMenuItemCn @onclick="@(() => HandlePublish(artId))">Publish</DropdownMenuItemCn>
+                                }
+                                <DropdownMenuItemCn>View History</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Duplicate</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" @onclick="@(() => HandleDelete(art.Id))">
+                                    <LucideTrashCn Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (!Filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No articles found
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class KbArticle
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Excerpt { get; set; } = "";
+        public string Category { get; set; } = "";
+        public string Subcategory { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Author { get; set; } = "";
+        public int Contributors { get; set; }
+        public string Version { get; set; } = "";
+        public int Views { get; set; }
+        public string LastUpdated { get; set; } = "";
+    }
+
+    private static readonly string[] _filters = ["all", "published", "draft", "review", "outdated"];
+
+    private readonly List<KbArticle> _articles =
+    [
+        new() { Id = 1, Title = "Production Deployment Checklist", Excerpt = "Step-by-step checklist for deploying services to production, including rollback procedures.", Category = "Engineering", Subcategory = "DevOps", Status = "published", Author = "Sarah Chen", Contributors = 5, Version = "v3.2", Views = 4520, LastUpdated = "Mar 22, 2026" },
+        new() { Id = 2, Title = "Database Migration Best Practices", Excerpt = "Guidelines for writing and running safe database migrations in production environments.", Category = "Engineering", Subcategory = "Backend", Status = "published", Author = "David Lee", Contributors = 3, Version = "v2.1", Views = 3890, LastUpdated = "Mar 18, 2026" },
+        new() { Id = 3, Title = "New Employee Onboarding Guide", Excerpt = "Complete guide for new hires covering tools, access, team introductions, and first week tasks.", Category = "People", Subcategory = "Onboarding", Status = "published", Author = "Lisa Wang", Contributors = 8, Version = "v4.0", Views = 6780, LastUpdated = "Mar 20, 2026" },
+        new() { Id = 4, Title = "Incident Response Playbook", Excerpt = "How to handle production incidents from detection through resolution and post-mortem.", Category = "Engineering", Subcategory = "SRE", Status = "review", Author = "Mike Johnson", Contributors = 6, Version = "v2.8", Views = 2340, LastUpdated = "Mar 24, 2026" },
+        new() { Id = 5, Title = "Brand Guidelines 2026", Excerpt = "Updated brand guidelines including logo usage, color palette, typography, and tone of voice.", Category = "Design", Subcategory = "Brand", Status = "draft", Author = "Emma Davis", Contributors = 2, Version = "v1.0", Views = 0, LastUpdated = "Mar 23, 2026" },
+        new() { Id = 6, Title = "Security Audit Procedures", Excerpt = "Internal security audit procedures for quarterly compliance reviews and vulnerability scanning.", Category = "Security", Subcategory = "Compliance", Status = "outdated", Author = "Tom Bradley", Contributors = 4, Version = "v1.5", Views = 1890, LastUpdated = "Jan 15, 2026" },
+    ];
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private IEnumerable<KbArticle> Filtered => _articles
+        .Where(a => _filter == "all" || a.Status == _filter)
+        .Where(a => a.Title.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    a.Category.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private void HandleDelete(int id) => _articles.RemoveAll(a => a.Id == id);
+
+    private void HandlePublish(int id)
+    {
+        var article = _articles.Find(a => a.Id == id);
+        if (article != null) article.Status = "published";
+    }
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "published" => "bg-emerald-500",
+        "draft"     => "bg-amber-500",
+        "review"    => "bg-blue-500",
+        "outdated"  => "bg-red-500",
+        _           => "bg-muted-foreground",
+    };
+}

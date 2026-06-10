@@ -1,0 +1,256 @@
+@* ============================================================
+   Block: reviews-split-view
+   Title: ReviewsSplitView
+   Description: A split-panel review comparison block for React and Next.js with selectable reviews, side-by-side detail view, highlighted differences, and sentiment indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-split-view.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="arrow-right-left" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-sm">Review Comparison</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_reviews.Length reviews
+                </BadgeCn>
+            </div>
+            <span class="text-muted-foreground text-xs">Select two reviews to compare</span>
+        </div>
+
+        <div class="flex flex-col md:flex-row md:divide-x">
+            @* Left panel: review selector list *@
+            <div class="w-full shrink-0 border-b md:w-56 md:border-b-0">
+                <div class="max-h-[460px] overflow-y-auto">
+                    @foreach (var rev in _reviews)
+                    {
+                        var review = rev;
+                        var isA = review.Id == _selectedA;
+                        var isB = review.Id == _selectedB;
+                        var isSelected = isA || isB;
+                        <div class="@Cn.Merge("border-b last:border-b-0", isSelected ? "bg-muted/40" : "")">
+                            <div class="px-3 py-2.5">
+                                <div class="flex items-center gap-2">
+                                    <div class="@Cn.Merge("flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium", isA ? "bg-foreground text-background" : isB ? "bg-muted-foreground/20 text-foreground" : "bg-muted text-muted-foreground")">
+                                        @(isA ? "A" : isB ? "B" : review.Initials)
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <span class="block truncate font-medium text-xs">@review.Author</span>
+                                        <div class="flex items-center gap-1">
+                                            @for (int i = 0; i < 5; i++)
+                                            {
+                                                var starIdx = i;
+                                                <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", starIdx < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                            }
+                                        </div>
+                                    </div>
+                                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", _sentimentColors[review.Sentiment])"></span>
+                                </div>
+                                <div class="mt-1.5 flex gap-1">
+                                    <ButtonCn Variant="@(isA ? ButtonVariant.Default : ButtonVariant.Outline)" Size="ButtonSize.Sm" Class="h-5 px-1.5 text-[10px]" OnClick="@(() => HandleSelect(review.Id, "a"))">A</ButtonCn>
+                                    <ButtonCn Variant="@(isB ? ButtonVariant.Default : ButtonVariant.Outline)" Size="ButtonSize.Sm" Class="h-5 px-1.5 text-[10px]" OnClick="@(() => HandleSelect(review.Id, "b"))">B</ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Right panel: comparison *@
+            <div class="flex-1">
+                <div class="grid grid-cols-1 divide-y md:grid-cols-2 md:divide-x md:divide-y-0">
+                    @{
+                        var reviewA = GetReview(_selectedA);
+                        var reviewB = GetReview(_selectedB);
+                        var panels = new[] { (review: reviewA, panelIndex: 0), (review: reviewB, panelIndex: 1) };
+                    }
+                    @foreach (var panel in panels)
+                    {
+                        var rv = panel.review;
+                        var pi = panel.panelIndex;
+                        if (rv != null)
+                        {
+                            <div class="flex flex-col">
+                                @* Review header *@
+                                <div class="border-b px-4 py-3">
+                                    <div class="flex items-center gap-2">
+                                        <div class="@Cn.Merge("flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium", pi == 0 ? "bg-foreground text-background" : "bg-muted-foreground/20 text-foreground")">
+                                            @(pi == 0 ? "A" : "B")
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <span class="block font-medium text-sm">@rv.Author</span>
+                                            <span class="text-muted-foreground text-xs">@rv.Role</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 flex items-center gap-2">
+                                        <div class="flex items-center gap-0.5">
+                                            @for (int i = 0; i < 5; i++)
+                                            {
+                                                var starIdx = i;
+                                                <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("size-3", starIdx < rv.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                            }
+                                        </div>
+                                        @if (rv.Verified)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">Verified</BadgeCn>
+                                        }
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="font-normal text-[10px]">@_sentimentLabels[rv.Sentiment]</BadgeCn>
+                                    </div>
+                                </div>
+
+                                @* Review content *@
+                                <div class="flex-1 px-4 py-3">
+                                    <p class="font-medium text-sm">@rv.Title</p>
+                                    <p class="mt-1.5 text-muted-foreground text-xs leading-relaxed">@rv.Body</p>
+
+                                    @* Pros *@
+                                    @if (rv.Pros.Length > 0)
+                                    {
+                                        <div class="mt-3">
+                                            <span class="mb-1 block font-medium text-muted-foreground text-xs">Pros</span>
+                                            <div class="space-y-1">
+                                                @foreach (var pro in rv.Pros)
+                                                {
+                                                    <div class="flex items-start gap-1.5">
+                                                        <LucideIconCn Name="check-circle-2" Size="12" Class="mt-0.5 size-3 shrink-0 text-emerald-500" />
+                                                        <span class="text-xs">@pro</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @* Cons *@
+                                    @if (rv.Cons.Length > 0)
+                                    {
+                                        <div class="mt-2.5">
+                                            <span class="mb-1 block font-medium text-muted-foreground text-xs">Cons</span>
+                                            <div class="space-y-1">
+                                                @foreach (var con in rv.Cons)
+                                                {
+                                                    <div class="flex items-start gap-1.5">
+                                                        <LucideIconCn Name="minus-circle" Size="12" Class="mt-0.5 size-3 shrink-0 text-red-500" />
+                                                        <span class="text-xs">@con</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+
+                                @* Footer *@
+                                <div class="border-t px-4 py-2.5">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-3 text-muted-foreground text-xs">
+                                            <span>@rv.Date</span>
+                                            <span>Used @rv.UsageDuration</span>
+                                        </div>
+                                        <div class="flex items-center gap-1 text-muted-foreground">
+                                            <LucideIconCn Name="thumbs-up" Size="12" Class="size-3" />
+                                            <span class="text-xs tabular-nums">@rv.Helpful</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ReviewItem(
+        string Id,
+        string Author,
+        string Initials,
+        string Role,
+        int Rating,
+        string Date,
+        bool Verified,
+        string Sentiment,
+        string Title,
+        string Body,
+        string[] Pros,
+        string[] Cons,
+        int Helpful,
+        string PurchaseDate,
+        string UsageDuration
+    );
+
+    private static readonly Dictionary<string, string> _sentimentColors = new()
+    {
+        ["positive"] = "bg-emerald-500",
+        ["mixed"] = "bg-amber-500",
+        ["critical"] = "bg-red-500",
+    };
+
+    private static readonly Dictionary<string, string> _sentimentLabels = new()
+    {
+        ["positive"] = "Positive",
+        ["mixed"] = "Mixed",
+        ["critical"] = "Critical",
+    };
+
+    private static readonly ReviewItem[] _reviews =
+    [
+        new("r1", "Sarah Chen", "SC", "Engineering Lead", 5, "Mar 22, 2026", true, "positive",
+            "Shipped our dashboard in half the time",
+            "Every component follows consistent patterns. TypeScript types are thorough and the Tailwind integration is seamless. We built our entire analytics dashboard using these blocks and the code quality was good enough to ship directly without cleanup.",
+            ["Consistent TypeScript types across all components", "Tailwind CSS integration is seamless", "Production-ready code quality"],
+            ["Limited chart component variations"],
+            47, "Jan 2026", "3 months"),
+        new("r2", "Marcus Johnson", "MJ", "Freelance Developer", 4, "Mar 19, 2026", true, "positive",
+            "Solid defaults, easy customization",
+            "Components work perfectly out of the box. Minor theming adjustments were straightforward with the token system. I use these for every client project now and the speed improvement is dramatic.",
+            ["Works out of the box without config", "Token-based theming is flexible", "Great for client projects"],
+            ["Theming learning curve for beginners", "Some mobile layouts need manual tweaks"],
+            31, "Feb 2026", "2 months"),
+        new("r3", "Elena Rodriguez", "ER", "Product Designer", 5, "Mar 16, 2026", true, "positive",
+            "Best component library for React teams",
+            "We migrated from a custom design system and the transition was seamless. Accessibility is handled well and everything composes naturally. The design consistency across blocks saved our design team weeks of review.",
+            ["Accessibility built in by default", "Natural component composition", "Design consistency across all blocks"],
+            ["Custom animation integration could be smoother"],
+            38, "Dec 2025", "4 months"),
+        new("r4", "David Kim", "DK", "CTO at Startup", 3, "Mar 13, 2026", true, "mixed",
+            "Good foundation, needs more patterns",
+            "Standard layouts are excellent. Would appreciate more complex data table variations with built-in sorting and filtering. We had to build several custom patterns on top of the base components for our enterprise dashboard.",
+            ["Strong foundational components", "Clean, readable code structure"],
+            ["Limited complex data table patterns", "Enterprise-level patterns need custom work", "No built-in advanced sorting or filtering"],
+            14, "Jan 2026", "3 months"),
+        new("r5", "Priya Patel", "PP", "Senior Frontend Engineer", 5, "Mar 10, 2026", true, "positive",
+            "Saved us months of development",
+            "Combined several blocks for a complete SaaS product. The code quality is high enough to ship directly without any cleanup needed. Our entire onboarding flow, dashboard, and settings pages use these blocks.",
+            ["Composable blocks for full applications", "Ship-ready code quality", "Comprehensive coverage of common UI patterns"],
+            ["Wish there were more animation presets"],
+            52, "Nov 2025", "5 months"),
+        new("r6", "James O'Brien", "JO", "Tech Lead", 2, "Mar 7, 2026", false, "critical",
+            "Not enough for our use case",
+            "The copy-paste model gives full ownership which is great, but we needed more specialized industry-specific patterns. Healthcare compliance forms and HIPAA-compliant data displays are not covered at all.",
+            ["Full code ownership with copy-paste model", "No dependency lock-in"],
+            ["No industry-specific patterns", "Healthcare and compliance UIs not covered", "Had to build most complex forms from scratch"],
+            8, "Feb 2026", "1 month"),
+    ];
+
+    private string _selectedA = "r1";
+    private string _selectedB = "r4";
+
+    private ReviewItem? GetReview(string id) =>
+        Array.Find(_reviews, r => r.Id == id);
+
+    private void HandleSelect(string id, string slot)
+    {
+        if (slot == "a")
+        {
+            if (id == _selectedB) _selectedB = _selectedA;
+            _selectedA = id;
+        }
+        else
+        {
+            if (id == _selectedA) _selectedA = _selectedB;
+            _selectedB = id;
+        }
+    }
+}

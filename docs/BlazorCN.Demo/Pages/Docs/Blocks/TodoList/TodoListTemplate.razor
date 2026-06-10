@@ -1,0 +1,213 @@
+@* ============================================================
+   Block: todo-list-template
+   Title: TodoListTemplate
+   Description: A todo list block with task templates for React and Next.js featuring preset task lists, template dropdown selector, custom template saving, and template badge indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-template.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="layout-template" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Task Templates</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <DropdownMenuCn>
+                    <DropdownMenuTriggerCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                            Templates
+                            <LucideIconCn Name="chevron-down" Size="12" Class="size-3" />
+                        </ButtonCn>
+                    </DropdownMenuTriggerCn>
+                    <DropdownMenuContentCn Align="FloatingAlign.End" Class="w-52">
+                        @foreach (var tpl in _templates)
+                        {
+                            var capturedTpl = tpl;
+                            <DropdownMenuItemCn Class="text-xs" OnClick="@(() => ApplyTemplate(capturedTpl))">
+                                <div class="flex flex-1 items-center justify-between">
+                                    <span>@capturedTpl.Name</span>
+                                    <span class="text-muted-foreground tabular-nums">@capturedTpl.Tasks.Length</span>
+                                </div>
+                            </DropdownMenuItemCn>
+                        }
+                        <DropdownMenuSeparatorCn />
+                        <DropdownMenuItemCn Class="text-xs" OnClick="@(() => _savingTemplate = true)">
+                            <LucideIconCn Name="save" Size="12" Class="mr-2 size-3" />
+                            Save current as template
+                        </DropdownMenuItemCn>
+                    </DropdownMenuContentCn>
+                </DropdownMenuCn>
+            </div>
+        </div>
+
+        @* Save template input *@
+        @if (_savingTemplate)
+        {
+            <div class="overflow-hidden">
+                <div class="flex items-center gap-2 border-b bg-muted/20 px-4 py-2">
+                    <InputCn @bind-Value="_templateName"
+                             @onkeydown="HandleTemplateNameKeyDown"
+                             Placeholder="Template name..."
+                             Class="h-7 text-xs" />
+                    <ButtonCn Variant="ButtonVariant.Outline"
+                              Size="ButtonSize.Sm"
+                              Class="h-7 gap-1 text-xs"
+                              @onclick="SaveAsTemplate"
+                              Disabled="@(string.IsNullOrWhiteSpace(_templateName))">
+                        <LucideIconCn Name="check" Size="12" Class="size-3" />
+                        Save
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Sm"
+                              Class="h-7 text-xs"
+                              @onclick="CancelSaveTemplate">
+                        Cancel
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < _todos.Count; i++)
+            {
+                var todo = _todos[i];
+                var isLast = i == _todos.Count - 1;
+                var todoId = todo.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="flex w-full items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                        <span class="mt-0.5 shrink-0">
+                            <CheckboxCn Id="@($"todo-{todo.Id}")"
+                                        Checked="@todo.Completed"
+                                        CheckedChanged="@((bool _) => ToggleTodo(todoId))" />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <span class="@Cn.Merge("text-sm transition-all duration-200", todo.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                                @todo.Text
+                            </span>
+                            @if (todo.Template != null)
+                            {
+                                <div class="mt-1">
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                        <LucideIconCn Name="layout-template" Size="12" Class="mr-1 size-3" />
+                                        @todo.Template
+                                    </BadgeCn>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (_todos.Count == 0)
+            {
+                <div class="px-4 py-8 text-center text-muted-foreground text-sm">
+                    <LucideIconCn Name="plus" Size="20" Class="mx-auto mb-2 size-5 text-muted-foreground/40" />
+                    Select a template to get started
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-2 border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs tabular-nums">@_todos.Count tasks</span>
+            <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+            <span class="text-muted-foreground text-xs tabular-nums">@_completedCount completed</span>
+            <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+            <span class="text-muted-foreground text-xs tabular-nums">@_templates.Count templates</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TodoItem(string Id, string Text, bool Completed, string? Template);
+    private record TemplateItem(string Id, string Name, string[] Tasks);
+
+    private static readonly TemplateItem[] _builtInTemplates =
+    [
+        new("sprint", "Sprint Planning", new[]
+        {
+            "Review previous sprint retrospective notes",
+            "Groom and estimate backlog items",
+            "Define sprint goal and success criteria",
+            "Assign tasks to team members",
+            "Set up sprint board columns",
+            "Schedule daily standup time slot",
+        }),
+        new("weekly", "Weekly Review", new[]
+        {
+            "Review completed tasks from the week",
+            "Update project status in tracking tool",
+            "Clear email inbox to zero",
+            "Review calendar for next week",
+            "Update team on blockers and progress",
+        }),
+        new("release", "Release Checklist", new[]
+        {
+            "Run full test suite and verify passing",
+            "Update changelog with release notes",
+            "Bump version number in package.json",
+            "Create release branch from main",
+            "Deploy to staging and smoke test",
+            "Tag release in git",
+            "Deploy to production",
+            "Monitor error rates for 30 minutes",
+        }),
+    ];
+
+    private List<TodoItem> _todos =
+    [
+        new("1", "Review sprint backlog priorities", false, null),
+        new("2", "Update component library version", true, null),
+        new("3", "Prepare demo for stakeholder meeting", false, null),
+    ];
+
+    private List<TemplateItem> _templates = new(_builtInTemplates);
+
+    private bool _savingTemplate = false;
+    private string _templateName = "";
+
+    private int _completedCount => _todos.Count(t => t.Completed);
+
+    private void ApplyTemplate(TemplateItem tpl)
+    {
+        _todos = tpl.Tasks
+            .Select((text, idx) => new TodoItem($"tpl-{tpl.Id}-{idx}", text, false, tpl.Name))
+            .ToList();
+    }
+
+    private void SaveAsTemplate()
+    {
+        var trimmed = _templateName.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        var newTpl = new TemplateItem(
+            $"custom-{_templates.Count}",
+            trimmed,
+            _todos.Where(t => !t.Completed).Select(t => t.Text).ToArray()
+        );
+        _templates.Add(newTpl);
+        _templateName = "";
+        _savingTemplate = false;
+    }
+
+    private void CancelSaveTemplate()
+    {
+        _savingTemplate = false;
+        _templateName = "";
+    }
+
+    private void ToggleTodo(string id)
+    {
+        var idx = _todos.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _todos[idx] = _todos[idx] with { Completed = !_todos[idx].Completed };
+    }
+
+    private void HandleTemplateNameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") SaveAsTemplate();
+        if (e.Key == "Escape") CancelSaveTemplate();
+    }
+}

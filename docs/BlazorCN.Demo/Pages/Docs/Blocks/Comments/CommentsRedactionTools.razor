@@ -1,0 +1,166 @@
+@* ============================================================
+   Block: comments-redaction-tools
+   Title: CommentsRedactionTools
+   Description: A content redaction comment section for React and Next.js with sensitive data masking, auto-detection, and manual redaction controls built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-redaction-tools.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Redacted Comments</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Sensitive data automatically masked
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1.5 text-xs">
+                    <LucideIconCn Name="shield-alert" Size="12" Class="size-3" />
+                    PII Protected
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Auto-detect info bar *@
+        <div class="border-b bg-muted/30 px-4 py-2.5">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Auto-detecting: emails, phones, SSNs, credit cards</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span>Click to reveal</span>
+            </div>
+        </div>
+
+        @* Comment List *@
+        <div>
+            @for (int i = 0; i < _commentStates.Count; i++)
+            {
+                var comment = _commentStates[i];
+                var isLast = i == _commentStates.Count - 1;
+                var initials = GetInitials(comment.Author);
+
+                <div class="@(isLast ? "p-4" : "border-b p-4")">
+                    <div class="flex gap-3">
+                        <AvatarCn Class="size-8 shrink-0">
+                            <AvatarImageCn Src="@comment.Avatar" Alt="@comment.Author" />
+                            <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@comment.Author</span>
+                                @if (comment.AutoRedacted)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 bg-amber-500/10 text-[10px] font-normal text-amber-600 dark:text-amber-400">
+                                        <LucideIconCn Name="shield-alert" Size="12" Class="size-3" />
+                                        Auto-redacted
+                                    </BadgeCn>
+                                }
+                                <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                            </div>
+                            <p class="mt-1.5 text-sm leading-relaxed">@comment.Content</p>
+
+                            @if (comment.Redactions.Count > 0)
+                            {
+                                <div class="mt-3 space-y-2">
+                                    @foreach (var kvp in comment.Redactions)
+                                    {
+                                        var key = kvp.Key;
+                                        var commentId = comment.Id;
+                                        <div class="flex items-center gap-2 rounded-md bg-muted/50 p-2">
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="shrink-0 text-[10px]">
+                                                @kvp.Value.Type
+                                            </BadgeCn>
+                                            @if (kvp.Value.Revealed)
+                                            {
+                                                <span class="font-mono text-xs">@kvp.Value.Original</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="font-mono text-xs text-muted-foreground">[REDACTED]</span>
+                                            }
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="ml-auto h-6 gap-1 px-2 text-xs" @onclick="@(() => RevealRedaction(commentId, key))">
+                                                @if (kvp.Value.Revealed)
+                                                {
+                                                    <LucideIconCn Name="eye-off" Size="12" Class="size-3" />
+                                                    <span>Hide</span>
+                                                }
+                                                else
+                                                {
+                                                    <LucideIconCn Name="eye" Size="12" Class="size-3" />
+                                                    <span>Reveal</span>
+                                                }
+                                            </ButtonCn>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t bg-muted/30 px-4 py-2.5">
+            <p class="text-xs text-muted-foreground">
+                Redactions are logged for compliance. Only authorized users can reveal sensitive data.
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record RedactionItem(string Type, string Original, bool Revealed);
+
+    private record CommentItem(string Id, string Author, string Avatar, string Content, Dictionary<string, RedactionItem> Redactions, string Timestamp, bool AutoRedacted);
+
+    private static List<CommentItem> CreateInitialComments() =>
+    [
+        new("1", "Support Agent", "",
+            "Customer requested password reset for account ████████████████. Verification code sent to phone ███-███-5678.",
+            new Dictionary<string, RedactionItem>
+            {
+                ["email"] = new("email", "sarah.chen@example.com", false),
+                ["phone"] = new("phone", "555-123-5678", false),
+            },
+            "10 min ago", true),
+        new("2", "James Wilson", "",
+            "Patient record #████████ shows SSN ███-██-████ in metadata. This should be removed from the export.",
+            new Dictionary<string, RedactionItem>
+            {
+                ["record"] = new("manual", "12345678", false),
+                ["ssn"] = new("ssn", "123-45-6789", false),
+            },
+            "25 min ago", true),
+        new("3", "Maya Patel", "",
+            "Credit card ending in ████ was charged $2,500. Customer ████████████████ confirmed transaction is legitimate.",
+            new Dictionary<string, RedactionItem>
+            {
+                ["card"] = new("manual", "4532", false),
+                ["customer"] = new("email", "customer@business.com", false),
+            },
+            "1 hour ago", true),
+    ];
+
+    private List<CommentItem> _commentStates = CreateInitialComments();
+
+    private void RevealRedaction(string commentId, string redactionKey)
+    {
+        _commentStates = _commentStates.Select(c =>
+        {
+            if (c.Id != commentId) return c;
+            var updatedRedactions = new Dictionary<string, RedactionItem>(c.Redactions);
+            if (updatedRedactions.TryGetValue(redactionKey, out var existing))
+            {
+                updatedRedactions[redactionKey] = existing with { Revealed = !existing.Revealed };
+            }
+            return c with { Redactions = updatedRedactions };
+        }).ToList();
+    }
+
+    private static string GetInitials(string author)
+    {
+        return string.Concat(author.Split(' ').Select(n => n.Length > 0 ? n[0].ToString().ToUpper() : ""));
+    }
+}

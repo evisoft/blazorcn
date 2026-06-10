@@ -1,0 +1,212 @@
+@* ============================================================
+   Block: comments-mention-autocomplete
+   Title: CommentsMentionAutocomplete
+   Description: An @-mention autocomplete comment section for React and Next.js with fuzzy search, keyboard navigation, and user avatars built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-mention-autocomplete.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Comments with @@Mentions</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">Type @@@@ to mention team members</p>
+        </div>
+
+        @* New comment input area *@
+        <div class="relative border-b p-4">
+            <div class="relative">
+                <TextareaCn @bind-Value="_newComment" @oninput="HandleInput" Placeholder="@("Write a comment... Use @ to mention someone")" Class="min-h-[100px]" />
+
+                @if (_showMentions && FilteredUsers().Count > 0)
+                {
+                    <div class="absolute bottom-full left-0 z-10 mb-2 w-full overflow-hidden rounded-md border bg-popover shadow-lg">
+                        <div class="max-h-[200px] overflow-y-auto">
+                            @{
+                                var filtered = FilteredUsers();
+                                for (int i = 0; i < Math.Min(filtered.Count, 5); i++)
+                                {
+                                    var user = filtered[i];
+                                    var index = i;
+                                    var initials = GetInitials(user.Name);
+                                    <button type="button"
+                                            @onclick="@(() => SelectMention(user))"
+                                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2 text-left transition-colors", index == _selectedIndex ? "bg-muted" : "hover:bg-muted/50")">
+                                        <AvatarCn Class="size-6">
+                                            <AvatarImageCn Src="@user.Avatar" Alt="@user.Name" />
+                                            <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                                        </AvatarCn>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-sm font-medium">@user.Name</span>
+                                                <span class="text-xs text-muted-foreground">@@@user.Username</span>
+                                            </div>
+                                            <p class="text-xs text-muted-foreground">@user.Role</p>
+                                        </div>
+                                    </button>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="mt-2 flex justify-end">
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 text-xs">
+                    Post comment
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Existing comments *@
+        <div>
+            @for (int ci = 0; ci < _existingComments.Length; ci++)
+            {
+                var comment = _existingComments[ci];
+                var isLast = ci == _existingComments.Length - 1;
+                var commentInitials = GetInitials(comment.Author);
+                <div class="@(isLast ? "p-4" : "border-b p-4")">
+                    <div class="flex gap-3">
+                        <AvatarCn Class="size-8 shrink-0">
+                            <AvatarFallbackCn Class="text-xs">@commentInitials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@comment.Author</span>
+                                <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                            </div>
+                            <p class="mt-1.5 text-sm leading-relaxed">
+                                @RenderCommentWithMentions(comment.Content, comment.Mentions)
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record UserData(string Id, string Name, string Username, string Avatar, string Role);
+    private record CommentData(string Id, string Author, string Content, UserData[] Mentions, string Timestamp);
+
+    private static readonly UserData[] _teamMembers =
+    [
+        new("1", "Sarah Chen",   "sarahc",  "", "Product Manager"),
+        new("2", "James Wilson", "jamesd",  "", "Engineering Lead"),
+        new("3", "Maya Patel",   "mayap",   "", "Designer"),
+        new("4", "Alex Morgan",  "alexm",   "", "Developer"),
+        new("5", "Chris Taylor", "christ",  "", "QA Engineer"),
+        new("6", "Jordan Lee",   "jordanl", "", "DevOps"),
+    ];
+
+    private static readonly CommentData[] _existingComments =
+    [
+        new("1", "Sarah Chen",
+            "Hey @alexm can you review the authentication flow before we ship?",
+            [_teamMembers[3]],
+            "10 min ago"),
+        new("2", "James Wilson",
+            "@mayap @christ the new design looks great! When can we test it?",
+            [_teamMembers[2], _teamMembers[4]],
+            "25 min ago"),
+    ];
+
+    private string _newComment = "";
+    private bool _showMentions = false;
+    private string _mentionQuery = "";
+    private int _selectedIndex = 0;
+
+    private void HandleInput(ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString() ?? "";
+        _newComment = text;
+
+        var lastAtIndex = text.LastIndexOf('@');
+        if (lastAtIndex != -1)
+        {
+            var textAfterAt = text.Substring(lastAtIndex + 1);
+            var hasSpace = textAfterAt.Contains(' ') || textAfterAt.Contains('\n');
+
+            if (!hasSpace)
+            {
+                _mentionQuery = textAfterAt.ToLower();
+                _showMentions = true;
+                _selectedIndex = 0;
+            }
+            else
+            {
+                _showMentions = false;
+            }
+        }
+        else
+        {
+            _showMentions = false;
+        }
+    }
+
+    private List<UserData> FilteredUsers()
+    {
+        return _teamMembers
+            .Where(u => u.Name.ToLower().Contains(_mentionQuery) || u.Username.ToLower().Contains(_mentionQuery))
+            .ToList();
+    }
+
+    private void SelectMention(UserData user)
+    {
+        var lastAtIndex = _newComment.LastIndexOf('@');
+        var beforeAt = _newComment.Substring(0, lastAtIndex);
+        var afterQuery = _newComment.Substring(lastAtIndex + _mentionQuery.Length + 1);
+        _newComment = $"{beforeAt}@{user.Username} {afterQuery}";
+        _showMentions = false;
+        _mentionQuery = "";
+    }
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ');
+        var result = "";
+        foreach (var p in parts)
+        {
+            if (p.Length > 0) result += char.ToUpper(p[0]);
+        }
+        return result;
+    }
+
+    private RenderFragment RenderCommentWithMentions(string content, UserData[] mentions) => __builder =>
+    {
+        // Build a list of segments: plain text or mention badge
+        // Replace each @username with a marker, then split
+        var rendered = content;
+        foreach (var user in mentions)
+        {
+            rendered = rendered.Replace($"@{user.Username}", $"\x02{user.Id}\x03");
+        }
+
+        // Split around \x02...\x03 markers
+        var parts = rendered.Split(new[] { '\x02', '\x03' });
+        // Even indices are plain text, odd indices are user IDs
+        for (int pi = 0; pi < parts.Length; pi++)
+        {
+            var part = parts[pi];
+            if (pi % 2 == 1)
+            {
+                // This is a user ID — find user and render badge
+                var matchedUser = mentions.FirstOrDefault(u => u.Id == part);
+                if (matchedUser != null)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="mx-0.5 gap-1 text-xs font-normal">
+                        <LucideIconCn Name="at-sign" Size="10" Class="size-2.5" />
+                        @matchedUser.Username
+                    </BadgeCn>
+                }
+            }
+            else if (part.Length > 0)
+            {
+                <span>@part</span>
+            }
+        }
+    };
+}

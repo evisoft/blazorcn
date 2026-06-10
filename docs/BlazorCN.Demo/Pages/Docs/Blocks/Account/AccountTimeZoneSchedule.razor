@@ -1,0 +1,374 @@
+@* ============================================================
+   Block: account-time-zone-schedule
+   Title: AccountTimeZoneSchedule
+   Description: A world clock and working hours configuration card for React and Next.js with primary timezone display, per-day schedule selectors, secondary team timezones, and calendar sync settings built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-time-zone-schedule.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Primary timezone display *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-start justify-between">
+                <div>
+                    <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Primary Timezone
+                    </span>
+                    <div class="mt-1 flex items-baseline gap-2">
+                        <span class="text-2xl font-semibold tabular-nums">10:34 AM</span>
+                        <span class="text-xs text-muted-foreground">@PrimaryTzInfo?.Abbreviation</span>
+                    </div>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Saturday, Apr 5, 2026</p>
+                </div>
+                <div class="flex flex-col items-end gap-2">
+                    <SelectCn Value="@_primaryTz" ValueChanged="@(v => _primaryTz = v ?? _primaryTz)">
+                        <SelectTriggerCn Class="h-8 w-[200px] text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var tz in _timezoneOptions)
+                            {
+                                <SelectItemCn Value="@tz.Id">
+                                    <span class="flex items-center gap-2">
+                                        <span>@tz.Label</span>
+                                        <span class="text-muted-foreground">@tz.UtcOffset</span>
+                                    </span>
+                                </SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                    <span class="flex cursor-pointer items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                          role="button" tabindex="0"
+                          @onclick="@(() => _autoDetect = !_autoDetect)">
+                        <LucideIconCn Name="locate" Size="10" Class="h-2.5 w-2.5" />
+                        @(_autoDetect ? "Auto-detect on" : "Auto-detect off")
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        @* Working hours *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Working Hours
+                </span>
+                <span class="text-[10px] text-muted-foreground">
+                    @EnabledDaysCount days &middot; @TotalWeeklyHours/week
+                </span>
+            </div>
+            <div class="mt-3 space-y-1.5">
+                @for (int i = 0; i < _schedule.Count; i++)
+                {
+                    var index = i;
+                    var day = _schedule[i];
+                    <div class="flex items-center gap-2">
+                        <SwitchCn Checked="@day.Enabled" CheckedChanged="@(v => _schedule[index].Enabled = v)" Class="scale-75" />
+                        <span class="@($"w-8 text-xs font-medium {(day.Enabled ? "text-foreground" : "text-muted-foreground/50")}")">
+                            @day.Short
+                        </span>
+                        @if (day.Enabled)
+                        {
+                            <SelectCn Value="@day.Start" ValueChanged="@(v => UpdateDayTime(index, "start", v ?? day.Start))">
+                                <SelectTriggerCn Class="h-7 w-[95px] text-xs">
+                                    <SelectValueCn />
+                                </SelectTriggerCn>
+                                <SelectContentCn>
+                                    @foreach (var t in _timeSlots)
+                                    {
+                                        <SelectItemCn Value="@t">@FormatTime12(t)</SelectItemCn>
+                                    }
+                                </SelectContentCn>
+                            </SelectCn>
+                            <span class="text-[10px] text-muted-foreground">to</span>
+                            <SelectCn Value="@day.End" ValueChanged="@(v => UpdateDayTime(index, "end", v ?? day.End))">
+                                <SelectTriggerCn Class="h-7 w-[95px] text-xs">
+                                    <SelectValueCn />
+                                </SelectTriggerCn>
+                                <SelectContentCn>
+                                    @foreach (var t in _timeSlots)
+                                    {
+                                        <SelectItemCn Value="@t">@FormatTime12(t)</SelectItemCn>
+                                    }
+                                </SelectContentCn>
+                            </SelectCn>
+                        }
+                        else
+                        {
+                            <span class="text-xs text-muted-foreground/50">Not available</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Secondary timezones *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="globe" Size="12" Class="h-3 w-3 text-muted-foreground" />
+                    <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Team Timezones
+                    </span>
+                </div>
+                @if (AvailableSecondaryTzs.Count > 0)
+                {
+                    <SelectCn Value="@_addTzValue" ValueChanged="@AddSecondaryTz">
+                        <SelectTriggerCn Class="h-6 w-6 border-none p-0 shadow-none [&>svg]:hidden">
+                            <LucideIconCn Name="plus" Size="14" Class="h-3.5 w-3.5 text-muted-foreground" />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var tz in AvailableSecondaryTzs)
+                            {
+                                <SelectItemCn Value="@tz.Id">@tz.Label (@tz.UtcOffset)</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                }
+            </div>
+            @if (_secondaryTzIds.Count == 0)
+            {
+                <p class="mt-2 text-xs text-muted-foreground">
+                    Add team timezones to compare working hour overlaps
+                </p>
+            }
+            else
+            {
+                <div class="mt-2 space-y-1.5">
+                    @foreach (var tzId in _secondaryTzIds.ToList())
+                    {
+                        var tz = _timezoneOptions.FirstOrDefault(t => t.Id == tzId);
+                        if (tz is null) continue;
+                        var offset = GetRelativeOffset(tzId);
+                        <div class="flex items-center justify-between overflow-hidden">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-medium">@tz.Label</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="h-4 px-1.5 text-[10px]">
+                                    @tz.Abbreviation
+                                </BadgeCn>
+                                <span class="text-[10px] text-muted-foreground">@tz.UtcOffset</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="@($"text-xs tabular-nums {(offset == "same time" ? "text-emerald-600" : "text-muted-foreground")}")">
+                                    @offset
+                                </span>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-5 w-5 p-0"
+                                          OnClick="@((_) => RemoveSecondaryTz(tzId))">
+                                    <LucideIconCn Name="x" Size="12" Class="h-3 w-3 text-muted-foreground" />
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Calendar sync *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="calendar-sync" Size="12" Class="h-3 w-3 text-muted-foreground" />
+                <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Calendar Sync
+                </span>
+            </div>
+            <div class="mt-2 space-y-2">
+                @for (int i = 0; i < _calendarSyncs.Count; i++)
+                {
+                    var idx = i;
+                    var sync = _calendarSyncs[i];
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-foreground">@sync.Provider</span>
+                        <div class="flex items-center gap-2">
+                            @if (sync.Enabled)
+                            {
+                                <span class="flex items-center gap-1 text-[10px] text-emerald-600">
+                                    <LucideIconCn Name="check" Size="10" Class="h-2.5 w-2.5" />
+                                    Connected
+                                </span>
+                            }
+                            <SwitchCn Checked="@sync.Enabled" CheckedChanged="@(v => _calendarSyncs[idx].Enabled = v)" Class="scale-75" />
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Save *@
+        <div class="flex items-center justify-between px-4 py-2.5">
+            <p class="text-[10px] text-muted-foreground">
+                Schedule applies to notifications, meetings, and availability status
+            </p>
+            <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" OnClick="HandleSave">
+                @if (_saved)
+                {
+                    <LucideIconCn Name="check" Size="12" Class="h-3 w-3" />
+                    @("Saved")
+                }
+                else
+                {
+                    <LucideIconCn Name="save" Size="12" Class="h-3 w-3" />
+                    @("Save")
+                }
+            </ButtonCn>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private class TimezoneInfo
+    {
+        public string Id { get; init; } = "";
+        public string Label { get; init; } = "";
+        public string Abbreviation { get; init; } = "";
+        public string UtcOffset { get; init; } = "";
+        public int OffsetMinutes { get; init; }
+    }
+
+    private class DayScheduleItem
+    {
+        public string Day { get; init; } = "";
+        public string Short { get; init; } = "";
+        public bool Enabled { get; set; }
+        public string Start { get; set; } = "";
+        public string End { get; set; } = "";
+    }
+
+    private class CalendarSyncItem
+    {
+        public string Provider { get; init; } = "";
+        public bool Enabled { get; set; }
+    }
+
+    private static readonly TimezoneInfo[] _timezoneOptions =
+    [
+        new() { Id = "America/New_York",    Label = "Eastern Time",            Abbreviation = "ET",   UtcOffset = "UTC-5",    OffsetMinutes = -300 },
+        new() { Id = "America/Chicago",     Label = "Central Time",            Abbreviation = "CT",   UtcOffset = "UTC-6",    OffsetMinutes = -360 },
+        new() { Id = "America/Denver",      Label = "Mountain Time",           Abbreviation = "MT",   UtcOffset = "UTC-7",    OffsetMinutes = -420 },
+        new() { Id = "America/Los_Angeles", Label = "Pacific Time",            Abbreviation = "PT",   UtcOffset = "UTC-8",    OffsetMinutes = -480 },
+        new() { Id = "Europe/London",       Label = "Greenwich Mean Time",     Abbreviation = "GMT",  UtcOffset = "UTC+0",    OffsetMinutes = 0    },
+        new() { Id = "Europe/Berlin",       Label = "Central European Time",   Abbreviation = "CET",  UtcOffset = "UTC+1",    OffsetMinutes = 60   },
+        new() { Id = "Europe/Istanbul",     Label = "Turkey Time",             Abbreviation = "TRT",  UtcOffset = "UTC+3",    OffsetMinutes = 180  },
+        new() { Id = "Asia/Kolkata",        Label = "India Standard Time",     Abbreviation = "IST",  UtcOffset = "UTC+5:30", OffsetMinutes = 330  },
+        new() { Id = "Asia/Tokyo",          Label = "Japan Standard Time",     Abbreviation = "JST",  UtcOffset = "UTC+9",    OffsetMinutes = 540  },
+        new() { Id = "Australia/Sydney",    Label = "Australian Eastern Time", Abbreviation = "AEST", UtcOffset = "UTC+11",   OffsetMinutes = 660  },
+    ];
+
+    private static readonly string[] _timeSlots = GenerateTimeSlots();
+
+    private static string[] GenerateTimeSlots()
+    {
+        var slots = new List<string>(48);
+        for (int h = 0; h < 24; h++)
+        {
+            slots.Add($"{h:D2}:00");
+            slots.Add($"{h:D2}:30");
+        }
+        return [.. slots];
+    }
+
+    private static string FormatTime12(string time)
+    {
+        var parts = time.Split(':');
+        int hour = int.Parse(parts[0]);
+        string min = parts[1];
+        if (hour == 0) return $"12:{min} AM";
+        if (hour == 12) return $"12:{min} PM";
+        if (hour > 12) return $"{hour - 12}:{min} PM";
+        return $"{hour}:{min} AM";
+    }
+
+    private string _primaryTz = "America/New_York";
+    private bool _autoDetect;
+    private string _addTzValue = "";
+    private bool _saved;
+
+    private List<DayScheduleItem> _schedule =
+    [
+        new() { Day = "Monday",    Short = "Mon", Enabled = true,  Start = "09:00", End = "17:00" },
+        new() { Day = "Tuesday",   Short = "Tue", Enabled = true,  Start = "09:00", End = "17:00" },
+        new() { Day = "Wednesday", Short = "Wed", Enabled = true,  Start = "09:00", End = "17:00" },
+        new() { Day = "Thursday",  Short = "Thu", Enabled = true,  Start = "09:00", End = "17:00" },
+        new() { Day = "Friday",    Short = "Fri", Enabled = true,  Start = "09:00", End = "17:30" },
+        new() { Day = "Saturday",  Short = "Sat", Enabled = false, Start = "10:00", End = "14:00" },
+        new() { Day = "Sunday",    Short = "Sun", Enabled = false, Start = "10:00", End = "14:00" },
+    ];
+
+    private List<string> _secondaryTzIds = ["Europe/London", "Asia/Tokyo"];
+
+    private List<CalendarSyncItem> _calendarSyncs =
+    [
+        new() { Provider = "Google Calendar",  Enabled = true  },
+        new() { Provider = "Outlook Calendar", Enabled = false },
+        new() { Provider = "Apple Calendar",   Enabled = false },
+    ];
+
+    private TimezoneInfo? PrimaryTzInfo => _timezoneOptions.FirstOrDefault(t => t.Id == _primaryTz);
+    private int EnabledDaysCount => _schedule.Count(d => d.Enabled);
+    private List<TimezoneInfo> AvailableSecondaryTzs =>
+        _timezoneOptions.Where(tz => tz.Id != _primaryTz && !_secondaryTzIds.Contains(tz.Id)).ToList();
+
+    private string TotalWeeklyHours
+    {
+        get
+        {
+            int totalMinutes = 0;
+            foreach (var day in _schedule)
+            {
+                if (!day.Enabled) continue;
+                var sp = day.Start.Split(':');
+                var ep = day.End.Split(':');
+                int sh = int.Parse(sp[0]), sm = int.Parse(sp[1]);
+                int eh = int.Parse(ep[0]), em = int.Parse(ep[1]);
+                totalMinutes += eh * 60 + em - (sh * 60 + sm);
+            }
+            int hours = totalMinutes / 60;
+            int mins = totalMinutes % 60;
+            return mins > 0 ? $"{hours}h {mins}m" : $"{hours}h";
+        }
+    }
+
+    private string GetRelativeOffset(string secondaryId)
+    {
+        var primary = _timezoneOptions.FirstOrDefault(t => t.Id == _primaryTz);
+        var secondary = _timezoneOptions.FirstOrDefault(t => t.Id == secondaryId);
+        if (primary is null || secondary is null) return "";
+        int diffMinutes = secondary.OffsetMinutes - primary.OffsetMinutes;
+        if (diffMinutes == 0) return "same time";
+        double diffHours = diffMinutes / 60.0;
+        string sign = diffHours > 0 ? "+" : "";
+        if (diffMinutes % 60 == 0) return $"{sign}{(int)diffHours}h";
+        int wholeHours = (int)Math.Abs(diffHours);
+        int remainMins = Math.Abs(diffMinutes) % 60;
+        string prefix = diffMinutes < 0 ? "-" : "+";
+        return $"{prefix}{wholeHours}h {remainMins}m";
+    }
+
+    private void UpdateDayTime(int index, string field, string value)
+    {
+        if (field == "start") _schedule[index].Start = value;
+        else _schedule[index].End = value;
+    }
+
+    private void AddSecondaryTz(string? tzId)
+    {
+        if (string.IsNullOrEmpty(tzId)) return;
+        if (!_secondaryTzIds.Contains(tzId) && tzId != _primaryTz)
+            _secondaryTzIds.Add(tzId);
+        _addTzValue = "";
+    }
+
+    private void RemoveSecondaryTz(string tzId)
+    {
+        _secondaryTzIds.Remove(tzId);
+    }
+
+    private async Task HandleSave(Microsoft.AspNetCore.Components.Web.MouseEventArgs _)
+    {
+        _saved = true;
+        await Task.Delay(2000);
+        _saved = false;
+        StateHasChanged();
+    }
+}

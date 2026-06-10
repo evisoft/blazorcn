@@ -1,0 +1,269 @@
+@* ============================================================
+   Block: map-utility-outages
+   Title: MapUtilityOutages
+   Description: React utility outage status map block for Next.js with outage zone markers, affected customer counts, restoration ETAs, and outage detail timeline using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-utility-outages.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="zap-off" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Outage Status</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal tabular-nums">
+                    @_totalAffected.ToString("N0") affected
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var sev in new[] { "critical", "major", "minor" })
+                {
+                    var cfg = GetSeverityConfig(sev);
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                        @CountBySeverity(sev)
+                    </span>
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Map placeholder *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Outage markers *@
+                    @foreach (var outage in _outages)
+                    {
+                        var o = outage;
+                        var pos = GetMarkerPosition(o.Longitude, o.Latitude);
+                        var cfg = GetSeverityConfig(o.Severity);
+                        var isSelected = _selectedId == o.Id;
+                        var markerSize = isSelected ? "size-10" : (o.Severity == "critical" ? "size-8" : "size-6");
+                        var iconSize = isSelected ? (o.Severity == "critical" ? 20 : 16) : (o.Severity == "critical" ? 16 : 12);
+                        var iconClass = isSelected ? (o.Severity == "critical" ? "size-5 text-white" : "size-4 text-white") : (o.Severity == "critical" ? "size-4 text-white" : "size-3 text-white");
+                        var iconName = o.Severity == "critical" ? "triangle-alert" : "zap";
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%")">
+                            <button
+                                type="button"
+                                class="flex flex-col items-center"
+                                @onclick="@(() => ToggleSelected(o.Id))">
+                                <div
+                                    class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background shadow-lg transition-all", markerSize)"
+                                    style="@($"background-color:{cfg.Color}")">
+                                    <LucideIconCn Name="@iconName" Size="@iconSize" Class="@iconClass" />
+                                </div>
+                            </button>
+
+                            @if (isSelected)
+                            {
+                                <div class="absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 w-52 rounded-lg border bg-card p-2.5 shadow-lg text-left">
+                                    <span class="block font-medium text-sm">@o.Area</span>
+                                    <span class="block text-xs text-muted-foreground">
+                                        @o.CustomersAffected.ToString("N0") customers &middot; ETA @o.Eta
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                    Map view — New York City
+                </div>
+            </div>
+
+            @* Detail Panel *@
+            <div class="w-64 shrink-0 border-l">
+                @if (_selected is not null)
+                {
+                    var sel = _selected;
+                    var selCfg = GetSeverityConfig(sel.Severity);
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium">@sel.Area</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-1 px-1.5 text-[10px] font-normal">
+                                <span class="@($"size-1.5 rounded-full {selCfg.Dot}")"></span>
+                                @selCfg.Label
+                            </BadgeCn>
+                        </div>
+                        <div class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>@GetStatusLabel(sel.Status)</span>
+                            <span>&middot;</span>
+                            <span>Reported @sel.ReportedAt</span>
+                        </div>
+                    </div>
+
+                    @* Stats *@
+                    <div class="grid grid-cols-2 border-b">
+                        <div class="border-r px-4 py-2.5">
+                            <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                Affected
+                            </span>
+                            <span class="text-sm font-semibold tabular-nums">@sel.CustomersAffected.ToString("N0")</span>
+                        </div>
+                        <div class="px-4 py-2.5">
+                            <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                ETA
+                            </span>
+                            <span class="text-sm font-semibold tabular-nums">@sel.Eta</span>
+                        </div>
+                    </div>
+
+                    @* Cause *@
+                    <div class="border-b px-4 py-2.5">
+                        <span class="block text-xs text-muted-foreground">Cause</span>
+                        <span class="text-sm">@sel.Cause</span>
+                    </div>
+
+                    @* Timeline *@
+                    <div class="px-4 py-3">
+                        <span class="mb-2 block text-xs font-medium text-muted-foreground">Timeline</span>
+                        <div class="space-y-0">
+                            @for (var i = 0; i < sel.Timeline.Length; i++)
+                            {
+                                var evt = sel.Timeline[i];
+                                var isLast = i == sel.Timeline.Length - 1;
+                                var dotClass = isLast ? selCfg.Dot : "bg-muted-foreground/30";
+                                <div class="flex gap-3">
+                                    <div class="flex flex-col items-center">
+                                        <div class="@($"mt-1 size-2 rounded-full {dotClass}")"></div>
+                                        @if (!isLast)
+                                        {
+                                            <div class="h-full w-px bg-border"></div>
+                                        }
+                                    </div>
+                                    <div class="pb-3">
+                                        <span class="block font-mono text-[10px] text-muted-foreground">@evt.Time</span>
+                                        <span class="block text-xs leading-relaxed">@evt.Description</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="flex h-full items-center justify-center p-4">
+                        <span class="text-center text-xs text-muted-foreground">
+                            Select an outage to view details
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TimelineEvent(string Time, string Description);
+
+    private record Outage(
+        string Id,
+        string Area,
+        string Severity,
+        string Status,
+        string Cause,
+        double Longitude,
+        double Latitude,
+        int CustomersAffected,
+        string Eta,
+        string ReportedAt,
+        TimelineEvent[] Timeline
+    );
+
+    private record SeverityConfig(string Label, string Dot, string Color);
+
+    private static readonly Outage[] _outages =
+    [
+        new("o1", "Midtown West",     "critical", "crew-on-site",    "Underground cable fault", -73.9907, 40.758,  4280, "2h 15min",  "8:42 AM",
+            [
+                new("8:42 AM", "Outage reported by smart grid sensors"),
+                new("8:45 AM", "Automated diagnostics initiated"),
+                new("9:02 AM", "Crew Alpha-7 dispatched"),
+                new("9:28 AM", "Crew on site, assessing underground vault"),
+                new("9:45 AM", "Cable fault located at junction 14-B"),
+            ]),
+        new("o2", "Lower East Side",  "major",    "crew-dispatched", "Transformer overload",    -73.984,  40.715,  1820, "3h 30min",  "9:15 AM",
+            [
+                new("9:15 AM", "Multiple customer reports received"),
+                new("9:18 AM", "Transformer T-412 flagged as overloaded"),
+                new("9:32 AM", "Crew Beta-3 dispatched from depot"),
+            ]),
+        new("o3", "Upper West Side",  "major",    "restoring",       "Downed power line",       -73.975,  40.787,   920, "45 min",    "7:30 AM",
+            [
+                new("7:30 AM", "911 reports of downed line on W 96th St"),
+                new("7:35 AM", "Area isolated, automatic switching engaged"),
+                new("7:52 AM", "Crew Gamma-1 dispatched"),
+                new("8:20 AM", "Crew on site, line secured"),
+                new("9:10 AM", "Repair complete, restoring service in phases"),
+            ]),
+        new("o4", "Brooklyn Heights", "minor",    "investigating",   "Equipment malfunction",   -73.9936, 40.696,    85, "Assessing", "10:05 AM",
+            [
+                new("10:05 AM", "Voltage fluctuation detected on feeder 28"),
+                new("10:08 AM", "Remote diagnostics in progress"),
+            ]),
+        new("o5", "Chelsea",          "minor",    "crew-dispatched", "Switching error",         -74.001,  40.7465,  210, "1h 15min",  "9:50 AM",
+            [
+                new("9:50 AM",  "Automated switching failure on circuit 7-C"),
+                new("9:55 AM",  "Manual override initiated"),
+                new("10:12 AM", "Crew Delta-5 dispatched"),
+            ]),
+        new("o6", "Harlem",           "critical", "crew-dispatched", "Substation trip",         -73.9442, 40.8116, 6150, "4h+",       "10:22 AM",
+            [
+                new("10:22 AM", "Substation SS-14 protective relay tripped"),
+                new("10:25 AM", "Cascading effect detected on feeders 31-34"),
+                new("10:30 AM", "Emergency crews Alpha-2 and Beta-6 dispatched"),
+            ]),
+    ];
+
+    private string? _selectedId = "o1";
+
+    private Outage? _selected => Array.Find(_outages, o => o.Id == _selectedId);
+
+    private int _totalAffected => _outages.Sum(o => o.CustomersAffected);
+
+    private void ToggleSelected(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+    }
+
+    private static int CountBySeverity(string severity) =>
+        Array.FindAll(_outages, o => o.Severity == severity).Length;
+
+    private static SeverityConfig GetSeverityConfig(string severity) => severity switch
+    {
+        "critical" => new("Critical", "bg-red-500",   "#ef4444"),
+        "major"    => new("Major",    "bg-amber-500", "#eab308"),
+        "minor"    => new("Minor",    "bg-blue-500",  "#3b82f6"),
+        _          => new("Unknown",  "bg-muted",     "#6b7280"),
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "investigating"   => "Investigating",
+        "crew-dispatched" => "Crew Dispatched",
+        "crew-on-site"    => "Crew On Site",
+        "restoring"       => "Restoring",
+        _                 => status,
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-74.020, -73.930], lat [40.685, 40.830]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.020, lonMax = -73.930;
+        const double latMin = 40.685,  latMax = 40.830;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+}

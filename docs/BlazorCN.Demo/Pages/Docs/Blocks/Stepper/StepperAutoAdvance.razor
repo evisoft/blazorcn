@@ -1,0 +1,264 @@
+@* ============================================================
+   Block: stepper-auto-advance
+   Title: StepperAutoAdvance
+   Description: An automated pipeline stepper that auto-advances through steps with progress indicators, countdown timers, and pause control built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-auto-advance.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Pipeline execution</span>
+            <div class="flex items-center gap-2">
+                @if (_isPaused && !_isComplete)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-amber-600 text-xs dark:text-amber-400">
+                        Paused
+                    </BadgeCn>
+                }
+                @if (_isComplete)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-emerald-600 text-xs dark:text-emerald-400">
+                        <LucideIconCn Name="check" Size="12" Class="mr-1 size-3" />
+                        Done
+                    </BadgeCn>
+                }
+                <span class="text-muted-foreground text-xs tabular-nums">
+                    @(_elapsedSeconds + _currentElapsed)s / @_totalDuration s
+                </span>
+            </div>
+        </div>
+
+        @* Pipeline steps *@
+        <div class="border-b">
+            @foreach (var entry in _pipelineSteps.Select((s, i) => new { Step = s, Index = i }))
+            {
+                var idx = entry.Index;
+                var step = entry.Step;
+                var isActive = idx == _activeStep;
+                var isCompleted = idx < _activeStep;
+                var isLast = idx == _pipelineSteps.Length - 1;
+                var stepProgress = isActive ? _progress : (isCompleted ? 100.0 : 0.0);
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="@Cn.Merge("flex items-center gap-3 px-4 py-3 transition-colors", isActive && !_isComplete ? "bg-muted/30" : "")">
+                        @* Status icon *@
+                        <span class="@Cn.Merge("flex size-7 shrink-0 items-center justify-center rounded-full text-xs transition-all duration-200", isCompleted ? "bg-emerald-500 text-white dark:bg-emerald-600" : (isActive && !_isComplete) ? "bg-foreground text-background" : (isActive && _isComplete) ? "bg-emerald-500 text-white dark:bg-emerald-600" : "border border-muted-foreground/25 text-muted-foreground")">
+                            @if (isCompleted || (isActive && _isComplete))
+                            {
+                                <LucideIconCn Name="check" Size="14" Class="size-3.5" />
+                            }
+                            else if (isActive && !_isPaused)
+                            {
+                                <LucideIconCn Name="loader" Size="14" Class="size-3.5 animate-spin" />
+                            }
+                            else if (isActive && _isPaused)
+                            {
+                                <LucideIconCn Name="pause" Size="12" Class="size-3" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="circle" Size="12" Class="size-3" />
+                            }
+                        </span>
+
+                        @* Step info *@
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="@Cn.Merge("font-medium text-sm", (isActive || isCompleted) ? "text-foreground" : "text-muted-foreground")">
+                                    @step.Label
+                                </span>
+                                @if (step.Duration > 0)
+                                {
+                                    <span class="text-muted-foreground text-xs tabular-nums">
+                                        @if (isActive)
+                                        {
+                                            @($"{_currentElapsed}s / {step.Duration}s")
+                                        }
+                                        else if (isCompleted)
+                                        {
+                                            @($"{step.Duration}s")
+                                        }
+                                        else
+                                        {
+                                            @($"~{step.Duration}s")
+                                        }
+                                    </span>
+                                }
+                            </div>
+                            <p class="mt-0.5 text-muted-foreground text-xs">@step.Description</p>
+
+                            @* Progress bar — only for non-final active or completed steps *@
+                            @if (step.Duration > 0 && (isActive || isCompleted))
+                            {
+                                <div class="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
+                                    <div
+                                        class="@Cn.Merge("h-full rounded-full transition-all duration-100", isCompleted ? "bg-emerald-500 dark:bg-emerald-600" : "bg-foreground")"
+                                        style="@($"width:{stepProgress:F0}%")">
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @* Percentage *@
+                        @if (step.Duration > 0 && (isActive || isCompleted))
+                        {
+                            <span class="@Cn.Merge("shrink-0 font-mono text-xs tabular-nums", isCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                                @((int)Math.Round(stepProgress))%
+                            </span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Controls *@
+        <div class="flex items-center justify-between px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 gap-1.5 text-xs" OnClick="HandleReset">
+                <LucideIconCn Name="rotate-ccw" Size="14" Class="size-3.5" />
+                Reset
+            </ButtonCn>
+            @if (!_isComplete)
+            {
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 gap-1.5 text-xs" OnClick="HandlePauseResume">
+                    @if (_isPaused)
+                    {
+                        <LucideIconCn Name="play" Size="12" Class="size-3" />
+                        @("Resume")
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="pause" Size="12" Class="size-3" />
+                        @("Pause")
+                    }
+                </ButtonCn>
+            }
+            @if (_isComplete)
+            {
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    All steps completed
+                </BadgeCn>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record PipelineStep(string Label, string Description, int Duration);
+
+    private static readonly PipelineStep[] _pipelineSteps =
+    [
+        new("Fetching data", "Pulling records from 3 data sources", 3),
+        new("Processing", "Cleaning, deduplication, and normalization", 5),
+        new("Generating report", "Building analytics summary and charts", 4),
+        new("Complete", "Pipeline finished successfully", 0),
+    ];
+
+    private int _activeStep = 0;
+    private double _progress = 0;
+    private bool _isPaused = false;
+    private bool _pendingAdvance = false;
+    private System.Threading.Timer? _tickTimer;
+    private System.Threading.Timer? _advanceTimer;
+
+    private bool _isComplete => _activeStep == _pipelineSteps.Length - 1;
+    private PipelineStep _currentStep => _pipelineSteps[_activeStep];
+
+    private int _elapsedSeconds => _pipelineSteps.Take(_activeStep).Sum(s => s.Duration);
+    private int _currentElapsed => _isComplete ? 0 : (int)Math.Round((_progress / 100.0) * _currentStep.Duration);
+    private int _totalDuration => _pipelineSteps.Sum(s => s.Duration);
+
+    protected override void OnInitialized()
+    {
+        StartTicking();
+    }
+
+    private void StartTicking()
+    {
+        StopTicking();
+        if (_isPaused || _isComplete || _currentStep.Duration == 0 || _pendingAdvance) return;
+
+        var incrementPerTick = 100.0 / (_currentStep.Duration * 20);
+
+        _tickTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                if (_isPaused || _isComplete || _pendingAdvance) return;
+
+                _progress += incrementPerTick;
+                if (_progress >= 100)
+                {
+                    _progress = 100;
+                    StopTicking();
+                    ScheduleAdvance();
+                }
+                StateHasChanged();
+            });
+        }, null, 50, 50);
+    }
+
+    private void StopTicking()
+    {
+        _tickTimer?.Dispose();
+        _tickTimer = null;
+    }
+
+    private void ScheduleAdvance()
+    {
+        _pendingAdvance = true;
+        _advanceTimer?.Dispose();
+        _advanceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                if (!_isComplete)
+                {
+                    _activeStep++;
+                    _progress = 0;
+                    _pendingAdvance = false;
+                    StartTicking();
+                }
+                StateHasChanged();
+            });
+        }, null, 300, System.Threading.Timeout.Infinite);
+    }
+
+    private void HandlePauseResume()
+    {
+        _isPaused = !_isPaused;
+        if (_isPaused)
+        {
+            StopTicking();
+            _advanceTimer?.Dispose();
+            _advanceTimer = null;
+            _pendingAdvance = false;
+        }
+        else
+        {
+            StartTicking();
+        }
+    }
+
+    private void HandleReset()
+    {
+        StopTicking();
+        _advanceTimer?.Dispose();
+        _advanceTimer = null;
+        _pendingAdvance = false;
+        _activeStep = 0;
+        _progress = 0;
+        _isPaused = false;
+        StartTicking();
+    }
+
+    public void Dispose()
+    {
+        StopTicking();
+        _advanceTimer?.Dispose();
+        _advanceTimer = null;
+    }
+}

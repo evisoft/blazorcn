@@ -1,0 +1,273 @@
+@* ============================================================
+   Block: music-audio-converter
+   Title: MusicAudioConverter
+   Description: An audio file converter block for React and Next.js with input and output format selectors, bitrate control, sample rate option, animated progress indicator, and convert button built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-audio-converter.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="file-audio" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Audio Converter</span>
+            </div>
+            <div class="flex items-center gap-2 text-muted-foreground text-xs">
+                <LucideIconCn Name="settings" Size="12" Class="size-3" />
+                <span>Lossless conversion</span>
+            </div>
+        </div>
+
+        @* File info *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted/50">
+                <LucideIconCn Name="file-audio" Size="16" Class="size-4 text-muted-foreground" />
+            </div>
+            <div class="min-w-0 flex-1">
+                <span class="block truncate font-medium text-sm">summer-vibes-mix.wav</span>
+                <span class="text-muted-foreground text-xs">48.2 MB · 3:42</span>
+            </div>
+        </div>
+
+        @* Format selectors *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="flex-1">
+                    <span class="mb-1.5 block font-medium text-muted-foreground text-xs">
+                        Input Format
+                    </span>
+                    <SelectCn Value="@_inputFormat" ValueChanged="@((string v) => _inputFormat = v)" Class="h-8 text-xs">
+                        <SelectTriggerCn Class="h-8 text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var fmt in _inputFormats)
+                            {
+                                var f = fmt;
+                                <SelectItemCn Value="@f.Value" Class="text-xs">@f.Label (@f.Extension)</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+
+                <LucideIconCn Name="arrow-right" Size="16" Class="mt-5 size-4 shrink-0 text-muted-foreground" />
+
+                <div class="flex-1">
+                    <span class="mb-1.5 block font-medium text-muted-foreground text-xs">
+                        Output Format
+                    </span>
+                    <SelectCn Value="@_outputFormat" ValueChanged="@((string v) => _outputFormat = v)" Class="h-8 text-xs">
+                        <SelectTriggerCn Class="h-8 text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var fmt in _outputFormats)
+                            {
+                                var f = fmt;
+                                <SelectItemCn Value="@f.Value" Class="text-xs">@f.Label (@f.Extension)</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+            </div>
+        </div>
+
+        @* Bitrate & Sample Rate *@
+        <div class="grid grid-cols-1 gap-4 border-b px-4 py-3 sm:grid-cols-2">
+
+            @* Bitrate *@
+            <div>
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="font-medium text-muted-foreground text-xs">Bitrate</span>
+                    <span class="font-mono text-muted-foreground text-xs tabular-nums">@CurrentBitrateLabel</span>
+                </div>
+                <SliderCn Value="@((double)_bitrate)"
+                          ValueChanged="@((double v) => { _bitrate = (int)v; })"
+                          Min="128"
+                          Max="320"
+                          Step="64"
+                          Class="w-full" />
+                <div class="mt-1.5 flex justify-between">
+                    @foreach (var opt in _bitrateOptions)
+                    {
+                        var o = opt;
+                        <span class="@Cn.Merge("text-[10px] tabular-nums", _bitrate == o.Value ? "font-medium text-foreground" : "text-muted-foreground")">
+                            @o.Value
+                        </span>
+                    }
+                </div>
+            </div>
+
+            @* Sample Rate *@
+            <div>
+                <span class="mb-1.5 block font-medium text-muted-foreground text-xs">
+                    Sample Rate
+                </span>
+                <SelectCn Value="@_sampleRate" ValueChanged="@((string v) => _sampleRate = v)" Class="h-8 text-xs">
+                    <SelectTriggerCn Class="h-8 text-xs">
+                        <SelectValueCn />
+                    </SelectTriggerCn>
+                    <SelectContentCn>
+                        @foreach (var opt in _sampleRateOptions)
+                        {
+                            var o = opt;
+                            <SelectItemCn Value="@o.Value" Class="text-xs">@o.Label</SelectItemCn>
+                        }
+                    </SelectContentCn>
+                </SelectCn>
+            </div>
+        </div>
+
+        @* Progress / Convert *@
+        <div class="px-4 py-3">
+            @if (_convertState == "idle")
+            {
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 w-full text-xs" OnClick="HandleConvert">
+                    Convert to @OutputFormatLabel
+                </ButtonCn>
+            }
+            else if (_convertState == "converting")
+            {
+                <div>
+                    <div class="mb-2 flex items-center justify-between">
+                        <span class="font-medium text-sm">Converting...</span>
+                        <span class="font-mono text-muted-foreground text-xs tabular-nums">@_progress%</span>
+                    </div>
+                    <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div class="h-full rounded-full bg-foreground transition-all duration-200 ease-out"
+                             style="@($"width:{_progress}%")"></div>
+                    </div>
+                    <p class="mt-1.5 text-muted-foreground text-xs">
+                        @_inputFormat.ToUpperInvariant() to @_outputFormat.ToUpperInvariant() · @CurrentBitrateLabel · @CurrentSampleRateLabel
+                    </p>
+                </div>
+            }
+            else if (_convertState == "done")
+            {
+                <div class="text-center">
+                    <div class="mb-2 flex items-center justify-center gap-2">
+                        <span class="flex size-5 items-center justify-center rounded-full bg-emerald-500/10">
+                            <LucideIconCn Name="check" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                        </span>
+                        <span class="font-medium text-sm">Conversion Complete</span>
+                    </div>
+                    <p class="mb-3 text-muted-foreground text-xs">
+                        summer-vibes-mix.@_outputFormat · Estimated 8.4 MB
+                    </p>
+                    <div class="flex gap-2">
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 flex-1 text-xs" OnClick="HandleReset">
+                            Convert Another
+                        </ButtonCn>
+                        <ButtonCn Size="ButtonSize.Sm" Class="h-8 flex-1 text-xs">
+                            Download File
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <p class="text-center text-muted-foreground text-xs">
+                Client-side conversion · Files never leave your device
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record FormatOption(string Value, string Label, string Extension);
+    private record BitrateOption(int Value, string Label);
+    private record SampleRateOption(string Value, string Label);
+
+    private static readonly FormatOption[] _inputFormats =
+    [
+        new("mp3",  "MP3",  ".mp3"),
+        new("wav",  "WAV",  ".wav"),
+        new("flac", "FLAC", ".flac"),
+        new("aac",  "AAC",  ".aac"),
+        new("ogg",  "OGG",  ".ogg"),
+    ];
+
+    private static readonly FormatOption[] _outputFormats =
+    [
+        new("mp3",  "MP3",  ".mp3"),
+        new("wav",  "WAV",  ".wav"),
+        new("flac", "FLAC", ".flac"),
+        new("aac",  "AAC",  ".aac"),
+        new("ogg",  "OGG",  ".ogg"),
+    ];
+
+    private static readonly BitrateOption[] _bitrateOptions =
+    [
+        new(128, "128 kbps"),
+        new(192, "192 kbps"),
+        new(256, "256 kbps"),
+        new(320, "320 kbps"),
+    ];
+
+    private static readonly SampleRateOption[] _sampleRateOptions =
+    [
+        new("44100", "44.1 kHz"),
+        new("48000", "48 kHz"),
+        new("96000", "96 kHz"),
+    ];
+
+    private string _inputFormat  = "wav";
+    private string _outputFormat = "mp3";
+    private int    _bitrate      = 256;
+    private string _sampleRate   = "44100";
+    private string _convertState = "idle";
+    private int    _progress     = 0;
+
+    private System.Timers.Timer? _timer;
+
+    private string CurrentBitrateLabel =>
+        _bitrateOptions.FirstOrDefault(b => b.Value == _bitrate)?.Label ?? "";
+
+    private string CurrentSampleRateLabel =>
+        _sampleRateOptions.FirstOrDefault(s => s.Value == _sampleRate)?.Label ?? "";
+
+    private string OutputFormatLabel =>
+        _outputFormats.FirstOrDefault(f => f.Value == _outputFormat)?.Label.ToUpperInvariant() ?? _outputFormat.ToUpperInvariant();
+
+    private void HandleConvert()
+    {
+        _convertState = "converting";
+        _progress = 0;
+        _timer = new System.Timers.Timer(120);
+        _timer.Elapsed += async (_, _) =>
+        {
+            _progress += 4;
+            if (_progress >= 100)
+            {
+                _progress = 100;
+                _timer?.Stop();
+                _timer?.Dispose();
+                _timer = null;
+                _convertState = "done";
+            }
+            await InvokeAsync(StateHasChanged);
+        };
+        _timer.AutoReset = true;
+        _timer.Start();
+    }
+
+    private void HandleReset()
+    {
+        _convertState = "idle";
+        _progress = 0;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+        _timer = null;
+    }
+}

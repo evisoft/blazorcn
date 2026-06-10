@@ -1,0 +1,252 @@
+@* ============================================================
+   Block: crud-appointment-scheduler
+   Title: CrudAppointmentScheduler
+   Description: Appointment scheduling with create, edit, cancel operations and time slot management for booking systems
+   Source: original/blocks/crud/crud-appointment-scheduler.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Appointments</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Mar 25, 2026 — @_counts["confirmed"] confirmed, @_counts["pending"] pending
+                    </p>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                          Class="h-7 gap-1 px-2 text-xs" @onclick="@(() => _showAdd = !_showAdd)">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    Book
+                </ButtonCn>
+            </div>
+        </div>
+
+        @if (_showAdd)
+        {
+            <div class="border-b bg-muted/30 px-4 py-3">
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <InputCn Placeholder="Client name" Class="h-8 text-xs"
+                             @bind-Value="_newClient" />
+                    <InputCn Placeholder="Service" Class="h-8 text-xs"
+                             @bind-Value="_newService" />
+                    <InputCn Placeholder="Time (e.g. 10:00 AM)" Class="h-8 text-xs"
+                             @bind-Value="_newTime" />
+                    <SelectCn Value="@_newDuration" ValueChanged="@((string v) => _newDuration = v)">
+                        <SelectTriggerCn Class="h-8 text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            <SelectItemCn Value="15 min">15 min</SelectItemCn>
+                            <SelectItemCn Value="30 min">30 min</SelectItemCn>
+                            <SelectItemCn Value="45 min">45 min</SelectItemCn>
+                            <SelectItemCn Value="60 min">60 min</SelectItemCn>
+                        </SelectContentCn>
+                    </SelectCn>
+                    <SelectCn Value="@_newProvider" ValueChanged="@((string v) => _newProvider = v)">
+                        <SelectTriggerCn Class="h-8 text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            <SelectItemCn Value="Dr. Smith">Dr. Smith</SelectItemCn>
+                            <SelectItemCn Value="Dr. Lee">Dr. Lee</SelectItemCn>
+                        </SelectContentCn>
+                    </SelectCn>
+                    <div class="flex gap-1">
+                        <ButtonCn Size="ButtonSize.Sm" Class="h-8 flex-1 text-xs" @onclick="HandleAdd">
+                            Book
+                        </ButtonCn>
+                        <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost"
+                                  Class="h-8 text-xs" @onclick="@(() => _showAdd = false)">
+                            <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="flex border-b">
+            @foreach (var tab in _tabs)
+            {
+                var tabKey = tab;
+                <button type="button"
+                        class="@Cn.Merge("flex-1 border-b-2 px-3 py-2 text-xs font-medium transition-colors", _filter == tabKey ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")"
+                        @onclick="@(() => _filter = tabKey)">
+                    @Capitalize(tabKey) (@(_counts.ContainsKey(tabKey) ? _counts[tabKey] : _appointments.Count(a => a.Status == tabKey)))
+                </button>
+            }
+        </div>
+
+        <div>
+            @{ var filtered = _filter == "all" ? _appointments : _appointments.Where(a => a.Status == _filter).ToList(); }
+            @foreach (var appt in filtered)
+            {
+                var sc = _statusConfig[appt.Status];
+                <div class="@Cn.Merge("flex items-center gap-3 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50", appt.Status == "cancelled" ? "opacity-50" : "")">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium">@appt.Client</span>
+                            <span class="@Cn.Merge("size-1.5 rounded-full", sc.Color)"></span>
+                            <span class="text-xs text-muted-foreground">@sc.Label</span>
+                        </div>
+                        <div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <span class="flex items-center gap-1">
+                                <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                @appt.Time · @appt.Duration
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <LucideIconCn Name="user" Size="12" Class="size-3" />
+                                @appt.Provider
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                                @appt.Date
+                            </span>
+                        </div>
+                    </div>
+                    <BadgeCn Variant="BadgeVariant.Outline" Class="hidden text-xs sm:inline-flex">
+                        @appt.Service
+                    </BadgeCn>
+                    <DropdownMenuCn>
+                        <DropdownMenuTriggerCn>
+                            <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                            </ButtonCn>
+                        </DropdownMenuTriggerCn>
+                        <DropdownMenuContentCn Align="FloatingAlign.End">
+                            @if (appt.Status == "pending")
+                            {
+                                var apptId = appt.Id;
+                                <DropdownMenuItemCn @onclick="@(() => HandleConfirm(apptId))">
+                                    Confirm
+                                </DropdownMenuItemCn>
+                            }
+                            @if (appt.Status != "cancelled" && appt.Status != "completed")
+                            {
+                                var apptId = appt.Id;
+                                <DropdownMenuItemCn @onclick="@(() => HandleCancel(apptId))">
+                                    Cancel
+                                </DropdownMenuItemCn>
+                            }
+                            <DropdownMenuItemCn>Reschedule</DropdownMenuItemCn>
+                            @{
+                                var apptIdDel = appt.Id;
+                            }
+                            <DropdownMenuItemCn Class="text-destructive" @onclick="@(() => HandleDelete(apptIdDel))">
+                                <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                Delete
+                            </DropdownMenuItemCn>
+                        </DropdownMenuContentCn>
+                    </DropdownMenuCn>
+                </div>
+            }
+            @if (!filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No appointments
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class Appointment
+    {
+        public int Id { get; set; }
+        public string Client { get; set; } = "";
+        public string Service { get; set; } = "";
+        public string Date { get; set; } = "";
+        public string Time { get; set; } = "";
+        public string Duration { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Provider { get; set; } = "";
+    }
+
+    private class StatusInfo
+    {
+        public string Label { get; set; } = "";
+        public string Color { get; set; } = "";
+    }
+
+    private readonly Dictionary<string, StatusInfo> _statusConfig = new()
+    {
+        ["confirmed"] = new() { Label = "Confirmed", Color = "bg-emerald-500" },
+        ["pending"]   = new() { Label = "Pending",   Color = "bg-amber-500"  },
+        ["cancelled"] = new() { Label = "Cancelled", Color = "bg-red-500"    },
+        ["completed"] = new() { Label = "Completed", Color = "bg-blue-500"   },
+    };
+
+    private readonly string[] _tabs = ["all", "confirmed", "pending", "cancelled"];
+
+    private List<Appointment> _appointments =
+    [
+        new() { Id = 1, Client = "Sarah Johnson",  Service = "Consultation",       Date = "Mar 25, 2026", Time = "9:00 AM",  Duration = "30 min", Status = "confirmed", Provider = "Dr. Smith" },
+        new() { Id = 2, Client = "Mike Peters",    Service = "Follow-up",          Date = "Mar 25, 2026", Time = "10:00 AM", Duration = "15 min", Status = "confirmed", Provider = "Dr. Smith" },
+        new() { Id = 3, Client = "Emma Davis",     Service = "Initial Assessment", Date = "Mar 25, 2026", Time = "11:00 AM", Duration = "60 min", Status = "pending",   Provider = "Dr. Lee"   },
+        new() { Id = 4, Client = "David Chen",     Service = "Review",             Date = "Mar 25, 2026", Time = "1:00 PM",  Duration = "30 min", Status = "cancelled", Provider = "Dr. Smith" },
+        new() { Id = 5, Client = "Lisa Wang",      Service = "Consultation",       Date = "Mar 25, 2026", Time = "2:30 PM",  Duration = "45 min", Status = "confirmed", Provider = "Dr. Lee"   },
+        new() { Id = 6, Client = "Tom Brown",      Service = "Check-up",           Date = "Mar 25, 2026", Time = "3:30 PM",  Duration = "30 min", Status = "completed", Provider = "Dr. Smith" },
+        new() { Id = 7, Client = "Rachel Green",   Service = "Therapy Session",    Date = "Mar 26, 2026", Time = "9:00 AM",  Duration = "60 min", Status = "pending",   Provider = "Dr. Lee"   },
+    ];
+
+    private bool _showAdd = false;
+    private string _filter = "all";
+    private string _newClient = "";
+    private string _newService = "";
+    private string _newTime = "";
+    private string _newDuration = "30 min";
+    private string _newProvider = "Dr. Smith";
+
+    private Dictionary<string, int> _counts => new()
+    {
+        ["all"]       = _appointments.Count,
+        ["confirmed"] = _appointments.Count(a => a.Status == "confirmed"),
+        ["pending"]   = _appointments.Count(a => a.Status == "pending"),
+        ["cancelled"] = _appointments.Count(a => a.Status == "cancelled"),
+    };
+
+    private void HandleAdd()
+    {
+        if (string.IsNullOrWhiteSpace(_newClient) || string.IsNullOrWhiteSpace(_newTime)) return;
+        var newId = _appointments.Count > 0 ? _appointments.Max(a => a.Id) + 1 : 1;
+        _appointments.Add(new Appointment
+        {
+            Id = newId,
+            Client = _newClient,
+            Service = _newService,
+            Time = _newTime,
+            Duration = _newDuration,
+            Provider = _newProvider,
+            Date = "Mar 25, 2026",
+            Status = "pending",
+        });
+        _newClient = "";
+        _newService = "";
+        _newTime = "";
+        _newDuration = "30 min";
+        _newProvider = "Dr. Smith";
+        _showAdd = false;
+    }
+
+    private void HandleCancel(int id)
+    {
+        var appt = _appointments.Find(a => a.Id == id);
+        if (appt != null) appt.Status = "cancelled";
+    }
+
+    private void HandleConfirm(int id)
+    {
+        var appt = _appointments.Find(a => a.Id == id);
+        if (appt != null) appt.Status = "confirmed";
+    }
+
+    private void HandleDelete(int id)
+    {
+        _appointments.RemoveAll(a => a.Id == id);
+    }
+
+    private static string Capitalize(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
+}

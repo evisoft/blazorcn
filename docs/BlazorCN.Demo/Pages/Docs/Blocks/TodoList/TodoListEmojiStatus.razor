@@ -1,0 +1,159 @@
+@* ============================================================
+   Block: todo-list-emoji-status
+   Title: TodoListEmojiStatus
+   Description: An emoji-based status indicator todo list block for React and Next.js with clickable emoji cycling, status filter bar, and status counts built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-emoji-status.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Emoji Tasks</span>
+            <span class="text-muted-foreground text-xs tabular-nums">@_tasks.Count tasks</span>
+        </div>
+
+        @* Emoji filter bar *@
+        <div class="flex items-center gap-1 border-b px-4 py-2">
+            <ButtonCn Variant="@(_filter == null ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                      Size="ButtonSize.Sm"
+                      Class="h-6 px-2 text-xs"
+                      @onclick="@(() => _filter = null)">
+                All
+            </ButtonCn>
+            @foreach (var s in _statuses)
+            {
+                var status = s;
+                <ButtonCn Variant="@(_filter == status.Id ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                          Size="ButtonSize.Sm"
+                          Class="h-6 gap-1 px-2 text-xs"
+                          @onclick="@(() => _filter = _filter == status.Id ? (TaskStatusId?)null : status.Id)">
+                    <span class="text-sm">@status.Emoji</span>
+                    @status.Label
+                </ButtonCn>
+            }
+        </div>
+
+        @* Add task *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <span class="text-base">📋</span>
+            <InputCn @bind-Value="_newTask"
+                     @onkeydown="HandleInputKeyDown"
+                     Placeholder="Add a task..."
+                     Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+            <ButtonCn Variant="ButtonVariant.Ghost"
+                      Size="ButtonSize.IconXs"
+                      @onclick="AddTask"
+                      Disabled="@(string.IsNullOrWhiteSpace(_newTask))"
+                      aria-label="Add task">
+                <LucideIconCn Name="plus" Size="16" Class="size-4" />
+            </ButtonCn>
+        </div>
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < FilteredTasks.Count; i++)
+            {
+                var task = FilteredTasks[i];
+                var isLast = i == FilteredTasks.Count - 1;
+                var taskId = task.Id;
+                var taskStatus = GetStatus(task.Status);
+                var isDone = task.Status == TaskStatusId.Done;
+                var isCancelled = task.Status == TaskStatusId.Cancelled;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                        <button type="button"
+                                @onclick="@(() => CycleStatus(taskId))"
+                                class="flex size-8 shrink-0 items-center justify-center rounded-md text-lg transition-transform hover:scale-110 active:scale-95"
+                                aria-label="@($"Status: {taskStatus.Label}. Click to change.")">
+                            @taskStatus.Emoji
+                        </button>
+                        <div class="min-w-0 flex-1">
+                            <span class="@Cn.Merge("text-sm", (isDone || isCancelled) ? "text-muted-foreground line-through" : "font-medium")">
+                                @task.Text
+                            </span>
+                            <span class="ml-2 text-muted-foreground text-xs">@taskStatus.Label</span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer with status counts *@
+        <div class="flex items-center gap-3 border-t px-4 py-3">
+            @foreach (var s in _statuses)
+            {
+                var status = s;
+                <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                    <span class="text-sm">@status.Emoji</span>
+                    <span class="tabular-nums">@GetCount(status.Id)</span>
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum TaskStatusId { Todo, InProgress, Done, Paused, Cancelled }
+
+    private record StatusDef(TaskStatusId Id, string Emoji, string Label);
+
+    private record TaskItem(string Id, string Text, TaskStatusId Status);
+
+    private static readonly StatusDef[] _statuses =
+    [
+        new(TaskStatusId.Todo, "📋", "To Do"),
+        new(TaskStatusId.InProgress, "🔄", "In Progress"),
+        new(TaskStatusId.Done, "✅", "Done"),
+        new(TaskStatusId.Paused, "⏸️", "Paused"),
+        new(TaskStatusId.Cancelled, "❌", "Cancelled"),
+    ];
+
+    private int _nextId = 9;
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Complete project documentation", TaskStatusId.InProgress),
+        new("2", "Review pull request #42", TaskStatusId.Todo),
+        new("3", "Deploy staging environment", TaskStatusId.Done),
+        new("4", "Refactor authentication module", TaskStatusId.Paused),
+        new("5", "Write integration tests", TaskStatusId.Todo),
+        new("6", "Update deprecated API calls", TaskStatusId.Cancelled),
+        new("7", "Design onboarding flow", TaskStatusId.InProgress),
+        new("8", "Optimize database queries", TaskStatusId.Todo),
+    ];
+
+    private TaskStatusId? _filter = null;
+    private string _newTask = "";
+
+    private List<TaskItem> FilteredTasks =>
+        _filter.HasValue ? _tasks.Where(t => t.Status == _filter.Value).ToList() : _tasks;
+
+    private StatusDef GetStatus(TaskStatusId id) => _statuses.First(s => s.Id == id);
+
+    private int GetCount(TaskStatusId id) => _tasks.Count(t => t.Status == id);
+
+    private void CycleStatus(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx < 0) return;
+        var task = _tasks[idx];
+        var currentIndex = Array.FindIndex(_statuses, s => s.Id == task.Status);
+        var nextIndex = (currentIndex + 1) % _statuses.Length;
+        _tasks[idx] = task with { Status = _statuses[nextIndex].Id };
+    }
+
+    private void AddTask()
+    {
+        var trimmed = _newTask.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        _tasks.Add(new TaskItem(_nextId.ToString(), trimmed, TaskStatusId.Todo));
+        _nextId++;
+        _newTask = "";
+    }
+
+    private void HandleInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddTask();
+    }
+}

@@ -1,0 +1,241 @@
+@* ============================================================
+   Block: music-playlist-generator
+   Title: MusicPlaylistGenerator
+   Description: A playlist generator block for React and Next.js with duration target, genre mix sliders, energy curve visualization, generate button, and track result list built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-playlist-generator.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="sparkles" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Playlist Generator</span>
+            </div>
+            <p class="mt-1 text-muted-foreground text-sm">
+                Set your parameters and generate a custom playlist
+            </p>
+        </div>
+
+        @* Duration selector *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2.5 block font-medium text-muted-foreground text-xs">
+                Target Duration
+            </span>
+            <div class="flex flex-wrap items-center gap-1.5">
+                @foreach (var opt in _durationOptions)
+                {
+                    var o = opt;
+                    <ButtonCn Variant="@((_duration == o) ? ButtonVariant.Default : ButtonVariant.Outline)"
+                              Size="ButtonSize.Sm"
+                              Class="h-7 text-xs"
+                              OnClick="@(() => _duration = o)">
+                        @o min
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Genre mix *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2.5 flex items-center justify-between">
+                <span class="font-medium text-muted-foreground text-xs">Genre Mix</span>
+                <span class="@Cn.Merge("font-mono text-xs tabular-nums", _totalPercentage == 100 ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400")">
+                    @_totalPercentage%
+                </span>
+            </div>
+            <div class="space-y-3">
+                @foreach (var (genre, index) in _genres.Select((g, i) => (g, i)))
+                {
+                    var idx = index;
+                    <div class="flex items-center gap-3">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", genre.Color)" />
+                        <span class="w-20 shrink-0 text-xs">@genre.Name</span>
+                        <SliderCn Value="@((double)genre.Percentage)"
+                                  ValueChanged="@((double v) => UpdateGenrePercentage(idx, (int)v))"
+                                  Max="100"
+                                  Step="5"
+                                  Class="flex-1" />
+                        <span class="w-8 shrink-0 text-right font-mono text-muted-foreground text-xs tabular-nums">
+                            @genre.Percentage%
+                        </span>
+                    </div>
+                }
+            </div>
+
+            @* Genre bar *@
+            <div class="mt-3 flex h-1.5 overflow-hidden rounded-full">
+                @foreach (var genre in _genres)
+                {
+                    <div class="@genre.Color" style="@($"width:{genre.Percentage}%")" />
+                }
+            </div>
+        </div>
+
+        @* Energy curve *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2.5 block font-medium text-muted-foreground text-xs">
+                Energy Curve
+            </span>
+            <div class="flex items-center gap-1.5">
+                @foreach (var ep in _energyPhases)
+                {
+                    var phase = ep;
+                    <button type="button"
+                            @onclick="@(() => _activePhase = phase.Phase)"
+                            class="@Cn.Merge("flex flex-1 flex-col items-center gap-1 rounded-md px-2 py-2 text-xs transition-colors", _activePhase == phase.Phase ? "bg-muted" : "hover:bg-muted/50")">
+                        <LucideIconCn Name="zap" Size="14" Class="@Cn.Merge("size-3.5", _activePhase == phase.Phase ? "text-foreground" : "text-muted-foreground")" />
+                        <span class="@(_activePhase == phase.Phase ? "font-medium" : "text-muted-foreground")">
+                            @phase.Label
+                        </span>
+                    </button>
+                }
+            </div>
+
+            @* Energy curve visualization *@
+            <div class="mt-2.5 flex h-8 items-end gap-0.5">
+                @foreach (var (h, i) in _energyBars.Select((x, i) => (x, i)))
+                {
+                    <div class="flex-1 rounded-sm bg-foreground/20" style="@($"height:{h * 10}%")" />
+                }
+            </div>
+        </div>
+
+        @* Generate button *@
+        <div class="@(_generated ? "border-b px-4 py-3" : "px-4 py-3")">
+            <ButtonCn Size="ButtonSize.Sm"
+                      Class="h-8 w-full gap-1.5 text-xs"
+                      OnClick="HandleGenerate"
+                      Disabled="@_generating">
+                @if (_generating)
+                {
+                    <LucideIconCn Name="loader-2" Size="12" Class="size-3 animate-spin" />
+                    <span>Generating...</span>
+                }
+                else
+                {
+                    <LucideIconCn Name="list-music" Size="12" Class="size-3" />
+                    <span>Generate Playlist</span>
+                }
+            </ButtonCn>
+        </div>
+
+        @* Generated results *@
+        @if (_generated)
+        {
+            <div>
+                <div class="border-b px-4 py-2.5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <LucideIconCn Name="music" Size="14" Class="size-3.5 text-muted-foreground" />
+                            <span class="font-medium text-xs">@_generatedTracks.Length tracks</span>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                            @_duration min
+                        </BadgeCn>
+                    </div>
+                </div>
+
+                @foreach (var (track, index) in _generatedTracks.Select((t, i) => (t, i)))
+                {
+                    var isLast = index == _generatedTracks.Length - 1;
+                    <div class="@Cn.Merge("group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                        <span class="w-5 shrink-0 text-right font-mono text-muted-foreground text-xs tabular-nums">
+                            @(index + 1)
+                        </span>
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", EnergyDot(track.Energy))" />
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm">@track.Title</span>
+                            <p class="truncate text-muted-foreground text-xs">@track.Artist</p>
+                        </div>
+                        <span class="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">
+                            @track.Duration
+                        </span>
+                        <LucideIconCn Name="play" Size="12" Class="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                    </div>
+                }
+
+                @* Footer *@
+                <div class="border-t px-4 py-2.5">
+                    <p class="text-center text-muted-foreground text-xs">
+                        AI-curated &middot; Save to library or regenerate
+                    </p>
+                </div>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private record Genre(string Name, int Percentage, string Color)
+    {
+        public int Percentage { get; set; } = Percentage;
+    }
+
+    private record GeneratedTrack(string Id, string Title, string Artist, string Duration, string Energy);
+
+    private static readonly int[] _durationOptions = [15, 30, 45, 60, 90, 120];
+
+    private static readonly GeneratedTrack[] _generatedTracks =
+    [
+        new("g1", "Soft Morning Light",  "Hana Rae",      "3:24", "low"),
+        new("g2", "Waking Patterns",     "Foyer",         "4:01", "low"),
+        new("g3", "Warmth Rising",       "Glasshouse",    "3:38", "medium"),
+        new("g4", "Accelerate",          "Neon Veins",    "3:52", "medium"),
+        new("g5", "Full Spectrum",       "Synth Riders",  "4:15", "high"),
+        new("g6", "Supernova",           "Axel Storm",    "3:29", "high"),
+        new("g7", "Afterglow",           "Drift Theory",  "4:42", "medium"),
+        new("g8", "Nightfall Serenade",  "Hana Rae",      "3:56", "low"),
+    ];
+
+    private static readonly int[] _energyBars = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 9, 8, 7, 5, 3, 2];
+
+    private record EnergyPhaseItem(string Phase, string Label, string Icon);
+
+    private static readonly EnergyPhaseItem[] _energyPhases =
+    [
+        new("calm",     "Start Calm", "~"),
+        new("build",    "Build Up",   "/"),
+        new("peak",     "Peak",       "^"),
+        new("cooldown", "Cool Down",  @"\"),
+    ];
+
+    private int _duration = 60;
+    private List<Genre> _genres =
+    [
+        new("Indie Pop",   40, "bg-violet-500"),
+        new("Electronic",  30, "bg-blue-500"),
+        new("Lo-Fi",       20, "bg-emerald-500"),
+        new("Jazz",        10, "bg-amber-500"),
+    ];
+    private string _activePhase = "calm";
+    private bool _generating = false;
+    private bool _generated = false;
+
+    private int _totalPercentage => _genres.Sum(g => g.Percentage);
+
+    private void UpdateGenrePercentage(int index, int value)
+    {
+        _genres[index].Percentage = value;
+    }
+
+    private async Task HandleGenerate()
+    {
+        _generating = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _generating = false;
+        _generated = true;
+    }
+
+    private static string EnergyDot(string energy) => energy switch
+    {
+        "low"    => "bg-blue-500",
+        "medium" => "bg-amber-500",
+        "high"   => "bg-red-500",
+        _        => "bg-muted-foreground",
+    };
+}

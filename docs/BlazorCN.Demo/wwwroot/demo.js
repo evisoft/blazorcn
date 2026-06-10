@@ -398,6 +398,15 @@ export function removeThemeColor(name) {
     document.documentElement.style.removeProperty(name);
 }
 
+export function scrollElementBy(element, left, top) {
+    if (element) element.scrollBy({ left, top, behavior: 'smooth' });
+}
+
+export function blazorcnGetBoundingRect(element) {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+}
+
 export function registerKeyboardShortcut(dotnetRef, methodName) {
     const handler = (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'k') {

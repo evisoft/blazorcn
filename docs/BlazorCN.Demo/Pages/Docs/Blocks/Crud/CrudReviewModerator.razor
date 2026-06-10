@@ -1,0 +1,202 @@
+@* ============================================================
+   Block: crud-review-moderator
+   Title: CrudReviewModerator
+   Description: Review moderation queue with star ratings, approval workflow, flagging, and response management
+   Source: original/blocks/crud/crud-review-moderator.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="shield-check" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Review Moderation</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_reviews.Count reviews · @_reviews.Count(r => r.Status == "pending") pending
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search reviews..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var s in new[] { "all", "pending", "approved", "rejected", "flagged" })
+                {
+                    var status = s;
+                    <button type="button"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == status ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")"
+                            @onclick="@(() => _filter = status)">
+                        @(status.Substring(0, 1).ToUpper() + status.Substring(1))
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @{ var filtered = _reviews
+                    .Where(r => _filter == "all" || r.Status == _filter)
+                    .Where(r => string.IsNullOrEmpty(_search) ||
+                                r.Title.ToLower().Contains(_search.ToLower()) ||
+                                r.Product.ToLower().Contains(_search.ToLower()) ||
+                                r.Author.ToLower().Contains(_search.ToLower()))
+                    .ToList(); }
+            @if (filtered.Count == 0)
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No reviews found
+                </div>
+            }
+            else
+            {
+                @for (var idx = 0; idx < filtered.Count; idx++)
+                {
+                    var review = filtered[idx];
+                    <div class="@Cn.Merge("border-b px-4 py-3 transition-colors hover:bg-muted/50", idx == filtered.Count - 1 ? "border-b-0" : "")">
+                        <div class="flex items-start gap-3">
+                            <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", GetStatusColor(review.Status))"></span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@review.Title</span>
+                                    <div class="flex items-center gap-0.5">
+                                        @for (var i = 0; i < 5; i++)
+                                        {
+                                            var starIdx = i;
+                                            <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("size-3", starIdx < review.Rating ? "fill-amber-500 text-amber-500" : "text-muted-foreground/30")" />
+                                        }
+                                    </div>
+                                </div>
+                                <p class="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                                    @review.Content
+                                </p>
+                                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <span>@review.Author</span>
+                                    @if (review.Verified)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">
+                                            Verified
+                                        </BadgeCn>
+                                    }
+                                    <span>·</span>
+                                    <span>@review.Product</span>
+                                    <span>·</span>
+                                    <span>@review.Date</span>
+                                    @if (review.Helpful > 0)
+                                    {
+                                        <span>·</span>
+                                        <span class="tabular-nums">@review.Helpful found helpful</span>
+                                    }
+                                </div>
+                                @if (review.Status == "pending")
+                                {
+                                    var rid = review.Id;
+                                    <div class="mt-2 flex gap-1">
+                                        <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                                  Class="h-6 px-2 text-xs"
+                                                  @onclick="@(() => HandleApprove(rid))">
+                                            Approve
+                                        </ButtonCn>
+                                        <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                                  Class="h-6 px-2 text-xs text-destructive"
+                                                  @onclick="@(() => HandleReject(rid))">
+                                            Reject
+                                        </ButtonCn>
+                                    </div>
+                                }
+                            </div>
+                            @{ var dropId = review.Id; }
+                            <DropdownMenuCn>
+                                <DropdownMenuTriggerCn>
+                                    <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                        <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                    </ButtonCn>
+                                </DropdownMenuTriggerCn>
+                                <DropdownMenuContentCn Align="FloatingAlign.End">
+                                    <DropdownMenuItemCn>View Full Review</DropdownMenuItemCn>
+                                    <DropdownMenuItemCn>Reply</DropdownMenuItemCn>
+                                    @if (review.Status != "approved")
+                                    {
+                                        <DropdownMenuItemCn @onclick="@(() => HandleApprove(dropId))">
+                                            Approve
+                                        </DropdownMenuItemCn>
+                                    }
+                                    @if (review.Status != "rejected")
+                                    {
+                                        <DropdownMenuItemCn @onclick="@(() => HandleReject(dropId))">
+                                            Reject
+                                        </DropdownMenuItemCn>
+                                    }
+                                    <DropdownMenuItemCn Class="text-destructive"
+                                                        @onclick="@(() => HandleDelete(dropId))">
+                                        <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                        Delete
+                                    </DropdownMenuItemCn>
+                                </DropdownMenuContentCn>
+                            </DropdownMenuCn>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class Review
+    {
+        public int Id { get; set; }
+        public string Author { get; set; } = "";
+        public string Product { get; set; } = "";
+        public int Rating { get; set; }
+        public string Title { get; set; } = "";
+        public string Content { get; set; } = "";
+        public string Status { get; set; } = "pending";
+        public string Date { get; set; } = "";
+        public int Helpful { get; set; }
+        public bool Verified { get; set; }
+    }
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private readonly List<Review> _reviews =
+    [
+        new() { Id = 1, Author = "Jennifer M.", Product = "Wireless Headphones Pro", Rating = 5, Title = "Best headphones I've ever owned", Content = "Incredible sound quality and the noise cancellation is superb. Battery lasts the full 30 hours as advertised.", Status = "pending", Date = "Mar 24, 2026", Helpful = 0, Verified = true },
+        new() { Id = 2, Author = "Robert K.", Product = "Standing Desk Frame", Rating = 2, Title = "Motor stopped working after 2 months", Content = "The desk worked great initially but the motor failed after regular use. Customer support has been unhelpful.", Status = "pending", Date = "Mar 23, 2026", Helpful = 0, Verified = true },
+        new() { Id = 3, Author = "spam_user_42", Product = "USB-C Hub", Rating = 1, Title = "Buy cheap products at www.scam-link.com", Content = "Visit www.scam-link.com for the best deals on electronics. This product is overpriced.", Status = "flagged", Date = "Mar 24, 2026", Helpful = 0, Verified = false },
+        new() { Id = 4, Author = "Amanda L.", Product = "Ergonomic Keyboard", Rating = 4, Title = "Great keyboard with minor issues", Content = "Love the split design and key feel. The wrist rest could be a bit softer. Bluetooth connection is rock solid.", Status = "approved", Date = "Mar 22, 2026", Helpful = 12, Verified = true },
+        new() { Id = 5, Author = "Chris T.", Product = "4K Webcam", Rating = 3, Title = "Decent quality but software needs work", Content = "Camera hardware is excellent but the companion app crashes frequently. Auto-exposure is slow in changing light.", Status = "approved", Date = "Mar 21, 2026", Helpful = 8, Verified = true },
+        new() { Id = 6, Author = "competitor_employee", Product = "Wireless Mouse", Rating = 1, Title = "Terrible product, buy Brand X instead", Content = "This mouse is awful. Brand X makes a much better product at half the price. I highly recommend switching.", Status = "rejected", Date = "Mar 20, 2026", Helpful = 0, Verified = false },
+    ];
+
+    private void HandleDelete(int id) => _reviews.RemoveAll(r => r.Id == id);
+
+    private void HandleApprove(int id)
+    {
+        var item = _reviews.Find(r => r.Id == id);
+        if (item != null) item.Status = "approved";
+    }
+
+    private void HandleReject(int id)
+    {
+        var item = _reviews.Find(r => r.Id == id);
+        if (item != null) item.Status = "rejected";
+    }
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "pending"  => "bg-amber-500",
+        "approved" => "bg-emerald-500",
+        "rejected" => "bg-red-500",
+        "flagged"  => "bg-red-500",
+        _ => "bg-muted-foreground",
+    };
+}

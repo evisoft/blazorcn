@@ -1,0 +1,249 @@
+@* ============================================================
+   Block: music-recording-booth
+   Title: MusicRecordingBooth
+   Description: An audio recording booth UI block for React and Next.js with recording status indicator, elapsed time counter, input level meter, noise gate threshold, format selector, and save discard buttons built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-recording-booth.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header with status *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="mic" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Recording Booth</span>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (_status == "recording")
+                {
+                    <span class="flex items-center gap-1.5 text-xs">
+                        <span class="size-2 animate-pulse rounded-full bg-red-500"></span>
+                        <span class="text-red-600 dark:text-red-400">REC</span>
+                    </span>
+                }
+                @if (_status == "stopped")
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">Ready to save</BadgeCn>
+                }
+                @if (_status == "idle")
+                {
+                    <span class="text-muted-foreground text-xs">Standby</span>
+                }
+            </div>
+        </div>
+
+        @* Timer display *@
+        <div class="flex items-center justify-center border-b px-4 py-6">
+            <div class="text-center">
+                <span class="@Cn.Merge("font-mono font-semibold text-4xl tabular-nums", _status == "recording" ? "text-red-600 dark:text-red-400" : "text-foreground")">
+                    @FormatElapsedTime(_elapsed)
+                </span>
+                <p class="mt-1 text-muted-foreground text-xs">
+                    @if (_status == "idle")
+                    {
+                        <text>Press record to start</text>
+                    }
+                    @if (_status == "recording")
+                    {
+                        <text>Recording in progress</text>
+                    }
+                    @if (_status == "stopped")
+                    {
+                        <text>Recorded @FormatElapsedTime(_elapsed)</text>
+                    }
+                </p>
+            </div>
+        </div>
+
+        @* Input level meter *@
+        <div class="border-b px-4 py-4">
+            <div class="mb-2 flex items-center justify-between">
+                <span class="font-medium text-muted-foreground text-xs">Input Level</span>
+                <span class="font-mono text-muted-foreground text-xs">-@(100 - _inputLevel) dB</span>
+            </div>
+            <div class="flex h-6 items-end gap-0.5"
+                 role="meter"
+                 aria-label="Input level meter"
+                 aria-valuenow="@_inputLevel"
+                 aria-valuemin="0"
+                 aria-valuemax="100">
+                @foreach (var entry in _levelBarsWithIndex)
+                {
+                    var idx = entry.Index;
+                    var amplitude = entry.Amplitude;
+                    var isActive = idx < (int)((_inputLevel / 100.0) * _staticLevelBars.Length);
+                    var isBelowGate = idx < _noiseGateThresholdIndex;
+                    var barColor = isActive
+                        ? (idx > _staticLevelBars.Length * 0.8
+                            ? "bg-red-500"
+                            : (idx > _staticLevelBars.Length * 0.6
+                                ? "bg-amber-500"
+                                : "bg-emerald-500"))
+                        : "bg-muted-foreground/10";
+                    var opacityClass = (isBelowGate && !isActive) ? "opacity-30" : "";
+                    <div class="@Cn.Merge("flex-1 rounded-sm transition-colors", barColor, opacityClass)"
+                         style="@($"height:{(int)(amplitude * 100)}%;min-height:2px")"></div>
+                }
+            </div>
+            <div class="mt-2 flex items-center justify-between text-muted-foreground text-xs">
+                <span>-60 dB</span>
+                <span>-30 dB</span>
+                <span>0 dB</span>
+            </div>
+        </div>
+
+        @* Noise gate threshold *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <span class="w-28 shrink-0 font-medium text-muted-foreground text-xs">Noise Gate</span>
+                <SliderCn Value="@((double)_noiseGate)"
+                          ValueChanged="@((double v) => { _noiseGate = (int)v; })"
+                          Min="0"
+                          Max="100"
+                          Step="1"
+                          Class="flex-1"
+                          aria-label="Noise gate threshold" />
+                <span class="w-10 text-right font-mono text-muted-foreground text-xs">@_noiseGate%</span>
+            </div>
+        </div>
+
+        @* Format selector *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">Recording Format</span>
+            <div class="flex items-center gap-1">
+                @foreach (var fmt in _formats)
+                {
+                    var f = fmt;
+                    <ButtonCn Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Sm"
+                              Class="@Cn.Merge("h-7 gap-1.5 text-xs", _format == f.Value ? "bg-muted shadow-sm" : "text-muted-foreground")"
+                              OnClick="@(() => _format = f.Value)">
+                        @f.Label
+                        @if (_format == f.Value)
+                        {
+                            <span class="text-muted-foreground text-xs">@f.Badge</span>
+                        }
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Action buttons *@
+        <div class="px-4 py-3">
+            @if (_status == "idle")
+            {
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 w-full gap-1.5 text-xs" OnClick="StartRecording">
+                    <LucideIconCn Name="circle" Size="12" Class="size-3 fill-current" />
+                    Start Recording
+                </ButtonCn>
+            }
+            @if (_status == "recording")
+            {
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 w-full gap-1.5 text-xs" OnClick="StopRecording">
+                    <LucideIconCn Name="square" Size="12" Class="size-3" />
+                    Stop Recording
+                </ButtonCn>
+            }
+            @if (_status == "stopped")
+            {
+                <div class="flex items-center gap-2">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 flex-1 gap-1.5 text-xs" OnClick="DiscardRecording">
+                        <LucideIconCn Name="trash-2" Size="12" Class="size-3" />
+                        Discard
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-8 flex-1 gap-1.5 text-xs">
+                        <LucideIconCn Name="save" Size="12" Class="size-3" />
+                        Save as @_format.ToUpperInvariant()
+                    </ButtonCn>
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record FormatOption(string Label, string Value, string Badge);
+
+    private static readonly FormatOption[] _formats =
+    [
+        new("WAV",  "wav",  "Lossless"),
+        new("MP3",  "mp3",  "320 kbps"),
+        new("FLAC", "flac", "Lossless"),
+    ];
+
+    private static readonly double[] _staticLevelBars =
+    [
+        0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.72, 0.78, 0.82, 0.75,
+        0.68, 0.55, 0.42, 0.35, 0.28, 0.22, 0.18, 0.12, 0.08, 0.05,
+    ];
+
+    private record LevelBarEntry(int Index, double Amplitude);
+
+    private static readonly LevelBarEntry[] _levelBarsWithIndex = BuildLevelBars();
+
+    private static LevelBarEntry[] BuildLevelBars()
+    {
+        var bars = new LevelBarEntry[_staticLevelBars.Length];
+        for (var i = 0; i < _staticLevelBars.Length; i++)
+            bars[i] = new LevelBarEntry(i, _staticLevelBars[i]);
+        return bars;
+    }
+
+    private string _status     = "idle";
+    private int    _elapsed    = 0;
+    private string _format     = "wav";
+    private int    _noiseGate  = 25;
+    private int    _inputLevel = 65;
+
+    private int _noiseGateThresholdIndex => (int)((_noiseGate / 100.0) * _staticLevelBars.Length);
+
+    private System.Timers.Timer? _timer;
+
+    private void StartRecording()
+    {
+        _status  = "recording";
+        _elapsed = 0;
+        _timer?.Stop();
+        _timer?.Dispose();
+        _timer = new System.Timers.Timer(1000);
+        _timer.Elapsed += async (_, _) =>
+        {
+            _elapsed++;
+            await InvokeAsync(StateHasChanged);
+        };
+        _timer.AutoReset = true;
+        _timer.Start();
+    }
+
+    private void StopRecording()
+    {
+        _status = "stopped";
+        _timer?.Stop();
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void DiscardRecording()
+    {
+        _status  = "idle";
+        _elapsed = 0;
+    }
+
+    private static string FormatElapsedTime(int totalSeconds)
+    {
+        var m = totalSeconds / 60;
+        var s = totalSeconds % 60;
+        return $"{m:D2}:{s:D2}";
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+        _timer = null;
+    }
+}

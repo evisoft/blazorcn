@@ -1,0 +1,428 @@
+@* ============================================================
+   Block: account-sso-config
+   Title: AccountSsoConfig
+   Description: A SAML SSO configuration card block for React and Next.js with identity provider selection, entity ID and SSO URL fields, certificate upload, attribute mapping table, test connection with status, and enforce toggle built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-sso-config.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">SSO Configuration</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Configure SAML single sign-on for your organization
+                    </p>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    @if (_isConnected)
+                    {
+                        <span class="size-2 rounded-full bg-emerald-500"></span>
+                        <span class="text-xs text-muted-foreground">Connected</span>
+                    }
+                    else
+                    {
+                        <span class="size-2 rounded-full bg-muted-foreground/40"></span>
+                        <span class="text-xs text-muted-foreground">Not connected</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Identity Provider Selection *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs font-medium text-muted-foreground">
+                Identity Provider
+            </span>
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                @foreach (var provider in _identityProviders)
+                {
+                    var isSelected = _selectedProviderId == provider.Id;
+                    <button type="button" @onclick="@(() => HandleProviderSelect(provider.Id))"
+                        class="@Cn.Merge("flex items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors", isSelected ? "border-foreground bg-muted/50" : "border-transparent bg-muted/30 hover:bg-muted/50")">
+                        <span class="@Cn.Merge("flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-semibold", provider.Color)">
+                            @provider.Letter
+                        </span>
+                        <span class="text-xs font-medium">@provider.Name</span>
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Configuration Fields *@
+        <div class="border-b px-4 py-3">
+            <div class="space-y-3">
+                <div>
+                    <span class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        Entity ID (Issuer)
+                    </span>
+                    <InputCn Class="h-8 font-mono text-xs"
+                        @bind-Value="_entityId"
+                        @bind-Value:after="MarkChanged"
+                        Placeholder="@($"https://your-{_selectedProvider?.Id ?? "idp"}.example.com/entity-id")" />
+                </div>
+                <div>
+                    <span class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        SSO URL (Login Endpoint)
+                    </span>
+                    <InputCn Class="h-8 font-mono text-xs"
+                        @bind-Value="_ssoUrl"
+                        @bind-Value:after="MarkChanged"
+                        Placeholder="@($"https://your-{_selectedProvider?.Id ?? "idp"}.example.com/sso/saml")" />
+                </div>
+            </div>
+        </div>
+
+        @* Certificate *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs font-medium text-muted-foreground">
+                X.509 Signing Certificate
+            </span>
+            @if (_certificate != null)
+            {
+                <div class="rounded-md border bg-muted/30 p-3">
+                    <div class="flex items-start gap-3">
+                        <LucideIconCn Name="file-text" Size="16" Class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-medium">@_certificate.Filename</span>
+                                @if (_certificate.IsValid)
+                                {
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                                        <LucideIconCn Name="check-circle-2" Size="10" Class="h-2.5 w-2.5" />
+                                        Valid
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
+                                        <LucideIconCn Name="alert-circle" Size="10" Class="h-2.5 w-2.5" />
+                                        Invalid
+                                    </span>
+                                }
+                            </div>
+                            <p class="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                                @_certificate.Fingerprint
+                            </p>
+                            <p class="text-[10px] text-muted-foreground">
+                                Expires @_certificate.ExpiresAt
+                            </p>
+                        </div>
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-[10px]"
+                            @onclick="@(() => { _certificate = null; _hasChanges = true; })">
+                            <LucideIconCn Name="x" Size="12" Class="h-3 w-3" />
+                            Remove
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <button type="button"
+                    class="flex w-full items-center justify-center gap-2 rounded-md border border-dashed bg-muted/20 py-4 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
+                    <LucideIconCn Name="cloud-upload" Size="16" Class="h-4 w-4" />
+                    Upload .pem or .crt certificate file
+                </button>
+            }
+        </div>
+
+        @* Attribute Mapping Table *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs font-medium text-muted-foreground">
+                Attribute Mapping
+            </span>
+            <div class="overflow-x-auto rounded-md border">
+                <TableCn>
+                    <TableHeaderCn>
+                        <TableRowCn Class="hover:bg-transparent">
+                            <TableHeadCn Class="w-[100px] text-[10px] font-medium uppercase tracking-wide">
+                                Attribute
+                            </TableHeadCn>
+                            <TableHeadCn Class="text-[10px] font-medium uppercase tracking-wide">
+                                SAML Claim URI
+                            </TableHeadCn>
+                            <TableHeadCn Class="w-[60px] text-[10px] font-medium uppercase tracking-wide">
+                                Req.
+                            </TableHeadCn>
+                            <TableHeadCn Class="w-[40px]" />
+                        </TableRowCn>
+                    </TableHeaderCn>
+                    <TableBodyCn>
+                        @foreach (var mapping in _attributeMappings)
+                        {
+                            var isEditing = _editingMappingId == mapping.Id;
+                            <TableRowCn>
+                                <TableCellCn Class="py-2">
+                                    <div>
+                                        <span class="text-xs font-medium">@mapping.Attribute</span>
+                                        <span class="block text-[10px] text-muted-foreground">
+                                            @mapping.Description
+                                        </span>
+                                    </div>
+                                </TableCellCn>
+                                <TableCellCn Class="py-2">
+                                    @if (isEditing)
+                                    {
+                                        <div class="flex items-center gap-1.5">
+                                            <InputCn @bind-Value="_editClaimValue" Class="h-6 font-mono text-[10px]" />
+                                            <button type="button" @onclick="@(() => HandleSaveMapping(mapping.Id))"
+                                                class="shrink-0 rounded p-0.5 text-emerald-600 hover:bg-muted">
+                                                <LucideIconCn Name="check-circle-2" Size="14" Class="h-3.5 w-3.5" />
+                                            </button>
+                                            <button type="button" @onclick="HandleCancelEditMapping"
+                                                class="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted">
+                                                <LucideIconCn Name="x" Size="14" Class="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="block max-w-[320px] truncate font-mono text-[10px] text-muted-foreground" title="@mapping.Claim">
+                                            @mapping.Claim
+                                        </span>
+                                    }
+                                </TableCellCn>
+                                <TableCellCn Class="py-2 text-center">
+                                    @if (mapping.Required)
+                                    {
+                                        <span class="text-[10px] font-medium text-foreground">Yes</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-[10px] text-muted-foreground">No</span>
+                                    }
+                                </TableCellCn>
+                                <TableCellCn Class="py-2">
+                                    @if (!isEditing)
+                                    {
+                                        <button type="button" @onclick="@(() => HandleStartEditMapping(mapping))"
+                                            class="rounded p-1 text-muted-foreground/50 hover:bg-muted hover:text-foreground">
+                                            <LucideIconCn Name="pencil" Size="12" Class="h-3 w-3" />
+                                        </button>
+                                    }
+                                </TableCellCn>
+                            </TableRowCn>
+                        }
+                    </TableBodyCn>
+                </TableCn>
+            </div>
+        </div>
+
+        @* Enforce SSO Toggle *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium">Enforce SSO</span>
+                        @if (_enforceSSO)
+                        {
+                            <span class="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                <LucideIconCn Name="shield-check" Size="10" Class="h-2.5 w-2.5" />
+                                Active
+                            </span>
+                        }
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Require all non-admin members to sign in via SSO. Password login will be disabled.
+                    </p>
+                </div>
+                <SwitchCn Checked="@_enforceSSO" CheckedChanged="@((bool v) => { _enforceSSO = v; _hasChanges = true; })" />
+            </div>
+        </div>
+
+        @* Test Connection Result *@
+        @if (_testStatus == "success" || _testStatus == "error")
+        {
+            <div class="overflow-hidden border-b">
+                <div class="px-4 py-3">
+                    @if (_testStatus == "success")
+                    {
+                        <div class="flex items-center gap-2 rounded-md bg-emerald-500/10 p-2.5">
+                            <LucideIconCn Name="check-circle-2" Size="14" Class="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                            <div>
+                                <span class="text-xs font-medium text-emerald-700">
+                                    Connection successful
+                                </span>
+                                <span class="block text-[10px] text-emerald-600">
+                                    SAML handshake verified with @(_selectedProvider?.Name). All attribute mappings resolved.
+                                </span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex items-center gap-2 rounded-md bg-red-500/10 p-2.5">
+                            <LucideIconCn Name="alert-circle" Size="14" Class="h-3.5 w-3.5 shrink-0 text-red-600" />
+                            <div>
+                                <span class="text-xs font-medium text-red-700">Connection failed</span>
+                                <span class="block text-[10px] text-red-600">
+                                    Could not establish SAML handshake. Verify the SSO URL is reachable and the certificate is valid.
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Actions *@
+        <div class="px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="gap-1.5 text-xs"
+                        Disabled="@(_testStatus == "testing" || _requiredFieldsMissing)"
+                        @onclick="HandleTestConnection">
+                        @if (_testStatus == "testing")
+                        {
+                            <LucideIconCn Name="loader-2" Size="14" Class="h-3.5 w-3.5 animate-spin" />
+                            @:Testing...
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="zap" Size="14" Class="h-3.5 w-3.5" />
+                            @:Test Connection
+                        }
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Class="gap-1.5 text-xs"
+                        Disabled="@(_isSaving || !_hasChanges)"
+                        @onclick="HandleSave">
+                        @if (_isSaving)
+                        {
+                            <LucideIconCn Name="loader-2" Size="14" Class="h-3.5 w-3.5 animate-spin" />
+                            @:Saving...
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="save" Size="14" Class="h-3.5 w-3.5" />
+                            @:Save Configuration
+                        }
+                    </ButtonCn>
+                </div>
+                @if (_lastTestedAt != null)
+                {
+                    <span class="text-[10px] text-muted-foreground">
+                        Last tested @_lastTestedAt
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record IdentityProviderInfo(string Id, string Name, string Letter, string Color);
+    private record CertInfo(string Filename, string Fingerprint, string ExpiresAt, bool IsValid);
+
+    private class AttrMapping
+    {
+        public string Id { get; set; } = "";
+        public string Attribute { get; set; } = "";
+        public string Claim { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool Required { get; set; }
+    }
+
+    private static readonly IdentityProviderInfo[] _identityProviders =
+    [
+        new("okta", "Okta", "O", "bg-blue-600 text-white"),
+        new("azure", "Azure AD", "A", "bg-sky-600 text-white"),
+        new("onelogin", "OneLogin", "1", "bg-violet-600 text-white"),
+        new("custom", "Custom SAML", "S", "bg-neutral-700 text-white"),
+    ];
+
+    private string _selectedProviderId = "okta";
+    private string _entityId = "https://acme.okta.com/app/abc123def456";
+    private string _ssoUrl = "https://acme.okta.com/app/abc123def456/sso/saml";
+    private CertInfo? _certificate = new("okta-signing-cert.pem", "SHA256:2f:8a:3c:d1:e7:9b:45:6f:0a:c8:d2:e4:f1:b3:a7:c9", "Dec 15, 2027", true);
+    private bool _isConnected = true;
+    private bool _enforceSSO = false;
+    private string? _lastTestedAt = "Apr 4, 2026 at 15:32";
+    private string _testStatus = "idle";
+    private bool _isSaving = false;
+    private string? _editingMappingId;
+    private string _editClaimValue = "";
+    private bool _hasChanges = false;
+
+    private List<AttrMapping> _attributeMappings =
+    [
+        new() { Id = "attr-1", Attribute = "email", Claim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", Description = "User email address", Required = true },
+        new() { Id = "attr-2", Attribute = "firstName", Claim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname", Description = "User first name", Required = true },
+        new() { Id = "attr-3", Attribute = "lastName", Claim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname", Description = "User last name", Required = true },
+        new() { Id = "attr-4", Attribute = "role", Claim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role", Description = "User role for RBAC", Required = false },
+        new() { Id = "attr-5", Attribute = "department", Claim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/department", Description = "User department", Required = false },
+    ];
+
+    private IdentityProviderInfo? _selectedProvider => _identityProviders.FirstOrDefault(p => p.Id == _selectedProviderId);
+    private bool _requiredFieldsMissing => string.IsNullOrEmpty(_entityId) || string.IsNullOrEmpty(_ssoUrl);
+
+    private void MarkChanged() => _hasChanges = true;
+
+    private void HandleProviderSelect(string providerId)
+    {
+        if (providerId != _selectedProviderId)
+        {
+            _selectedProviderId = providerId;
+            _entityId = "";
+            _ssoUrl = "";
+            _certificate = null;
+            _isConnected = false;
+            _lastTestedAt = null;
+            _testStatus = "idle";
+        }
+        else
+        {
+            _selectedProviderId = providerId;
+        }
+        _hasChanges = true;
+    }
+
+    private async Task HandleTestConnection()
+    {
+        if (_requiredFieldsMissing) return;
+        _testStatus = "testing";
+        StateHasChanged();
+        await Task.Delay(2500);
+        var success = _entityId.Length > 5 && _ssoUrl.StartsWith("https://");
+        _testStatus = success ? "success" : "error";
+    }
+
+    private async Task HandleSave()
+    {
+        _isSaving = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _isSaving = false;
+        _hasChanges = false;
+        if (_testStatus == "success")
+        {
+            _isConnected = true;
+        }
+    }
+
+    private void HandleStartEditMapping(AttrMapping mapping)
+    {
+        _editingMappingId = mapping.Id;
+        _editClaimValue = mapping.Claim;
+    }
+
+    private void HandleSaveMapping(string id)
+    {
+        if (string.IsNullOrWhiteSpace(_editClaimValue)) return;
+        var mapping = _attributeMappings.FirstOrDefault(m => m.Id == id);
+        if (mapping != null)
+        {
+            mapping.Claim = _editClaimValue.Trim();
+        }
+        _editingMappingId = null;
+        _editClaimValue = "";
+        _hasChanges = true;
+    }
+
+    private void HandleCancelEditMapping()
+    {
+        _editingMappingId = null;
+        _editClaimValue = "";
+    }
+}

@@ -1,0 +1,123 @@
+@* ============================================================
+   Block: stats-donut-pill-legend
+   Title: StatsDonutPillLegend
+   Description: A donut breakdown stats card for React and Next.js with a Recharts PieChart donut, a center total label, and a full-width row of rounded-full pill legend badges with colored dots, segment labels, and tabular values built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-donut-pill-legend.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Traffic sources</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Last 30 days</p>
+            </div>
+            <p class="text-xs font-medium tabular-nums text-muted-foreground">5 channels</p>
+        </div>
+
+        <div class="relative px-4 py-4">
+            <div class="mx-auto aspect-square max-h-[220px] flex items-center justify-center">
+                <svg viewBox="0 0 220 220" class="w-full h-full max-h-[220px]" aria-hidden="true">
+                    @foreach (var arc in _arcs)
+                    {
+                        @((MarkupString)arc.Path)
+                    }
+                </svg>
+            </div>
+            <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Total visits
+                </p>
+                <p class="mt-0.5 text-2xl font-semibold tabular-nums">
+                    @FormatCompact(_totalVisits)
+                </p>
+            </div>
+        </div>
+
+        <dl class="flex flex-wrap gap-2 border-t px-4 py-3">
+            @foreach (var seg in _segments)
+            {
+                var percent = (seg.Value / (double)_totalVisits) * 100;
+                <div class="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1">
+                    <span aria-hidden="true" class="size-2 rounded-full" style="@($"background-color:{seg.Fill}")"></span>
+                    <dt class="text-xs font-medium">@seg.Source</dt>
+                    <dd class="text-xs tabular-nums text-muted-foreground">@(percent.ToString("F1"))%</dd>
+                </div>
+            }
+        </dl>
+    </div>
+</section>
+
+@code {
+    private record TrafficSegment(string Id, string Source, int Value, string Fill);
+
+    private static readonly TrafficSegment[] _segments =
+    [
+        new("organic",  "Organic",  42_180, "oklch(0.646 0.222 41.116)"),
+        new("direct",   "Direct",   28_640, "oklch(0.6 0.118 184.704)"),
+        new("social",   "Social",   17_320, "oklch(0.398 0.07 227.392)"),
+        new("referral", "Referral",  9_840, "oklch(0.828 0.189 84.429)"),
+        new("email",    "Email",     5_120, "oklch(0.769 0.188 70.08)"),
+    ];
+
+    private static readonly int _totalVisits = _segments.Sum(s => s.Value);
+
+    // Pre-computed SVG arc paths for the donut chart
+    private record ArcPath(string Path);
+    private static readonly ArcPath[] _arcs = BuildArcs();
+
+    private static ArcPath[] BuildArcs()
+    {
+        const double cx = 110;
+        const double cy = 110;
+        const double outerR = 95;
+        const double innerR = 60;
+        const double gapDeg = 2.0;
+        const double gapRad = gapDeg * Math.PI / 180.0;
+
+        double total = _segments.Sum(s => s.Value);
+        var result = new ArcPath[_segments.Length];
+        double startAngle = -Math.PI / 2; // start at top
+
+        for (int i = 0; i < _segments.Length; i++)
+        {
+            var seg = _segments[i];
+            double sweep = (seg.Value / total) * (2 * Math.PI) - gapRad;
+            if (sweep < 0) sweep = 0;
+            double endAngle = startAngle + sweep;
+
+            double ox1 = cx + outerR * Math.Cos(startAngle);
+            double oy1 = cy + outerR * Math.Sin(startAngle);
+            double ox2 = cx + outerR * Math.Cos(endAngle);
+            double oy2 = cy + outerR * Math.Sin(endAngle);
+            double ix1 = cx + innerR * Math.Cos(endAngle);
+            double iy1 = cy + innerR * Math.Sin(endAngle);
+            double ix2 = cx + innerR * Math.Cos(startAngle);
+            double iy2 = cy + innerR * Math.Sin(startAngle);
+
+            int largeArc = sweep > Math.PI ? 1 : 0;
+
+            string d = $"M {ox1:F3} {oy1:F3} " +
+                       $"A {outerR} {outerR} 0 {largeArc} 1 {ox2:F3} {oy2:F3} " +
+                       $"L {ix1:F3} {iy1:F3} " +
+                       $"A {innerR} {innerR} 0 {largeArc} 0 {ix2:F3} {iy2:F3} " +
+                       $"Z";
+
+            string path = $"<path d=\"{d}\" fill=\"{seg.Fill}\" stroke=\"white\" stroke-width=\"2\" />";
+            result[i] = new ArcPath(path);
+
+            startAngle = endAngle + gapRad;
+        }
+
+        return result;
+    }
+
+    private static string FormatCompact(int value)
+    {
+        if (value >= 1_000_000)
+            return $"{(value / 1_000_000.0):F1}M";
+        if (value >= 1_000)
+            return $"{(value / 1_000.0):F1}k";
+        return value.ToString();
+    }
+}

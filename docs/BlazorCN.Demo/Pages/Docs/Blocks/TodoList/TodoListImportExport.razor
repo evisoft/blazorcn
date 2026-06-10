@@ -1,0 +1,276 @@
+@* ============================================================
+   Block: todo-list-import-export
+   Title: TodoListImportExport
+   Description: An import and export tasks todo list block for React and Next.js with paste import, format selector, export preview, and copy button built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-import-export.tsx
+   ============================================================ *@
+
+@inject IJSRuntime JS
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Tasks</span>
+            <div class="flex items-center gap-1.5">
+                <ButtonCn Variant="@ImportButtonVariant"
+                          Size="ButtonSize.Sm"
+                          Class="h-7 gap-1 text-xs"
+                          @onclick="ToggleImportMode">
+                    <LucideIconCn Name="upload" Size="12" Class="size-3" />
+                    Import
+                </ButtonCn>
+                <ButtonCn Variant="@ExportButtonVariant"
+                          Size="ButtonSize.Sm"
+                          Class="h-7 gap-1 text-xs"
+                          @onclick="ToggleExportMode">
+                    <LucideIconCn Name="download" Size="12" Class="size-3" />
+                    Export
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Import panel *@
+        @if (_mode == "import")
+        {
+            <div class="border-b px-4 py-3">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="font-medium text-muted-foreground text-xs">Paste tasks (one per line)</span>
+                    @if (ParsedCount > 0)
+                    {
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs tabular-nums">
+                            @ParsedCount @(ParsedCount == 1 ? "task" : "tasks") detected
+                        </BadgeCn>
+                    }
+                </div>
+                <TextareaCn @bind-Value="_importText"
+                            Placeholder="@("[ ] Buy groceries\n[x] Send invoice\nClean kitchen")"
+                            Class="mb-2 min-h-24 resize-none font-mono text-xs" />
+                <div class="flex items-center justify-end gap-2">
+                    <ButtonCn Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Sm"
+                              Class="h-7 text-xs"
+                              @onclick="CancelImport">
+                        Cancel
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Outline"
+                              Size="ButtonSize.Sm"
+                              Class="h-7 text-xs"
+                              @onclick="HandleImport"
+                              Disabled="@(ParsedCount == 0)">
+                        Import @(ParsedCount > 0 ? $"{ParsedCount} tasks" : "")
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Export panel *@
+        @if (_mode == "export")
+        {
+            <div class="border-b px-4 py-3">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="font-medium text-muted-foreground text-xs">Export format</span>
+                    <div class="flex items-center gap-1">
+                        @foreach (var fmt in _formatLabels)
+                        {
+                            var fmtKey = fmt.Format;
+                            <ButtonCn Variant="@(_exportFormat == fmtKey ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                                      Size="ButtonSize.Sm"
+                                      Class="h-6 px-2 text-xs"
+                                      @onclick="@(() => _exportFormat = fmtKey)">
+                                @fmt.Label
+                            </ButtonCn>
+                        }
+                    </div>
+                </div>
+                <div class="rounded-md bg-zinc-950 p-3">
+                    <pre class="max-h-40 overflow-auto font-mono text-sm text-zinc-100 leading-relaxed">@ExportOutput</pre>
+                </div>
+                <div class="mt-2 flex items-center justify-end">
+                    <ButtonCn Variant="ButtonVariant.Outline"
+                              Size="ButtonSize.Sm"
+                              Class="h-7 gap-1 text-xs"
+                              @onclick="HandleCopy">
+                        @if (_copied)
+                        {
+                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                            <text>Copied</text>
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                            <text>Copy</text>
+                        }
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < _tasks.Count; i++)
+            {
+                var task = _tasks[i];
+                var isLast = i == _tasks.Count - 1;
+                var taskId = task.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="group flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                        <CheckboxCn Id="@($"ie-todo-{task.Id}")"
+                                    Checked="@task.Completed"
+                                    CheckedChanged="@((bool _) => ToggleTask(taskId))" />
+                        <span class="@Cn.Merge("min-w-0 flex-1 text-sm transition-all duration-200", task.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                            @task.Text
+                        </span>
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.IconXs"
+                                  @onclick="@(() => DeleteTask(taskId))"
+                                  Class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                  aria-label="@($"Delete {task.Text}")">
+                            <LucideIconCn Name="trash-2" Size="12" Class="size-3 text-muted-foreground" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">
+                @_tasks.Count @(_tasks.Count == 1 ? "task" : "tasks") · @CompletedCount completed
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TaskItem(string Id, string Text, bool Completed);
+
+    private enum ExportFormat { Plain, Markdown, Json }
+
+    private record FormatLabel(ExportFormat Format, string Label);
+
+    private static readonly FormatLabel[] _formatLabels =
+    [
+        new(ExportFormat.Plain, "Plain Text"),
+        new(ExportFormat.Markdown, "Markdown"),
+        new(ExportFormat.Json, "JSON"),
+    ];
+
+    private int _nextId = 6;
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Complete project documentation", false),
+        new("2", "Review design mockups", true),
+        new("3", "Set up CI/CD pipeline", false),
+        new("4", "Write API integration tests", true),
+        new("5", "Deploy to staging environment", false),
+    ];
+
+    private string _mode = "list";
+    private string _importText = "";
+    private ExportFormat _exportFormat = ExportFormat.Markdown;
+    private bool _copied = false;
+
+    private int ParsedCount => ParseImport(_importText).Count;
+    private string ExportOutput => FormatExport(_exportFormat);
+    private int CompletedCount => _tasks.Count(t => t.Completed);
+
+    private ButtonVariant ImportButtonVariant => _mode == "import" ? ButtonVariant.Secondary : ButtonVariant.Outline;
+    private ButtonVariant ExportButtonVariant => _mode == "export" ? ButtonVariant.Secondary : ButtonVariant.Outline;
+
+    private void ToggleImportMode() => _mode = _mode == "import" ? "list" : "import";
+    private void ToggleExportMode() => _mode = _mode == "export" ? "list" : "export";
+    private void CancelImport() { _importText = ""; _mode = "list"; }
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Completed = !_tasks[idx].Completed };
+    }
+
+    private void DeleteTask(string id)
+    {
+        _tasks.RemoveAll(t => t.Id == id);
+    }
+
+    private void HandleImport()
+    {
+        var parsed = ParseImport(_importText);
+        if (parsed.Count == 0) return;
+        foreach (var p in parsed)
+        {
+            _tasks.Add(new TaskItem(_nextId.ToString(), p.Text, p.Completed));
+            _nextId++;
+        }
+        _importText = "";
+        _mode = "list";
+    }
+
+    private async Task HandleCopy()
+    {
+        var output = FormatExport(_exportFormat);
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", output); } catch { }
+        _copied = true;
+        await Task.Delay(2000);
+        _copied = false;
+    }
+
+    private string FormatExport(ExportFormat fmt)
+    {
+        return fmt switch
+        {
+            ExportFormat.Plain => string.Join("\n", _tasks.Select(t => $"{(t.Completed ? "[x]" : "[ ]")} {t.Text}")),
+            ExportFormat.Markdown => string.Join("\n", _tasks.Select(t => $"- [{(t.Completed ? "x" : " ")}] {t.Text}")),
+            ExportFormat.Json => FormatJson(),
+            _ => ""
+        };
+    }
+
+    private string FormatJson()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("[\n");
+        for (int i = 0; i < _tasks.Count; i++)
+        {
+            var t = _tasks[i];
+            var comma = i < _tasks.Count - 1 ? "," : "";
+            sb.Append("  {\n");
+            sb.Append($"    \"id\": \"{EscapeJson(t.Id)}\",\n");
+            sb.Append($"    \"text\": \"{EscapeJson(t.Text)}\",\n");
+            sb.Append($"    \"completed\": {(t.Completed ? "true" : "false")}\n");
+            sb.Append($"  }}{comma}\n");
+        }
+        sb.Append("]");
+        return sb.ToString();
+    }
+
+    private static string EscapeJson(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    private static List<(string Text, bool Completed)> ParseImport(string text)
+    {
+        var result = new List<(string Text, bool Completed)>();
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+
+            var s = line;
+            if (s.Length > 0 && (s[0] == '-' || s[0] == '*'))
+                s = s[1..].TrimStart();
+
+            if (s.StartsWith("[x] ", StringComparison.OrdinalIgnoreCase) && s.Length > 4)
+                result.Add((s[4..].Trim(), true));
+            else if (s.StartsWith("[x]", StringComparison.OrdinalIgnoreCase) && s.Length > 3)
+                result.Add((s[3..].Trim(), true));
+            else if (s.StartsWith("[ ] ") && s.Length > 4)
+                result.Add((s[4..].Trim(), false));
+            else if (s.StartsWith("[ ]") && s.Length > 3)
+                result.Add((s[3..].Trim(), false));
+            else
+                result.Add((line, false));
+        }
+        return result;
+    }
+}

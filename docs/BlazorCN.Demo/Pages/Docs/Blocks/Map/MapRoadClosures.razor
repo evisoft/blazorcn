@@ -1,0 +1,317 @@
+@* ============================================================
+   Block: map-road-closures
+   Title: MapRoadClosures
+   Description: Interactive road closure and traffic alert map with closure markers, detour routes, estimated delay badges, and incident detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-road-closures.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="traffic-cone" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Road closures</span>
+                <span class="text-xs text-muted-foreground">@_sorted.Length incidents</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => SetTypeFilter(null))"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _typeFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    All
+                </button>
+                @foreach (var tp in _types)
+                {
+                    var t = tp;
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleTypeFilter(t))"
+                        class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs capitalize transition-colors", _typeFilter == t ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        @t
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 divide-y border-r">
+                @foreach (var inc in _sorted)
+                {
+                    var incident = inc;
+                    <button
+                        type="button"
+                        @onclick="@(() => HandleMarkerClick(incident))"
+                        class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedIncident == incident.Id ? "bg-muted/50" : "")"
+                    >
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", SeverityDot(incident.Severity))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@incident.Title</span>
+                            <div class="mt-0.5 flex items-center gap-1.5">
+                                <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground" />
+                                <span class="text-xs text-muted-foreground">+@incident.EstimatedDelay</span>
+                            </div>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal">
+                            @SeverityLabel(incident.Severity)
+                        </BadgeCn>
+                    </button>
+                }
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Detour route lines (SVG overlay) *@
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                        @foreach (var inc in _sorted)
+                        {
+                            var incident = inc;
+                            if (incident.DetourCoordinates != null && incident.DetourCoordinates.Length > 1)
+                            {
+                                var pts = string.Join(" ", incident.DetourCoordinates.Select(c => {
+                                    var pos = GetMarkerPosition(c[0], c[1]);
+                                    return $"{pos.X.ToString("F1")}%,{pos.Y.ToString("F1")}%";
+                                }));
+                                var strokeWidth = _selectedIncident == incident.Id ? "4" : "2";
+                                var opacity = _selectedIncident == incident.Id ? "0.8" : "0.4";
+                                @((MarkupString)$"<polyline points=\"{pts}\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"{strokeWidth}\" stroke-opacity=\"{opacity}\" stroke-dasharray=\"6 4\" />")
+                            }
+                        }
+                    </svg>
+
+                    @* Incident markers *@
+                    @foreach (var inc in _sorted)
+                    {
+                        var incident = inc;
+                        var pos = GetMarkerPosition(incident.Longitude, incident.Latitude);
+                        var isSelected = _selectedIncident == incident.Id;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%")"
+                        >
+                            <button
+                                type="button"
+                                title="@incident.Title"
+                                @onclick="@(() => HandleMarkerClick(incident))"
+                                class="flex items-center justify-center"
+                            >
+                                <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md", SeverityMarkerColor(incident.Severity))">
+                                    <LucideIconCn Name="alert-triangle" Size="14" Class="size-3.5 text-white" />
+                                </div>
+                            </button>
+
+                            @* Popup *@
+                            @if (isSelected && _popupIncident?.Id == incident.Id)
+                            {
+                                <div class="absolute left-1/2 z-10 mt-1.5 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg text-popover-foreground">
+                                    <div class="mb-2 flex items-start justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@incident.Title</p>
+                                            <p class="mt-0.5 text-xs text-muted-foreground">@incident.Location</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal">
+                                            @SeverityLabel(incident.Severity)
+                                        </BadgeCn>
+                                    </div>
+                                    <p class="mb-2 text-xs text-muted-foreground leading-relaxed">@incident.Description</p>
+                                    <div class="space-y-1.5 border-t pt-2">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Delay</span>
+                                            <span class="font-medium">+@incident.EstimatedDelay</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Since</span>
+                                            <span class="font-medium">@incident.Since</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Expected end</span>
+                                            <span class="font-medium">@incident.ExpectedEnd</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Type</span>
+                                            <span class="capitalize font-medium">@TypeLabel(incident.Type)</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        @onclick:stopPropagation
+                                        @onclick="@(() => _popupIncident = null)"
+                                        class="absolute right-2 top-2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                                    >
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="pointer-events-none select-none absolute bottom-2 left-2 z-10 rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                    Map view — Los Angeles, CA
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @(_incidents.Count(i => i.Severity == "closure")) closures
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-orange-500"></span>
+                @(_incidents.Count(i => i.Severity == "major")) major
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @(_incidents.Count(i => i.Severity == "moderate")) moderate
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                @(_incidents.Count(i => i.Severity == "minor")) minor
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                @(_incidents.Count(i => i.DetourCoordinates != null)) detour routes available
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Incident(
+        string Id,
+        string Title,
+        string Severity,
+        string Type,
+        string Location,
+        string EstimatedDelay,
+        string Since,
+        string ExpectedEnd,
+        string Description,
+        double Longitude,
+        double Latitude,
+        double[][]? DetourCoordinates
+    );
+
+    private static readonly Incident[] _incidents =
+    [
+        new("inc1", "I-405 Full Closure",       "closure",  "construction", "I-405 between Wilshire & Santa Monica", "45 min", "6 hours ago", "Tomorrow 5 AM",
+            "Full freeway closure for bridge deck replacement. All lanes closed in both directions. Use detour via US-101.",
+            -118.448, 34.052,
+            [[-118.448,34.052],[-118.44,34.06],[-118.425,34.068],[-118.41,34.072],[-118.39,34.07],[-118.375,34.065]]),
+        new("inc2", "Multi-Vehicle Collision",   "major",    "accident",     "US-101 N at Highland Ave",              "30 min", "45 min ago",   "2 hours",
+            "Three-vehicle collision blocking two right lanes. Emergency vehicles on scene. Expect significant slowdowns approaching Highland Ave exit.",
+            -118.338, 34.101,
+            [[-118.338,34.101],[-118.345,34.098],[-118.352,34.095],[-118.358,34.098],[-118.355,34.105],[-118.348,34.108]]),
+        new("inc3", "Dodger Stadium Event",      "moderate", "event",        "Vin Scully Ave & Stadium Way",          "20 min", "1 hour ago",   "4 hours",
+            "Heavy traffic around Dodger Stadium due to evening game. Expect delays on Sunset Blvd, Stadium Way, and Academy Rd.",
+            -118.24, 34.074, null),
+        new("inc4", "Water Main Break",          "major",    "construction", "Wilshire Blvd at Western Ave",          "25 min", "3 hours ago",  "8 hours",
+            "Emergency water main repair blocking westbound right lane and center lane. DWP crews on site. Flaggers directing traffic.",
+            -118.309, 34.062,
+            [[-118.309,34.062],[-118.312,34.065],[-118.318,34.067],[-118.322,34.064],[-118.318,34.06],[-118.312,34.059]]),
+        new("inc5", "Fog Advisory",              "minor",    "weather",      "PCH near Malibu",                       "10 min", "2 hours ago",  "Mid-morning",
+            "Dense fog reducing visibility to under 200 feet along Pacific Coast Highway. Reduced speed limit in effect. Use headlights.",
+            -118.68, 34.025, null),
+        new("inc6", "Lane Restriction",          "minor",    "construction", "Santa Monica Blvd at Beverly Dr",       "5 min",  "5 hours ago",  "Tomorrow 6 AM",
+            "Overnight utility work reducing eastbound to one lane between Beverly Dr and Doheny Dr.",
+            -118.401, 34.081, null),
+    ];
+
+    private static readonly string[] _types = ["construction", "accident", "event", "weather"];
+
+    private static readonly int[] _severityOrder = [0, 1, 2, 3];
+
+    private string? _selectedIncident = "inc1";
+    private Incident? _popupIncident = null;
+    private string? _typeFilter = null;
+
+    private Incident[] _filtered => _typeFilter == null
+        ? _incidents
+        : Array.FindAll(_incidents, i => i.Type == _typeFilter);
+
+    private Incident[] _sorted => _filtered
+        .OrderBy(i => SeverityOrderValue(i.Severity))
+        .ToArray();
+
+    private static int SeverityOrderValue(string severity) => severity switch
+    {
+        "closure"  => 0,
+        "major"    => 1,
+        "moderate" => 2,
+        "minor"    => 3,
+        _          => 4,
+    };
+
+    private static string SeverityDot(string severity) => severity switch
+    {
+        "closure"  => "bg-red-500",
+        "major"    => "bg-orange-500",
+        "moderate" => "bg-amber-500",
+        "minor"    => "bg-blue-500",
+        _          => "bg-muted",
+    };
+
+    private static string SeverityMarkerColor(string severity) => severity switch
+    {
+        "closure"  => "bg-red-500",
+        "major"    => "bg-orange-500",
+        "moderate" => "bg-amber-500",
+        "minor"    => "bg-blue-500",
+        _          => "bg-muted",
+    };
+
+    private static string SeverityLabel(string severity) => severity switch
+    {
+        "closure"  => "Closed",
+        "major"    => "Major",
+        "moderate" => "Moderate",
+        "minor"    => "Minor",
+        _          => severity,
+    };
+
+    private static string TypeLabel(string type) => type switch
+    {
+        "construction" => "Construction",
+        "accident"     => "Accident",
+        "event"        => "Event",
+        "weather"      => "Weather",
+        _              => type,
+    };
+
+    private void HandleMarkerClick(Incident incident)
+    {
+        _popupIncident = _popupIncident?.Id == incident.Id ? null : incident;
+        _selectedIncident = incident.Id;
+    }
+
+    private void SetTypeFilter(string? value)
+    {
+        _typeFilter = value;
+    }
+
+    private void ToggleTypeFilter(string t)
+    {
+        _typeFilter = _typeFilter == t ? null : t;
+    }
+
+    // Map lon/lat to CSS % within the placeholder.
+    // Viewport: lon [-118.75, -118.2], lat [33.99, 34.13]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -118.75, lonMax = -118.2;
+        const double latMin = 33.99,   latMax = 34.13;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 92);
+        y = Math.Clamp(y, 5, 92);
+        return (x, y);
+    }
+}

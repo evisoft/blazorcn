@@ -1,0 +1,161 @@
+@* ============================================================
+   Block: checkout-promo-code
+   Title: CheckoutPromoCode
+   Description: A promo and discount code section with input field, apply button, applied discount display with remove option, multiple code support, and order total summary
+   Source: original/blocks/checkout/checkout-promo-code.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">Discount Code</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">Have a promo code? Enter it below</p>
+        </div>
+
+        @* Input *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="relative flex-1">
+                    <LucideIconCn Name="tag" Size="14" Class="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <InputCn type="text"
+                             Placeholder="Enter code"
+                             @bind-Value="_input"
+                             Class="h-8 pl-8 text-sm uppercase" />
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 shrink-0 text-xs"
+                          OnClick="ApplyCode">
+                    Apply
+                </ButtonCn>
+            </div>
+            @if (_error != null)
+            {
+                <p class="mt-1.5 text-red-500 text-xs">@_error</p>
+            }
+        </div>
+
+        @* Applied codes *@
+        @if (_appliedCodes.Count > 0)
+        {
+            <div class="border-b px-4 py-3">
+                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                    Applied discounts
+                </span>
+                <div class="space-y-2">
+                    @foreach (var it in _appliedCodes)
+                    {
+                        var item = it;
+                        <div class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                            <div class="flex items-center gap-2">
+                                <LucideIconCn Name="percent" Size="14" Class="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                                <span class="font-mono font-medium text-xs">@item.Code</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-emerald-600 text-xs dark:text-emerald-400">
+                                    @item.Label
+                                </BadgeCn>
+                            </div>
+                            <button type="button"
+                                    @onclick="@(() => RemoveCode(item.Code))"
+                                    class="rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground">
+                                <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Order summary *@
+        <div class="px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                Order summary
+            </span>
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted-foreground">Subtotal</span>
+                    <span class="tabular-nums">$@(_subtotal.ToString("F2"))</span>
+                </div>
+                @if (_totalDiscount > 0)
+                {
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-emerald-600 dark:text-emerald-400">Discount</span>
+                        <span class="tabular-nums text-emerald-600 dark:text-emerald-400">
+                            -$@(_totalDiscount.ToString("F2"))
+                        </span>
+                    </div>
+                }
+                <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted-foreground">Shipping</span>
+                    <span class="tabular-nums">$@(_shipping.ToString("F2"))</span>
+                </div>
+                <div class="flex items-center justify-between border-t pt-2">
+                    <span class="font-medium text-sm">Total</span>
+                    <span class="font-semibold text-sm tabular-nums">$@(_total.ToString("F2"))</span>
+                </div>
+                @if (_totalDiscount > 0)
+                {
+                    <p class="text-right text-emerald-600 text-xs dark:text-emerald-400">
+                        You're saving $@(_totalDiscount.ToString("F2"))
+                    </p>
+                }
+            </div>
+            <ButtonCn Size="ButtonSize.Sm" Class="mt-3 w-full">
+                Continue to Payment
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record AppliedCode(string Code, string Type, double Value, string Label);
+
+    private static readonly Dictionary<string, (string Type, double Value, string Label)> _availableCodes = new()
+    {
+        ["SAVE20"]   = ("percentage", 20,  "20% off"),
+        ["SHIP10"]   = ("fixed",      10,  "$10 off"),
+        ["WELCOME15"] = ("percentage", 15, "15% off"),
+    };
+
+    private const double _subtotal = 249.97;
+    private const double _shipping = 9.99;
+
+    private List<AppliedCode> _appliedCodes =
+    [
+        new("SAVE20", "percentage", 20, "20% off"),
+    ];
+
+    private string _input = "";
+    private string? _error = null;
+
+    private double _totalDiscount => _appliedCodes.Aggregate(0.0, (sum, c) =>
+        c.Type == "percentage" ? sum + _subtotal * (c.Value / 100.0) : sum + c.Value);
+
+    private double _discountedSubtotal => Math.Max(0, _subtotal - _totalDiscount);
+    private double _total => _discountedSubtotal + _shipping;
+
+    private void ApplyCode()
+    {
+        var upperCode = _input.Trim().ToUpperInvariant();
+        if (string.IsNullOrEmpty(upperCode)) return;
+
+        if (_appliedCodes.Any(c => c.Code == upperCode))
+        {
+            _error = "Code already applied";
+            return;
+        }
+
+        if (!_availableCodes.TryGetValue(upperCode, out var match))
+        {
+            _error = "Invalid promo code";
+            return;
+        }
+
+        _appliedCodes = [.._appliedCodes, new(upperCode, match.Type, match.Value, match.Label)];
+        _input = "";
+        _error = null;
+    }
+
+    private void RemoveCode(string promoCode)
+    {
+        _appliedCodes = _appliedCodes.Where(c => c.Code != promoCode).ToList();
+    }
+}

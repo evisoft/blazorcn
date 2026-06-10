@@ -1,0 +1,297 @@
+@* ============================================================
+   Block: reviews-moderation-queue
+   Title: ReviewsModerationQueue
+   Description: A React review moderation queue for Next.js with timeline-style severity indicators, approve/reject/escalate actions, flag reason context, and animated card transitions built with shadcn/ui Button, Badge, Avatar components, motion/react animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-moderation-queue.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Moderation Queue</span>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    @_pendingCount pending review@(_pendingCount != 1 ? "s" : "") to process
+                    @if (_processedCount > 0)
+                    {
+                        <span class="ml-1.5 text-emerald-600 dark:text-emerald-400">
+                            (@(_processedCount) processed this session)
+                        </span>
+                    }
+                </p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    Critical
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    Warning
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    Low
+                </span>
+            </div>
+        </div>
+
+        @* Queue *@
+        <div class="divide-y">
+            @foreach (var review in _reviews)
+            {
+                var severity = GetHighestSeverity(review.FlagReasons);
+                var borderClass = severity != null ? SeverityBorder(severity) : "border-l-transparent";
+                var processed = _processedIds.TryGetValue(review.Id, out var proc) ? proc : null;
+
+                <div class="@Cn.Merge("border-l-2", borderClass)">
+                    <div class="px-4 py-3.5">
+                        @* Author row *@
+                        <div class="flex items-start gap-3">
+                            <AvatarCn Class="mt-0.5 size-8">
+                                <AvatarFallbackCn Class="text-[10px]">@review.Author.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@review.Author.Name</span>
+                                    <span class="text-xs text-muted-foreground">@review.SubmittedAt</span>
+                                    @if (review.PurchaseVerified)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">Verified purchase</BadgeCn>
+                                    }
+                                    @if (review.ReportCount > 0)
+                                    {
+                                        <span class="text-xs text-red-600 dark:text-red-400">
+                                            @review.ReportCount report@(review.ReportCount != 1 ? "s" : "")
+                                        </span>
+                                    }
+                                </div>
+                                <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>@review.Product</span>
+                                    <span>·</span>
+                                    <span>@review.Author.ReviewCount review@(review.Author.ReviewCount != 1 ? "s" : "")</span>
+                                    <span>·</span>
+                                    <span>Joined @review.Author.JoinedDate</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        @* Rating + Title *@
+                        <div class="mt-2.5 flex items-center gap-2">
+                            <div class="flex items-center gap-0.5">
+                                @for (int i = 0; i < 5; i++)
+                                {
+                                    var idx = i;
+                                    <LucideIconCn Name="star" Size="12" Class="@Cn.Merge("size-3", idx < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/30")" />
+                                }
+                            </div>
+                            <span class="text-sm font-medium">@review.Title</span>
+                        </div>
+
+                        @* Body *@
+                        <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">@review.Body</p>
+
+                        @* Flag reasons *@
+                        @if (review.FlagReasons.Length > 0)
+                        {
+                            <div class="mt-3 space-y-1.5">
+                                @foreach (var reason in review.FlagReasons)
+                                {
+                                    var cfg = GetSeverityConfig(reason.Severity);
+                                    <div class="@Cn.Merge("flex items-center gap-2 rounded-md px-2.5 py-1.5", cfg.Bg)">
+                                        <LucideIconCn Name="@reason.IconName" Size="14" Class="@Cn.Merge("size-3.5", cfg.Text)" />
+                                        <span class="@Cn.Merge("text-xs font-medium", cfg.Text)">@reason.Label</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @* Actions *@
+                        @if (processed == null)
+                        {
+                            var reviewId = review.Id;
+                            <div class="mt-3 flex items-center gap-1.5">
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs"
+                                          @onclick="@(() => HandleAction(reviewId, "approved"))">
+                                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                    Approve
+                                </ButtonCn>
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs"
+                                          @onclick="@(() => HandleAction(reviewId, "rejected"))">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    Reject
+                                </ButtonCn>
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs"
+                                          @onclick="@(() => HandleAction(reviewId, "escalated"))">
+                                    <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3" />
+                                    Escalate
+                                </ButtonCn>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mt-3">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal capitalize">@processed</BadgeCn>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Empty state *@
+        @if (_reviews.Count == 0)
+        {
+            <div class="flex flex-col items-center gap-2 px-4 py-12">
+                <LucideIconCn Name="check" Size="24" Class="size-6 text-emerald-500" />
+                <span class="text-sm font-medium">Queue cleared</span>
+                <span class="text-xs text-muted-foreground">All reviews have been processed</span>
+            </div>
+        }
+
+        @* Footer *@
+        @if (_reviews.Count > 0)
+        {
+            <div class="flex items-center justify-between border-t px-4 py-2.5">
+                <span class="text-xs text-muted-foreground">
+                    @(_reviews.Count(r => r.FlagReasons.Length > 0)) flagged
+                    <span class="mx-1.5">·</span>
+                    @(_reviews.Count(r => r.PurchaseVerified)) verified
+                </span>
+                <span class="text-xs text-muted-foreground">Sorted by severity, then recency</span>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record AuthorInfo(string Name, string Email, string Initials, int ReviewCount, string JoinedDate);
+
+    private record FlagReason(string Label, string Severity, string IconName);
+
+    private class ModerationReview
+    {
+        public string Id { get; set; } = "";
+        public AuthorInfo Author { get; set; } = new("", "", "", 0, "");
+        public string Product { get; set; } = "";
+        public int Rating { get; set; }
+        public string Title { get; set; } = "";
+        public string Body { get; set; } = "";
+        public string SubmittedAt { get; set; } = "";
+        public FlagReason[] FlagReasons { get; set; } = [];
+        public int ReportCount { get; set; }
+        public bool PurchaseVerified { get; set; }
+    }
+
+    private record SeverityConfig(string Border, string Bg, string Text);
+
+    private static SeverityConfig GetSeverityConfig(string severity) => severity switch
+    {
+        "critical" => new("border-l-red-500", "bg-red-500/10", "text-red-600 dark:text-red-400"),
+        "warning"  => new("border-l-amber-500", "bg-amber-500/10", "text-amber-600 dark:text-amber-400"),
+        _          => new("border-l-blue-500", "bg-blue-500/10", "text-blue-600 dark:text-blue-400"),
+    };
+
+    private static string SeverityBorder(string severity) => GetSeverityConfig(severity).Border;
+
+    private static string? GetHighestSeverity(FlagReason[] reasons)
+    {
+        if (reasons.Length == 0) return null;
+        if (reasons.Any(r => r.Severity == "critical")) return "critical";
+        if (reasons.Any(r => r.Severity == "warning")) return "warning";
+        return "low";
+    }
+
+    private List<ModerationReview> _reviews = new()
+    {
+        new()
+        {
+            Id = "mod-1",
+            Author = new("spam_user_42", "totally.real@fakemail.xyz", "SU", 1, "Apr 4, 2026"),
+            Product = "UI Component Library",
+            Rating = 5,
+            Title = "Buy cheap software at best-deals dot com",
+            Body = "Great product! Also check out best-deals.com for amazing software discounts. Click here for 90% off all development tools. Limited time offer!!! Visit now for exclusive deals.",
+            SubmittedAt = "8 min ago",
+            FlagReasons =
+            [
+                new("Spam / promotional content", "critical", "shield-alert"),
+                new("Contains external links", "warning", "link"),
+            ],
+            ReportCount = 7,
+            PurchaseVerified = false,
+        },
+        new()
+        {
+            Id = "mod-2",
+            Author = new("Chris Anderson", "chris.a@example.com", "CA", 3, "Jan 12, 2026"),
+            Product = "Dashboard Pro Kit",
+            Rating = 1,
+            Title = "Terrible experience, nothing works after update",
+            Body = "Every component broke after updating to v3.2. No migration guide, no changelog entry for breaking changes. Wasted two days rolling back. The sidebar component throws hydration errors on every page load.",
+            SubmittedAt = "32 min ago",
+            FlagReasons =
+            [
+                new("Potentially abusive language", "warning", "message-square-warning"),
+            ],
+            ReportCount = 1,
+            PurchaseVerified = true,
+        },
+        new()
+        {
+            Id = "mod-3",
+            Author = new("Rebecca Torres", "r.torres@company.io", "RT", 8, "Sep 3, 2025"),
+            Product = "Form Builder Kit",
+            Rating = 4,
+            Title = "Solid but needs better mobile support",
+            Body = "Desktop experience is flawless. On mobile, some components do not resize well below 320px. The drawer component specifically has issues with swipe gestures on iOS Safari. Filed a detailed bug report with screenshots.",
+            SubmittedAt = "1 hr ago",
+            FlagReasons =
+            [
+                new("Review may reference beta features", "low", "alert-triangle"),
+            ],
+            ReportCount = 0,
+            PurchaseVerified = true,
+        },
+        new()
+        {
+            Id = "mod-4",
+            Author = new("James Wright", "j.wright@email.com", "JW", 12, "Jun 15, 2025"),
+            Product = "Auth Module",
+            Rating = 2,
+            Title = "Overrated compared to alternatives",
+            Body = "The copy-paste model is inconvenient for large teams and the lack of a proper package registry means version management is painful. We switched to a compiled alternative after three months of maintenance overhead.",
+            SubmittedAt = "2 hr ago",
+            FlagReasons = [],
+            ReportCount = 0,
+            PurchaseVerified = true,
+        },
+        new()
+        {
+            Id = "mod-5",
+            Author = new("Mei Lin", "mei.lin@startup.co", "ML", 5, "Nov 20, 2025"),
+            Product = "Chart Components",
+            Rating = 5,
+            Title = "Perfect for our startup MVP",
+            Body = "We shipped our MVP in two weeks using these components. The design quality is professional enough for investor demos and the accessibility defaults saved us from common WCAG pitfalls during our compliance audit.",
+            SubmittedAt = "3 hr ago",
+            FlagReasons = [],
+            ReportCount = 0,
+            PurchaseVerified = true,
+        },
+    };
+
+    private Dictionary<string, string> _processedIds = new();
+
+    private int _pendingCount => _reviews.Count(r => !_processedIds.ContainsKey(r.Id));
+    private int _processedCount => _processedIds.Count;
+
+    private async Task HandleAction(string id, string action)
+    {
+        _processedIds[id] = action;
+        await Task.Delay(600);
+        _reviews.RemoveAll(r => r.Id == id);
+        _processedIds.Remove(id);
+    }
+}

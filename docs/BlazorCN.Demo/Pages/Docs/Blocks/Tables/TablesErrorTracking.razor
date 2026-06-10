@@ -1,0 +1,149 @@
+@* ============================================================
+   Block: tables-error-tracking
+   Title: TablesErrorTracking
+   Description: Error tracking table with stack traces, frequency counts, and severity levels for React/Next.js debugging dashboards using shadcn/ui and Tailwind CSS.
+   Source: original/blocks/tables/tables-error-tracking.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h3 class="text-sm font-medium">Error Tracking</h3>
+                <p class="text-xs text-muted-foreground">
+                    @(_errors.Count(e => e.Status == "unresolved")) unresolved errors
+                </p>
+            </div>
+            <div class="flex items-center gap-1.5">
+                @foreach (var s in _filterOptions)
+                {
+                    var filterVal = s;
+                    <ButtonCn
+                        Variant="@(_filter == filterVal ? ButtonVariant.Default : ButtonVariant.Outline)"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 px-2 text-xs"
+                        @onclick="@(() => _filter = filterVal)">
+                        @(filterVal.Substring(0, 1).ToUpper() + filterVal.Substring(1))
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+        <TableCn>
+            <TableHeaderCn>
+                <TableRowCn Class="bg-muted/50">
+                    <TableHeadCn Class="w-8 text-xs font-medium text-muted-foreground"></TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">Error</TableHeadCn>
+                    <TableHeadCn Class="w-20 text-xs font-medium text-muted-foreground">Severity</TableHeadCn>
+                    <TableHeadCn Class="w-20 text-xs font-medium text-muted-foreground">Status</TableHeadCn>
+                    <TableHeadCn Class="w-20 text-xs font-medium text-muted-foreground text-right">Events</TableHeadCn>
+                    <TableHeadCn Class="w-20 text-xs font-medium text-muted-foreground text-right">Users</TableHeadCn>
+                    <TableHeadCn Class="w-24 text-xs font-medium text-muted-foreground text-right">Last Seen</TableHeadCn>
+                </TableRowCn>
+            </TableHeaderCn>
+            <TableBodyCn>
+                @foreach (var err in _errors.Where(e => _filter == "all" || e.Status == _filter))
+                {
+                    var error = err;
+                    var isExpanded = _expanded == error.Id;
+                    var sevCfg = _severityConfig[error.Severity];
+                    var staCfg = _statusConfig[error.Status];
+                    <TableRowCn Class="hover:bg-muted/50 cursor-pointer" @onclick="@(() => _expanded = (_expanded == error.Id ? null : error.Id))">
+                        <TableCellCn Class="w-8 px-2">
+                            <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div>
+                                <p class="text-sm font-medium truncate max-w-80">@error.Title</p>
+                                <p class="font-mono text-xs text-muted-foreground">@error.File</p>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div class="flex items-center gap-1.5">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", sevCfg.DotClass)"></span>
+                                <span class="text-xs">@sevCfg.Label</span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("text-[10px] font-normal", staCfg.ClassName)">
+                                @staCfg.Label
+                            </BadgeCn>
+                        </TableCellCn>
+                        <TableCellCn Class="text-right font-mono text-sm tabular-nums">
+                            @error.Occurrences.ToString("N0")
+                        </TableCellCn>
+                        <TableCellCn Class="text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                <LucideIconCn Name="users" Size="12" Class="size-3 text-muted-foreground" />
+                                <span class="text-sm tabular-nums">@error.AffectedUsers.ToString("N0")</span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn Class="text-right text-xs text-muted-foreground">
+                            @error.LastSeen
+                        </TableCellCn>
+                    </TableRowCn>
+                    @if (isExpanded)
+                    {
+                        <TableRowCn>
+                            <TableCellCn ColSpan="7" Class="bg-muted/30 px-6 py-3">
+                                <p class="mb-2 text-xs text-muted-foreground">@error.Message</p>
+                                <div class="rounded-md bg-zinc-950 p-3 font-mono text-xs text-zinc-300 whitespace-pre">@error.StackTrace</div>
+                                <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="clock" Size="12" Class="size-3" /> First seen: @error.FirstSeen
+                                    </span>
+                                </div>
+                            </TableCellCn>
+                        </TableRowCn>
+                    }
+                }
+            </TableBodyCn>
+        </TableCn>
+    </div>
+</section>
+
+@code {
+    private record SeverityConfig(string Label, string ClassName, string DotClass);
+    private record StatusConfig(string Label, string ClassName);
+    private record TrackedError(string Id, string Title, string Message, string StackTrace, string Severity, string Status, int Occurrences, int AffectedUsers, string FirstSeen, string LastSeen, string File);
+
+    private string? _expanded = null;
+    private string _filter = "all";
+
+    private static readonly string[] _filterOptions = ["all", "unresolved", "investigating", "resolved"];
+
+    private static readonly Dictionary<string, SeverityConfig> _severityConfig = new()
+    {
+        ["critical"] = new("Critical", "bg-red-500/10 text-red-700", "bg-red-500"),
+        ["error"]    = new("Error",    "bg-orange-500/10 text-orange-700", "bg-orange-500"),
+        ["warning"]  = new("Warning",  "bg-amber-500/10 text-amber-700", "bg-amber-500"),
+    };
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["unresolved"]   = new("Unresolved",   "bg-red-500/10 text-red-700"),
+        ["investigating"] = new("Investigating", "bg-blue-500/10 text-blue-700"),
+        ["resolved"]     = new("Resolved",     "bg-green-500/10 text-green-700"),
+    };
+
+    private static readonly TrackedError[] _errors =
+    [
+        new("ERR-001", "TypeError: Cannot read property 'map' of undefined", "Uncaught exception in ProductList component",
+            "at ProductList (components/ProductList.tsx:42:18)\nat renderWithHooks (react-dom.js:14985:18)\nat mountIndeterminateComponent (react-dom.js:17811:13)",
+            "critical", "unresolved", 1247, 834, "Mar 20, 2026", "2 min ago", "components/ProductList.tsx:42"),
+        new("ERR-002", "NetworkError: Failed to fetch", "API request timeout on /api/users endpoint",
+            "at fetchWithRetry (lib/api.ts:23:11)\nat getUserProfile (services/user.ts:18:5)",
+            "error", "investigating", 523, 312, "Mar 22, 2026", "15 min ago", "lib/api.ts:23"),
+        new("ERR-003", "SyntaxError: Unexpected token in JSON", "Malformed response from payment gateway",
+            "at JSON.parse (<anonymous>)\nat parseResponse (lib/payments.ts:67:22)",
+            "error", "unresolved", 89, 67, "Mar 23, 2026", "1 hr ago", "lib/payments.ts:67"),
+        new("ERR-004", "RangeError: Maximum call stack exceeded", "Infinite loop in recursive category tree",
+            "at buildTree (utils/categories.ts:15:3)\nat buildTree (utils/categories.ts:22:12)",
+            "critical", "investigating", 34, 21, "Mar 24, 2026", "5 min ago", "utils/categories.ts:15"),
+        new("ERR-005", "Warning: Each child should have a unique key", "React key prop missing in NotificationList",
+            "at NotificationList (components/NotificationList.tsx:28:7)",
+            "warning", "unresolved", 8921, 4102, "Mar 1, 2026", "30 sec ago", "components/NotificationList.tsx:28"),
+        new("ERR-006", "AbortError: The operation was aborted", "Request cancelled during navigation",
+            "at AbortController.abort (lib/fetch.ts:12:8)",
+            "warning", "resolved", 2341, 1890, "Mar 10, 2026", "3 hr ago", "lib/fetch.ts:12"),
+    ];
+}

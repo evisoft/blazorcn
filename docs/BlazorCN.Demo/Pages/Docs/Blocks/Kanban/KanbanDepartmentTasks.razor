@@ -1,0 +1,176 @@
+@* ============================================================
+   Block: kanban-department-tasks
+   Title: KanbanDepartmentTasks
+   Description: React swimlane kanban board for Next.js with department rows, workflow status columns, and task chips using shadcn/ui and Tailwind CSS
+   Source: original/blocks/kanban/kanban-department-tasks.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-6xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="building" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Department Overview</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    Q2 2026
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="circle-check" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="text-muted-foreground text-xs">
+                    @TotalByStatus("done") of @_tasks.Length done
+                </span>
+            </div>
+        </div>
+
+        @* Grid *@
+        <div class="overflow-x-auto">
+            @* Column headers *@
+            <div class="grid grid-cols-[200px_1fr_1fr_1fr] border-b bg-muted/30">
+                <div class="px-4 py-2.5">
+                    <span class="font-medium text-muted-foreground text-xs">Department</span>
+                </div>
+                @foreach (var s in _statuses)
+                {
+                    <div class="border-l px-4 py-2.5">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-muted-foreground text-xs">@s.Label</span>
+                            <span class="font-mono text-muted-foreground/60 text-xs">@TotalByStatus(s.Id)</span>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Swimlane rows *@
+            @for (var rowIndex = 0; rowIndex < _departments.Length; rowIndex++)
+            {
+                var dept = _departments[rowIndex];
+                var isLast = rowIndex == _departments.Length - 1;
+                var deptTasks = _tasks.Where(t => t.Department == dept.Id).ToArray();
+                var deptDone = deptTasks.Count(t => t.Status == "done");
+                <div class="@Cn.Merge("grid grid-cols-[200px_1fr_1fr_1fr]", !isLast ? "border-b" : "")">
+                    @* Department label *@
+                    <div class="flex items-start gap-2.5 px-4 py-3">
+                        <div class="flex size-6 shrink-0 items-center justify-center rounded bg-muted font-mono text-[10px] text-muted-foreground">
+                            @dept.Icon
+                        </div>
+                        <div class="min-w-0">
+                            <span class="font-medium text-sm">@dept.Name</span>
+                            <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                                <span>@dept.Headcount people</span>
+                                <span>·</span>
+                                <span>@deptDone/@deptTasks.Length</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* Status cells *@
+                    @foreach (var s in _statuses)
+                    {
+                        var cellTasks = GetTasksForCell(dept.Id, s.Id);
+                        <div class="@Cn.Merge("border-l px-3 py-2.5", cellTasks.Length == 0 ? "bg-muted/20" : "")">
+                            <div class="flex flex-col gap-1.5">
+                                @if (cellTasks.Length == 0)
+                                {
+                                    <div class="rounded-md border border-dashed border-muted-foreground/20 px-2 py-1.5 text-center text-muted-foreground/40 text-xs">
+                                        Empty
+                                    </div>
+                                }
+                                @foreach (var task in cellTasks)
+                                {
+                                    <div class="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 transition-colors hover:bg-muted">
+                                        <span class="truncate text-xs">@task.Title</span>
+                                        <span class="@Cn.Merge("ml-auto shrink-0 font-mono text-[10px]", EffortColor(task.Effort))">
+                                            @EffortLabel(task.Effort)
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("font-mono text-[10px]", EffortColor("small"))">S</span>
+                    Small
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("font-mono text-[10px]", EffortColor("medium"))">M</span>
+                    Medium
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("font-mono text-[10px]", EffortColor("large"))">L</span>
+                    Large
+                </span>
+            </div>
+            <span class="font-mono text-muted-foreground/60 text-xs">
+                @(Math.Round((double)TotalByStatus("done") / _tasks.Length * 100))% complete
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DepartmentItem(string Id, string Name, string Icon, int Headcount);
+    private record StatusItem(string Id, string Label);
+    private record TaskItem(string Id, string Title, string Department, string Status, string Effort);
+
+    private static readonly DepartmentItem[] _departments =
+    [
+        new("engineering", "Engineering", "ENG", 12),
+        new("design",      "Design",      "DSN",  5),
+        new("marketing",   "Marketing",   "MKT",  7),
+        new("sales",       "Sales",       "SLS",  9),
+    ];
+
+    private static readonly StatusItem[] _statuses =
+    [
+        new("backlog",     "Backlog"),
+        new("in-progress", "In Progress"),
+        new("done",        "Done"),
+    ];
+
+    private static readonly TaskItem[] _tasks =
+    [
+        new("t1",  "Migrate to edge runtime",       "engineering", "backlog",     "large"),
+        new("t2",  "Implement rate limiting",        "engineering", "in-progress", "medium"),
+        new("t3",  "Refactor auth middleware",       "engineering", "in-progress", "medium"),
+        new("t4",  "Set up error monitoring",        "engineering", "done",        "small"),
+        new("t5",  "Component library audit",        "design",      "backlog",     "medium"),
+        new("t6",  "Onboarding flow redesign",       "design",      "in-progress", "large"),
+        new("t7",  "Icon set update to v3",          "design",      "done",        "small"),
+        new("t8",  "Design system tokens",           "design",      "done",        "medium"),
+        new("t9",  "Q2 content calendar",            "marketing",   "backlog",     "medium"),
+        new("t10", "Product launch campaign",        "marketing",   "in-progress", "large"),
+        new("t11", "SEO audit and fixes",            "marketing",   "done",        "medium"),
+        new("t12", "CRM integration setup",          "sales",       "backlog",     "large"),
+        new("t13", "Pipeline report automation",     "sales",       "in-progress", "medium"),
+        new("t14", "Lead scoring model update",      "sales",       "done",        "small"),
+    ];
+
+    private static TaskItem[] GetTasksForCell(string department, string status) =>
+        _tasks.Where(t => t.Department == department && t.Status == status).ToArray();
+
+    private static int TotalByStatus(string status) =>
+        _tasks.Count(t => t.Status == status);
+
+    private static string EffortLabel(string effort) => effort switch
+    {
+        "small"  => "S",
+        "medium" => "M",
+        _        => "L",
+    };
+
+    private static string EffortColor(string effort) => effort switch
+    {
+        "small"  => "text-emerald-600 dark:text-emerald-400",
+        "medium" => "text-amber-600 dark:text-amber-400",
+        _        => "text-red-600 dark:text-red-400",
+    };
+}

@@ -1,0 +1,160 @@
+@* ============================================================
+   Block: comments-markdown-preview
+   Title: CommentsMarkdownPreview
+   Description: A markdown-enabled comment system for React and Next.js with split-pane editor, live preview, syntax toolbar, and rendered markdown display built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-markdown-preview.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Comments</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                @_comments.Length @(_comments.Length == 1 ? "comment" : "comments")
+            </p>
+        </div>
+
+        @* Editor / toolbar *@
+        <div class="border-b p-4">
+            <div class="mb-2 flex items-center gap-1 border-b pb-2">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="size-7" OnClick="@(() => InsertMarkdown("**bold**"))">
+                    <LucideIconCn Name="bold" Size="12" Class="size-3" />
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="size-7" OnClick="@(() => InsertMarkdown("*italic*"))">
+                    <LucideIconCn Name="italic" Size="12" Class="size-3" />
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="size-7" OnClick="@(() => InsertMarkdown("[link](url)"))">
+                    <LucideIconCn Name="link" Size="12" Class="size-3" />
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="size-7" OnClick="@(() => InsertMarkdown("- item\n"))">
+                    <LucideIconCn Name="list" Size="12" Class="size-3" />
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="size-7" OnClick="@(() => InsertMarkdown("`code`"))">
+                    <LucideIconCn Name="code" Size="12" Class="size-3" />
+                </ButtonCn>
+                <div class="ml-auto flex gap-1">
+                    <ButtonCn Variant="@(!_showPreview ? ButtonVariant.Secondary : ButtonVariant.Ghost)" Size="ButtonSize.Sm" Class="h-6 px-2 text-xs" OnClick="@(() => _showPreview = false)">
+                        Write
+                    </ButtonCn>
+                    <ButtonCn Variant="@(_showPreview ? ButtonVariant.Secondary : ButtonVariant.Ghost)" Size="ButtonSize.Sm" Class="h-6 px-2 text-xs" OnClick="@(() => _showPreview = true)">
+                        Preview
+                    </ButtonCn>
+                </div>
+            </div>
+
+            @if (_showPreview)
+            {
+                <div class="min-h-[200px] rounded-md border bg-muted/30 p-3">
+                    @if (!string.IsNullOrEmpty(_newComment))
+                    {
+                        <div class="prose prose-sm dark:prose-invert">
+                            <p class="text-sm leading-relaxed">@_newComment</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-sm text-muted-foreground">Nothing to preview</p>
+                    }
+                </div>
+            }
+            else
+            {
+                <TextareaCn @bind-Value="_newComment" Placeholder="Write a comment... (Markdown supported)" Class="min-h-[200px] font-mono text-sm" />
+            }
+
+            <div class="mt-2 flex justify-end">
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 text-xs">
+                    Post comment
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Comment list *@
+        <div class="divide-y">
+            @foreach (var comment in _comments)
+            {
+                var c = comment;
+                var initials = GetInitials(c.Author);
+                <div class="p-4">
+                    <div class="flex gap-3">
+                        <AvatarCn Class="size-8 shrink-0">
+                            <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-sm font-medium">@c.Author</span>
+                                <span class="text-xs text-muted-foreground">@c.Timestamp</span>
+                            </div>
+
+                            @if (c.Markdown != null)
+                            {
+                                <div class="prose prose-sm mt-2 dark:prose-invert">
+                                    @foreach (var line in c.Markdown.Split('\n'))
+                                    {
+                                        var ln = line;
+                                        @if (ln.StartsWith("## "))
+                                        {
+                                            <h2 class="mb-2 mt-3 text-sm font-medium">@ln.Substring(3)</h2>
+                                        }
+                                        else if (System.Text.RegularExpressions.Regex.IsMatch(ln, @"^\d+\. "))
+                                        {
+                                            <li class="text-sm">@System.Text.RegularExpressions.Regex.Replace(ln, @"^\d+\. ", "")</li>
+                                        }
+                                        else
+                                        {
+                                            <p class="text-sm leading-relaxed">@((MarkupString)RenderInlineMarkdown(ln))</p>
+                                        }
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="mt-1 text-sm leading-relaxed">@c.Content</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record CommentData(string Id, string Author, string Content, string Timestamp, string? Markdown);
+
+    private static readonly CommentData[] _comments =
+    [
+        new("1", "Sarah Chen", "",  "2 hours ago",
+            "## Implementation Steps\n\n1. Install dependencies\n2. Configure Tailwind\n3. Add components\n\nHere's a **bold** idea with *italic* emphasis."),
+        new("2", "Alex Morgan", "Great breakdown! This will help the team get started quickly.", "3 hours ago", null),
+    ];
+
+    private string _newComment = "";
+    private bool _showPreview = false;
+
+    private void InsertMarkdown(string syntax)
+    {
+        _newComment += syntax;
+    }
+
+    private static string GetInitials(string author)
+    {
+        var parts = author.Split(' ');
+        var initials = "";
+        foreach (var p in parts)
+        {
+            if (p.Length > 0) initials += char.ToUpper(p[0]);
+        }
+        return initials;
+    }
+
+    private static string RenderInlineMarkdown(string line)
+    {
+        var result = System.Text.RegularExpressions.Regex.Replace(line, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        result = System.Text.RegularExpressions.Regex.Replace(result, @"\*(.+?)\*", "<em>$1</em>");
+        return result;
+    }
+}

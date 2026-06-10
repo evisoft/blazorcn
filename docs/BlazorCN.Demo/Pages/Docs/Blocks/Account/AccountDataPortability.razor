@@ -1,0 +1,431 @@
+@* ============================================================
+   Block: account-data-portability
+   Title: AccountDataPortability
+   Description: A multi-step data migration wizard for React and Next.js with source selection, data type checkboxes, field mapping, review summary, and transfer progress built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-data-portability.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Step indicator *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-1">
+                @for (int i = 0; i < _steps.Length; i++)
+                {
+                    var step = _steps[i];
+                    var idx = i;
+                    <div class="flex items-center gap-1 flex-1">
+                        <div class="flex items-center gap-2 flex-1">
+                            <div class="@Cn.Merge("flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium transition-colors", _currentStep > step.Id || _currentStep == step.Id ? "bg-foreground text-background" : "bg-muted text-muted-foreground")">
+                                @if (_currentStep > step.Id)
+                                {
+                                    <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                }
+                                else
+                                {
+                                    @step.Id
+                                }
+                            </div>
+                            <span class="@Cn.Merge("text-xs hidden sm:inline", _currentStep == step.Id ? "font-medium" : "text-muted-foreground")">
+                                @step.Label
+                            </span>
+                        </div>
+                        @if (idx < _steps.Length - 1)
+                        {
+                            <div class="@Cn.Merge("h-px flex-1 mx-1", _currentStep > step.Id ? "bg-foreground" : "bg-border")"></div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Step 1: Select Source *@
+        @if (_currentStep == 1)
+        {
+            <div class="px-4 py-4">
+                <div class="mb-3">
+                    <h3 class="text-sm font-medium">Select Source</h3>
+                    <p class="text-xs text-muted-foreground">Choose where to import your data from</p>
+                </div>
+                <div class="space-y-2">
+                    @foreach (var source in _sources)
+                    {
+                        var isSelected = _selectedSource == source.Id;
+                        var sourceId = source.Id;
+                        <button type="button" @onclick="@(() => _selectedSource = sourceId)"
+                                class="@Cn.Merge("flex w-full items-center gap-3 rounded-md border px-3 py-3 text-left transition-colors", isSelected ? "border-foreground bg-muted/50" : "hover:bg-muted/30")">
+                            <div class="@Cn.Merge("flex size-8 items-center justify-center rounded-md", isSelected ? "bg-foreground text-background" : "bg-muted")">
+                                @if (source.Icon == "database")
+                                {
+                                    <LucideIconCn Name="database" Size="16" Class="size-4" />
+                                }
+                                else if (source.Icon == "mail")
+                                {
+                                    <LucideIconCn Name="mail" Size="16" Class="size-4" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="file-spreadsheet" Size="16" Class="size-4" />
+                                }
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-sm font-medium">@source.Name</span>
+                                <p class="text-xs text-muted-foreground">@source.Description</p>
+                            </div>
+                            @if (isSelected)
+                            {
+                                <LucideIconCn Name="check" Size="16" Class="size-4 shrink-0 text-foreground" />
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Step 2: Choose Data *@
+        @if (_currentStep == 2)
+        {
+            <div class="px-4 py-4">
+                <div class="mb-3 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-medium">Choose Data</h3>
+                        <p class="text-xs text-muted-foreground">Select which data types to migrate from @SourceName</p>
+                    </div>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] h-4 px-1.5">@SelectedCount selected</BadgeCn>
+                </div>
+                <div class="space-y-1">
+                    @foreach (var dt in _dataTypes)
+                    {
+                        var dtId = dt.Id;
+                        <span @onclick="@(() => ToggleDataType(dtId))" role="button" tabindex="0"
+                              class="flex items-center gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-colors hover:bg-muted/50">
+                            <CheckboxCn Checked="@dt.Selected" />
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@dt.Label</span>
+                                    <span class="text-[10px] text-muted-foreground tabular-nums">@dt.RecordCount.ToString("N0") records</span>
+                                </div>
+                                <p class="text-xs text-muted-foreground">@dt.Description</p>
+                            </div>
+                            <span class="text-xs text-muted-foreground tabular-nums shrink-0">@dt.Size</span>
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Step 3: Map Fields *@
+        @if (_currentStep == 3)
+        {
+            <div class="px-4 py-4">
+                <div class="mb-3 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-medium">Map Fields</h3>
+                        <p class="text-xs text-muted-foreground">Review how source fields map to your schema</p>
+                    </div>
+                    <div class="flex items-center gap-3 text-[10px]">
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                            @MappedFields mapped
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-amber-500"></span>
+                            @UnmatchedFields unmatched
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-muted-foreground"></span>
+                            @SkippedFields skipped
+                        </span>
+                    </div>
+                </div>
+                <div class="rounded-md border">
+                    <div class="flex items-center border-b bg-muted/30 px-3 py-2 text-[10px] font-medium text-muted-foreground">
+                        <span class="flex-1">SOURCE FIELD</span>
+                        <span class="w-8 text-center">
+                            <LucideIconCn Name="arrow-right" Size="12" Class="size-3 mx-auto" />
+                        </span>
+                        <span class="flex-1">TARGET FIELD</span>
+                        <span class="w-16 text-right">TYPE</span>
+                    </div>
+                    @foreach (var fm in _fieldMappings)
+                    {
+                        <div class="flex items-center border-b last:border-b-0 px-3 py-2">
+                            <span class="flex-1 flex items-center gap-2">
+                                <span class="@Cn.Merge("size-1.5 rounded-full shrink-0", fm.Status == "mapped" ? "bg-emerald-500" : fm.Status == "unmatched" ? "bg-amber-500" : "bg-muted-foreground")"></span>
+                                <span class="font-mono text-xs">@fm.SourceField</span>
+                            </span>
+                            <span class="w-8 text-center text-muted-foreground">
+                                <LucideIconCn Name="arrow-right" Size="12" Class="size-3 mx-auto" />
+                            </span>
+                            <span class="flex-1">
+                                @if (!string.IsNullOrEmpty(fm.TargetField))
+                                {
+                                    <span class="font-mono text-xs">@fm.TargetField</span>
+                                }
+                                else
+                                {
+                                    <span class="text-xs text-muted-foreground italic">@(fm.Status == "skipped" ? "Skipped" : "Not mapped")</span>
+                                }
+                            </span>
+                            <span class="w-16 text-right">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] h-4 px-1.5 font-mono">@fm.DataType</BadgeCn>
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Step 4: Review *@
+        @if (_currentStep == 4)
+        {
+            <div class="px-4 py-4">
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium">Review Transfer</h3>
+                    <p class="text-xs text-muted-foreground">Confirm the details before starting the migration</p>
+                </div>
+                <div class="space-y-3">
+                    <div class="rounded-md bg-muted/50 p-3">
+                        <span class="text-[10px] font-medium text-muted-foreground">SOURCE</span>
+                        <p class="text-sm font-medium mt-0.5">@SourceName</p>
+                    </div>
+                    <div class="rounded-md bg-muted/50 p-3">
+                        <span class="text-[10px] font-medium text-muted-foreground">DATA TYPES</span>
+                        <div class="mt-1 flex flex-wrap gap-1.5">
+                            @foreach (var dt in SelectedDataTypes)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] h-5">@dt.Label</BadgeCn>
+                            }
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="rounded-md bg-muted/50 p-3">
+                            <span class="text-[10px] font-medium text-muted-foreground">RECORDS</span>
+                            <p class="text-sm font-medium tabular-nums mt-0.5">@TotalRecords.ToString("N0")</p>
+                        </div>
+                        <div class="rounded-md bg-muted/50 p-3">
+                            <span class="text-[10px] font-medium text-muted-foreground">FIELDS MAPPED</span>
+                            <p class="text-sm font-medium tabular-nums mt-0.5">@MappedFields / @_fieldMappings.Length</p>
+                        </div>
+                        <div class="rounded-md bg-muted/50 p-3">
+                            <span class="text-[10px] font-medium text-muted-foreground">EST. TIME</span>
+                            <p class="text-sm font-medium mt-0.5">~4 min</p>
+                        </div>
+                    </div>
+                    @if (UnmatchedFields > 0)
+                    {
+                        <div class="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                            <span class="size-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0"></span>
+                            <p class="text-xs text-muted-foreground">
+                                @UnmatchedFields field@(UnmatchedFields > 1 ? "s" : "") could not be automatically mapped and will be skipped. You can go back to map them manually.
+                            </p>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Step 5: Transfer *@
+        @if (_currentStep == 5)
+        {
+            <div class="px-4 py-4">
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium">@(_transferStatus == "complete" ? "Transfer Complete" : "Transferring Data")</h3>
+                    <p class="text-xs text-muted-foreground">
+                        @(_transferStatus == "complete"
+                            ? $"Successfully migrated {TotalRecords.ToString("N0")} records from {SourceName}"
+                            : $"Migrating {TotalRecords.ToString("N0")} records from {SourceName}")
+                    </p>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-muted-foreground">@(_transferStatus == "running" ? "Processing..." : "Done")</span>
+                            <span class="text-xs tabular-nums text-muted-foreground">@_transferProgress%</span>
+                        </div>
+                        <ProgressCn Value="@_transferProgress" Class="h-1.5" />
+                    </div>
+
+                    @if (_transferStatus == "running")
+                    {
+                        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                            <LucideIconCn Name="loader-2" Size="12" Class="size-3 animate-spin" />
+                            <span>Writing contact records to database...</span>
+                        </div>
+                    }
+
+                    @if (_transferStatus == "complete")
+                    {
+                        <div class="space-y-2">
+                            @foreach (var dt in SelectedDataTypes)
+                            {
+                                <div class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                                    <div class="flex items-center gap-2">
+                                        <LucideIconCn Name="check" Size="14" Class="size-3.5 text-emerald-500" />
+                                        <span class="text-xs font-medium">@dt.Label</span>
+                                    </div>
+                                    <span class="text-xs tabular-nums text-muted-foreground">@dt.RecordCount.ToString("N0") records</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Navigation *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" OnClick="HandleBack"
+                      Disabled="@(_currentStep == 1 || _transferStatus == "running")" Class="gap-1.5">
+                <LucideIconCn Name="arrow-left" Size="14" Class="size-3.5" />
+                Back
+            </ButtonCn>
+            @if (_currentStep < 5)
+            {
+                <ButtonCn Size="ButtonSize.Sm" OnClick="HandleNext" Disabled="@(!CanAdvance)" Class="gap-1.5">
+                    @(_currentStep == 4 ? "Start Transfer" : "Next")
+                    <LucideIconCn Name="arrow-right" Size="14" Class="size-3.5" />
+                </ButtonCn>
+            }
+            @if (_currentStep == 5 && _transferStatus == "complete")
+            {
+                <ButtonCn Size="ButtonSize.Sm" Class="gap-1.5">
+                    <LucideIconCn Name="check" Size="14" Class="size-3.5" />
+                    Done
+                </ButtonCn>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record MigrationSource(string Id, string Name, string Icon, string Description, string[] SupportedTypes);
+    private record FieldMapping(string SourceField, string TargetField, string DataType, string Status);
+    private record Step(int Id, string Label);
+
+    private class DataType
+    {
+        public string Id { get; init; } = "";
+        public string Label { get; init; } = "";
+        public string Description { get; init; } = "";
+        public string Size { get; init; } = "";
+        public int RecordCount { get; init; }
+        public bool Selected { get; set; }
+    }
+
+    private int _currentStep = 1;
+    private string? _selectedSource;
+    private string _transferStatus = "idle";
+    private int _transferProgress = 0;
+    private System.Threading.Timer? _timer;
+
+    private readonly DataType[] _dataTypes =
+    [
+        new() { Id = "contacts", Label = "Contacts & People", Description = "Names, emails, phone numbers, company associations", Size = "24.8 MB", RecordCount = 12847, Selected = true },
+        new() { Id = "deals", Label = "Deals & Opportunities", Description = "Pipeline stages, values, close dates, owners", Size = "8.2 MB", RecordCount = 3241, Selected = true },
+        new() { Id = "activities", Label = "Activity History", Description = "Calls, meetings, notes, task completions", Size = "156.4 MB", RecordCount = 89432, Selected = false },
+        new() { Id = "emails", Label = "Email Threads", Description = "Sent and received emails linked to contacts", Size = "412.1 MB", RecordCount = 54210, Selected = false },
+        new() { Id = "files", Label = "Attachments & Documents", Description = "PDFs, images, contracts, proposals", Size = "1.8 GB", RecordCount = 2104, Selected = false },
+    ];
+
+    private static readonly MigrationSource[] _sources =
+    [
+        new("salesforce", "Salesforce", "database", "CRM contacts, deals, and activity", ["contacts", "deals", "activities", "emails", "files"]),
+        new("hubspot", "HubSpot", "mail", "Marketing contacts, campaigns, and forms", ["contacts", "campaigns", "forms", "emails", "activities"]),
+        new("csv-import", "CSV / Spreadsheet", "spreadsheet", "Import from exported CSV or Excel files", ["contacts", "deals", "activities"]),
+    ];
+
+    private static readonly FieldMapping[] _fieldMappings =
+    [
+        new("FirstName", "first_name", "string", "mapped"),
+        new("LastName", "last_name", "string", "mapped"),
+        new("Email", "email", "string", "mapped"),
+        new("Phone", "phone_number", "string", "mapped"),
+        new("Company", "organization.name", "string", "mapped"),
+        new("LeadSource", "source_channel", "enum", "mapped"),
+        new("AnnualRevenue", "annual_revenue", "number", "mapped"),
+        new("CustomField__c", "", "string", "unmatched"),
+        new("InternalNotes__c", "", "text", "skipped"),
+    ];
+
+    private static readonly Step[] _steps =
+    [
+        new(1, "Source"),
+        new(2, "Data"),
+        new(3, "Map Fields"),
+        new(4, "Review"),
+        new(5, "Transfer"),
+    ];
+
+    private DataType[] SelectedDataTypes => _dataTypes.Where(d => d.Selected).ToArray();
+    private int SelectedCount => SelectedDataTypes.Length;
+    private int TotalRecords => SelectedDataTypes.Sum(d => d.RecordCount);
+    private int MappedFields => _fieldMappings.Count(f => f.Status == "mapped");
+    private int UnmatchedFields => _fieldMappings.Count(f => f.Status == "unmatched");
+    private int SkippedFields => _fieldMappings.Count(f => f.Status == "skipped");
+    private string SourceName => _sources.FirstOrDefault(s => s.Id == _selectedSource)?.Name ?? "Unknown";
+
+    private bool CanAdvance =>
+        (_currentStep == 1 && _selectedSource != null) ||
+        (_currentStep == 2 && SelectedCount > 0) ||
+        _currentStep == 3 ||
+        _currentStep == 4;
+
+    private void ToggleDataType(string id)
+    {
+        var dt = _dataTypes.FirstOrDefault(d => d.Id == id);
+        if (dt != null) dt.Selected = !dt.Selected;
+    }
+
+    private void HandleNext()
+    {
+        if (_currentStep == 4)
+        {
+            _currentStep = 5;
+            HandleTransfer();
+        }
+        else if (_currentStep < 5)
+        {
+            _currentStep++;
+        }
+    }
+
+    private void HandleBack()
+    {
+        if (_currentStep > 1 && _transferStatus != "running")
+        {
+            _currentStep--;
+        }
+    }
+
+    private void HandleTransfer()
+    {
+        _transferStatus = "running";
+        _transferProgress = 0;
+        _timer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                if (_transferProgress >= 100)
+                {
+                    _timer?.Dispose();
+                    _transferStatus = "complete";
+                    _transferProgress = 100;
+                }
+                else
+                {
+                    _transferProgress += 5;
+                }
+                StateHasChanged();
+            });
+        }, null, 300, 300);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

@@ -1,0 +1,239 @@
+@* ============================================================
+   Block: chat-message-search
+   Title: ChatMessageSearch
+   Description: React chat block with message search and highlighting for Next.js featuring a search input in the header, real-time message filtering, yellow text highlighting, and match count display using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-message-search.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            @if (_isSearching)
+            {
+                <LucideIconCn Name="search" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <InputCn
+                    @bind-Value="_searchQuery"
+                    @bind-Value:event="oninput"
+                    Placeholder="Search messages..."
+                    Class="h-7 flex-1 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0" />
+                @if (_totalMatches > 0)
+                {
+                    <span class="shrink-0 text-muted-foreground text-xs tabular-nums">@(_activeIndex + 1) of @_totalMatches</span>
+                }
+                @if (_searchQuery.Trim().Length > 0 && _totalMatches == 0)
+                {
+                    <span class="shrink-0 text-muted-foreground text-xs">No results</span>
+                }
+                <div class="flex items-center gap-0.5">
+                    <ButtonCn
+                        Variant="ButtonVariant.Ghost"
+                        Size="ButtonSize.Icon"
+                        Class="size-6"
+                        Disabled="@(_totalMatches == 0)"
+                        @onclick="GoPrev">
+                        <LucideIconCn Name="chevron-up" Size="14" Class="size-3.5" />
+                    </ButtonCn>
+                    <ButtonCn
+                        Variant="ButtonVariant.Ghost"
+                        Size="ButtonSize.Icon"
+                        Class="size-6"
+                        Disabled="@(_totalMatches == 0)"
+                        @onclick="GoNext">
+                        <LucideIconCn Name="chevron-down" Size="14" Class="size-3.5" />
+                    </ButtonCn>
+                </div>
+                <ButtonCn
+                    Variant="ButtonVariant.Ghost"
+                    Size="ButtonSize.Icon"
+                    Class="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+                    @onclick="CloseSearch">
+                    <LucideIconCn Name="x" Size="16" Class="size-4" />
+                </ButtonCn>
+            }
+            else
+            {
+                <span class="font-medium text-sm">#engineering-bugs</span>
+                <span class="text-muted-foreground text-xs">3 members</span>
+                <ButtonCn
+                    Variant="ButtonVariant.Ghost"
+                    Size="ButtonSize.Icon"
+                    Class="ml-auto size-7 text-muted-foreground hover:text-foreground"
+                    @onclick="OpenSearch">
+                    <LucideIconCn Name="search" Size="16" Class="size-4" />
+                </ButtonCn>
+            }
+        </div>
+
+        @* Messages *@
+        <div class="flex flex-1 flex-col overflow-y-auto py-2">
+            @if (_allMessages.Length == 0)
+            {
+                <div class="flex flex-1 flex-col items-center justify-center gap-2 p-8">
+                    <LucideIconCn Name="search" Size="32" Class="size-8 text-muted-foreground/30" />
+                    <p class="text-muted-foreground text-sm">No messages yet</p>
+                </div>
+            }
+            else
+            {
+                <div class="flex flex-1 flex-col justify-end">
+                    @for (int idx = 0; idx < _allMessages.Length; idx++)
+                    {
+                        var msg = _allMessages[idx];
+                        var prevMsg = idx > 0 ? _allMessages[idx - 1] : null;
+                        var isConsecutive = prevMsg?.Sender == msg.Sender;
+                        var isMatched = _matchedIds.Contains(msg.Id);
+                        var isActiveMatch = isMatched && _matchedIds.Count > 0 && _matchedIds[_activeIndex] == msg.Id;
+                        <div class="@Cn.Merge("flex gap-2 px-4 transition-colors hover:bg-accent", isConsecutive ? "pt-0.5" : "pt-3", isActiveMatch ? "bg-yellow-200/50 dark:bg-yellow-500/20" : "", (isMatched && !isActiveMatch) ? "bg-yellow-200/30 dark:bg-yellow-500/10" : "")">
+                            @if (!isConsecutive)
+                            {
+                                <AvatarCn Class="mt-0.5 size-8 shrink-0">
+                                    <AvatarFallbackCn Class="text-[10px]">@msg.Initials</AvatarFallbackCn>
+                                </AvatarCn>
+                            }
+                            else
+                            {
+                                <div class="size-8 shrink-0"></div>
+                            }
+                            <div class="min-w-0 flex-1">
+                                @if (!isConsecutive)
+                                {
+                                    <div class="flex items-baseline gap-2">
+                                        <span class="font-medium text-sm">@msg.Sender</span>
+                                        <span class="text-muted-foreground text-xs">@msg.Time</span>
+                                    </div>
+                                }
+                                <p class="text-sm leading-relaxed">
+                                    @foreach (var seg in GetHighlightSegments(msg.Content, _searchQuery))
+                                    {
+                                        @if (seg.IsMatch)
+                                        {
+                                            <mark class="@Cn.Merge("rounded-sm px-0.5", isActiveMatch ? "bg-yellow-200/50 dark:bg-yellow-500/30" : "bg-yellow-200/30 dark:bg-yellow-500/15")">@seg.Text</mark>
+                                        }
+                                        else
+                                        {
+                                            @seg.Text
+                                        }
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                    }
+                    <div class="h-2"></div>
+                </div>
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="flex items-center gap-2">
+                <div class="flex flex-1 items-center rounded-md border bg-muted/50">
+                    <InputCn
+                        @bind-Value="_input"
+                        @bind-Value:event="oninput"
+                        Placeholder="@("Message #engineering-bugs...")"
+                        Class="h-9 flex-1 border-0 bg-transparent text-sm shadow-none focus-visible:ring-0" />
+                    <ButtonCn
+                        Type="submit"
+                        Size="ButtonSize.Icon"
+                        Variant="ButtonVariant.Ghost"
+                        Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                        Class="mr-1 size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Sender, string Initials, string Content, string Time, bool IsMe);
+
+    private record TextSegment(string Text, bool IsMatch);
+
+    private static readonly ChatMessage[] _allMessages =
+    [
+        new("1", "Lena Kowalski", "LK", "Has anyone looked into the memory leak in the dashboard service? Production metrics show a steady climb.", "11:02 AM", false),
+        new("2", "You", "ME", "I noticed that too. The heap snapshot shows a lot of unreleased event listeners on the WebSocket connection.", "11:04 AM", true),
+        new("3", "Lena Kowalski", "LK", "Makes sense. We added the real-time dashboard updates last sprint. The cleanup function might be missing in the useEffect.", "11:05 AM", false),
+        new("4", "Marcus Chen", "MC", "I can confirm — I checked the WebSocket hook and there's no return cleanup. Each re-render opens a new connection without closing the old one.", "11:08 AM", false),
+        new("5", "You", "ME", "That explains the connection count we're seeing. Node process has over 2,000 open WebSocket connections per pod.", "11:10 AM", true),
+        new("6", "Marcus Chen", "MC", "I'll fix the hook now. Should be straightforward — just need to return ws.close() from the effect and add the dependency array.", "11:12 AM", false),
+        new("7", "Lena Kowalski", "LK", "Can you also add connection pooling? We should reuse connections across components instead of creating new ones for each dashboard widget.", "11:14 AM", false),
+        new("8", "Marcus Chen", "MC", "Good idea. I'll create a WebSocket provider at the app level so all dashboard components share a single connection.", "11:16 AM", false),
+        new("9", "You", "ME", "That's the right approach. Make sure to handle reconnection logic in the provider too — exponential backoff with jitter.", "11:18 AM", true),
+        new("10", "Lena Kowalski", "LK", "Once the fix is deployed, I'll monitor the memory metrics for 24 hours to confirm the leak is resolved. The dashboard should stabilize around 200MB per pod.", "11:20 AM", false),
+        new("11", "Marcus Chen", "MC", "PR is up: #1847. Added the cleanup, connection pooling provider, and reconnection with backoff. Ready for review.", "11:45 AM", false),
+        new("12", "You", "ME", "Reviewing now. Looks clean. One suggestion — add a max reconnection attempt limit so it doesn't retry forever if the server is down.", "11:50 AM", true),
+    ];
+
+    private string _searchQuery = "";
+    private bool _isSearching = false;
+    private int _activeIndex = 0;
+    private string _input = "";
+
+    private List<string> _matchedIds =>
+        string.IsNullOrWhiteSpace(_searchQuery)
+            ? []
+            : _allMessages
+                .Where(m => m.Content.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+                .Select(m => m.Id)
+                .ToList();
+
+    private int _totalMatches => _matchedIds.Count;
+
+    private void GoNext()
+    {
+        if (_totalMatches == 0) return;
+        _activeIndex = (_activeIndex + 1) % _totalMatches;
+    }
+
+    private void GoPrev()
+    {
+        if (_totalMatches == 0) return;
+        _activeIndex = (_activeIndex - 1 + _totalMatches) % _totalMatches;
+    }
+
+    private void OpenSearch()
+    {
+        _isSearching = true;
+        _activeIndex = 0;
+    }
+
+    private void CloseSearch()
+    {
+        _isSearching = false;
+        _searchQuery = "";
+        _activeIndex = 0;
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+
+    private static List<TextSegment> GetHighlightSegments(string text, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return [new TextSegment(text, false)];
+
+        var segments = new List<TextSegment>();
+        int pos = 0;
+        while (pos < text.Length)
+        {
+            int idx = text.IndexOf(query, pos, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+            {
+                segments.Add(new TextSegment(text[pos..], false));
+                break;
+            }
+            if (idx > pos)
+                segments.Add(new TextSegment(text[pos..idx], false));
+            segments.Add(new TextSegment(text[idx..(idx + query.Length)], true));
+            pos = idx + query.Length;
+        }
+        return segments;
+    }
+}

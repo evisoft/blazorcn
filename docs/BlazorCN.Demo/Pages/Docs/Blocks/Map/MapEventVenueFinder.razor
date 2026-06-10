@@ -1,0 +1,283 @@
+@* ============================================================
+   Block: map-event-venue-finder
+   Title: MapEventVenueFinder
+   Description: React event venue discovery map block for Next.js with capacity badges, venue type filters, availability indicators, and booking detail popups using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-event-venue-finder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="building" Size="16" Class="size-4 text-muted-foreground" />
+                    <span class="text-sm font-medium">Event venues</span>
+                    <span class="text-xs text-muted-foreground">@_filteredVenues.Length venues</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="calendar" Size="12" Class="size-3 text-muted-foreground" />
+                    <span class="text-xs text-muted-foreground">Sat, Apr 12, 2026</span>
+                </div>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+                @foreach (var t in _venueTypes)
+                {
+                    var venueType = t;
+                    var isActive = Array.IndexOf(_typeFilters, venueType) >= 0;
+                    <ButtonCn
+                        Variant="@(isActive ? ButtonVariant.Default : ButtonVariant.Outline)"
+                        Size="ButtonSize.Sm"
+                        Class="h-7 gap-1.5 text-xs"
+                        OnClick="@(() => ToggleType(venueType))"
+                    >
+                        <span class="@($"size-2 rounded-full {GetTypeColor(venueType)}")"></span>
+                        @GetTypeLabel(venueType)
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-60 shrink-0 divide-y border-r">
+                @foreach (var v in _filteredVenues)
+                {
+                    var venue = v;
+                    var isSelected = _selectedVenue == venue.Id;
+                    <button
+                        type="button"
+                        @onclick="@(() => HandleVenueClick(venue))"
+                        class="@Cn.Merge("flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "")"
+                    >
+                        <div class="@($"flex size-8 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold text-white tabular-nums {GetTypeColor(venue.Type)}")">
+                            @venue.Capacity
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5">
+                                <span class="truncate text-sm font-medium">@venue.Name</span>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>@venue.Neighborhood</span>
+                                <span class="text-muted-foreground/50">|</span>
+                                <span class="tabular-nums">$@venue.PricePerHour/hr</span>
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-end gap-1">
+                            <span class="@($"size-1.5 rounded-full {GetAvailabilityDot(venue.Availability)}")"></span>
+                            <LucideIconCn Name="chevron-right" Size="14" Class="size-3.5 text-muted-foreground/40" />
+                        </div>
+                    </button>
+                }
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                    @* Venue markers *@
+                    @foreach (var v in _filteredVenues)
+                    {
+                        var venue = v;
+                        var pos = GetMarkerPosition(venue.Longitude, venue.Latitude);
+                        var isSelected = _selectedVenue == venue.Id;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%")"
+                        >
+                            <button
+                                type="button"
+                                class="@Cn.Merge($"flex items-center gap-1 rounded-full border-2 border-white px-2 py-0.5 text-[10px] font-semibold text-white shadow-md tabular-nums transition-transform hover:scale-110 {GetTypeColor(venue.Type)}", isSelected ? "ring-2 ring-offset-1 ring-foreground" : "")"
+                                @onclick="@(() => HandleVenueClick(venue))"
+                                title="@venue.Name"
+                            >
+                                <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                @venue.Capacity
+                            </button>
+                            @* Tooltip / popup *@
+                            @if (isSelected && _popupVenue?.Id == venue.Id)
+                            {
+                                <div class="absolute left-1/2 z-10 mt-1.5 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg text-popover-foreground">
+                                    <div class="mb-1 flex items-center justify-between">
+                                        <span class="text-sm font-medium">@venue.Name</span>
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-2">
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">
+                                            @GetTypeLabel(venue.Type)
+                                        </BadgeCn>
+                                        <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <LucideIconCn Name="map-pin" Size="12" Class="size-3" />
+                                            @venue.Neighborhood
+                                        </span>
+                                    </div>
+                                    <div class="mb-2 space-y-1">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Capacity</span>
+                                            <span class="font-medium tabular-nums">@venue.Capacity guests</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Rating</span>
+                                            <span class="font-medium tabular-nums">@venue.Rating/5.0</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Status</span>
+                                            <span class="flex items-center gap-1 font-medium">
+                                                <span class="@($"size-1.5 rounded-full {GetAvailabilityDot(venue.Availability)}")"></span>
+                                                @GetAvailabilityLabel(venue.Availability)
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="mb-2 flex flex-wrap gap-1">
+                                        @foreach (var feat in venue.Features)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">@feat</BadgeCn>
+                                        }
+                                    </div>
+                                    <div class="flex items-center justify-between border-t pt-2">
+                                        <span class="text-sm font-semibold tabular-nums">
+                                            $@venue.PricePerHour
+                                            <span class="text-xs font-normal text-muted-foreground">/hour</span>
+                                        </span>
+                                        <ButtonCn
+                                            Size="ButtonSize.Sm"
+                                            Class="h-7 text-xs"
+                                            Disabled="@(venue.Availability == "booked")"
+                                        >
+                                            @(venue.Availability == "booked" ? "Unavailable" : "Book venue")
+                                        </ButtonCn>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="pointer-events-none absolute bottom-2 left-2 z-10 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                    Map view — New York City
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @(_venues.Count(v => v.Availability == "available")) available
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @(_venues.Count(v => v.Availability == "limited")) limited
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @(_venues.Count(v => v.Availability == "booked")) booked
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">New York City metro area</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Venue(
+        string Id,
+        string Name,
+        string Type,
+        double Longitude,
+        double Latitude,
+        int Capacity,
+        int PricePerHour,
+        double Rating,
+        string Availability,
+        string Neighborhood,
+        string[] Features
+    );
+
+    private static readonly string[] _venueTypes = ["conference", "rooftop", "gallery", "theater", "loft"];
+
+    private static string GetTypeColor(string type) => type switch
+    {
+        "conference" => "bg-blue-500",
+        "rooftop"    => "bg-purple-500",
+        "gallery"    => "bg-emerald-500",
+        "theater"    => "bg-amber-500",
+        "loft"       => "bg-rose-500",
+        _            => "bg-muted",
+    };
+
+    private static string GetTypeLabel(string type) => type switch
+    {
+        "conference" => "Conference",
+        "rooftop"    => "Rooftop",
+        "gallery"    => "Gallery",
+        "theater"    => "Theater",
+        "loft"       => "Loft",
+        _            => type,
+    };
+
+    private static string GetAvailabilityDot(string availability) => availability switch
+    {
+        "available" => "bg-emerald-500",
+        "limited"   => "bg-amber-500",
+        "booked"    => "bg-red-500",
+        _           => "bg-muted",
+    };
+
+    private static string GetAvailabilityLabel(string availability) => availability switch
+    {
+        "available" => "Available",
+        "limited"   => "Limited",
+        "booked"    => "Booked",
+        _           => availability,
+    };
+
+    private static readonly Venue[] _venues =
+    [
+        new("v1", "Skyline Terrace",      "rooftop",    -73.9855, 40.7484, 200, 450, 4.8, "available", "Midtown",         ["Outdoor", "Catering", "AV system", "Bar"]),
+        new("v2", "The Grand Hall",       "conference", -73.9712, 40.7527, 500, 800, 4.6, "limited",   "Midtown East",    ["Projector", "Stage", "WiFi", "Catering"]),
+        new("v3", "Whitespace Gallery",   "gallery",    -74.0052, 40.7425, 120, 350, 4.9, "available", "Chelsea",         ["Natural light", "White walls", "Loading dock"]),
+        new("v4", "Mercury Lounge",       "theater",    -73.9902, 40.7224, 250, 600, 4.5, "booked",    "Lower East Side", ["Stage", "Lighting rig", "Sound system", "Green room"]),
+        new("v5", "Brooklyn Loft Studio", "loft",       -73.9631, 40.7112,  80, 200, 4.7, "available", "Williamsburg",    ["Exposed brick", "Kitchen", "WiFi", "Rooftop access"]),
+        new("v6", "The Pavilion",         "conference", -73.9781, 40.7614, 350, 650, 4.4, "limited",   "Columbus Circle", ["Breakout rooms", "Projector", "WiFi", "Catering"]),
+        new("v7", "Soho Art Space",       "gallery",    -74.0005, 40.7238, 100, 300, 4.6, "available", "SoHo",            ["Skylight", "White walls", "Street level"]),
+        new("v8", "Hudson Rooftop",       "rooftop",    -74.0028, 40.7568, 150, 500, 4.3, "available", "Hudson Yards",    ["Outdoor", "Bar", "Heaters", "City views"]),
+    ];
+
+    private string[] _typeFilters = [];
+    private string?  _selectedVenue = null;
+    private Venue?   _popupVenue    = null;
+
+    private Venue[] _filteredVenues => _typeFilters.Length == 0
+        ? _venues
+        : Array.FindAll(_venues, v => Array.IndexOf(_typeFilters, v.Type) >= 0);
+
+    private void ToggleType(string type)
+    {
+        if (Array.IndexOf(_typeFilters, type) >= 0)
+            _typeFilters = Array.FindAll(_typeFilters, t => t != type);
+        else
+            _typeFilters = [.. _typeFilters, type];
+
+        _selectedVenue = null;
+        _popupVenue    = null;
+    }
+
+    private void HandleVenueClick(Venue venue)
+    {
+        _popupVenue    = _popupVenue?.Id == venue.Id ? null : venue;
+        _selectedVenue = venue.Id;
+    }
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-74.02, -73.92], lat [40.70, 40.78]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.02, lonMax = -73.92;
+        const double latMin = 40.70,  latMax = 40.78;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 90);
+        y = Math.Clamp(y, 5, 90);
+        return (x, y);
+    }
+}

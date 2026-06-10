@@ -1,0 +1,209 @@
+@* ============================================================
+   Block: comments-approval-workflow
+   Title: CommentsApprovalWorkflow
+   Description: React comment block for Next.js with multi-step approval process, status tracking, and reviewer assignment built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-approval-workflow.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Comment pending approval</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Stage @(_comment.CurrentStage + 1) of @_comment.Stages.Length
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-[10px] font-normal">
+                    <LucideIconCn Name="clock" Size="10" Class="size-2.5" />
+                    @_currentStageData.Name
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Comment body *@
+        <div class="border-b p-4">
+            <div class="flex items-baseline gap-2">
+                <span class="text-sm font-medium">@_comment.Author</span>
+                <span class="text-xs text-muted-foreground">@_comment.Timestamp</span>
+            </div>
+            <p class="mt-2 text-sm leading-relaxed">@_comment.Content</p>
+        </div>
+
+        @* Workflow label *@
+        <div class="border-b px-4 py-3">
+            <span class="text-xs font-medium text-muted-foreground">Approval workflow</span>
+        </div>
+
+        @* Stages *@
+        <div>
+            @for (var i = 0; i < _comment.Stages.Length; i++)
+            {
+                var stage = _comment.Stages[i];
+                var isLast = i == _comment.Stages.Length - 1;
+                var isCurrent = i == _comment.CurrentStage;
+                var initials = GetInitials(stage.Reviewer);
+                <div class="@(isLast ? "p-4" : "border-b p-4")">
+                    <div class="flex items-start gap-3">
+                        <AvatarCn Class="size-8 shrink-0">
+                            <AvatarImageCn Src="@stage.Avatar" Alt="@stage.Reviewer" />
+                            <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@stage.Name</span>
+                                @if (isCurrent)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">
+                                        Current
+                                    </BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-1 flex items-center gap-2">
+                                <span class="@($"size-1.5 shrink-0 rounded-full {StatusDot(stage.Status)}")"></span>
+                                <span class="@($"text-xs {StatusColor(stage.Status)}")">
+                                    @Capitalize(stage.Status)
+                                </span>
+                                <span class="text-xs text-muted-foreground">·</span>
+                                <span class="text-xs text-muted-foreground">@stage.Reviewer</span>
+                                @if (!string.IsNullOrEmpty(stage.Timestamp))
+                                {
+                                    <span class="text-xs text-muted-foreground">·</span>
+                                    <span class="text-xs text-muted-foreground">@stage.Timestamp</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrEmpty(stage.Notes))
+                            {
+                                <div class="mt-2 rounded-md bg-muted/50 p-2">
+                                    <p class="text-xs leading-relaxed text-muted-foreground">@stage.Notes</p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Approval actions *@
+        @if (_canApprove)
+        {
+            <div class="border-t p-4">
+                @if (!_showNotesForm)
+                {
+                    <div class="flex gap-2">
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 flex-1 gap-1 text-xs" @onclick="@(() => _showNotesForm = true)">
+                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                            Approve
+                        </ButtonCn>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 flex-1 gap-1 text-xs" @onclick="@(() => _showNotesForm = true)">
+                            <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            Reject
+                        </ButtonCn>
+                    </div>
+                }
+                else
+                {
+                    <div>
+                        <TextareaCn @bind-Value="_approvalNotes" Placeholder="Add notes (optional)..." Class="min-h-[60px] text-xs" />
+                        <div class="mt-2 flex gap-2">
+                            <ButtonCn Size="ButtonSize.Sm" Class="h-7 flex-1 gap-1 text-xs" @onclick="HandleApprove">
+                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                Approve
+                            </ButtonCn>
+                            <ButtonCn Variant="ButtonVariant.Destructive" Size="ButtonSize.Sm" Class="h-7 flex-1 gap-1 text-xs" @onclick="HandleReject">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                Reject
+                            </ButtonCn>
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs" @onclick="HandleCancel">
+                                Cancel
+                            </ButtonCn>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private record ApprovalStage(
+        string Id,
+        string Name,
+        string Reviewer,
+        string Avatar,
+        string Status,
+        string Timestamp = "",
+        string Notes = ""
+    );
+
+    private record Comment(
+        string Id,
+        string Author,
+        string Content,
+        string Timestamp,
+        int CurrentStage,
+        ApprovalStage[] Stages
+    );
+
+    private static readonly Comment _comment = new(
+        Id: "1",
+        Author: "Sarah Chen",
+        Content: "We should migrate to the new API endpoints before the Q2 release. This will require coordination with the mobile and web teams to ensure compatibility.",
+        Timestamp: "1 hour ago",
+        CurrentStage: 1,
+        Stages:
+        [
+            new ApprovalStage("1", "Technical Review", "Alex Morgan", "", "approved", "45 min ago", "Approach looks solid, approved for next stage."),
+            new ApprovalStage("2", "Security Review", "Maya Patel", "", "pending"),
+            new ApprovalStage("3", "Executive Approval", "Chris Taylor", "", "pending"),
+        ]
+    );
+
+    private ApprovalStage _currentStageData => _comment.Stages[_comment.CurrentStage];
+    private bool _canApprove => _currentStageData.Status == "pending";
+
+    private string _approvalNotes = "";
+    private bool _showNotesForm = false;
+
+    private void HandleApprove()
+    {
+        _showNotesForm = false;
+        _approvalNotes = "";
+    }
+
+    private void HandleReject()
+    {
+        _showNotesForm = false;
+        _approvalNotes = "";
+    }
+
+    private void HandleCancel()
+    {
+        _showNotesForm = false;
+        _approvalNotes = "";
+    }
+
+    private static string GetInitials(string name) =>
+        string.Concat(name.Split(' ').Select(n => char.ToUpper(n[0])));
+
+    private static string Capitalize(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
+
+    private static string StatusColor(string status) => status switch
+    {
+        "approved" => "text-emerald-600 dark:text-emerald-400",
+        "rejected"  => "text-red-600 dark:text-red-400",
+        _           => "text-amber-600 dark:text-amber-400",
+    };
+
+    private static string StatusDot(string status) => status switch
+    {
+        "approved" => "bg-emerald-500",
+        "rejected"  => "bg-red-500",
+        _           => "bg-amber-500",
+    };
+}

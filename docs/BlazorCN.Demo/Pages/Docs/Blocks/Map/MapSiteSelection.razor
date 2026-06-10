@@ -1,0 +1,251 @@
+@* ============================================================
+   Block: map-site-selection
+   Title: MapSiteSelection
+   Description: React retail site selection tool map block for Next.js with candidate site markers, demographic scores, traffic indicators, and site scoring panel using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-site-selection.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="map-pin" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Site Selection</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-muted-foreground">@_sites.Length candidates</span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="@Cn.Merge("text-xs font-medium tabular-nums", ScoreTextColor(_avgScore))">
+                    @_avgScore avg score
+                </span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground">Top: @_topSite.Name</span>
+            </div>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[420px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                @* Site markers *@
+                @foreach (var s in _sites)
+                {
+                    var site = s;
+                    var isSelected = _selected == site.Id;
+                    var pos = GetMarkerPosition(site.Longitude, site.Latitude);
+                    var bgColor = ScoreColor(site.Score);
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%")"
+                    >
+                        <button
+                            type="button"
+                            class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background font-semibold text-white shadow-md transition-all", isSelected ? "size-9 text-xs" : "size-7 text-[10px]")"
+                            style="@($"background-color:{bgColor}")"
+                            @onclick="@(() => ToggleSite(site.Id))"
+                            title="@site.Name"
+                        >
+                            @site.Score
+                        </button>
+                        @* Marker tooltip *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 z-10 mt-1.5 w-52 -translate-x-1/2 rounded-md border bg-popover p-2.5 shadow-lg text-popover-foreground">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium">@site.Name</span>
+                                    <span class="text-muted-foreground">Grade @site.Grade</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="pointer-events-none select-none absolute bottom-2 left-2 z-10 rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                Map view — New York, NY
+            </div>
+        </div>
+
+        @* Site list *@
+        <div>
+            @foreach (var s in _sites)
+            {
+                var site = s;
+                var index = Array.IndexOf(_sites, site);
+                var gc = GetGradeColors(site.Grade);
+                var isExpanded = _selected == site.Id;
+                var isLast = index == _sites.Length - 1;
+                <div class="@(isLast && !isExpanded ? "" : "border-t")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSiteList(site.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                    >
+                        <div
+                            class="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                            style="@($"background-color:{ScoreColor(site.Score)}")"
+                        >
+                            @site.Score
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@site.Name</span>
+                            <p class="mt-0.5 truncate text-xs text-muted-foreground">@site.Address</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs text-muted-foreground tabular-nums">@site.Rent</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("h-5 px-1.5 text-[10px] font-medium", gc.Text)">
+                                Grade @site.Grade
+                            </BadgeCn>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="grid grid-cols-3 gap-3 px-4 pb-4 pl-14">
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Demographics</span>
+                                <div class="mt-1.5 space-y-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Population</span>
+                                        <span class="text-xs font-medium tabular-nums">@site.DemographicsPopulation.ToString("N0")</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Median income</span>
+                                        <span class="text-xs font-medium tabular-nums">$@((site.DemographicsMedianIncome / 1000).ToString("F0"))K</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Median age</span>
+                                        <span class="text-xs font-medium tabular-nums">@site.DemographicsAgeMedian</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Traffic</span>
+                                <div class="mt-1.5 space-y-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Foot traffic</span>
+                                        <span class="text-xs font-medium tabular-nums">@site.TrafficDailyFoot.ToString("N0")</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Vehicle traffic</span>
+                                        <span class="text-xs font-medium tabular-nums">@site.TrafficDailyVehicle.ToString("N0")</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Transit</span>
+                                        <span class="text-xs font-medium">@site.TrafficTransitAccess</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Competition</span>
+                                <div class="mt-1.5 space-y-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Nearby stores</span>
+                                        <span class="text-xs font-medium tabular-nums">@site.CompetitionNearby</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Scan radius</span>
+                                        <span class="text-xs font-medium">@site.CompetitionRadius</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-muted-foreground">Space</span>
+                                        <span class="text-xs font-medium tabular-nums">@site.Sqft sqft</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CandidateSite(
+        string Id,
+        string Name,
+        string Address,
+        double Longitude,
+        double Latitude,
+        int Score,
+        string Grade,
+        string Rent,
+        string Sqft,
+        int DemographicsPopulation,
+        int DemographicsMedianIncome,
+        int DemographicsAgeMedian,
+        int TrafficDailyFoot,
+        int TrafficDailyVehicle,
+        string TrafficTransitAccess,
+        int CompetitionNearby,
+        string CompetitionRadius
+    );
+
+    private record GradeColors(string Text, string Bg, string Dot);
+
+    private static readonly CandidateSite[] _sites =
+    [
+        new("s1", "Union Square West",   "47 Union Square W, New York",  -73.9912, 40.7359, 92, "A", "$185/sqft", "3,200", 48200, 98500,  34, 32400, 18600, "4 subway lines", 3, "0.5 mi"),
+        new("s2", "Williamsburg Bedford","189 Bedford Ave, Brooklyn",    -73.9572, 40.7142, 85, "A", "$142/sqft", "2,800", 35800, 76200,  29, 24100,  9800, "L train",         5, "0.5 mi"),
+        new("s3", "Chelsea Market Area", "85 10th Ave, New York",        -74.0069, 40.7425, 78, "B", "$210/sqft", "4,100", 29400, 112000, 36, 28700, 14200, "A/C/E lines",     8, "0.5 mi"),
+        new("s4", "Astoria Broadway",    "31-15 Broadway, Astoria",      -73.9165, 40.7627, 71, "B", "$95/sqft",  "2,400", 42100, 62800,  31, 18300, 12400, "N/W trains",      2, "0.5 mi"),
+        new("s5", "LIC Court Square",    "44-02 Court Square, LIC",      -73.9454, 40.7473, 64, "C", "$118/sqft", "3,600", 22800, 88400,  33, 14600, 16800, "7/E/M lines",     1, "0.5 mi"),
+        new("s6", "Park Slope 5th Ave",  "312 5th Ave, Brooklyn",        -73.9786, 40.6722, 58, "C", "$108/sqft", "1,900", 31200, 94100,  37, 12800,  7600, "R train",         6, "0.5 mi"),
+    ];
+
+    private string? _selected = "s1";
+
+    private int _avgScore => (int)Math.Round(_sites.Average(s => s.Score));
+    private CandidateSite _topSite => _sites.OrderByDescending(s => s.Score).First();
+
+    private void ToggleSite(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private void ToggleSiteList(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static string ScoreColor(int score)
+    {
+        if (score >= 80) return "#22c55e";
+        if (score >= 65) return "#3b82f6";
+        if (score >= 50) return "#eab308";
+        return "#ef4444";
+    }
+
+    private static string ScoreTextColor(int score)
+    {
+        if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
+        if (score >= 65) return "text-blue-600 dark:text-blue-400";
+        if (score >= 50) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    private static GradeColors GetGradeColors(string grade) => grade switch
+    {
+        "A" => new("text-emerald-600 dark:text-emerald-400", "bg-emerald-500/10", "bg-emerald-500"),
+        "B" => new("text-blue-600 dark:text-blue-400",       "bg-blue-500/10",    "bg-blue-500"),
+        "C" => new("text-amber-600 dark:text-amber-400",     "bg-amber-500/10",   "bg-amber-500"),
+        "D" => new("text-red-600 dark:text-red-400",         "bg-red-500/10",     "bg-red-500"),
+        _   => new("text-muted-foreground",                  "bg-muted",          "bg-muted"),
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-74.06, -73.90], lat [40.66, 40.78]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.06, lonMax = -73.90;
+        const double latMin = 40.66,  latMax = 40.78;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 90);
+        y = Math.Clamp(y, 5, 90);
+        return (x, y);
+    }
+}

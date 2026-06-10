@@ -1,0 +1,243 @@
+@* ============================================================
+   Block: comments-follow-thread
+   Title: CommentsFollowThread
+   Description: A thread subscription comment section for React and Next.js with follow/unfollow toggles, notification settings, and subscriber lists built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-follow-thread.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Thread Subscriptions</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Follow threads to get notifications
+            </p>
+        </div>
+
+        @* Thread list *@
+        <div>
+            @foreach (var thread in _threadStates)
+            {
+                var t = thread;
+                var isLast = t.Id == _threadStates[_threadStates.Length - 1].Id;
+                var visibleFollowers = t.Followers.Take(5).ToArray();
+                var remainingCount = t.Followers.Length - 5;
+
+                <div class="@(isLast ? "p-4" : "border-b p-4")">
+                    <div class="space-y-3">
+
+                        @* Title row *@
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-sm font-medium">@t.Title</h3>
+                                <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>@t.CommentCount comments</span>
+                                    <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                                    <div class="flex items-center gap-1">
+                                        <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                        <span>@t.Followers.Length followers</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <ButtonCn Variant="@(t.IsFollowing ? ButtonVariant.Outline : ButtonVariant.Default)" Size="ButtonSize.Sm" Class="h-7 shrink-0 gap-1.5 text-xs" OnClick="@(() => ToggleFollow(t.Id))">
+                                @if (t.IsFollowing)
+                                {
+                                    <LucideIconCn Name="eye-off" Size="12" Class="size-3" />
+                                    @("Unfollow")
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="eye" Size="12" Class="size-3" />
+                                    @("Follow")
+                                }
+                            </ButtonCn>
+                        </div>
+
+                        @* Follower avatars *@
+                        @if (t.Followers.Length > 0)
+                        {
+                            <div class="flex items-center gap-2">
+                                <div class="flex -space-x-2">
+                                    @foreach (var follower in visibleFollowers)
+                                    {
+                                        var f = follower;
+                                        var initials = GetInitials(f.Name);
+                                        <AvatarCn Class="size-6 border-2 border-background">
+                                            <AvatarImageCn Src="@f.Avatar" Alt="@f.Name" />
+                                            <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                                        </AvatarCn>
+                                    }
+                                </div>
+                                @if (remainingCount > 0)
+                                {
+                                    <span class="text-xs text-muted-foreground">+@remainingCount more</span>
+                                }
+                            </div>
+                        }
+
+                        @* Notification preferences *@
+                        @if (t.IsFollowing)
+                        {
+                            <div class="rounded-md bg-muted/30 p-3">
+                                <div class="mb-2 flex items-center gap-2">
+                                    <LucideIconCn Name="bell" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs font-medium text-muted-foreground">Notification preferences</span>
+                                </div>
+                                <div class="flex gap-1">
+                                    @foreach (var lvl in _notificationLevels)
+                                    {
+                                        var level = lvl;
+                                        var threadId = t.Id;
+                                        var isActive = t.NotificationLevel == level;
+                                        <button type="button"
+                                                class="@Cn.Merge("flex-1 rounded-sm px-2 py-1.5 text-xs font-medium transition-all", isActive ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")"
+                                                @onclick="@(() => SetNotificationLevel(threadId, level))">
+                                            @if (level == "all")
+                                            {
+                                                @("All comments")
+                                            }
+                                            else if (level == "mentions")
+                                            {
+                                                @("Mentions only")
+                                            }
+                                            else
+                                            {
+                                                <span class="flex items-center justify-center gap-1">
+                                                    <LucideIconCn Name="bell-off" Size="12" Class="size-3" />
+                                                    Muted
+                                                </span>
+                                            }
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t bg-muted/30 px-4 py-2.5">
+            <p class="text-xs text-muted-foreground">
+                Following @_threadStates.Count(t => t.IsFollowing) of @_threadStates.Length threads
+            </p>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Follower(string Id, string Name, string Avatar, string Level);
+
+    private sealed class ThreadState
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+        public int CommentCount { get; set; }
+        public Follower[] Followers { get; set; } = [];
+        public bool IsFollowing { get; set; }
+        public string NotificationLevel { get; set; } = "all";
+    }
+
+    private static readonly string[] _notificationLevels = ["all", "mentions", "muted"];
+
+    private ThreadState[] _threadStates =
+    [
+        new ThreadState
+        {
+            Id = "1",
+            Title = "Product Roadmap Q2 2026",
+            CommentCount = 24,
+            Followers =
+            [
+                new("1", "Sarah Chen", "", "all"),
+                new("2", "James Wilson", "", "all"),
+                new("3", "Maya Patel", "", "mentions"),
+                new("4", "Alex Morgan", "", "all"),
+                new("5", "Chris Taylor", "", "muted"),
+            ],
+            IsFollowing = true,
+            NotificationLevel = "all",
+        },
+        new ThreadState
+        {
+            Id = "2",
+            Title = "Design System Documentation",
+            CommentCount = 15,
+            Followers =
+            [
+                new("1", "Sarah Chen", "", "mentions"),
+                new("3", "Maya Patel", "", "all"),
+            ],
+            IsFollowing = false,
+            NotificationLevel = "all",
+        },
+        new ThreadState
+        {
+            Id = "3",
+            Title = "API Rate Limiting Strategy",
+            CommentCount = 8,
+            Followers =
+            [
+                new("2", "James Wilson", "", "all"),
+                new("4", "Alex Morgan", "", "all"),
+            ],
+            IsFollowing = true,
+            NotificationLevel = "mentions",
+        },
+    ];
+
+    private void ToggleFollow(string threadId)
+    {
+        _threadStates = _threadStates.Select(t =>
+        {
+            if (t.Id != threadId) return t;
+            var newFollowing = !t.IsFollowing;
+            var newFollowers = newFollowing
+                ? [.. t.Followers, new Follower("you", "You", "", "all")]
+                : t.Followers.Where(f => f.Id != "you").ToArray();
+            return new ThreadState
+            {
+                Id = t.Id,
+                Title = t.Title,
+                CommentCount = t.CommentCount,
+                Followers = newFollowers,
+                IsFollowing = newFollowing,
+                NotificationLevel = t.NotificationLevel,
+            };
+        }).ToArray();
+    }
+
+    private void SetNotificationLevel(string threadId, string level)
+    {
+        _threadStates = _threadStates.Select(t =>
+        {
+            if (t.Id != threadId) return t;
+            return new ThreadState
+            {
+                Id = t.Id,
+                Title = t.Title,
+                CommentCount = t.CommentCount,
+                Followers = t.Followers,
+                IsFollowing = t.IsFollowing,
+                NotificationLevel = level,
+            };
+        }).ToArray();
+    }
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ');
+        var initials = "";
+        foreach (var p in parts)
+        {
+            if (p.Length > 0) initials += char.ToUpper(p[0]);
+        }
+        return initials;
+    }
+}

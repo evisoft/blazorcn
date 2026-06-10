@@ -1,0 +1,224 @@
+@* ============================================================
+   Block: tables-database-queries
+   Title: TablesDatabaseQueries
+   Description: Slow query log table with execution times, query previews, row counts, and performance indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/tables/tables-database-queries.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h3 class="text-sm font-medium">Slow Query Log</h3>
+                <p class="text-xs text-muted-foreground">
+                    @_queries.Length slow queries detected &middot; Threshold: 500ms
+                </p>
+            </div>
+            <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="database" Size="14" Class="size-3.5" />
+                <span>production</span>
+            </div>
+        </div>
+        <TableCn>
+            <TableHeaderCn>
+                <TableRowCn Class="bg-muted/50">
+                    <TableHeadCn Class="w-8 text-xs font-medium text-muted-foreground" />
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">Query</TableHeadCn>
+                    <TableHeadCn Class="w-20 text-xs font-medium text-muted-foreground">
+                        <button type="button" class="flex items-center gap-1" @onclick="@(() => HandleSort(SortKey.ExecutionTime))">
+                            Time @SortIconMarkup(SortKey.ExecutionTime)
+                        </button>
+                    </TableHeadCn>
+                    <TableHeadCn Class="w-20 text-xs font-medium text-muted-foreground">
+                        <button type="button" class="flex items-center gap-1" @onclick="@(() => HandleSort(SortKey.RowsExamined))">
+                            Rows @SortIconMarkup(SortKey.RowsExamined)
+                        </button>
+                    </TableHeadCn>
+                    <TableHeadCn Class="w-16 text-xs font-medium text-muted-foreground">
+                        <button type="button" class="flex items-center gap-1" @onclick="@(() => HandleSort(SortKey.Calls))">
+                            Calls @SortIconMarkup(SortKey.Calls)
+                        </button>
+                    </TableHeadCn>
+                    <TableHeadCn Class="w-20 text-right text-xs font-medium text-muted-foreground">
+                        Last Seen
+                    </TableHeadCn>
+                </TableRowCn>
+            </TableHeaderCn>
+            <TableBodyCn>
+                @foreach (var q in Sorted())
+                {
+                    var qId = q.Id;
+                    var severity = GetSeverity(q.ExecutionTime);
+                    var dotClass = GetDotClass(severity);
+                    var textClass = GetTextClass(severity);
+                    var isExpanded = _expanded == qId;
+                    <TableRowCn Class="cursor-pointer hover:bg-muted/50" @onclick="@(() => ToggleExpand(qId))">
+                        <TableCellCn Class="w-8 px-2">
+                            <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div class="flex items-center gap-2">
+                                <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", dotClass)"></span>
+                                <span class="max-w-80 truncate font-mono text-xs">@q.Query</span>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <span class="@Cn.Merge("font-mono text-sm font-medium tabular-nums", textClass)">
+                                @FormatMs(q.ExecutionTime)
+                            </span>
+                        </TableCellCn>
+                        <TableCellCn Class="font-mono text-xs text-muted-foreground tabular-nums">
+                            @FormatRows(q.RowsExamined)
+                        </TableCellCn>
+                        <TableCellCn Class="font-mono text-xs tabular-nums">
+                            @q.Calls.ToString("N0")
+                        </TableCellCn>
+                        <TableCellCn Class="text-right text-xs text-muted-foreground">
+                            @q.LastSeen
+                        </TableCellCn>
+                    </TableRowCn>
+                    @if (isExpanded)
+                    {
+                        <TableRowCn>
+                            <TableCellCn ColSpan="6" Class="bg-muted/30 px-6 py-3">
+                                <div class="whitespace-pre rounded-md bg-zinc-950 p-3 font-mono text-xs text-zinc-300">@q.FullQuery</div>
+                                <div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                                    <span>Avg time: @FormatMs(q.AvgTime)</span>
+                                    <span>&middot;</span>
+                                    <span>Rows returned: @FormatRows(q.RowsReturned)</span>
+                                    <span>&middot;</span>
+                                    <span>Database: @q.Database</span>
+                                </div>
+                            </TableCellCn>
+                        </TableRowCn>
+                    }
+                }
+            </TableBodyCn>
+        </TableCn>
+    </div>
+</section>
+
+@code {
+    private enum SortKey { ExecutionTime, RowsExamined, Calls }
+    private enum Severity { Critical, Warning, Info }
+
+    private record SlowQuery(
+        string Id,
+        string Query,
+        string FullQuery,
+        string Database,
+        int ExecutionTime,
+        int RowsExamined,
+        int RowsReturned,
+        int Calls,
+        int AvgTime,
+        string LastSeen
+    );
+
+    private static readonly SlowQuery[] _queries =
+    [
+        new("1",
+            "SELECT * FROM users WHERE email LIKE '%@gmail.com'",
+            "SELECT u.*, p.name AS plan_name\nFROM users u\nLEFT JOIN plans p ON u.plan_id = p.id\nWHERE u.email LIKE '%@gmail.com'\nORDER BY u.created_at DESC\nLIMIT 100",
+            "production", 4523, 1240000, 8420, 342, 4200, "2 min ago"),
+        new("2",
+            "SELECT COUNT(*) FROM orders WHERE created_at > ...",
+            "SELECT COUNT(*) FROM orders\nWHERE created_at > '2026-01-01'\nAND status IN ('completed', 'refunded')\nGROUP BY DATE(created_at)",
+            "production", 2890, 890000, 84, 128, 2650, "5 min ago"),
+        new("3",
+            "UPDATE sessions SET last_active = NOW() WHERE ...",
+            "UPDATE sessions\nSET last_active = NOW()\nWHERE user_id = ?\nAND expired_at IS NULL",
+            "production", 1245, 450000, 1, 8942, 980, "30 sec ago"),
+        new("4",
+            "SELECT p.*, r.avg_rating FROM products p JOIN ...",
+            "SELECT p.*, r.avg_rating, r.review_count\nFROM products p\nJOIN (\n  SELECT product_id, AVG(rating) as avg_rating, COUNT(*) as review_count\n  FROM reviews\n  GROUP BY product_id\n) r ON p.id = r.product_id\nWHERE p.active = true\nORDER BY r.avg_rating DESC",
+            "production", 3210, 2100000, 1500, 67, 3100, "15 min ago"),
+        new("5",
+            "DELETE FROM audit_logs WHERE created_at < ...",
+            "DELETE FROM audit_logs\nWHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)\nLIMIT 10000",
+            "production", 890, 340000, 0, 24, 780, "1 hr ago"),
+        new("6",
+            "SELECT DISTINCT tags FROM posts WHERE ...",
+            "SELECT DISTINCT tags\nFROM posts\nWHERE published = true\nAND category_id IN (SELECT id FROM categories WHERE active = true)",
+            "analytics", 1567, 560000, 234, 456, 1400, "8 min ago"),
+    ];
+
+    private string? _expanded = null;
+    private SortKey _sortKey = SortKey.ExecutionTime;
+    private bool _sortDesc = true;
+
+    private void ToggleExpand(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private void HandleSort(SortKey key)
+    {
+        if (_sortKey == key)
+            _sortDesc = !_sortDesc;
+        else
+        {
+            _sortKey = key;
+            _sortDesc = true;
+        }
+    }
+
+    private IEnumerable<SlowQuery> Sorted()
+    {
+        IEnumerable<SlowQuery> ordered = _sortKey switch
+        {
+            SortKey.ExecutionTime => _sortDesc
+                ? _queries.OrderByDescending(q => q.ExecutionTime)
+                : _queries.OrderBy(q => q.ExecutionTime),
+            SortKey.RowsExamined => _sortDesc
+                ? _queries.OrderByDescending(q => q.RowsExamined)
+                : _queries.OrderBy(q => q.RowsExamined),
+            SortKey.Calls => _sortDesc
+                ? _queries.OrderByDescending(q => q.Calls)
+                : _queries.OrderBy(q => q.Calls),
+            _ => _queries,
+        };
+        return ordered;
+    }
+
+    private static Severity GetSeverity(int ms)
+    {
+        if (ms >= 3000) return Severity.Critical;
+        if (ms >= 1000) return Severity.Warning;
+        return Severity.Info;
+    }
+
+    private static string GetDotClass(Severity s) => s switch
+    {
+        Severity.Critical => "bg-red-500",
+        Severity.Warning  => "bg-amber-500",
+        _                 => "bg-blue-500",
+    };
+
+    private static string GetTextClass(Severity s) => s switch
+    {
+        Severity.Critical => "text-red-600",
+        Severity.Warning  => "text-amber-600",
+        _                 => "text-blue-600",
+    };
+
+    private static string FormatMs(int ms)
+    {
+        if (ms >= 1000) return $"{(ms / 1000.0):F1}s";
+        return $"{ms}ms";
+    }
+
+    private static string FormatRows(int n)
+    {
+        if (n >= 1000000) return $"{(n / 1000000.0):F1}M";
+        if (n >= 1000)    return $"{(n / 1000.0):F0}K";
+        return n.ToString();
+    }
+
+    private MarkupString SortIconMarkup(SortKey col)
+    {
+        if (_sortKey != col) return (MarkupString)"";
+        var icon = _sortDesc ? "chevron-down" : "chevron-up";
+        return (MarkupString)$"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"size-3 inline-block\" aria-hidden=\"true\"><polyline points=\"{(_sortDesc ? "6 9 12 15 18 9" : "18 15 12 9 6 15")}\"></polyline></svg>";
+    }
+}

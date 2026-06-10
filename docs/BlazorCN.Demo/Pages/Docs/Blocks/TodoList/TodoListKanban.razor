@@ -1,0 +1,159 @@
+@* ============================================================
+   Block: todo-list-kanban
+   Title: TodoListKanban
+   Description: A kanban-style todo list block for React and Next.js with three-column workflow, task cards, and click-to-move progression built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-kanban.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Board</span>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_tasks.Count @(_tasks.Count == 1 ? "task" : "tasks")
+            </span>
+        </div>
+
+        @* Kanban columns *@
+        <div class="grid grid-cols-1 md:grid-cols-3">
+            @for (int ci = 0; ci < _columns.Length; ci++)
+            {
+                var col = _columns[ci];
+                var colIndex = ci;
+                var isFirst = colIndex == 0;
+                var isLast = colIndex == _columns.Length - 1;
+                var columnTasks = _tasks.Where(t => t.Column == col.Id).ToList();
+                <div class="@(isLast ? "" : "border-b md:border-b-0 md:border-r")">
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b px-3 py-2.5">
+                        <span class="font-medium text-xs">@col.Title</span>
+                        <span class="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground tabular-nums">
+                            @columnTasks.Count
+                        </span>
+                    </div>
+
+                    @* Task cards *@
+                    <div class="flex flex-col gap-2 p-3" style="min-height: 12rem">
+                        @foreach (var task in columnTasks)
+                        {
+                            var taskItem = task;
+                            <div class="group flex items-center gap-2 rounded-md border bg-background px-3 py-2">
+                                @if (!isFirst)
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Ghost"
+                                              Size="ButtonSize.IconXs"
+                                              Class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                              @onclick="@(() => MoveTask(taskItem.Id, false))"
+                                              aria-label="@MoveToLabel(taskItem.Text, _columns[colIndex - 1].Title)">
+                                        <LucideIconCn Name="chevron-left" Size="12" Class="size-3 text-muted-foreground" />
+                                    </ButtonCn>
+                                }
+                                <span class="@Cn.Merge("min-w-0 flex-1 text-sm", col.Id == KanbanCol.Done ? "text-muted-foreground line-through" : "text-foreground")">
+                                    @taskItem.Text
+                                </span>
+                                @if (!isLast)
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Ghost"
+                                              Size="ButtonSize.IconXs"
+                                              Class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                              @onclick="@(() => MoveTask(taskItem.Id, true))"
+                                              aria-label="@MoveToLabel(taskItem.Text, _columns[colIndex + 1].Title)">
+                                        <LucideIconCn Name="chevron-right" Size="12" Class="size-3 text-muted-foreground" />
+                                    </ButtonCn>
+                                }
+                            </div>
+                        }
+
+                        @if (columnTasks.Count == 0)
+                        {
+                            <div class="flex flex-1 items-center justify-center">
+                                <span class="text-muted-foreground/50 text-xs">No tasks</span>
+                            </div>
+                        }
+                    </div>
+
+                    @* Add task input *@
+                    <div class="flex items-center gap-1.5 border-t px-3 py-2">
+                        <InputCn Value="@_newTaskTexts[col.Id]"
+                                 ValueChanged="@((string v) => { _newTaskTexts[col.Id] = v; })"
+                                 @onkeydown="@((KeyboardEventArgs e) => HandleColumnKeyDown(e, col.Id))"
+                                 Placeholder="Add task..."
+                                 Class="h-7 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0" />
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.IconXs"
+                                  @onclick="@(() => AddTask(col.Id))"
+                                  Disabled="@(string.IsNullOrWhiteSpace(_newTaskTexts[col.Id]))"
+                                  aria-label="@($"Add task to {col.Title}")">
+                            <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum KanbanCol { Todo, InProgress, Done }
+
+    private record KanbanTask(string Id, string Text, KanbanCol Column);
+
+    private record ColumnDef(KanbanCol Id, string Title);
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new(KanbanCol.Todo, "To Do"),
+        new(KanbanCol.InProgress, "In Progress"),
+        new(KanbanCol.Done, "Done"),
+    ];
+
+    private List<KanbanTask> _tasks =
+    [
+        new("1", "Complete project documentation", KanbanCol.Todo),
+        new("2", "Purchase blocks from shadcnblocks.com", KanbanCol.Todo),
+        new("3", "Design landing page mockups", KanbanCol.Todo),
+        new("4", "Implement authentication flow", KanbanCol.InProgress),
+        new("5", "Write API integration tests", KanbanCol.InProgress),
+        new("6", "Set up CI/CD pipeline", KanbanCol.Done),
+        new("7", "Configure database migrations", KanbanCol.Done),
+    ];
+
+    private Dictionary<KanbanCol, string> _newTaskTexts = new()
+    {
+        [KanbanCol.Todo] = "",
+        [KanbanCol.InProgress] = "",
+        [KanbanCol.Done] = "",
+    };
+
+    private int _nextId = 8;
+
+    private void MoveTask(string taskId, bool forward)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == taskId);
+        if (idx < 0) return;
+        var task = _tasks[idx];
+        var colIdx = Array.FindIndex(_columns, c => c.Id == task.Column);
+        var newColIdx = forward
+            ? Math.Min(colIdx + 1, _columns.Length - 1)
+            : Math.Max(colIdx - 1, 0);
+        _tasks[idx] = task with { Column = _columns[newColIdx].Id };
+    }
+
+    private void AddTask(KanbanCol col)
+    {
+        var text = _newTaskTexts[col].Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        _tasks.Add(new KanbanTask(_nextId.ToString(), text, col));
+        _nextId++;
+        _newTaskTexts[col] = "";
+    }
+
+    private void HandleColumnKeyDown(KeyboardEventArgs e, KanbanCol col)
+    {
+        if (e.Key == "Enter") AddTask(col);
+    }
+
+    private static string MoveToLabel(string text, string targetTitle) =>
+        $"Move \"{text}\" to {targetTitle}";
+}

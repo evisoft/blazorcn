@@ -1,0 +1,262 @@
+@* ============================================================
+   Block: map-carbon-emissions
+   Title: MapCarbonEmissions
+   Description: Interactive carbon emission by region map with emission-sized markers, industry breakdown badges, reduction targets, and region detail panels built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-carbon-emissions.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="factory" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Carbon emissions</span>
+                <span class="text-xs text-muted-foreground">@_regions.Length regions</span>
+            </div>
+            <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                <LucideIconCn Name="flame" Size="12" Class="size-3" />
+                @_totalEmissions.ToString("N0") Mt CO2
+            </span>
+        </div>
+
+        <div class="flex">
+            @* Left sidebar — top emitters *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Top emitters</span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var r in _sortedRegions)
+                    {
+                        var region = r;
+                        var isExpanded = _expanded == region.Id;
+                        var isSelected = _selectedRegion == region.Id;
+                        <div>
+                            <button
+                                type="button"
+                                class="@Cn.Merge("flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "")"
+                                @onclick="@(() => ToggleRegion(region.Id))"
+                            >
+                                <span class="@($"size-2 shrink-0 rounded-full {GetColor(region.PerCapitaTons)}")"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-sm font-medium">@region.Name</span>
+                                    <div class="mt-0.5 flex items-center gap-2">
+                                        <span class="text-xs text-muted-foreground">@region.Country</span>
+                                        <span class="@Cn.Merge("text-xs", region.ChangePercent < 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                            @(region.ChangePercent > 0 ? "+" : "")@region.ChangePercent%
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end gap-0.5">
+                                    <span class="text-xs font-medium tabular-nums">@region.EmissionsMt Mt</span>
+                                    <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                                </div>
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="border-t bg-muted/30 px-3 py-2">
+                                    @foreach (var sec in region.Sectors)
+                                    {
+                                        <div class="flex items-center gap-2 py-0.5 text-xs">
+                                            <span class="w-20 shrink-0 text-muted-foreground">@sec.Name</span>
+                                            <div class="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                                                <div
+                                                    class="h-full rounded-full bg-foreground/30"
+                                                    style="@($"width:{sec.Percent}%")"
+                                                ></div>
+                                            </div>
+                                            <span class="w-7 text-right tabular-nums text-muted-foreground">@sec.Percent%</span>
+                                        </div>
+                                    }
+                                    <div class="mt-1.5 flex items-center justify-between text-xs">
+                                        <span class="flex items-center gap-1 text-muted-foreground">
+                                            <LucideIconCn Name="target" Size="12" Class="size-3" />-@region.ReductionTarget%
+                                        </span>
+                                        <span class="tabular-nums">@region.ReductionProgress% done</span>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map area — Map/MapMarker/MapPopup components are not available in BlazorCN; rendered as a styled placeholder with proportionally-sized emission markers *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated world map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                    @* Emission markers positioned over approximate lat/lon for the world viewport *@
+                    @foreach (var r in _regions)
+                    {
+                        var region = r;
+                        var size = GetMarkerSize(region.EmissionsMt);
+                        var pos = GetMarkerPosition(region.Longitude, region.Latitude);
+                        var colorCss = GetColorCss(region.PerCapitaTons);
+                        var isSelected = _selectedRegion == region.Id;
+                        <button
+                            type="button"
+                            class="absolute flex items-center justify-center rounded-full border-2 border-white/80 shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none"
+                            style="@($"width:{size}px;height:{size}px;left:{pos.X}%;top:{pos.Y}%;background-color:{colorCss};opacity:{(isSelected ? 1.0 : 0.85)}")"
+                            @onclick="@(() => SelectOrDeselect(region.Id))"
+                            title="@region.Name — @region.EmissionsMt Mt CO2"
+                        >
+                            <span class="text-[10px] font-medium text-white tabular-nums">@region.EmissionsMt</span>
+                        </button>
+                    }
+
+                    @* Active region popup *@
+                    @if (_activeRegion != null)
+                    {
+                        var active = _activeRegion;
+                        var pos = GetMarkerPosition(active.Longitude, active.Latitude);
+                        var progressPct = Math.Min(100, (double)active.ReductionProgress / active.ReductionTarget * 100.0);
+                        <div
+                            class="absolute z-20 w-52 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - 16px))")"
+                        >
+                            <div class="mb-2 flex items-start justify-between">
+                                <p class="text-sm font-medium">@active.Name</p>
+                                <div class="flex items-center gap-1">
+                                    <span class="@Cn.Merge("text-xs font-medium", active.ChangePercent < 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                        @(active.ChangePercent > 0 ? "+" : "")@active.ChangePercent%
+                                    </span>
+                                    <button type="button" class="ml-1 text-muted-foreground hover:text-foreground text-xs" @onclick="@(() => _selectedRegion = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mb-2 space-y-1">
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-muted-foreground">Emissions</span>
+                                    <span class="font-medium tabular-nums">@active.EmissionsMt Mt</span>
+                                </div>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2">
+                                <div class="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="target" Size="12" Class="size-3" />
+                                        Target
+                                    </span>
+                                    <span class="tabular-nums">-@active.ReductionTarget%</span>
+                                </div>
+                                <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                    <div
+                                        class="h-full rounded-full bg-emerald-500"
+                                        style="@($"width:{progressPct:F1}%")"
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                    Map view — Global
+                </div>
+            </div>
+        </div>
+
+        @* Footer legend *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                @_countVeryHigh very high
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @_countModerate moderate
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_countLow low
+            </span>
+            <span class="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                <LucideIconCn Name="leaf" Size="12" Class="size-3" />
+                @_countDeclining declining
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Sector(string Name, int Percent);
+
+    private record Region(
+        string Id,
+        string Name,
+        string Country,
+        int EmissionsMt,
+        double ChangePercent,
+        int ReductionTarget,
+        int ReductionProgress,
+        Sector[] Sectors,
+        double Longitude,
+        double Latitude,
+        double PerCapitaTons
+    );
+
+    private static readonly Region[] _regions =
+    [
+        new("r1", "Pearl River Delta", "China", 542, -2.1, 30, 12,
+            [new("Manufacturing", 38), new("Energy", 29), new("Transport", 18), new("Buildings", 15)],
+            113.26, 23.13, 8.3),
+        new("r2", "Ruhr Valley", "Germany", 187, -5.4, 55, 38,
+            [new("Energy", 41), new("Industry", 32), new("Transport", 16), new("Buildings", 11)],
+            7.25, 51.45, 36.7),
+        new("r3", "Texas Gulf Coast", "United States", 425, 1.8, 50, 15,
+            [new("Petrochemical", 44), new("Energy", 28), new("Transport", 17), new("Agriculture", 11)],
+            -95.37, 29.76, 30.8),
+        new("r4", "Kanto Region", "Japan", 298, -3.2, 46, 22,
+            [new("Energy", 36), new("Industry", 25), new("Transport", 22), new("Buildings", 17)],
+            139.69, 35.69, 6.9),
+    ];
+
+    private static readonly int _maxEmission = _regions.Max(r => r.EmissionsMt);
+
+    private static double GetMarkerSize(int mt) => 28.0 + (double)mt / _maxEmission * 28.0;
+
+    private static string GetColor(double pc) =>
+        pc >= 30 ? "bg-red-500" : pc >= 8 ? "bg-amber-500" : "bg-emerald-500";
+
+    private static string GetColorCss(double pc) =>
+        pc >= 30 ? "#ef4444" : pc >= 8 ? "#f59e0b" : "#22c55e";
+
+    // Map lon/lat to % positions within the placeholder.
+    // Viewport: lon [-120, 160], lat [-10, 65]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -120.0, lonMax = 160.0;
+        const double latMin = -10.0,  latMax = 65.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private string? _selectedRegion = null;
+    private string? _expanded = null;
+
+    private Region[] _sortedRegions => [.. _regions.OrderByDescending(r => r.EmissionsMt)];
+    private int _totalEmissions => _regions.Sum(r => r.EmissionsMt);
+    private int _countVeryHigh  => _regions.Count(r => r.PerCapitaTons >= 30);
+    private int _countModerate  => _regions.Count(r => r.PerCapitaTons >= 8 && r.PerCapitaTons < 30);
+    private int _countLow       => _regions.Count(r => r.PerCapitaTons < 8);
+    private int _countDeclining => _regions.Count(r => r.ChangePercent < 0);
+
+    private Region? _activeRegion => _selectedRegion != null
+        ? Array.Find(_regions, r => r.Id == _selectedRegion)
+        : null;
+
+    private void ToggleRegion(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+        _selectedRegion = id;
+    }
+
+    private void SelectOrDeselect(string id)
+    {
+        _selectedRegion = _selectedRegion == id ? null : id;
+    }
+}

@@ -1,0 +1,371 @@
+@* ============================================================
+   Block: map-driver-assignment
+   Title: MapDriverAssignment
+   Description: Interactive driver assignment map with driver location markers, delivery zone overlays, load capacity badges, and assignment detail cards built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-driver-assignment.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="map-pin" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Driver Assignments</span>
+                <span class="text-xs text-muted-foreground">@_zones.Length zones</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_assignedZones.Length assigned
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-muted-foreground"></span>
+                    @_unassignedZones.Length open
+                </span>
+            </div>
+        </div>
+
+        @* Map + Side Panel *@
+        <div class="flex">
+            @* Map — Map/MapMarker/MapRoute/MarkerContent/MarkerTooltip/MarkerPopup/ZoneOverlays are
+               Next.js registry components with no BlazorCN equivalent; rendered as a styled static
+               map placeholder with SVG polygons simulating zone overlays and positioned truck markers. *@
+            <div class="relative h-[500px] flex-1 bg-muted/30">
+                @* Map background grid *@
+                <div class="absolute inset-0 overflow-hidden opacity-20">
+                    <div class="grid h-full grid-cols-8 grid-rows-8">
+                        @for (int gi = 0; gi < 64; gi++)
+                        {
+                            <div class="border border-border/50"></div>
+                        }
+                    </div>
+                </div>
+
+                @* Road-like lines *@
+                <div class="absolute inset-0 opacity-30">
+                    <div class="absolute left-0 right-0 top-[25%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[50%] h-px bg-border"></div>
+                    <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                    <div class="absolute bottom-0 left-[75%] top-0 w-px bg-border"></div>
+                </div>
+
+                @* SVG zone overlays *@
+                <svg class="absolute inset-0 h-full w-full" style="pointer-events:none">
+                    @foreach (var z in _zones)
+                    {
+                        var pos = GetZoneRect(z);
+                        @((MarkupString)$"<rect x=\"{pos.X:F1}%\" y=\"{pos.Y:F1}%\" width=\"{pos.W:F1}%\" height=\"{pos.H:F1}%\" fill=\"{z.Color}\" fill-opacity=\"0.08\" stroke=\"{z.Color}\" stroke-width=\"2\" stroke-opacity=\"0.4\" stroke-dasharray=\"4 3\" />")
+                    }
+                </svg>
+
+                @* Map label *@
+                <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Manhattan, New York City
+                </div>
+
+                @* Map zoom controls *@
+                <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    </button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                    </button>
+                </div>
+
+                @* Driver markers *@
+                @foreach (var d in _drivers)
+                {
+                    var driver = d;
+                    var zone = System.Array.Find(_zones, z => z.Id == driver.Zone);
+                    var markerPos = GetDriverPosition(driver);
+                    var isSelected = _selectedDriverId == driver.Id;
+                    var zidx = isSelected ? 20 : 10;
+                    <div class="absolute" style="@($"left:{markerPos.Left:F1}%; top:{markerPos.Top:F1}%; transform:translate(-50%,-50%); z-index:{zidx}")">
+                        <div class="group relative flex flex-col items-center">
+                            @* Truck marker *@
+                            <button
+                                type="button"
+                                @onclick="@(() => ToggleDriver(driver.Id))"
+                                class="flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md"
+                                style="@($"background-color:{(zone != null ? zone.Color : "#6b7280")}")">
+                                <LucideIconCn Name="truck" Size="14" Class="size-3.5 text-white" />
+                            </button>
+                            @* Hover tooltip *@
+                            <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block" style="white-space:nowrap;z-index:30">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium">@driver.Name</span>
+                                    <span class="text-muted-foreground">@driver.CurrentLoad/@driver.MaxCapacity</span>
+                                </div>
+                            </div>
+                            @* Popup (shown when selected) *@
+                            @if (isSelected)
+                            {
+                                <div class="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg" style="z-index:30">
+                                    <div class="mb-2 flex items-center justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@driver.Name</p>
+                                            <p class="text-xs text-muted-foreground">@driver.Vehicle</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                            @(zone != null ? zone.Name : "")
+                                        </BadgeCn>
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span class="flex items-center gap-1">
+                                            <LucideIconCn Name="weight" Size="12" Class="size-3" />
+                                            <span class="@($"font-medium tabular-nums {CapacityColor(driver.CurrentLoad, driver.MaxCapacity)}")">
+                                                @driver.CurrentLoad/@driver.MaxCapacity
+                                            </span>
+                                        </span>
+                                        <span>·</span>
+                                        <span>@driver.Stops.Length stops</span>
+                                    </div>
+                                    <div class="border-t pt-2">
+                                        <p class="mb-1 text-xs font-medium text-muted-foreground">
+                                            Upcoming stops
+                                        </p>
+                                        @foreach (var stop in driver.Stops)
+                                        {
+                                            <div class="flex items-center justify-between py-1">
+                                                <span class="truncate text-xs">@stop.Address</span>
+                                                <span class="ml-2 shrink-0 text-xs text-muted-foreground tabular-nums">@stop.Eta</span>
+                                            </div>
+                                        }
+                                    </div>
+                                    @* Close button *@
+                                    <button type="button" @onclick="@(() => _selectedDriverId = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @* Route lines (dashed SVG lines from driver to first stop direction) *@
+                <svg class="absolute inset-0 h-full w-full" style="pointer-events:none;z-index:5">
+                    @foreach (var d in _drivers)
+                    {
+                        var zone = System.Array.Find(_zones, z => z.Id == d.Zone);
+                        var color = zone != null ? zone.Color : "#6b7280";
+                        var from = GetDriverPosition(d);
+                        var to = new MarkerPos(from.Left + 4.0, from.Top - 3.0);
+                        @((MarkupString)$"<line x1=\"{from.Left:F1}%\" y1=\"{from.Top:F1}%\" x2=\"{to.Left:F1}%\" y2=\"{to.Top:F1}%\" stroke=\"{color}\" stroke-width=\"2\" stroke-opacity=\"0.5\" stroke-dasharray=\"5 4\" />")
+                    }
+                </svg>
+            </div>
+
+            @* Side Panel *@
+            <div class="w-64 border-l">
+                <div class="border-b px-4 py-3">
+                    <span class="text-sm font-medium">Assignments</span>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @_totalPackages packages across @_drivers.Length drivers
+                    </p>
+                </div>
+                <div class="max-h-[440px] overflow-y-auto">
+                    @for (int di = 0; di < _drivers.Length; di++)
+                    {
+                        var driver = _drivers[di];
+                        var driverZone = System.Array.Find(_zones, z => z.Id == driver.Zone);
+                        var isLast = di == _drivers.Length - 1;
+                        <div class="@(isLast ? "" : "border-b")">
+                            <div class="px-4 py-3">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="flex items-center gap-1.5 text-sm font-medium">
+                                        <span
+                                            class="size-2 rounded-full"
+                                            style="@($"background-color:{(driverZone != null ? driverZone.Color : "#6b7280")}")">
+                                        </span>
+                                        @driver.Name
+                                    </span>
+                                </div>
+                                <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="user" Size="12" Class="size-3" />
+                                    <span>@driver.Vehicle</span>
+                                    <span>·</span>
+                                    <span>@(driverZone != null ? driverZone.Name : "")</span>
+                                </div>
+                                @* Capacity bar *@
+                                <div class="mb-2">
+                                    <div class="mb-1 flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Capacity</span>
+                                        <span class="@($"font-medium tabular-nums {CapacityColor(driver.CurrentLoad, driver.MaxCapacity)}")">
+                                            @(Math.Round((double)driver.CurrentLoad / driver.MaxCapacity * 100))%
+                                        </span>
+                                    </div>
+                                    <div class="h-1.5 rounded-full bg-muted">
+                                        <div
+                                            class="@($"h-1.5 rounded-full transition-all {CapacityBg(driver.CurrentLoad, driver.MaxCapacity)}")"
+                                            style="@($"width:{(double)driver.CurrentLoad / driver.MaxCapacity * 100:F0}%")">
+                                        </div>
+                                    </div>
+                                </div>
+                                @* Stops *@
+                                <div class="space-y-1">
+                                    @foreach (var stop in driver.Stops)
+                                    {
+                                        <div class="flex items-center justify-between">
+                                            <span class="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                                                <LucideIconCn Name="box" Size="12" Class="size-3 shrink-0" />
+                                                @stop.Packages pkgs
+                                            </span>
+                                            <span class="text-xs text-muted-foreground tabular-nums">@stop.Eta</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    @* Unassigned zones *@
+                    @foreach (var uz in _unassignedZones)
+                    {
+                        <div class="border-t px-4 py-3">
+                            <div class="flex items-center gap-1.5">
+                                <span class="size-2 rounded-full bg-muted-foreground/40"></span>
+                                <span class="text-sm font-medium text-muted-foreground">@uz.Name</span>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground">No driver assigned</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var z in _zones)
+            {
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span
+                        class="size-1.5 rounded-full"
+                        style="@($"background-color:{(z.DriverId != null ? z.Color : "#9ca3af")}")">
+                    </span>
+                    @z.Name
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Stop(string Address, int Packages, string Eta);
+
+    private record DriverAssignment(
+        string Id,
+        string Name,
+        string Vehicle,
+        int MaxCapacity,
+        int CurrentLoad,
+        string Zone,
+        double Longitude,
+        double Latitude,
+        Stop[] Stops
+    );
+
+    private record ZoneData(
+        string Id,
+        string Name,
+        string Color,
+        string? DriverId
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private record ZoneRect(double X, double Y, double W, double H);
+
+    private static readonly ZoneData[] _zones =
+    [
+        new("z1", "Midtown East",    "#3b82f6", "d1"),
+        new("z2", "Lower East Side", "#22c55e", "d2"),
+        new("z3", "West Village",    "#eab308", "d3"),
+        new("z4", "Chelsea",         "#a855f7", null),
+    ];
+
+    private static readonly DriverAssignment[] _drivers =
+    [
+        new("d1", "Marcus Chen",  "Sprinter #104", 40, 28, "z1", -73.972, 40.754,
+        [
+            new("405 Lexington Ave", 8, "10 min"),
+            new("220 E 42nd St",     5, "22 min"),
+            new("600 3rd Ave",       6, "35 min"),
+        ]),
+        new("d2", "Sarah Lopez",  "Transit #107",  30, 24, "z2", -73.985, 40.720,
+        [
+            new("88 Delancey St",    4,  "5 min"),
+            new("152 Rivington St",  12, "15 min"),
+            new("201 Allen St",      8,  "28 min"),
+        ]),
+        new("d3", "James Wright", "Van #112",       25,  9, "z3", -74.002, 40.733,
+        [
+            new("133 W 4th St",      3, "8 min"),
+            new("75 Christopher St", 6, "20 min"),
+        ]),
+    ];
+
+    private ZoneData[] _assignedZones   => System.Array.FindAll(_zones, z => z.DriverId != null);
+    private ZoneData[] _unassignedZones => System.Array.FindAll(_zones, z => z.DriverId == null);
+    private int _totalPackages => _drivers.Sum(d => d.Stops.Sum(s => s.Packages));
+
+    private string? _selectedDriverId = null;
+
+    private void ToggleDriver(string id)
+    {
+        _selectedDriverId = _selectedDriverId == id ? null : id;
+    }
+
+    private static string CapacityColor(int load, int max)
+    {
+        var pct = (double)load / max * 100;
+        if (pct >= 80) return "text-red-600 dark:text-red-400";
+        if (pct >= 50) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+
+    private static string CapacityBg(int load, int max)
+    {
+        var pct = (double)load / max * 100;
+        if (pct >= 80) return "bg-red-500";
+        if (pct >= 50) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    // Map bounding box: lon [-74.015, -73.960], lat [40.710, 40.765]
+    private const double LonMin = -74.015;
+    private const double LonMax = -73.960;
+    private const double LatMin = 40.710;
+    private const double LatMax = 40.765;
+
+    private static MarkerPos GetDriverPosition(DriverAssignment d)
+    {
+        var left = (d.Longitude - LonMin) / (LonMax - LonMin) * 80.0 + 10.0;
+        var top  = (LatMax - d.Latitude) / (LatMax - LatMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+
+    // Zone bounds from TSX converted to percentage positions
+    private static ZoneRect GetZoneRect(ZoneData z)
+    {
+        return z.Id switch
+        {
+            "z1" => ToRect(-73.98, 40.75, -73.965, 40.76),
+            "z2" => ToRect(-73.995, 40.715, -73.978, 40.728),
+            "z3" => ToRect(-74.008, 40.728, -73.998, 40.738),
+            "z4" => ToRect(-74.005, 40.738, -73.99,  40.75),
+            _    => new ZoneRect(0, 0, 0, 0),
+        };
+    }
+
+    private static ZoneRect ToRect(double lon1, double lat1, double lon2, double lat2)
+    {
+        var x = (lon1 - LonMin) / (LonMax - LonMin) * 100.0;
+        var y = (LatMax - lat2) / (LatMax - LatMin) * 100.0;
+        var w = (lon2 - lon1) / (LonMax - LonMin) * 100.0;
+        var h = (lat2 - lat1) / (LatMax - LatMin) * 100.0;
+        return new ZoneRect(x, y, w, h);
+    }
+}

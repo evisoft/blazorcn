@@ -1,0 +1,208 @@
+@* ============================================================
+   Block: changelog-lighthouse-scores
+   Title: ChangelogLighthouseScores
+   Description: React Lighthouse performance scores changelog block for Next.js showing performance, accessibility, best practices, and SEO metrics per release built with shadcn/ui Badge, Tailwind CSS, and Framer Motion.
+   Source: original/blocks/changelog/changelog-lighthouse-scores.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="gauge" Size="16" Class="size-4 text-muted-foreground" />
+            <h2 class="text-sm font-medium">Lighthouse Scores</h2>
+            <span class="ml-auto font-mono text-xs text-muted-foreground">@_releases[0].Url</span>
+        </div>
+
+        @* Top score grid for latest release *@
+        <div class="grid grid-cols-4 border-b">
+            @foreach (var (cat, index) in _categories.Select((c, i) => (c, i)))
+            {
+                var latestScore = cat.GetScore(_releases[0].Scores);
+                <div class="@Cn.Merge("px-4 py-4 text-center", index < _categories.Length - 1 ? "border-r" : "")">
+                    <div class="flex items-center justify-center gap-1.5">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", GetDotColor(latestScore))"></span>
+                        <span class="text-xs text-muted-foreground">@cat.Label</span>
+                    </div>
+                    <p class="@Cn.Merge("mt-1 text-2xl font-semibold tabular-nums", GetScoreColor(latestScore))">
+                        @latestScore
+                    </p>
+                </div>
+            }
+        </div>
+
+        @* Releases list *@
+        <div>
+            @for (var rIdx = 0; rIdx < _releases.Length; rIdx++)
+            {
+                var release = _releases[rIdx];
+                var isExpanded = _expanded == release.Id;
+                var avgScore = (release.Scores.Performance + release.Scores.Accessibility + release.Scores.BestPractices + release.Scores.Seo) / 4;
+                var isLast = rIdx == _releases.Length - 1;
+                var rid = release.Id;
+
+                <div>
+                    <button
+                        type="button"
+                        @onclick="@(() => Toggle(rid))"
+                        class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", !isLast || isExpanded ? "border-b" : "")">
+
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", GetDotColor(avgScore))"></span>
+
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@release.Version</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">avg @avgScore</BadgeCn>
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-3">
+                                @foreach (var cat in _categories)
+                                {
+                                    var score = cat.GetScore(release.Scores);
+                                    var delta = cat.GetScore(release.Delta);
+                                    <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <span class="@Cn.Merge("font-mono tabular-nums", GetScoreColor(score))">@score</span>
+                                        @if (delta != 0)
+                                        {
+                                            <span class="@Cn.Merge("flex items-center", delta > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                                                @if (delta > 0)
+                                                {
+                                                    <LucideIconCn Name="arrow-up" Size="10" Class="size-2.5" />
+                                                }
+                                                else
+                                                {
+                                                    <LucideIconCn Name="arrow-down" Size="10" Class="size-2.5" />
+                                                }
+                                            </span>
+                                        }
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        <span class="shrink-0 text-xs text-muted-foreground">@release.Date</span>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="@Cn.Merge("bg-muted/50 px-4 py-3", !isLast ? "border-b" : "")">
+                                <span class="text-xs font-medium text-muted-foreground">Core Web Vitals</span>
+                                <div class="mt-2 space-y-1.5">
+                                    @foreach (var audit in release.Audits)
+                                    {
+                                        <div class="flex items-center gap-2">
+                                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", GetStatusDot(audit.Status))"></span>
+                                            <span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">@audit.Name</span>
+                                            <span class="shrink-0 font-mono text-xs tabular-nums">@audit.Score</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string? _expanded = "r1";
+
+    private sealed record Scores(int Performance, int Accessibility, int BestPractices, int Seo);
+    private sealed record AuditDetail(string Name, string Score, string Status);
+    private sealed record Release(string Id, string Version, string Date, string Url, Scores Scores, Scores Delta, AuditDetail[] Audits);
+
+    private sealed class Category
+    {
+        public string Label { get; init; } = "";
+        public Func<Scores, int> GetScore { get; init; } = _ => 0;
+    }
+
+    private static readonly Category[] _categories =
+    [
+        new() { Label = "Perf",  GetScore = s => s.Performance },
+        new() { Label = "A11y",  GetScore = s => s.Accessibility },
+        new() { Label = "BP",    GetScore = s => s.BestPractices },
+        new() { Label = "SEO",   GetScore = s => s.Seo },
+    ];
+
+    private static readonly Release[] _releases =
+    [
+        new("r1", "v6.2.0", "Mar 30, 2026", "acme.com/dashboard",
+            new(96, 98, 100, 97),
+            new(4, 1, 0, 2),
+            [
+                new("First Contentful Paint",   "0.8s",  "pass"),
+                new("Largest Contentful Paint", "1.2s",  "pass"),
+                new("Total Blocking Time",      "50ms",  "pass"),
+                new("Cumulative Layout Shift",  "0.02",  "pass"),
+                new("Speed Index",              "1.1s",  "pass"),
+            ]),
+        new("r2", "v6.1.0", "Mar 22, 2026", "acme.com/dashboard",
+            new(92, 97, 100, 95),
+            new(6, 2, 5, 0),
+            [
+                new("First Contentful Paint",   "1.0s",  "pass"),
+                new("Largest Contentful Paint", "1.6s",  "pass"),
+                new("Total Blocking Time",      "120ms", "warn"),
+                new("Cumulative Layout Shift",  "0.04",  "pass"),
+                new("Speed Index",              "1.4s",  "pass"),
+            ]),
+        new("r3", "v6.0.0", "Mar 14, 2026", "acme.com/dashboard",
+            new(86, 95, 95, 95),
+            new(-3, 0, -5, 3),
+            [
+                new("First Contentful Paint",   "1.4s",  "warn"),
+                new("Largest Contentful Paint", "2.1s",  "warn"),
+                new("Total Blocking Time",      "180ms", "warn"),
+                new("Cumulative Layout Shift",  "0.08",  "warn"),
+                new("Speed Index",              "2.0s",  "warn"),
+            ]),
+        new("r4", "v5.9.0", "Mar 6, 2026", "acme.com/dashboard",
+            new(89, 95, 100, 92),
+            new(2, 1, 0, -1),
+            [
+                new("First Contentful Paint",   "1.2s",  "pass"),
+                new("Largest Contentful Paint", "1.8s",  "warn"),
+                new("Total Blocking Time",      "150ms", "warn"),
+                new("Cumulative Layout Shift",  "0.05",  "pass"),
+                new("Speed Index",              "1.6s",  "pass"),
+            ]),
+        new("r5", "v5.8.0", "Feb 26, 2026", "acme.com/dashboard",
+            new(87, 94, 100, 93),
+            new(0, 0, 0, 0),
+            [
+                new("First Contentful Paint",   "1.3s",  "pass"),
+                new("Largest Contentful Paint", "1.9s",  "warn"),
+                new("Total Blocking Time",      "160ms", "warn"),
+                new("Cumulative Layout Shift",  "0.06",  "pass"),
+                new("Speed Index",              "1.7s",  "pass"),
+            ]),
+    ];
+
+    private void Toggle(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private static string GetScoreColor(int score) =>
+        score >= 90 ? "text-emerald-600 dark:text-emerald-400"
+        : score >= 50 ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
+
+    private static string GetDotColor(int score) =>
+        score >= 90 ? "bg-emerald-500"
+        : score >= 50 ? "bg-amber-500"
+        : "bg-red-500";
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "pass" => "bg-emerald-500",
+        "warn" => "bg-amber-500",
+        _      => "bg-red-500",
+    };
+}

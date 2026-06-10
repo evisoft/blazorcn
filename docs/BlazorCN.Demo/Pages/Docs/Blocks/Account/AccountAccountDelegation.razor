@@ -1,0 +1,372 @@
+@* ============================================================
+   Block: account-account-delegation
+   Title: AccountAccountDelegation
+   Description: A delegation dashboard for React and Next.js with permission matrix table, stats bar, pending invites, and inline invite form built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-account-delegation.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h2 class="text-sm font-medium">Account Delegation</h2>
+                <p class="text-xs text-muted-foreground">
+                    @ActiveDelegateCount active delegate@(ActiveDelegateCount != 1 ? "s" : "")@(PendingDelegateCount > 0 ? $" · {PendingDelegateCount} pending" : "")
+                </p>
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" @onclick="@(() => _showInviteForm = !_showInviteForm)">
+                @if (_showInviteForm)
+                {
+                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                    @:Cancel
+                }
+                else
+                {
+                    <LucideIconCn Name="user-plus" Size="12" Class="size-3" />
+                    @:Invite Delegate
+                }
+            </ButtonCn>
+        </div>
+
+        @* Invite Form *@
+        @if (_showInviteForm)
+        {
+            <div class="overflow-hidden">
+                <div class="space-y-3 border-b bg-muted/30 px-4 py-3">
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="space-y-1">
+                            <span class="text-xs font-medium text-muted-foreground">Email address</span>
+                            <InputCn Type="email" Placeholder="@("colleague@company.com")" Class="h-8 text-sm" @bind-Value="_inviteEmail" />
+                        </div>
+                        <div class="space-y-1">
+                            <span class="text-xs font-medium text-muted-foreground">Role</span>
+                            <SelectCn @bind-Value="_inviteRole">
+                                <SelectTriggerCn Class="h-8 text-sm">
+                                    <SelectValueCn />
+                                </SelectTriggerCn>
+                                <SelectContentCn>
+                                    <SelectItemCn Value="viewer">Viewer</SelectItemCn>
+                                    <SelectItemCn Value="editor">Editor</SelectItemCn>
+                                    <SelectItemCn Value="admin">Admin</SelectItemCn>
+                                </SelectContentCn>
+                            </SelectCn>
+                        </div>
+                        <div class="space-y-1">
+                            <span class="text-xs font-medium text-muted-foreground">Expires after</span>
+                            <SelectCn @bind-Value="_inviteExpiration">
+                                <SelectTriggerCn Class="h-8 text-sm">
+                                    <SelectValueCn />
+                                </SelectTriggerCn>
+                                <SelectContentCn>
+                                    <SelectItemCn Value="7">7 days</SelectItemCn>
+                                    <SelectItemCn Value="30">30 days</SelectItemCn>
+                                    <SelectItemCn Value="90">90 days</SelectItemCn>
+                                    <SelectItemCn Value="180">180 days</SelectItemCn>
+                                    <SelectItemCn Value="never">No expiration</SelectItemCn>
+                                </SelectContentCn>
+                            </SelectCn>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <span class="text-xs font-medium text-muted-foreground">Permissions</span>
+                        <div class="flex flex-wrap gap-x-4 gap-y-2">
+                            @foreach (var perm in _availablePermissions)
+                            {
+                                <span class="flex items-center gap-1.5">
+                                    <CheckboxCn Id="@($"perm-{perm.Id}")" Checked="@(_selectedPermissions.Contains(perm.Id))" CheckedChanged="@((bool v) => TogglePermission(perm.Id))" />
+                                    <span class="cursor-pointer text-xs" @onclick="@(() => TogglePermission(perm.Id))">@perm.Label</span>
+                                </span>
+                            }
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" @onclick="HandleInvite" Disabled="@(string.IsNullOrWhiteSpace(_inviteEmail))">
+                            <LucideIconCn Name="send" Size="12" Class="size-3" />
+                            Send Invite
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Stats Bar *@
+        <div class="grid grid-cols-3 divide-x border-b">
+            @foreach (var stat in _stats)
+            {
+                <div class="px-4 py-2.5">
+                    <div class="flex items-center gap-1.5">
+                        <span class="@($"size-1.5 rounded-full {stat.DotColor}")"></span>
+                        <span class="text-xs text-muted-foreground">@stat.Label</span>
+                    </div>
+                    <p class="mt-0.5 text-lg font-semibold tabular-nums">@stat.Value</p>
+                </div>
+            }
+        </div>
+
+        @* Delegates Table *@
+        <TableCn>
+            <TableHeaderCn>
+                <TableRowCn Class="hover:bg-transparent">
+                    <TableHeadCn Class="text-xs">Delegate</TableHeadCn>
+                    <TableHeadCn Class="text-xs">Role</TableHeadCn>
+                    <TableHeadCn Class="text-xs">Permissions</TableHeadCn>
+                    <TableHeadCn Class="text-xs">Granted</TableHeadCn>
+                    <TableHeadCn Class="text-xs">Expires</TableHeadCn>
+                    <TableHeadCn Class="text-xs">Last Active</TableHeadCn>
+                    <TableHeadCn Class="w-10 text-xs" />
+                </TableRowCn>
+            </TableHeaderCn>
+            <TableBodyCn>
+                @foreach (var del in _delegates)
+                {
+                    var role = _roleConfig[del.Role];
+                    var isExpiringSoon = del.ExpiresInDays <= 7 && del.ExpiresInDays > 0 && del.Status == "active";
+                    var isPending = del.Status == "pending";
+                    <TableRowCn Class="@Cn.Merge("border-b transition-colors hover:bg-muted/50", isPending ? "border-dashed" : "")">
+                        <TableCellCn Class="py-2.5">
+                            <div class="flex items-center gap-2.5">
+                                <div class="@Cn.Merge("flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-medium", isPending ? "border border-dashed border-muted-foreground/30 bg-transparent text-muted-foreground" : "bg-muted")">
+                                    @del.Initials
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-medium">@(isPending ? del.Email : del.Name)</p>
+                                    @if (!isPending)
+                                    {
+                                        <p class="truncate text-xs text-muted-foreground">@del.Email</p>
+                                    }
+                                </div>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn Class="py-2.5">
+                            <BadgeCn Variant="BadgeVariant.Outline" Class="@($"h-5 gap-1 px-1.5 text-[10px] font-medium {role.ClassName}")">
+                                <span class="@($"size-1 rounded-full {role.DotColor}")"></span>
+                                @role.Label
+                            </BadgeCn>
+                        </TableCellCn>
+                        <TableCellCn Class="py-2.5">
+                            <div class="flex flex-wrap gap-1">
+                                @foreach (var perm in del.Permissions.Take(3))
+                                {
+                                    <span class="inline-flex rounded bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">@perm.Label</span>
+                                }
+                                @if (del.Permissions.Length > 3)
+                                {
+                                    <span class="inline-flex rounded bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">+@(del.Permissions.Length - 3)</span>
+                                }
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn Class="py-2.5">
+                            <span class="text-xs text-muted-foreground">@del.GrantedAt</span>
+                        </TableCellCn>
+                        <TableCellCn Class="py-2.5">
+                            <span class="@Cn.Merge("flex items-center gap-1 text-xs", isExpiringSoon ? "font-medium text-amber-600 dark:text-amber-400" : "text-muted-foreground")">
+                                @if (isExpiringSoon)
+                                {
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3 shrink-0" />
+                                }
+                                @del.ExpiresAt
+                                @if (isExpiringSoon)
+                                {
+                                    <span class="text-[10px]">(@(del.ExpiresInDays)d)</span>
+                                }
+                            </span>
+                        </TableCellCn>
+                        <TableCellCn Class="py-2.5">
+                            @if (isPending)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="h-5 border-dashed px-1.5 text-[10px] text-muted-foreground">
+                                    <LucideIconCn Name="mail" Size="10" Class="mr-0.5 size-2.5" />
+                                    Pending
+                                </BadgeCn>
+                            }
+                            else
+                            {
+                                <span class="text-xs text-muted-foreground">@del.LastActive</span>
+                            }
+                        </TableCellCn>
+                        <TableCellCn Class="py-2.5">
+                            @if (isPending)
+                            {
+                                <div class="flex items-center gap-1">
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-1.5 text-[10px]" @onclick="@(async () => await HandleResend(del.Id))">
+                                        @if (_copiedId == del.Id)
+                                        {
+                                            <LucideIconCn Name="check" Size="10" Class="size-2.5 text-emerald-600" />
+                                            @:Sent
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="refresh-cw" Size="10" Class="size-2.5" />
+                                            @:Resend
+                                        }
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-1.5 text-[10px] text-destructive hover:text-destructive" @onclick="@(() => HandleRevoke(del.Id))">
+                                        <LucideIconCn Name="x" Size="10" Class="size-2.5" />
+                                    </ButtonCn>
+                                </div>
+                            }
+                            else
+                            {
+                                <DropdownMenuCn>
+                                    <DropdownMenuTriggerCn>
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-6 p-0">
+                                            <LucideIconCn Name="more-horizontal" Size="14" Class="size-3.5" />
+                                        </ButtonCn>
+                                    </DropdownMenuTriggerCn>
+                                    <DropdownMenuContentCn Align="FloatingAlign.End" Class="w-44">
+                                        <DropdownMenuItemCn Class="gap-2 text-xs">
+                                            <LucideIconCn Name="pencil" Size="12" Class="size-3" />
+                                            Edit permissions
+                                        </DropdownMenuItemCn>
+                                        <DropdownMenuItemCn Class="gap-2 text-xs">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            Extend access
+                                        </DropdownMenuItemCn>
+                                        <DropdownMenuSeparatorCn />
+                                        <DropdownMenuItemCn Class="gap-2 text-xs text-destructive focus:text-destructive" @onclick="@(() => HandleRevoke(del.Id))">
+                                            <LucideIconCn Name="shield-alert" Size="12" Class="size-3" />
+                                            Revoke access
+                                        </DropdownMenuItemCn>
+                                    </DropdownMenuContentCn>
+                                </DropdownMenuCn>
+                            }
+                        </TableCellCn>
+                    </TableRowCn>
+                }
+            </TableBodyCn>
+        </TableCn>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="shield-check" Size="12" Class="size-3" />
+                All delegate actions are logged in the audit trail
+            </div>
+            <span class="text-[10px] text-muted-foreground tabular-nums">
+                @_delegates.Count total@(_delegates.Count != 1 ? " delegates" : " delegate")
+            </span>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record DelegatePermission(string Id, string Label);
+
+    private record RoleConfig(string Label, string ClassName, string DotColor);
+
+    private record Stat(string Label, int Value, string DotColor);
+
+    private record DelegateEntry(
+        string Id,
+        string Name,
+        string Email,
+        string Initials,
+        string Role,
+        DelegatePermission[] Permissions,
+        string GrantedAt,
+        string ExpiresAt,
+        int ExpiresInDays,
+        string LastActive,
+        string Status
+    );
+
+    private static readonly DelegatePermission[] _availablePermissions =
+    [
+        new("billing", "Billing"),
+        new("settings", "Settings"),
+        new("reports", "Reports"),
+        new("users", "Users"),
+        new("api-keys", "API Keys"),
+        new("integrations", "Integrations"),
+    ];
+
+    private static readonly Dictionary<string, RoleConfig> _roleConfig = new()
+    {
+        ["admin"] = new("Admin", "border-red-500/30 text-red-600 dark:text-red-400", "bg-red-500"),
+        ["editor"] = new("Editor", "border-amber-500/30 text-amber-600 dark:text-amber-400", "bg-amber-500"),
+        ["viewer"] = new("Viewer", "border-blue-500/30 text-blue-600 dark:text-blue-400", "bg-blue-500"),
+    };
+
+    private static readonly Stat[] _stats =
+    [
+        new("Active Delegates", 3, "bg-emerald-500"),
+        new("Pending Invites", 1, "bg-amber-500"),
+        new("Revoked This Month", 2, "bg-red-500"),
+    ];
+
+    private List<DelegateEntry> _delegates =
+    [
+        new("d1", "Sarah Chen", "sarah.chen@acme-corp.com", "SC", "admin",
+            [new("billing", "Billing"), new("settings", "Settings"), new("reports", "Reports"), new("users", "Users"), new("api-keys", "API Keys")],
+            "Jan 15, 2026", "Jul 15, 2026", 101, "2 hours ago", "active"),
+        new("d2", "Marcus Johnson", "m.johnson@acme-corp.com", "MJ", "editor",
+            [new("reports", "Reports"), new("settings", "Settings"), new("integrations", "Integrations")],
+            "Feb 28, 2026", "Apr 10, 2026", 5, "18 min ago", "active"),
+        new("d3", "Aisha Patel", "aisha.patel@acme-corp.com", "AP", "viewer",
+            [new("reports", "Reports"), new("billing", "Billing")],
+            "Mar 10, 2026", "Sep 10, 2026", 158, "3 days ago", "active"),
+        new("d4", "Tom Reeves", "t.reeves@acme-corp.com", "TR", "editor",
+            [new("settings", "Settings"), new("users", "Users")],
+            "—", "May 20, 2026", 45, "—", "pending"),
+    ];
+
+    private bool _showInviteForm;
+    private string _inviteEmail = "";
+    private string _inviteRole = "viewer";
+    private string _inviteExpiration = "90";
+    private List<string> _selectedPermissions = ["reports"];
+    private string? _copiedId;
+
+    private int ActiveDelegateCount => _delegates.Count(d => d.Status == "active");
+    private int PendingDelegateCount => _delegates.Count(d => d.Status == "pending");
+
+    private void TogglePermission(string permId)
+    {
+        if (_selectedPermissions.Contains(permId))
+            _selectedPermissions.Remove(permId);
+        else
+            _selectedPermissions.Add(permId);
+    }
+
+    private void HandleInvite()
+    {
+        if (string.IsNullOrWhiteSpace(_inviteEmail)) return;
+        var localPart = _inviteEmail.Split('@')[0];
+        var initials = string.Join("", localPart.Split('.').Select(s => s.Length > 0 ? char.ToUpper(s[0]).ToString() : ""));
+        if (initials.Length > 2) initials = initials[..2];
+        if (string.IsNullOrEmpty(initials)) initials = "??";
+
+        var newDelegate = new DelegateEntry(
+            $"d{_delegates.Count + 1}",
+            localPart.Replace(".", " "),
+            _inviteEmail,
+            initials,
+            _inviteRole,
+            _availablePermissions.Where(p => _selectedPermissions.Contains(p.Id)).ToArray(),
+            "—",
+            _inviteExpiration == "never" ? "No expiration" : $"{_inviteExpiration} days from now",
+            _inviteExpiration == "never" ? 999 : int.Parse(_inviteExpiration),
+            "—",
+            "pending"
+        );
+        _delegates.Add(newDelegate);
+        _inviteEmail = "";
+        _selectedPermissions = ["reports"];
+        _showInviteForm = false;
+    }
+
+    private void HandleRevoke(string id)
+    {
+        _delegates.RemoveAll(d => d.Id == id);
+    }
+
+    private async Task HandleResend(string id)
+    {
+        _copiedId = id;
+        await Task.Delay(2000);
+        _copiedId = null;
+    }
+}

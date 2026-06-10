@@ -1,0 +1,168 @@
+@* ============================================================
+   Block: comments-status-workflow
+   Title: CommentsStatusWorkflow
+   Description: React comment block for Next.js with custom status pipelines, stage transitions, and workflow automation built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-status-workflow.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Issue #@_comment.Id</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">@_comment.Author</p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1.5 text-[10px] font-normal">
+                    <span class="@($"size-1.5 rounded-full {_config.Dot}")"></span>
+                    @_config.Label
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Comment body *@
+        <div class="border-b p-4">
+            <p class="text-sm leading-relaxed">@_comment.Content</p>
+            <div class="mt-2 text-xs text-muted-foreground">@_comment.Timestamp</div>
+        </div>
+
+        @* Current status *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2.5 text-xs font-medium text-muted-foreground">Current status</div>
+            <div class="flex items-center gap-3">
+                <span class="@($"size-2 rounded-full {_config.Dot}")"></span>
+                <span class="@($"text-sm font-medium {_config.Color}")">@_config.Label</span>
+            </div>
+        </div>
+
+        @* Transition buttons *@
+        @if (_canTransition)
+        {
+            <div class="border-b px-4 py-3">
+                <div class="mb-2.5 text-xs font-medium text-muted-foreground">Transition to</div>
+                <div class="flex flex-wrap gap-2">
+                    @foreach (var next in _config.NextStates)
+                    {
+                        var nextStatus = next;
+                        var nextConfig = GetConfig(nextStatus);
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" @onclick="@(() => SetStatus(nextStatus))">
+                            <span class="@($"size-1.5 rounded-full {nextConfig.Dot}")"></span>
+                            @nextConfig.Label
+                        </ButtonCn>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Status history toggle *@
+        <div class="border-b">
+            <button type="button" @onclick="@(() => _showHistory = !_showHistory)"
+                class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="clock" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="text-xs font-medium text-muted-foreground">Status history</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                        @_comment.History.Length changes
+                    </BadgeCn>
+                </div>
+                <LucideIconCn Name="chevron-right" Size="16" Class="@($"size-4 text-muted-foreground/60 transition-transform duration-200{(_showHistory ? " rotate-90" : "")}")" />
+            </button>
+
+            @if (_showHistory)
+            {
+                <div class="border-t px-4 py-3">
+                    <div class="space-y-3">
+                        @foreach (var change in _comment.History)
+                        {
+                            var fromCfg = GetConfig(change.From);
+                            var toCfg = GetConfig(change.To);
+                            <div class="flex items-start gap-3">
+                                <div class="flex items-center gap-1">
+                                    <span class="@($"size-1.5 rounded-full {fromCfg.Dot}")"></span>
+                                    <LucideIconCn Name="chevron-right" Size="12" Class="size-3 text-muted-foreground/60" />
+                                    <span class="@($"size-1.5 rounded-full {toCfg.Dot}")"></span>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs">
+                                            <span class="@fromCfg.Color">@fromCfg.Label</span>
+                                            <span class="text-muted-foreground"> @("→") </span>
+                                            <span class="@toCfg.Color">@toCfg.Label</span>
+                                        </span>
+                                    </div>
+                                    <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                        <span>@change.User</span>
+                                        <span>·</span>
+                                        <span>@change.Timestamp</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Closed state *@
+        @if (!_canTransition)
+        {
+            <div class="px-4 py-4">
+                <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <LucideIconCn Name="check" Size="14" Class="size-3.5" />
+                    <span>This issue is closed. No further transitions available.</span>
+                </div>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private record StatusConfig(string Label, string Color, string Dot, string[] NextStates);
+
+    private record StatusChange(string Id, string From, string To, string User, string Timestamp);
+
+    private record CommentData(
+        string Id,
+        string Author,
+        string Content,
+        string Timestamp,
+        string Status,
+        StatusChange[] History
+    );
+
+    private static StatusConfig GetConfig(string status) => status switch
+    {
+        "open"        => new("Open",        "text-blue-600 dark:text-blue-400",     "bg-blue-500",           ["triaged", "closed"]),
+        "triaged"     => new("Triaged",     "text-purple-600 dark:text-purple-400", "bg-purple-500",         ["in-progress", "closed"]),
+        "in-progress" => new("In Progress", "text-amber-600 dark:text-amber-400",   "bg-amber-500",          ["resolved", "triaged"]),
+        "resolved"    => new("Resolved",    "text-emerald-600 dark:text-emerald-400","bg-emerald-500",       ["closed", "in-progress"]),
+        _             => new("Closed",      "text-muted-foreground",                "bg-muted-foreground/40",  []),
+    };
+
+    private static readonly CommentData _comment = new(
+        Id: "1",
+        Author: "Sarah Chen",
+        Content: "The search functionality returns incorrect results when using special characters. This affects users searching for file names with brackets or quotes.",
+        Timestamp: "2 hours ago",
+        Status: "in-progress",
+        History:
+        [
+            new StatusChange("1", "open",    "triaged",     "Alex Morgan", "1 hour ago"),
+            new StatusChange("2", "triaged",  "in-progress", "Maya Patel",  "30 min ago"),
+        ]
+    );
+
+    private string _currentStatus = _comment.Status;
+    private bool _showHistory = false;
+
+    private StatusConfig _config => GetConfig(_currentStatus);
+    private bool _canTransition => _config.NextStates.Length > 0;
+
+    private void SetStatus(string status)
+    {
+        _currentStatus = status;
+    }
+}

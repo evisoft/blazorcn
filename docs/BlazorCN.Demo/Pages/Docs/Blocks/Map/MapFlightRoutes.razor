@@ -1,0 +1,268 @@
+@* ============================================================
+   Block: map-flight-routes
+   Title: MapFlightRoutes
+   Description: React flight route visualization block for Next.js with curved route arcs, airport markers, airline badges, flight info tooltips, and route selection using mapcn map components and Tailwind CSS
+   Source: original/blocks/map/map-flight-routes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="plane" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Flight Routes</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-muted-foreground tabular-nums">@_visibleFlights.Length routes</span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground tabular-nums">@_visibleAirports.Length airports</span>
+            </div>
+        </div>
+
+        @* Airline filters *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2.5">
+            @foreach (var al in _airlines)
+            {
+                var airline = al;
+                var count = _flights.Count(f => f.Airline == airline.Id);
+                var isActive = _activeAirlines.Contains(airline.Id);
+                <button
+                    type="button"
+                    @onclick="@(() => ToggleAirline(airline.Id))"
+                    class="@Cn.Merge("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors", isActive ? "bg-muted text-foreground" : "bg-muted/30 text-muted-foreground")">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", isActive ? airline.DotColor : "bg-muted-foreground/40")" />
+                    <span class="font-medium">@airline.Name</span>
+                    <span class="tabular-nums opacity-60">@count</span>
+                </button>
+            }
+        </div>
+
+        <div class="flex flex-col md:flex-row">
+            @* Flight list *@
+            <div class="w-full border-b md:w-64 md:shrink-0 md:border-b-0 md:border-r">
+                <div class="max-h-[300px] overflow-y-auto md:max-h-[400px]">
+                    @foreach (var flightItem in _visibleFlights)
+                    {
+                        var flight = flightItem;
+                        var flightAirline = _airlines.FirstOrDefault(a => a.Id == flight.Airline);
+                        var isSelected = _selectedFlight == flight.Id;
+                        <button
+                            type="button"
+                            @onclick="@(() => { _selectedFlight = (isSelected ? null : flight.Id); })"
+                            class="@Cn.Merge("flex w-full items-center gap-2.5 border-b px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/50", isSelected ? "bg-muted/50" : "")">
+                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", flightAirline?.DotColor ?? "")" />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-mono text-sm font-medium">@flight.From</span>
+                                    <span class="text-xs text-muted-foreground">→</span>
+                                    <span class="font-mono text-sm font-medium">@flight.To</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                    <span class="tabular-nums">@flight.Duration</span>
+                                    <span>·</span>
+                                    <span class="tabular-nums">@flight.Departure</span>
+                                </div>
+                            </div>
+                            <span class="shrink-0 font-mono text-xs font-medium tabular-nums">@flight.Price</span>
+                        </button>
+                    }
+                    @if (_visibleFlights.Length == 0)
+                    {
+                        <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                            No flights match the selected airlines
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[350px] flex-1 md:h-[440px] overflow-hidden bg-muted/20">
+                @* Subtle grid background to suggest a map *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    World
+                </div>
+
+                @* Route arcs *@
+                @foreach (var flightItem in _visibleFlights)
+                {
+                    var flight = flightItem;
+                    var fromAirport = GetAirport(flight.From);
+                    var toAirport = GetAirport(flight.To);
+                    var flightAirline = _airlines.FirstOrDefault(a => a.Id == flight.Airline);
+                    var isSelected = _selectedFlight == flight.Id;
+                    var color = flightAirline?.Color ?? "#888888";
+                    var strokeWidth = isSelected ? 3.0 : 1.5;
+                    var opacity = isSelected ? 0.9 : 0.4;
+                    var arc = GenerateArc(fromAirport.Lng, fromAirport.Lat, toAirport.Lng, toAirport.Lat);
+                    var pathD = BuildArcPath(arc);
+                    <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                        @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"{pathD}\" stroke=\"{color}\" stroke-width=\"{strokeWidth.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" stroke-opacity=\"{opacity.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" fill=\"none\" /></svg>")
+                    </div>
+                    @* Clickable overlay for route selection *@
+                    <div class="absolute inset-0 overflow-hidden">
+                        @((MarkupString)$"<svg class=\"absolute inset-0 w-full h-full\" xmlns=\"http://www.w3.org/2000/svg\" style=\"cursor:pointer\"><path d=\"{pathD}\" stroke=\"transparent\" stroke-width=\"12\" fill=\"none\" /></svg>")
+                    </div>
+                }
+
+                @* Airport markers *@
+                @foreach (var airportItem in _visibleAirports)
+                {
+                    var airport = airportItem;
+                    var leftPct = MapLonToPercent(airport.Lng) * 100;
+                    var topPct = MapLatToPercent(airport.Lat) * 100;
+                    <div class="absolute group" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%)")">
+                        <div class="size-3 rounded-full border-2 border-white bg-foreground shadow-md" />
+                        <span class="pointer-events-none absolute left-1/2 top-full mt-0.5 -translate-x-1/2 rounded bg-background/90 px-1 py-0.5 font-mono text-[10px] font-semibold shadow-sm whitespace-nowrap">
+                            @airport.Code
+                        </span>
+                        <div class="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 hidden group-hover:block whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md z-10">
+                            <p class="font-medium text-center">@airport.Name</p>
+                            <p class="text-[10px] opacity-70 text-center">@airport.City</p>
+                        </div>
+                    </div>
+                }
+
+                @* Controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        @{
+            var selectedFlightData = _selectedFlight != null ? _flights.FirstOrDefault(f => f.Id == _selectedFlight) : null;
+            var selectedAirline = selectedFlightData != null ? _airlines.FirstOrDefault(a => a.Id == selectedFlightData.Airline) : null;
+        }
+        @if (selectedFlightData != null && selectedAirline != null)
+        {
+            <div class="flex items-center gap-3 border-t px-4 py-2.5">
+                <span class="@Cn.Merge("size-1.5 rounded-full", selectedAirline.DotColor)" />
+                <span class="text-xs font-medium">@selectedAirline.Name</span>
+                <span class="font-mono text-xs text-muted-foreground">@selectedFlightData.From → @selectedFlightData.To</span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground tabular-nums">@selectedFlightData.Duration</span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground">@selectedFlightData.Aircraft</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-mono text-xs font-medium tabular-nums">
+                    @selectedFlightData.Price
+                </BadgeCn>
+            </div>
+        }
+        @if (_selectedFlight == null)
+        {
+            <div class="border-t px-4 py-2.5">
+                <span class="text-xs text-muted-foreground">Select a route to view flight details</span>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record AirlineInfo(string Id, string Name, string Color, string DotColor);
+    private record Airport(string Code, string Name, string City, double Lng, double Lat);
+    private record Flight(string Id, string From, string To, string Airline, string Duration, string Departure, string Aircraft, string Price);
+
+    private static readonly AirlineInfo[] _airlines =
+    [
+        new("ua", "United", "#3b82f6", "bg-blue-500"),
+        new("dl", "Delta", "#ef4444", "bg-red-500"),
+        new("ba", "British Airways", "#8b5cf6", "bg-violet-500"),
+    ];
+
+    private static readonly Airport[] _airports =
+    [
+        new("SFO", "San Francisco Intl", "San Francisco", -122.375, 37.619),
+        new("JFK", "John F. Kennedy", "New York", -73.778, 40.64),
+        new("LHR", "Heathrow", "London", -0.461, 51.47),
+        new("NRT", "Narita Intl", "Tokyo", 140.386, 35.765),
+        new("CDG", "Charles de Gaulle", "Paris", 2.55, 49.013),
+        new("DXB", "Dubai Intl", "Dubai", 55.365, 25.253),
+    ];
+
+    private static readonly Flight[] _flights =
+    [
+        new("f1", "SFO", "JFK", "ua", "5h 25m", "08:30", "B777-300ER", "$342"),
+        new("f2", "JFK", "LHR", "ba", "7h 10m", "19:15", "A380-800", "$687"),
+        new("f3", "SFO", "NRT", "ua", "11h 15m", "13:45", "B787-9", "$891"),
+        new("f4", "JFK", "CDG", "dl", "7h 45m", "22:00", "A330-900", "$598"),
+        new("f5", "LHR", "DXB", "ba", "6h 50m", "10:20", "B787-10", "$512"),
+        new("f6", "SFO", "LHR", "ua", "10h 30m", "16:00", "B777-200LR", "$724"),
+    ];
+
+    // Bounding box for world map projection
+    private const double _lonMin = -140.0;
+    private const double _lonMax = 160.0;
+    private const double _latMin = 15.0;
+    private const double _latMax = 65.0;
+
+    private System.Collections.Generic.HashSet<string> _activeAirlines = new(new[] { "ua", "dl", "ba" });
+    private string? _selectedFlight = "f1";
+
+    private Flight[] _visibleFlights => _flights.Where(f => _activeAirlines.Contains(f.Airline)).ToArray();
+
+    private Airport[] _visibleAirports
+    {
+        get
+        {
+            var codes = new System.Collections.Generic.HashSet<string>();
+            foreach (var f in _visibleFlights)
+            {
+                codes.Add(f.From);
+                codes.Add(f.To);
+            }
+            return _airports.Where(a => codes.Contains(a.Code)).ToArray();
+        }
+    }
+
+    private void ToggleAirline(string id)
+    {
+        if (_activeAirlines.Contains(id))
+            _activeAirlines.Remove(id);
+        else
+            _activeAirlines.Add(id);
+    }
+
+    private Airport GetAirport(string code) =>
+        _airports.FirstOrDefault(a => a.Code == code) ?? _airports[0];
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+
+    private (double Lng, double Lat)[] GenerateArc(double fromLng, double fromLat, double toLng, double toLat, int segments = 40)
+    {
+        var points = new (double Lng, double Lat)[segments + 1];
+        var dx = toLng - fromLng;
+        var dy = toLat - fromLat;
+        var dist = Math.Sqrt(dx * dx + dy * dy);
+        var arcHeight = Math.Min(dist * 0.2, 15.0);
+        for (var i = 0; i <= segments; i++)
+        {
+            var t = (double)i / segments;
+            var lng = fromLng + dx * t;
+            var lat = fromLat + dy * t;
+            var offset = Math.Sin(t * Math.PI) * arcHeight;
+            points[i] = (lng, lat + offset);
+        }
+        return points;
+    }
+
+    private string BuildArcPath((double Lng, double Lat)[] arc)
+    {
+        if (arc.Length == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < arc.Length; i++)
+        {
+            var x = MapLonToPercent(arc[i].Lng) * 100;
+            var y = MapLatToPercent(arc[i].Lat) * 100;
+            sb.Append(i == 0 ? $"M {x.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}% {y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%" : $" L {x.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}% {y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}%");
+        }
+        return sb.ToString();
+    }
+}

@@ -1,0 +1,238 @@
+@* ============================================================
+   Block: kanban-audit-checklist
+   Title: KanbanAuditChecklist
+   Description: A security audit kanban board for React and Next.js with bulk selection via shadcn/ui Checkbox, CVSS scoring, severity indicators, and floating action bar built with Tailwind CSS
+   Source: original/blocks/kanban/kanban-audit-checklist.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="relative overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield-alert" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Security Audit</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_findings.Count findings
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                @if (_criticalCount > 0)
+                {
+                    <span class="flex items-center gap-1.5 text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        <span class="text-red-600 dark:text-red-400">@_criticalCount critical</span>
+                    </span>
+                }
+                <span class="text-muted-foreground text-xs">
+                    @(_findings.Count(f => f.Column == "remediated")) remediated
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-3 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var columnFindings = _findings.Where(f => f.Column == column.Id).ToList();
+                var columnIds = columnFindings.Select(f => f.Id).ToList();
+                var allSelected = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+                var someSelected = columnIds.Any(id => _selected.Contains(id));
+                var isIndeterminate = !allSelected && someSelected;
+
+                <div>
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                        <span class="flex items-center" role="button" tabindex="0"
+                              @onclick="@(() => ToggleColumnAll(column.Id))">
+                            @* Render manual checkbox to support indeterminate visual *@
+                            <button type="button"
+                                    role="checkbox"
+                                    aria-checked="@(allSelected ? "true" : isIndeterminate ? "mixed" : "false")"
+                                    data-slot="checkbox"
+                                    data-state="@(allSelected ? "checked" : "unchecked")"
+                                    class="cn-checkbox peer shrink-0 outline-none">
+                                @if (isIndeterminate)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                }
+                                else if (allSelected)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M20 6 9 17l-5-5" /></svg>
+                                }
+                            </button>
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@columnFindings.Count</span>
+                    </div>
+
+                    @* Findings *@
+                    <div>
+                        @foreach (var finding in columnFindings)
+                        {
+                            var isLast = finding == columnFindings[columnFindings.Count - 1];
+                            var isChecked = _selected.Contains(finding.Id);
+                            var capturedFinding = finding;
+                            <div class="@Cn.Merge("flex items-start gap-2.5 px-4 py-2.5 transition-colors hover:bg-muted/50", !isLast ? "border-b" : "", isChecked ? "bg-muted/30" : "")">
+                                <span class="mt-0.5 flex shrink-0 items-center">
+                                    <CheckboxCn Checked="@isChecked"
+                                                CheckedChanged="@((bool _) => ToggleSelect(capturedFinding.Id))" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", SeverityDot(capturedFinding.Severity))"></span>
+                                        <span class="@Cn.Merge("truncate font-medium text-sm", column.Id == "remediated" ? "text-muted-foreground line-through" : "")">
+                                            @capturedFinding.Title
+                                        </span>
+                                    </div>
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <span class="text-muted-foreground text-xs">
+                                            @capturedFinding.AffectedSystem
+                                        </span>
+                                        <span class="@Cn.Merge("font-mono text-xs tabular-nums", CvssColor(capturedFinding.Cvss))">
+                                            @capturedFinding.Cvss.ToString("F1")
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @(_findings.Count(f => f.Column == "remediated")) of @_findings.Count remediated
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Last scan 12 min ago</span>
+        </div>
+
+        @* Floating Action Bar *@
+        @if (_selected.Count > 0)
+        {
+            <div class="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-lg border bg-card px-4 py-2.5 shadow-lg">
+                <span class="font-medium text-sm">@_selected.Count selected</span>
+                <div class="flex items-center gap-2">
+                    <SelectCn Value="@_moveTarget" ValueChanged="@((string? val) => MoveSelected(val ?? ""))">
+                        <SelectTriggerCn Class="h-7 w-[130px] text-xs">
+                            <SelectValueCn Placeholder="Move to..." />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var col in _columns)
+                            {
+                                var c = col;
+                                <SelectItemCn Value="@c.Id" Class="text-xs">@c.Title</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="ArchiveSelected">
+                        <LucideIconCn Name="archive" Size="12" Class="size-3" />
+                        Archive
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="DeselectAll">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        Deselect
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private sealed class AuditFinding
+    {
+        public string Id { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string Severity { get; init; } = "";
+        public double Cvss { get; init; }
+        public string AffectedSystem { get; init; } = "";
+        public string Column { get; set; } = "";
+    }
+
+    private sealed record ColumnDef(string Id, string Title);
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("pending",    "Pending"),
+        new("in-review",  "In Review"),
+        new("remediated", "Remediated"),
+    ];
+
+    private List<AuditFinding> _findings =
+    [
+        new() { Id = "af1",  Title = "SQL injection in search endpoint",           Severity = "critical", Cvss = 9.8, AffectedSystem = "API Gateway",   Column = "pending"    },
+        new() { Id = "af2",  Title = "Missing rate limiting on auth routes",       Severity = "high",     Cvss = 7.5, AffectedSystem = "Auth Service",  Column = "pending"    },
+        new() { Id = "af3",  Title = "Outdated TLS 1.1 cipher suite",             Severity = "high",     Cvss = 7.2, AffectedSystem = "Load Balancer", Column = "pending"    },
+        new() { Id = "af4",  Title = "Excessive IAM permissions on Lambda role",   Severity = "medium",   Cvss = 5.4, AffectedSystem = "AWS IAM",       Column = "pending"    },
+        new() { Id = "af5",  Title = "XSS via unsanitized user input in comments", Severity = "critical", Cvss = 9.1, AffectedSystem = "Web App",       Column = "in-review"  },
+        new() { Id = "af6",  Title = "CORS misconfiguration allows wildcard origin",Severity = "high",    Cvss = 8.0, AffectedSystem = "API Gateway",   Column = "in-review"  },
+        new() { Id = "af7",  Title = "Unencrypted PII in application logs",        Severity = "medium",   Cvss = 6.3, AffectedSystem = "Logging",       Column = "in-review"  },
+        new() { Id = "af8",  Title = "Session tokens stored in localStorage",      Severity = "medium",   Cvss = 5.9, AffectedSystem = "Web App",       Column = "in-review"  },
+        new() { Id = "af9",  Title = "Hardcoded API key in client bundle",         Severity = "high",     Cvss = 7.8, AffectedSystem = "Web App",       Column = "remediated" },
+        new() { Id = "af10", Title = "Open S3 bucket with user uploads",           Severity = "critical", Cvss = 9.4, AffectedSystem = "AWS S3",        Column = "remediated" },
+        new() { Id = "af11", Title = "Weak password hashing algorithm (MD5)",      Severity = "low",      Cvss = 3.7, AffectedSystem = "Auth Service",  Column = "remediated" },
+    ];
+
+    private HashSet<string> _selected = [];
+    private string _moveTarget = "";
+
+    private int _criticalCount => _findings.Count(f => f.Severity == "critical" && f.Column != "remediated");
+
+    private static string SeverityDot(string severity) => severity switch
+    {
+        "critical" => "bg-red-500",
+        "high"     => "bg-amber-500",
+        "medium"   => "bg-yellow-500",
+        "low"      => "bg-blue-500",
+        _          => "",
+    };
+
+    private static string CvssColor(double score)
+    {
+        if (score >= 9) return "text-red-600 dark:text-red-400";
+        if (score >= 7) return "text-amber-600 dark:text-amber-400";
+        if (score >= 4) return "text-yellow-600 dark:text-yellow-400";
+        return "text-blue-600 dark:text-blue-400";
+    }
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Remove(id))
+            _selected.Add(id);
+    }
+
+    private void ToggleColumnAll(string columnId)
+    {
+        var columnIds = _findings.Where(f => f.Column == columnId).Select(f => f.Id).ToList();
+        var allSel = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+        foreach (var id in columnIds)
+        {
+            if (allSel) _selected.Remove(id);
+            else _selected.Add(id);
+        }
+    }
+
+    private void MoveSelected(string targetColumn)
+    {
+        if (string.IsNullOrEmpty(targetColumn)) return;
+        foreach (var f in _findings.Where(f => _selected.Contains(f.Id)))
+            f.Column = targetColumn;
+        _selected.Clear();
+        _moveTarget = "";
+    }
+
+    private void ArchiveSelected(MouseEventArgs e)
+    {
+        _findings = _findings.Where(f => !_selected.Contains(f.Id)).ToList();
+        _selected.Clear();
+    }
+
+    private void DeselectAll(MouseEventArgs e)
+    {
+        _selected.Clear();
+    }
+}

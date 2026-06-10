@@ -1,0 +1,175 @@
+@* ============================================================
+   Block: todo-list-daily-planner
+   Title: TodoListDailyPlanner
+   Description: A daily planner todo list block for React and Next.js with morning, afternoon, and evening sections, progress bar, and motivational completion message built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-daily-planner.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Daily Planner</span>
+                <p class="text-muted-foreground text-xs">Thursday, Apr 3</p>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_completedCount of @_tasks.Count tasks
+            </span>
+        </div>
+
+        @* Progress bar or completion message *@
+        <div class="border-b px-4 py-3">
+            @if (_allDone)
+            {
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="circle-check-2" Size="16" Class="size-4 text-emerald-500" />
+                    <span class="font-medium text-sm">All done for today</span>
+                    <span class="text-muted-foreground text-xs">@_tasks.Count tasks completed</span>
+                </div>
+            }
+            else
+            {
+                <div class="flex items-center gap-3">
+                    <span class="shrink-0 font-medium text-xs tabular-nums">@_progressPercent%</span>
+                    <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div class="h-full rounded-full bg-foreground transition-all duration-400"
+                             style="@($"width:{_progressPercent}%")"></div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Sections *@
+        @for (int si = 0; si < _sectionOrder.Length; si++)
+        {
+            var sec = _sectionOrder[si];
+            var cfg = _sectionConfig[sec];
+            var sectionTasks = _tasks.Where(t => t.Sec == sec).ToList();
+            var sectionDone = sectionTasks.Count(t => t.Completed);
+            var isLastSec = si == _sectionOrder.Length - 1;
+
+            <div>
+                @* Section header *@
+                <div class="@($"flex items-center gap-2 border-b px-4 py-2 {cfg.Bg}")">
+                    <LucideIconCn Name="@cfg.IconName" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-xs">@cfg.Label</span>
+                    <span class="text-muted-foreground text-xs">@cfg.Range</span>
+                    <span class="ml-auto text-muted-foreground text-xs tabular-nums">
+                        @sectionDone/@sectionTasks.Count
+                    </span>
+                </div>
+
+                @* Tasks *@
+                @foreach (var task in sectionTasks)
+                {
+                    var taskId = task.Id;
+                    <div class="flex items-center gap-3 border-b px-4 py-2.5 transition-colors hover:bg-muted/50">
+                        <span class="flex shrink-0 items-center">
+                            <CheckboxCn Checked="@task.Completed"
+                                        CheckedChanged="@((bool _) => ToggleTask(taskId))"
+                                        aria-label="@CheckboxAriaLabel(task.Text, task.Completed)" />
+                        </span>
+                        <span class="@Cn.Merge("min-w-0 flex-1 text-sm", task.Completed ? "text-muted-foreground line-through" : "")">
+                            @task.Text
+                        </span>
+                        @if (!string.IsNullOrEmpty(task.Time))
+                        {
+                            <span class="shrink-0 font-mono text-muted-foreground text-xs">@task.Time</span>
+                        }
+                    </div>
+                }
+
+                @* Add input *@
+                <div class="@($"flex items-center gap-2 px-4 py-2{(isLastSec ? "" : " border-b")}")">
+                    <InputCn Value="@_inputs[sec]"
+                             ValueChanged="@((string v) => SetInput(sec, v))"
+                             @onkeydown="@((KeyboardEventArgs e) => HandleSectionKeyDown(e, sec))"
+                             Placeholder="@($"Add {cfg.Label.ToLower()} task...")"
+                             Class="h-7 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0" />
+                    <ButtonCn Variant="ButtonVariant.Ghost"
+                              Size="ButtonSize.Sm"
+                              Class="h-6 w-6 shrink-0 p-0"
+                              @onclick="@(() => AddTask(sec))"
+                              aria-label="@($"Add {cfg.Label.ToLower()} task")">
+                        <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private enum DaySection { Morning, Afternoon, Evening }
+
+    private record TaskItem(string Id, string Text, bool Completed, DaySection Sec, string Time);
+
+    private record SectionCfg(string Label, string IconName, string Range, string Bg);
+
+    private static readonly Dictionary<DaySection, SectionCfg> _sectionConfig = new()
+    {
+        [DaySection.Morning]   = new("Morning",   "sun",       "6 AM — 12 PM", "bg-amber-500/5"),
+        [DaySection.Afternoon] = new("Afternoon", "cloud-sun", "12 PM — 5 PM", "bg-blue-500/5"),
+        [DaySection.Evening]   = new("Evening",   "moon",      "5 PM — 10 PM", "bg-violet-500/5"),
+    };
+
+    private static readonly DaySection[] _sectionOrder =
+        [DaySection.Morning, DaySection.Afternoon, DaySection.Evening];
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Review overnight alerts and dashboards",  true,  DaySection.Morning,   "7:00"),
+        new("2", "Morning standup with engineering team",   true,  DaySection.Morning,   "9:00"),
+        new("3", "Deep work: implement search indexing",    false, DaySection.Morning,   "9:30"),
+        new("4", "Lunch with product manager",              false, DaySection.Afternoon, "12:30"),
+        new("5", "Code review for billing module PR",       false, DaySection.Afternoon, "2:00"),
+        new("6", "Sprint planning preparation",             false, DaySection.Afternoon, "3:30"),
+        new("7", "Write tech blog post draft",              false, DaySection.Evening,   "6:00"),
+        new("8", "Review and respond to open PRs",          false, DaySection.Evening,   "7:30"),
+    ];
+
+    private Dictionary<DaySection, string> _inputs = new()
+    {
+        [DaySection.Morning]   = "",
+        [DaySection.Afternoon] = "",
+        [DaySection.Evening]   = "",
+    };
+
+    private int _completedCount => _tasks.Count(t => t.Completed);
+
+    private int _progressPercent =>
+        _tasks.Count > 0 ? (int)Math.Round((double)_completedCount / _tasks.Count * 100) : 0;
+
+    private bool _allDone => _tasks.Count > 0 && _completedCount == _tasks.Count;
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Completed = !_tasks[idx].Completed };
+    }
+
+    private void AddTask(DaySection sec)
+    {
+        var text = _inputs[sec].Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        _tasks.Add(new TaskItem($"new-{_tasks.Count + 1}", text, false, sec, ""));
+        _inputs[sec] = "";
+    }
+
+    private void SetInput(DaySection sec, string value)
+    {
+        _inputs[sec] = value;
+    }
+
+    private void HandleSectionKeyDown(KeyboardEventArgs e, DaySection sec)
+    {
+        if (e.Key == "Enter") AddTask(sec);
+    }
+
+    private static string CheckboxAriaLabel(string text, bool completed) =>
+        $"Mark \"{text}\" as {(completed ? "incomplete" : "complete")}";
+}

@@ -1,0 +1,187 @@
+@* ============================================================
+   Block: music-studio-session
+   Title: MusicStudioSession
+   Description: A recording studio session tracker block for React and Next.js with session name, track list, time logging, hourly rate calculator, and status indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-studio-session.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="mic" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">@_session.Name</span>
+            </div>
+            <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>@_session.Date</span>
+                <span>&middot;</span>
+                <span>@_session.Studio</span>
+                <span>&middot;</span>
+                <span>@_session.Engineer</span>
+            </div>
+        </div>
+
+        @* Session summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="clock" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-semibold text-sm tabular-nums">@_formattedHours</span>
+            </div>
+            <span class="text-muted-foreground text-xs">&middot;</span>
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="music" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="text-muted-foreground text-xs">@_tracks.Length tracks</span>
+            </div>
+            <div class="ml-auto flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_statusCounts["recording"]
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_statusCounts["mixing"]
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_statusCounts["mastered"]
+                </span>
+            </div>
+        </div>
+
+        @* Track list *@
+        <div>
+            @foreach (var entry in _tracksWithIndex)
+            {
+                var track = entry.Track;
+                var index = entry.Index;
+                var dotClass = _statusConfig[track.Status].Dot;
+                var statusLabel = _statusConfig[track.Status].Label;
+                <div class="flex items-center gap-3 border-b px-4 py-3 transition-colors hover:bg-muted/50">
+                    <span class="w-5 text-right font-mono text-muted-foreground text-xs">
+                        @(index + 1)
+                    </span>
+                    <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", dotClass)"></span>
+                    <div class="min-w-0 flex-1">
+                        <span class="font-medium text-sm">@track.Title</span>
+                    </div>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-normal text-xs">@statusLabel</BadgeCn>
+                    @if (track.Takes > 0)
+                    {
+                        <span class="text-muted-foreground text-xs tabular-nums">@track.Takes takes</span>
+                    }
+                    <span class="w-12 text-right font-mono text-muted-foreground text-xs tabular-nums">
+                        @(track.DurationMin > 0 ? $"{track.DurationMin}m" : "--")
+                    </span>
+                </div>
+            }
+        </div>
+
+        @* Billing summary *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="dollar-sign" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-muted-foreground text-xs">Session cost</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-muted-foreground text-xs tabular-nums">
+                        @_formattedHours @("@") $@_session.HourlyRate/hr
+                    </span>
+                    <span class="font-semibold text-sm tabular-nums">
+                        $@_totalCost.ToString("N0")
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        @* Notes *@
+        <div class="px-4 py-3">
+            <button type="button"
+                    @onclick="@(() => _showNotes = !_showNotes)"
+                    class="flex w-full items-center gap-2 text-left">
+                <LucideIconCn Name="sticky-note" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="font-medium text-muted-foreground text-xs">Session notes</span>
+            </button>
+            @if (_showNotes)
+            {
+                <div class="mt-2 rounded-md bg-muted/50 p-3">
+                    <p class="text-sm leading-relaxed">@_session.Notes</p>
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record SessionInfo(string Name, string Date, string Studio, string Engineer, int HourlyRate, string Notes);
+    private record Track(string Id, string Title, int DurationMin, string Status, int Takes);
+    private record StatusConfig(string Dot, string Label);
+    private record TrackWithIndex(Track Track, int Index);
+
+    private static readonly SessionInfo _session = new(
+        Name: "Midnight Sessions Vol. 2",
+        Date: "Mar 28, 2026",
+        Studio: "Sunset Sound, Studio B",
+        Engineer: "Marcus Chen",
+        HourlyRate: 150,
+        Notes: "Vocals tracked with Neumann U87 through Neve 1073 preamp. Bass DI recorded simultaneously with amp mic. Need to revisit guitar solo on track 3 during next session. Client requested additional reverb on lead vocal."
+    );
+
+    private static readonly Track[] _tracks =
+    [
+        new("1", "Golden Hour",   45, "mastered",  4),
+        new("2", "Riverbed",      62, "mastered",  7),
+        new("3", "Paper Walls",   38, "mixing",    3),
+        new("4", "Neon Drift",    55, "mixing",    5),
+        new("5", "Slow Dissolve", 28, "recording", 2),
+        new("6", "Atlas",          0, "recording", 0),
+    ];
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["recording"] = new StatusConfig("bg-red-500",     "Recording"),
+        ["mixing"]     = new StatusConfig("bg-amber-500",  "Mixing"),
+        ["mastered"]   = new StatusConfig("bg-emerald-500","Mastered"),
+    };
+
+    private static readonly TrackWithIndex[] _tracksWithIndex = BuildTracksWithIndex();
+
+    private static TrackWithIndex[] BuildTracksWithIndex()
+    {
+        var result = new TrackWithIndex[_tracks.Length];
+        for (var i = 0; i < _tracks.Length; i++)
+            result[i] = new TrackWithIndex(_tracks[i], i);
+        return result;
+    }
+
+    private static readonly int _totalMinutes = SumMinutes();
+    private static int SumMinutes()
+    {
+        var sum = 0;
+        foreach (var t in _tracks) sum += t.DurationMin;
+        return sum;
+    }
+
+    private static readonly double _totalHours = _totalMinutes / 60.0;
+    private static readonly int _totalCost = (int)Math.Round(_totalHours * _session.HourlyRate);
+    private static readonly string _formattedHours = $"{(int)Math.Floor(_totalHours)}h {_totalMinutes % 60}m";
+
+    private static readonly Dictionary<string, int> _statusCounts = new()
+    {
+        ["recording"] = CountByStatus("recording"),
+        ["mixing"]     = CountByStatus("mixing"),
+        ["mastered"]   = CountByStatus("mastered"),
+    };
+
+    private static int CountByStatus(string status)
+    {
+        var count = 0;
+        foreach (var t in _tracks) if (t.Status == status) count++;
+        return count;
+    }
+
+    private bool _showNotes = false;
+}

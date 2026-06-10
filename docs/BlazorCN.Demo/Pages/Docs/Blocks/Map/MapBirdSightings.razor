@@ -1,0 +1,295 @@
+@* ============================================================
+   Block: map-bird-sightings
+   Title: MapBirdSightings
+   Description: Interactive bird sighting map with species markers, seasonal migration routes, rarity badges, and sighting detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-bird-sightings.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bird" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Bird Sightings</span>
+                <span class="text-xs text-muted-foreground">
+                    Central Texas · @_filtered.Length sightings
+                </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _showRoutes = !_showRoutes)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _showRoutes ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    Migration routes
+                </button>
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                @foreach (var rarity in new[] { "rare", "vagrant" })
+                {
+                    var r = rarity;
+                    <button
+                        type="button"
+                        @onclick="@(() => _filter = (_filter == r ? null : r))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == r ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", RarityColor(r))" />
+                        @RarityLabel(r)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map + Sidebar *@
+        <div class="flex">
+            @* Map placeholder *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Subtle grid background to suggest a map *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Central Texas Region
+                </div>
+
+                @* Migration route lines (SVG) *@
+                @if (_showRoutes)
+                {
+                    <svg class="absolute inset-0 h-full w-full" viewBox="0 0 500 500" preserveAspectRatio="none">
+                        @foreach (var route in _migrationRoutes)
+                        {
+                            var pts = string.Join(" ", route.Coordinates.Select((c, i) =>
+                            {
+                                var px = MapLonToPercent(c[0]) * 500;
+                                var py = MapLatToPercent(c[1]) * 500;
+                                return (i == 0 ? "M" : "L") + $" {px:F1} {py:F1}";
+                            }));
+                            <path d="@pts" fill="none" stroke="@route.Color" stroke-width="2" stroke-opacity="0.4" stroke-dasharray="6 4" />
+                        }
+                    </svg>
+                }
+
+                @* Markers *@
+                @foreach (var sighting in _filtered)
+                {
+                    var s = sighting;
+                    var leftPct = MapLonToPercent(s.Longitude) * 100;
+                    var topPct = MapLatToPercent(s.Latitude) * 100;
+                    <div class="absolute" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%)")">
+                        @* Marker dot *@
+                        <button
+                            type="button"
+                            @onclick="@(() => _selected = (_selected == s.Id ? null : s.Id))"
+                            class="@Cn.Merge("flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md", RarityColor(s.Rarity))">
+                            <LucideIconCn Name="bird" Size="12" Class="size-3 text-white" />
+                        </button>
+
+                        @* Tooltip (always shown below marker) *@
+                        <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@s.Species</span>
+                                <span class="text-muted-foreground">x@s.Count</span>
+                            </div>
+                        </div>
+
+                        @* Popup *@
+                        @if (_selected == s.Id)
+                        {
+                            <div class="absolute left-1/2 top-full z-10 mt-7 w-60 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@s.Species</p>
+                                        <p class="font-mono text-xs text-muted-foreground">@s.ScientificName</p>
+                                    </div>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@RarityLabel(s.Rarity)</BadgeCn>
+                                </div>
+                                <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <div class="flex items-center gap-1">
+                                        <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                                        @s.Date
+                                    </div>
+                                    <span>·</span>
+                                    <span>x@s.Count</span>
+                                    @if (s.HasPhoto)
+                                    {
+                                        <span>·</span>
+                                        <div class="flex items-center gap-1">
+                                            <LucideIconCn Name="camera" Size="12" Class="size-3" />
+                                            Photo
+                                        </div>
+                                    }
+                                </div>
+                                <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <div class="flex items-center gap-1">
+                                        <LucideIconCn Name="trees" Size="12" Class="size-3" />
+                                        @s.Habitat
+                                    </div>
+                                    <span>·</span>
+                                    <div class="flex items-center gap-1">
+                                        <LucideIconCn Name="map-pin" Size="12" Class="size-3" />
+                                        @s.Observer
+                                    </div>
+                                </div>
+                                <div class="border-t pt-2">
+                                    <p class="text-xs leading-relaxed">@s.Notes</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm">
+                        <LucideIconCn Name="locate" Size="14" Class="size-3.5 text-muted-foreground" />
+                    </button>
+                </div>
+            </div>
+
+            @* Sightings list sidebar *@
+            <div class="w-64 shrink-0 border-l">
+                <div class="border-b px-4 py-3">
+                    <span class="text-sm font-medium">Recent Sightings</span>
+                    <p class="text-xs text-muted-foreground">
+                        @_filtered.Length observations this week
+                    </p>
+                </div>
+                <div class="max-h-[430px] overflow-y-auto">
+                    @for (var i = 0; i < _filtered.Length; i++)
+                    {
+                        var sighting = _filtered[i];
+                        var isLast = i == _filtered.Length - 1;
+                        var isExpanded = _expandedSidebar == sighting.Id;
+                        var sid = sighting;
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                @onclick="@(() => { _expandedSidebar = (isExpanded ? null : sid.Id); _selected = sid.Id; })"
+                                class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                                <span class="@Cn.Merge("size-2 shrink-0 rounded-full", RarityColor(sighting.Rarity))" />
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-xs font-medium">@sighting.Species</span>
+                                    <p class="truncate text-xs text-muted-foreground">
+                                        @sighting.Date · @sighting.Observer
+                                    </p>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    @if (sighting.HasPhoto)
+                                    {
+                                        <LucideIconCn Name="camera" Size="12" Class="size-3 text-muted-foreground/60" />
+                                    }
+                                    <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                                </div>
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="px-4 pb-3 pl-9">
+                                    <p class="mb-1 font-mono text-xs text-muted-foreground">@sighting.ScientificName</p>
+                                    <div class="mb-1.5 flex items-center gap-2">
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs font-normal">@sighting.Habitat</BadgeCn>
+                                        <span class="text-xs text-muted-foreground">x@sighting.Count</span>
+                                    </div>
+                                    <p class="text-xs leading-relaxed text-muted-foreground">@sighting.Notes</p>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var rarity in new[] { "common", "uncommon", "rare", "vagrant" })
+            {
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", RarityColor(rarity))" />
+                    @RarityLabel(rarity) (@RarityCount(rarity))
+                </span>
+            }
+            <span class="ml-auto text-xs text-muted-foreground">
+                @_sightings.Sum(s => s.Count) total individuals
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Sighting(
+        string Id,
+        string Species,
+        string ScientificName,
+        string Rarity,
+        string Habitat,
+        string Observer,
+        string Date,
+        int Count,
+        bool HasPhoto,
+        string Notes,
+        double Longitude,
+        double Latitude
+    );
+
+    private record MigrationRoute(string Id, string Species, string Color, double[][] Coordinates);
+
+    private static readonly Sighting[] _sightings =
+    [
+        new("s1", "Painted Bunting", "Passerina ciris", "uncommon", "Shrubland", "M. Torres", "Mar 28", 2, true, "Male in full breeding plumage near feeders at dawn", -97.74, 30.27),
+        new("s2", "Golden-cheeked Warbler", "Setophaga chrysoparia", "rare", "Oak-juniper woodland", "L. Chen", "Mar 27", 1, true, "Singing male in mature Ashe juniper canopy", -98.08, 30.52),
+        new("s3", "Northern Cardinal", "Cardinalis cardinalis", "common", "Urban garden", "J. Park", "Mar 28", 4, false, "Pair with two juveniles at seed feeder", -97.68, 30.32),
+        new("s4", "Vermilion Flycatcher", "Pyrocephalus rubinus", "uncommon", "Open mesquite", "R. Garcia", "Mar 26", 1, true, "Hawking insects from fence post along creek", -97.82, 30.18),
+        new("s5", "Groove-billed Ani", "Crotophaga sulcirostris", "vagrant", "Dense brush", "A. Nguyen", "Mar 25", 1, true, "Extremely unusual this far north — first county record", -97.55, 30.42),
+        new("s6", "Black-chinned Hummingbird", "Archilochus alexandri", "common", "Residential garden", "K. Wilson", "Mar 28", 3, false, "Multiple individuals at native salvia blooms", -97.72, 30.38),
+        new("s7", "Zone-tailed Hawk", "Buteo albonotatus", "rare", "Canyon rim", "D. Rivera", "Mar 27", 1, true, "Soaring with Turkey Vultures over limestone bluffs", -97.92, 30.35),
+    ];
+
+    private static readonly MigrationRoute[] _migrationRoutes =
+    [
+        new("mr1", "Golden-cheeked Warbler", "#eab308", [[-89.5, 15.5], [-93.2, 19.8], [-96.5, 25.8], [-97.5, 28.4], [-98.08, 30.52]]),
+        new("mr2", "Painted Bunting", "#3b82f6", [[-83.5, 9.2], [-87.0, 17.5], [-93.0, 23.0], [-96.0, 27.5], [-97.74, 30.27]]),
+    ];
+
+    // Bounding box for the visible map area (with padding)
+    private const double _lonMin = -98.4;
+    private const double _lonMax = -97.2;
+    private const double _latMin = 29.9;
+    private const double _latMax = 30.8;
+
+    private string? _selected;
+    private string? _filter;
+    private bool _showRoutes = true;
+    private string? _expandedSidebar;
+
+    private Sighting[] _filtered => _filter != null
+        ? _sightings.Where(s => s.Rarity == _filter).ToArray()
+        : _sightings;
+
+    private static string RarityColor(string rarity) => rarity switch
+    {
+        "common" => "bg-muted-foreground",
+        "uncommon" => "bg-blue-500",
+        "rare" => "bg-amber-500",
+        "vagrant" => "bg-red-500",
+        _ => "bg-muted-foreground",
+    };
+
+    private static string RarityLabel(string rarity) => rarity switch
+    {
+        "common" => "Common",
+        "uncommon" => "Uncommon",
+        "rare" => "Rare",
+        "vagrant" => "Vagrant",
+        _ => rarity,
+    };
+
+    private int RarityCount(string rarity) => _sightings.Count(s => s.Rarity == rarity);
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+}

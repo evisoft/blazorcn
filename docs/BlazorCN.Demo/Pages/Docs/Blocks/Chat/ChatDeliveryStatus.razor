@@ -1,0 +1,196 @@
+@* ============================================================
+   Block: chat-delivery-status
+   Title: ChatDeliveryStatus
+   Description: React chat interface with detailed message delivery status indicators for Next.js showing sending, sent, delivered, and read states with an expandable delivery timeline using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-delivery-status.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8 shrink-0">
+                <AvatarFallbackCn Class="text-[10px]">KL</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">Kim Lee</span>
+                <p class="text-muted-foreground text-xs">Online</p>
+            </div>
+            @* Status legend *@
+            <div class="flex items-center gap-3">
+                @foreach (var s in _statusOrder)
+                {
+                    var cfg = _statusConfig[s];
+                    <span class="flex items-center gap-1 text-muted-foreground text-[10px]">
+                        <LucideIconCn Name="@cfg.IconName" Size="12" Class="@Cn.Merge("size-3", cfg.IconClass)" />
+                        <span class="hidden sm:inline">@cfg.Label</span>
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Messages *@
+        <div class="flex flex-1 flex-col overflow-y-auto py-2">
+            <div class="flex flex-1 flex-col justify-end">
+                @for (int idx = 0; idx < _allMessages.Length; idx++)
+                {
+                    var msg = _allMessages[idx];
+                    var isConsecutive = idx > 0 && _allMessages[idx - 1].Sender == msg.Sender;
+                    var isExpanded = _expandedId == msg.Id;
+                    var hasTimeline = msg.IsMe && msg.StatusTimestamps != null;
+                    var item = msg;
+                    var expanded = isExpanded;
+                    var consecutive = isConsecutive;
+                    var timeline = hasTimeline;
+                    <div>
+                        <div class="@Cn.Merge("flex gap-2 px-4 transition-colors hover:bg-accent", consecutive ? "pt-0.5" : "pt-3", timeline ? "cursor-pointer" : "")"
+                             role="@(timeline ? "button" : null)"
+                             tabindex="@(timeline ? "0" : null)"
+                             @onclick="@(() => { if (timeline) { _expandedId = expanded ? null : item.Id; } })"
+                             @onkeydown="@((e) => { if (timeline && (e.Key == "Enter" || e.Key == " ")) { _expandedId = expanded ? null : item.Id; } })">
+                            @if (!consecutive)
+                            {
+                                <AvatarCn Class="mt-0.5 size-8 shrink-0">
+                                    <AvatarFallbackCn Class="text-[10px]">@item.Initials</AvatarFallbackCn>
+                                </AvatarCn>
+                            }
+                            else
+                            {
+                                <div class="size-8 shrink-0"></div>
+                            }
+                            <div class="min-w-0 flex-1">
+                                @if (!consecutive)
+                                {
+                                    <div class="flex items-baseline gap-2">
+                                        <span class="font-medium text-sm">@item.Sender</span>
+                                        <span class="text-muted-foreground text-xs">@item.Time</span>
+                                    </div>
+                                }
+                                <p class="text-sm leading-relaxed">@item.Content</p>
+                                @if (item.IsMe && item.Status != null)
+                                {
+                                    var cfg = _statusConfig[item.Status];
+                                    <div class="mt-0.5 flex items-center gap-1.5">
+                                        <LucideIconCn Name="@cfg.IconName" Size="12" Class="@Cn.Merge("size-3", cfg.IconClass)" />
+                                        <span class="text-muted-foreground text-[10px]">@cfg.Label</span>
+                                        @if (timeline)
+                                        {
+                                            <LucideIconCn Name="chevron-right" Size="12" Class="@Cn.Merge("size-3 text-muted-foreground/60 transition-transform duration-200", expanded ? "rotate-90" : "")" />
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        @if (expanded && item.StatusTimestamps != null)
+                        {
+                            @* DeliveryTimeline *@
+                            var entries = _statusOrder
+                                .Where(s => item.StatusTimestamps.ContainsKey(s))
+                                .Select(s => (Status: s, Label: _statusConfig[s].Label, Time: item.StatusTimestamps[s]))
+                                .ToList();
+                            <div class="ml-10 mt-1 rounded-md bg-muted/50 p-2">
+                                <div class="flex flex-col gap-1">
+                                    @for (int ei = 0; ei < entries.Count; ei++)
+                                    {
+                                        var entry = entries[ei];
+                                        var notLast = ei < entries.Count - 1;
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex w-4 flex-col items-center">
+                                                <span class="@Cn.Merge("size-1.5 rounded-full", entry.Status == "read" ? "bg-blue-500" : "bg-muted-foreground/40")" />
+                                                @if (notLast)
+                                                {
+                                                    <div class="h-2 w-px bg-muted-foreground/20"></div>
+                                                }
+                                            </div>
+                                            <span class="min-w-16 text-muted-foreground text-[10px]">@entry.Label</span>
+                                            <span class="font-mono text-muted-foreground/70 text-[10px]">@entry.Time</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                <div class="h-2"></div>
+            </div>
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <form class="flex items-center gap-2" @onsubmit="HandleSubmit">
+                <div class="flex flex-1 items-center rounded-md border bg-muted/50">
+                    <InputCn @bind-Value="_input"
+                             Placeholder="Type a message..."
+                             Class="h-9 flex-1 border-0 bg-transparent text-sm shadow-none focus-visible:ring-0" />
+                    <ButtonCn type="submit"
+                              Size="ButtonSize.Icon"
+                              Variant="ButtonVariant.Ghost"
+                              Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                              Class="mr-1 size-7 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+            </form>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record StatusCfg(string IconName, string IconClass, string Label);
+
+    private record Message(
+        string Id,
+        string Content,
+        string Sender,
+        string Initials,
+        string Time,
+        bool IsMe,
+        string? Status,
+        Dictionary<string, string>? StatusTimestamps);
+
+    private static readonly string[] _statusOrder = ["sending", "sent", "delivered", "read"];
+
+    private static readonly Dictionary<string, StatusCfg> _statusConfig = new()
+    {
+        ["sending"]   = new("clock",       "text-muted-foreground", "Sending..."),
+        ["sent"]      = new("check",       "text-muted-foreground", "Sent"),
+        ["delivered"] = new("check-check", "text-muted-foreground", "Delivered"),
+        ["read"]      = new("check-check", "text-blue-500",         "Read"),
+    };
+
+    private static readonly Message[] _allMessages =
+    [
+        new("1", "Hey, can you send me the updated contract?",
+            "Kim Lee", "KL", "3:00 PM", false, null, null),
+        new("2", "Sure, let me grab it from the shared drive.",
+            "You", "YO", "3:01 PM", true, "read",
+            new() { ["sending"] = "3:01:00 PM", ["sent"] = "3:01:01 PM", ["delivered"] = "3:01:02 PM", ["read"] = "3:01:15 PM" }),
+        new("3", "Here's the link: contracts/acme-v3-final.pdf",
+            "You", "YO", "3:02 PM", true, "read",
+            new() { ["sending"] = "3:02:00 PM", ["sent"] = "3:02:01 PM", ["delivered"] = "3:02:03 PM", ["read"] = "3:02:30 PM" }),
+        new("4", "Got it, thanks. I'll review it this afternoon and flag anything that needs changes.",
+            "Kim Lee", "KL", "3:03 PM", false, null, null),
+        new("5", "Sounds good. Pay special attention to the SLA section — legal updated the response time guarantees.",
+            "You", "YO", "3:04 PM", true, "delivered",
+            new() { ["sending"] = "3:04:00 PM", ["sent"] = "3:04:01 PM", ["delivered"] = "3:04:02 PM" }),
+        new("6", "Section 4.2 looks fine but I have a question about the data retention clause in 5.1.",
+            "Kim Lee", "KL", "4:15 PM", false, null, null),
+        new("7", "What's the question? I can loop in the legal team if needed.",
+            "You", "YO", "4:17 PM", true, "sent",
+            new() { ["sending"] = "4:17:00 PM", ["sent"] = "4:17:01 PM" }),
+        new("8", "Let me type it up — one sec.",
+            "You", "YO", "4:18 PM", true, "sending",
+            new() { ["sending"] = "4:18:00 PM" }),
+    ];
+
+    private string? _expandedId;
+    private string _input = "";
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

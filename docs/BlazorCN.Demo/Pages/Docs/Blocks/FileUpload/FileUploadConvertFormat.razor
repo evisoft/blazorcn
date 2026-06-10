@@ -1,0 +1,285 @@
+@* ============================================================
+   Block: file-upload-convert-format
+   Title: FileUploadConvertFormat
+   Description: File format conversion upload block for React and Next.js with target format dropdown, quality options, conversion progress, and download button using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-convert-format.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="repeat" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Format Conversion</span>
+            </div>
+            @if (_state != "idle")
+            {
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-2 text-xs" OnClick="Reset">
+                    Reset
+                </ButtonCn>
+            }
+        </div>
+
+        @* Upload area *@
+        @if (_state == "idle")
+        {
+            <div class="border-b px-4 py-4">
+                <div
+                    role="button"
+                    tabindex="0"
+                    class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-muted-foreground/20 px-6 py-10 transition-colors hover:border-muted-foreground/40 hover:bg-muted/30"
+                >
+                    <LucideIconCn Name="cloud-upload" Size="32" Class="size-8 text-muted-foreground/60" />
+                    <span class="font-medium text-sm">Upload file to convert</span>
+                    <p class="text-muted-foreground text-xs">
+                        Images, documents, and videos up to 100 MB
+                    </p>
+                    @* In Blazor WASM file picking requires InputFile; simulate with a demo file here *@
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-1 text-xs" OnClick="SimulateUpload">
+                        Choose file
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* File info *@
+        @if (_state != "idle")
+        {
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <div class="min-w-0 flex-1">
+                    <span class="block truncate font-medium text-sm">@_fileName</span>
+                    <span class="text-muted-foreground text-xs">
+                        @_fileSize &middot; @_fileExt.ToUpper()
+                    </span>
+                </div>
+                @if (_state == "complete")
+                {
+                    <LucideIconCn Name="check-circle-2" Size="16" Class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                }
+            </div>
+        }
+
+        @* Conversion row *@
+        @if (_state != "idle")
+        {
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <span class="shrink-0 rounded bg-muted px-2 py-1 font-mono text-xs">
+                    @_fileExt.ToUpper()
+                </span>
+                <LucideIconCn Name="arrow-right" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                <div class="w-32">
+                    <SelectCn TValue="string"
+                              Value="@_targetFormat"
+                              ValueChanged="@((string v) => { _targetFormat = v; })"
+                              Disabled="@(_state == "converting" || _state == "complete")">
+                        <SelectTriggerCn Class="h-8 text-xs">
+                            <SelectValueCn Placeholder="Target format" />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var fmt in _availableFormats)
+                            {
+                                var fmtVal = fmt;
+                                <SelectItemCn Value="@fmtVal" Class="text-xs">@fmtVal</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+            </div>
+        }
+
+        @* Quality selector *@
+        @if ((_state == "uploaded" || _state == "converting") && !string.IsNullOrEmpty(_targetFormat))
+        {
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <span class="text-muted-foreground text-xs">Quality</span>
+                <div class="w-48">
+                    <SelectCn TValue="string"
+                              Value="@_quality"
+                              ValueChanged="@((string v) => { _quality = v; })"
+                              Disabled="@(_state == "converting")">
+                        <SelectTriggerCn Class="h-8 text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var opt in _qualityOptions)
+                            {
+                                var optVal = opt;
+                                <SelectItemCn Value="@optVal.Value" Class="text-xs">@optVal.Label</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                </div>
+            </div>
+        }
+
+        @* Progress *@
+        @if (_state == "converting")
+        {
+            <div class="border-b px-4 py-3">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="text-muted-foreground text-xs">Converting...</span>
+                    <span class="tabular-nums text-muted-foreground text-xs">@_progress%</span>
+                </div>
+                <ProgressCn Value="@_progress" Class="h-1.5" />
+            </div>
+        }
+
+        @* Complete with download *@
+        @if (_state == "complete")
+        {
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center justify-between rounded-md bg-muted/50 p-3">
+                    <div class="min-w-0 flex-1">
+                        <span class="block truncate font-medium text-sm">@_outputName</span>
+                        <span class="text-muted-foreground text-xs">
+                            @_outputSize &middot; @_targetFormat
+                        </span>
+                    </div>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                        <LucideIconCn Name="download" Size="12" Class="size-3" />
+                        Download
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Actions *@
+        <div class="px-4 py-3">
+            @if (_state == "idle")
+            {
+                <span class="text-muted-foreground text-xs">
+                    Supported: PNG, JPG, WebP, SVG, PDF, DOCX, MP4, MOV
+                </span>
+            }
+            @if (_state == "uploaded")
+            {
+                <ButtonCn
+                    Size="ButtonSize.Sm"
+                    Variant="ButtonVariant.Outline"
+                    Class="h-7 text-xs"
+                    OnClick="StartConversion"
+                    Disabled="@(string.IsNullOrEmpty(_targetFormat))">
+                    Convert to @(!string.IsNullOrEmpty(_targetFormat) ? _targetFormat : "...")
+                </ButtonCn>
+            }
+            @if (_state == "converting")
+            {
+                <span class="text-muted-foreground text-xs">
+                    Converting @_fileExt.ToUpper() to @_targetFormat...
+                </span>
+            }
+            @if (_state == "complete")
+            {
+                <span class="text-muted-foreground text-xs">
+                    Conversion complete. File ready for download.
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record QualityOption(string Value, string Label);
+
+    private static readonly Dictionary<string, string[]> _formatOptions = new()
+    {
+        ["png"]  = ["JPG", "WebP", "SVG", "ICO", "BMP"],
+        ["jpg"]  = ["PNG", "WebP", "SVG", "BMP"],
+        ["jpeg"] = ["PNG", "WebP", "SVG", "BMP"],
+        ["webp"] = ["PNG", "JPG", "SVG"],
+        ["pdf"]  = ["DOCX", "TXT", "PNG", "JPG"],
+        ["docx"] = ["PDF", "TXT", "HTML", "MD"],
+        ["mp4"]  = ["GIF", "WebM", "AVI", "MOV"],
+        ["mov"]  = ["MP4", "GIF", "WebM"],
+        ["svg"]  = ["PNG", "JPG", "WebP"],
+    };
+
+    private static readonly QualityOption[] _qualityOptions =
+    [
+        new("low",    "Low (smaller file)"),
+        new("medium", "Medium (balanced)"),
+        new("high",   "High (best quality)"),
+    ];
+
+    private string _state = "idle";
+    private string _fileName = "";
+    private string _fileSize = "";
+    private string _fileExt = "";
+    private string _targetFormat = "";
+    private string _quality = "high";
+    private int _progress = 0;
+    private string _outputSize = "";
+
+    private string[] _availableFormats => _formatOptions.TryGetValue(_fileExt, out var fmts) ? fmts : [];
+    private string _outputName => System.Text.RegularExpressions.Regex.Replace(_fileName, @"\.[^.]+$", $".{_targetFormat.ToLower()}");
+
+    private System.Threading.Timer? _timer;
+
+    private void SimulateUpload()
+    {
+        // Simulate uploading a demo PNG file
+        _fileName = "photo-landscape.png";
+        _fileSize = "2.4 MB";
+        _fileExt = "png";
+        _targetFormat = "";
+        _quality = "high";
+        _progress = 0;
+        _outputSize = "";
+        _state = "uploaded";
+    }
+
+    private void StartConversion()
+    {
+        if (string.IsNullOrEmpty(_targetFormat)) return;
+        _state = "converting";
+        _progress = 0;
+
+        _timer?.Dispose();
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                var increment = 5 + (int)(_progress / 15.0);
+                _progress += increment;
+                if (_progress >= 100)
+                {
+                    _progress = 100;
+                    _timer?.Dispose();
+                    _timer = null;
+
+                    var sizeMultiplier = _quality == "high" ? 0.85 : _quality == "medium" ? 0.6 : 0.35;
+                    var estimatedKb = 1840.0 * sizeMultiplier;
+                    _outputSize = estimatedKb >= 1024
+                        ? $"{(estimatedKb / 1024.0):F1} MB"
+                        : $"{estimatedKb:F0} KB";
+                    _state = "complete";
+                }
+                StateHasChanged();
+            });
+        }, null, 120, 120);
+    }
+
+    private void Reset()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        _state = "idle";
+        _fileName = "";
+        _fileSize = "";
+        _fileExt = "";
+        _targetFormat = "";
+        _quality = "high";
+        _progress = 0;
+        _outputSize = "";
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+}

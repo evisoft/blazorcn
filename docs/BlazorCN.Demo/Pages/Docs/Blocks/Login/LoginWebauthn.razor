@@ -1,0 +1,263 @@
+@* ============================================================
+   Block: login-webauthn
+   Title: LoginWebauthn
+   Description: WebAuthn registration and login React authentication block for Next.js with passkey creation flow, authenticator selection, credential management, and fallback to password using shadcn/ui, Tailwind CSS, and Lucide icons
+   Source: original/blocks/login/login-webauthn.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+  <div class="overflow-hidden rounded-lg border bg-card">
+
+    <div class="border-b px-4 py-3">
+      <p class="text-sm font-medium">WebAuthn Authentication</p>
+      <p class="mt-0.5 text-xs text-muted-foreground">
+        Sign in with a passkey or security key
+      </p>
+    </div>
+
+    <div class="border-b px-4 py-2">
+      <div class="flex gap-4">
+        @foreach (var tab in _tabs)
+        {
+          var tabLabel = tab;
+          <button
+            type="button"
+            class="@Cn.Merge("border-b-2 pb-2 text-xs transition-colors", _view == tabLabel ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground")"
+            @onclick="@(() => _view = tabLabel)">
+            @(tabLabel == "login" ? "Sign in" : tabLabel == "register" ? "Register" : "Credentials")
+          </button>
+        }
+      </div>
+    </div>
+
+    @if (_view == "login")
+    {
+      <div class="px-4 py-4">
+        @if (!_authenticated)
+        {
+          <div class="flex flex-col items-center py-4">
+            <div class="mb-4 flex size-14 items-center justify-center rounded-full bg-muted/50">
+              <LucideIconCn Name="fingerprint" Size="24" Class="size-6 text-muted-foreground" />
+            </div>
+            <p class="text-sm font-medium">
+              @(_authenticating ? "Waiting for authenticator..." : "Use your passkey")
+            </p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              @(_authenticating
+                ? "Complete the verification on your device"
+                : "Touch your security key or use biometrics")
+            </p>
+            @if (!_authenticating)
+            {
+              <ButtonCn Class="mt-4 gap-1.5" Size="ButtonSize.Sm" @onclick="HandleAuthenticate">
+                <LucideIconCn Name="key-round" Size="14" Class="size-3.5" />
+                Authenticate
+              </ButtonCn>
+            }
+          </div>
+        }
+        else
+        {
+          <div class="flex flex-col items-center py-4">
+            <div class="mb-4 flex size-14 items-center justify-center rounded-full bg-emerald-500/10">
+              <LucideIconCn Name="check-circle-2" Size="24" Class="size-6 text-emerald-600" />
+            </div>
+            <p class="text-sm font-medium">Authentication successful</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              Signed in with MacBook Pro Touch ID
+            </p>
+          </div>
+        }
+
+        <SeparatorCn Class="my-3" />
+
+        <button
+          type="button"
+          class="block w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground">
+          Use password instead
+        </button>
+      </div>
+    }
+
+    @if (_view == "register")
+    {
+      <div class="px-4 py-4">
+        <div class="mb-4 rounded-md bg-muted/50 p-3">
+          <p class="text-xs font-medium text-muted-foreground">Create a new passkey</p>
+          <p class="mt-0.5 text-xs text-muted-foreground">
+            Passkeys are more secure than passwords and work across devices
+          </p>
+        </div>
+
+        <div class="mb-4 space-y-2">
+          <p class="text-xs font-medium text-muted-foreground">Choose authenticator type</p>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="rounded-md border p-3 transition-colors hover:bg-muted/50">
+              <div class="flex items-center gap-2">
+                <LucideIconCn Name="laptop" Size="16" Class="size-4 text-muted-foreground" />
+                <p class="text-xs font-medium">This device</p>
+              </div>
+              <p class="mt-1 text-xs text-muted-foreground">
+                Touch ID, Face ID, Windows Hello
+              </p>
+            </div>
+            <div class="rounded-md border p-3 transition-colors hover:bg-muted/50">
+              <div class="flex items-center gap-2">
+                <LucideIconCn Name="smartphone" Size="16" Class="size-4 text-muted-foreground" />
+                <p class="text-xs font-medium">Security key</p>
+              </div>
+              <p class="mt-1 text-xs text-muted-foreground">
+                YubiKey, Titan, or other FIDO2
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <LabelCn For="webauthn-name" Class="text-xs font-medium text-muted-foreground">
+            Credential name
+          </LabelCn>
+          <InputCn
+            id="webauthn-name"
+            type="text"
+            Placeholder="@("e.g. \"Work laptop\", \"YubiKey Blue\"")"
+            @bind-Value="_credName" />
+        </div>
+
+        <ButtonCn
+          Class="mt-3 w-full gap-1.5"
+          Size="ButtonSize.Sm"
+          Disabled="@(string.IsNullOrEmpty(_credName))"
+          @onclick="HandleRegister">
+          <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+          Create passkey
+        </ButtonCn>
+      </div>
+    }
+
+    @if (_view == "manage")
+    {
+      <div class="py-1">
+        @if (_credentials.Count == 0)
+        {
+          <div class="px-4 py-6 text-center">
+            <p class="text-sm text-muted-foreground">No credentials registered</p>
+          </div>
+        }
+        else
+        {
+          @for (int i = 0; i < _credentials.Count; i++)
+          {
+            var cred = _credentials[i];
+            var idx = i;
+            <div>
+              <div class="flex items-center gap-3 px-4 py-3">
+                <div class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
+                  @if (cred.Type == "platform")
+                  {
+                    <LucideIconCn Name="fingerprint" Size="16" Class="size-4 text-muted-foreground" />
+                  }
+                  else
+                  {
+                    <LucideIconCn Name="key-round" Size="16" Class="size-4 text-muted-foreground" />
+                  }
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium">@cred.Name</p>
+                  <p class="text-xs text-muted-foreground">
+                    Added @cred.CreatedAt &middot; Last used @cred.LastUsed
+                  </p>
+                </div>
+                <ButtonCn
+                  Variant="ButtonVariant.Ghost"
+                  Size="ButtonSize.Sm"
+                  Class="h-7 px-2 text-muted-foreground"
+                  @onclick="@(() => HandleDelete(cred.Id))">
+                  <LucideIconCn Name="trash-2" Size="14" Class="size-3.5" />
+                </ButtonCn>
+              </div>
+              @if (idx < _credentials.Count - 1)
+              {
+                <SeparatorCn />
+              }
+            </div>
+          }
+        }
+
+        <SeparatorCn />
+
+        <div class="px-4 py-3">
+          <ButtonCn
+            Variant="ButtonVariant.Outline"
+            Size="ButtonSize.Sm"
+            Class="w-full gap-1.5 text-xs"
+            @onclick="@(() => _view = "register")">
+            <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+            Add new credential
+          </ButtonCn>
+        </div>
+      </div>
+    }
+
+    <div class="border-t px-4 py-3">
+      <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <LucideIconCn Name="shield-check" Size="12" Class="size-3" />
+        <span>WebAuthn Level 2 &middot; FIDO2 compliant &middot; Phishing resistant</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+@code {
+  private string _view = "login";
+  private bool _authenticating = false;
+  private bool _authenticated = false;
+  private string _credName = "";
+
+  private static readonly string[] _tabs = ["login", "register", "manage"];
+
+  private List<Credential> _credentials = [
+    new Credential { Id = "c1", Name = "MacBook Pro Touch ID", Type = "platform", CreatedAt = "Jan 15, 2026", LastUsed = "2 hours ago" },
+    new Credential { Id = "c2", Name = "YubiKey 5 NFC", Type = "security-key", CreatedAt = "Feb 3, 2026", LastUsed = "Last week" },
+  ];
+
+  private async Task HandleAuthenticate()
+  {
+    _authenticating = true;
+    await Task.Delay(2000);
+    _authenticating = false;
+    _authenticated = true;
+  }
+
+  private void HandleRegister()
+  {
+    if (!string.IsNullOrEmpty(_credName))
+    {
+      _credentials.Add(new Credential
+      {
+        Id = $"c{_credentials.Count + 1}",
+        Name = _credName,
+        Type = "platform",
+        CreatedAt = "Mar 24, 2026",
+        LastUsed = "Never",
+      });
+      _credName = "";
+      _view = "manage";
+    }
+  }
+
+  private void HandleDelete(string id)
+  {
+    _credentials.RemoveAll(c => c.Id == id);
+  }
+
+  private sealed class Credential
+  {
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public string CreatedAt { get; set; } = "";
+    public string LastUsed { get; set; } = "";
+  }
+}

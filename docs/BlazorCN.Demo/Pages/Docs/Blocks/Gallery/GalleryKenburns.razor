@@ -1,0 +1,174 @@
+@* ============================================================
+   Block: gallery-kenburns
+   Title: GalleryKenburns
+   Description: A cinematic gallery with Ken Burns zoom and pan animations built with React, Next.js, shadcn/ui, Tailwind CSS, and Framer Motion for smooth crossfade transitions and subtle motion effects
+   Source: original/blocks/gallery/gallery-kenburns.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<style>
+    .kb-image {
+        animation: kenburns 8s linear forwards;
+    }
+
+    @@keyframes kenburns {
+        from { transform: var(--kb-from); }
+        to   { transform: var(--kb-to); }
+    }
+
+    .kb-fade-in {
+        animation: kbFadeIn 1.5s ease-in-out forwards;
+    }
+
+    @@keyframes kbFadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+
+    .kb-caption {
+        animation: kbCaptionIn 0.6s ease-out 0.5s both;
+    }
+
+    @@keyframes kbCaptionIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <h2 class="font-medium text-sm">Ken Burns Gallery</h2>
+            <p class="mt-1 text-muted-foreground text-xs">Cinematic zoom and pan effect</p>
+        </div>
+
+        <div class="relative h-[500px] overflow-hidden bg-black">
+            @{
+                var img = _images[_currentIndex];
+                var kbFrom = _kenBurnsVariants[_currentIndex % _kenBurnsVariants.Length].From;
+                var kbTo   = _kenBurnsVariants[_currentIndex % _kenBurnsVariants.Length].To;
+            }
+            <div key="@_currentIndex"
+                 class="absolute inset-0 kb-fade-in">
+                <div class="h-full w-full kb-image"
+                     style="@($"--kb-from: {kbFrom}; --kb-to: {kbTo};")" >
+                    <img src="@img.Image"
+                         alt="@img.Title"
+                         class="h-full w-full object-cover" />
+                </div>
+            </div>
+
+            <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 py-6">
+                <div class="kb-caption">
+                    <h3 class="font-semibold text-white text-xl">@img.Title</h3>
+                    <p class="mt-1 text-sm text-white/80">@img.Location</p>
+                </div>
+            </div>
+
+            <div class="absolute top-4 right-4">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Icon"
+                          Class="h-8 w-8 rounded-full bg-background/90 backdrop-blur-sm"
+                          @onclick="TogglePlayPause">
+                    @if (_isPlaying)
+                    {
+                        <LucideIconCn Name="pause" Size="16" Class="size-4" />
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="play" Size="16" Class="size-4" />
+                    }
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-center gap-1.5 border-t px-4 py-3">
+            @foreach (var (image, index) in _images.Select((img2, i) => (img2, i)))
+            {
+                var idx = index;
+                <button type="button"
+                        @onclick="@(() => SetIndex(idx))"
+                        class="group relative">
+                    <span class="@Cn.Merge("block size-1.5 rounded-full transition-all", idx == _currentIndex ? "bg-primary" : "bg-muted-foreground/30 group-hover:bg-muted-foreground/50")" />
+                </button>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record GalleryImage(string Id, string Title, string Location, string Image);
+
+    private record KenBurnsVariant(string From, string To);
+
+    private int _currentIndex = 0;
+    private bool _isPlaying = true;
+    private System.Threading.Timer? _timer;
+
+    private static readonly GalleryImage[] _images =
+    [
+        new("1", "Alpine Summit",       "Swiss Alps",              "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop"),
+        new("2", "Ocean Horizon",       "Pacific Coast",           "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&auto=format&fit=crop"),
+        new("3", "Ancient Forest",      "Redwood National Park",   "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800&auto=format&fit=crop"),
+        new("4", "Desert Expanse",      "Sahara Desert",           "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&auto=format&fit=crop"),
+        new("5", "Urban Skyline",       "New York City",           "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&auto=format&fit=crop"),
+        new("6", "Winter Wonderland",   "Norwegian Fjords",        "https://images.unsplash.com/photo-1518173946687-a544bf02a536?w=800&auto=format&fit=crop"),
+    ];
+
+    // CSS transform strings matching the original Framer Motion variants
+    private static readonly KenBurnsVariant[] _kenBurnsVariants =
+    [
+        new("scale(1)   translate(0px, 0px)",     "scale(1.15) translate(-20px, -20px)"),
+        new("scale(1.1) translate(0px, 0px)",      "scale(1)    translate(15px, 15px)"),
+        new("scale(1)   translate(-10px, 0px)",    "scale(1.12) translate(10px, -15px)"),
+        new("scale(1.08) translate(0px, -10px)",   "scale(1)    translate(-15px, 10px)"),
+        new("scale(1)   translate(10px, 10px)",    "scale(1.1)  translate(-10px, -10px)"),
+        new("scale(1.05) translate(-5px, 5px)",    "scale(1)    translate(5px, -5px)"),
+    ];
+
+    protected override void OnInitialized()
+    {
+        StartTimer();
+    }
+
+    private void StartTimer()
+    {
+        _timer?.Dispose();
+        if (_isPlaying)
+        {
+            _timer = new System.Threading.Timer(_ =>
+            {
+                _currentIndex = (_currentIndex + 1) % _images.Length;
+                InvokeAsync(StateHasChanged);
+            }, null, 6000, 6000);
+        }
+    }
+
+    private void TogglePlayPause()
+    {
+        _isPlaying = !_isPlaying;
+        if (_isPlaying)
+        {
+            StartTimer();
+        }
+        else
+        {
+            _timer?.Dispose();
+            _timer = null;
+        }
+    }
+
+    private void SetIndex(int index)
+    {
+        _currentIndex = index;
+        if (_isPlaying)
+        {
+            StartTimer(); // reset interval on manual nav
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

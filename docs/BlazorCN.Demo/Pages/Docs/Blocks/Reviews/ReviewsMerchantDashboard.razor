@@ -1,0 +1,369 @@
+@* ============================================================
+   Block: reviews-merchant-dashboard
+   Title: ReviewsMerchantDashboard
+   Description: A merchant review management dashboard block for React and Next.js with bento grid stats overview, response rate indicator, pending replies queue with inline reply input, sentiment breakdown, and recent activity feed built with shadcn/ui Avatar, Badge, Button, and Input components, motion/react animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-merchant-dashboard.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Review Management</span>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Monitor performance and respond to feedback
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                @if (_pendingCount > 0)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal tabular-nums">
+                        @_pendingCount pending
+                    </BadgeCn>
+                }
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Export
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Bento grid: stats + sentiment *@
+        <div class="grid grid-cols-[1fr_180px] border-b">
+            @* Stats grid *@
+            <div class="grid grid-cols-2 gap-px border-r bg-border">
+                @foreach (var stat in _stats)
+                {
+                    <div class="bg-card px-4 py-3">
+                        <span class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            @stat.Label
+                        </span>
+                        <div class="mt-1 flex items-baseline gap-2">
+                            <span class="text-xl font-semibold tabular-nums">@stat.Value</span>
+                            <span class="@Cn.Merge("flex items-center gap-0.5 text-[10px] font-medium tabular-nums", TrendColor(stat.Trend))">
+                                @if (stat.Trend == "up")
+                                {
+                                    <LucideIconCn Name="arrow-up" Size="10" Class="size-2.5" />
+                                }
+                                @if (stat.Trend == "down")
+                                {
+                                    <LucideIconCn Name="arrow-down" Size="10" Class="size-2.5" />
+                                }
+                                @stat.Change
+                            </span>
+                        </div>
+                        <span class="text-[10px] text-muted-foreground">@stat.Detail</span>
+                    </div>
+                }
+            </div>
+
+            @* Sentiment breakdown panel *@
+            <div class="flex flex-col justify-center px-4 py-3">
+                <span class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Sentiment
+                </span>
+
+                @* Stacked bar *@
+                <div class="mt-2 flex h-2 overflow-hidden rounded-full">
+                    <div class="bg-emerald-500" style="@($"width:{_sentimentBreakdown["positive"].Percentage}%")" />
+                    <div class="bg-amber-500" style="@($"width:{_sentimentBreakdown["neutral"].Percentage}%")" />
+                    <div class="bg-red-500" style="@($"width:{_sentimentBreakdown["negative"].Percentage}%")" />
+                </div>
+
+                @* Legend *@
+                <div class="mt-2.5 space-y-1.5">
+                    @foreach (var key in new[] { "positive", "neutral", "negative" })
+                    {
+                        var sentiment = _sentimentBreakdown[key];
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1.5">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", SentimentDotColor(key))" />
+                                <span class="text-[10px] capitalize text-muted-foreground">@key</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <span class="@Cn.Merge("text-[10px] font-medium tabular-nums", SentimentTextColor(key))">
+                                    @(sentiment.Percentage)%
+                                </span>
+                                <span class="text-[10px] tabular-nums text-muted-foreground">
+                                    @("(")@(sentiment.Count)@(")")</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Two-column: Pending replies + Activity feed *@
+        <div class="grid grid-cols-[1fr_220px] divide-x">
+            @* Pending replies queue *@
+            <div>
+                <div class="flex items-center justify-between border-b px-4 py-2.5">
+                    <span class="text-xs font-medium text-muted-foreground">Recent Reviews</span>
+                    <span class="text-[10px] tabular-nums text-muted-foreground">
+                        @_pendingCount awaiting reply
+                    </span>
+                </div>
+
+                <div>
+                    @for (int idx = 0; idx < _reviews.Count; idx++)
+                    {
+                        var review = _reviews[idx];
+                        var isLast = idx == _reviews.Count - 1;
+                        var isExpanded = _expandedReply == review.Id;
+                        <div class="@(isLast ? "" : "border-b")">
+                            <div class="px-4 py-3">
+                                @* Author row *@
+                                <div class="flex items-center gap-2.5">
+                                    <AvatarCn Class="size-7">
+                                        <AvatarFallbackCn Class="text-[10px]">@review.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-medium">@review.Author</span>
+                                            <span class="text-[10px] text-muted-foreground">@review.Date</span>
+                                        </div>
+                                        <span class="text-[10px] text-muted-foreground">
+                                            @review.Product
+                                        </span>
+                                    </div>
+
+                                    @* Rating *@
+                                    <div class="flex items-center gap-0.5">
+                                        @for (int si = 0; si < 5; si++)
+                                        {
+                                            var starIdx = si;
+                                            var starClass = starIdx < review.Rating
+                                                ? "size-3 fill-amber-500 text-amber-500"
+                                                : "size-3 text-muted-foreground/30";
+                                            <LucideIconCn Name="star" Size="12" Class="@starClass" />
+                                        }
+                                    </div>
+
+                                    @* Status badge *@
+                                    @if (review.Replied)
+                                    {
+                                        <span class="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                                            <LucideIconCn Name="check-circle-2" Size="12" Class="size-3" />
+                                            Replied
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            Pending
+                                        </span>
+                                    }
+                                </div>
+
+                                @* Review body *@
+                                <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                    @review.Body
+                                </p>
+
+                                @* Sentiment + actions *@
+                                <div class="mt-2 flex items-center gap-2">
+                                    <span class="@Cn.Merge("inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]", SentimentBadgeClass(review.Sentiment))">
+                                        <span class="@Cn.Merge("size-1 rounded-full", SentimentDotColor(review.Sentiment))" />
+                                        @review.Sentiment
+                                    </span>
+
+                                    @if (!review.Replied)
+                                    {
+                                        var capturedReview = review;
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="ml-auto h-6 gap-1 px-2 text-xs"
+                                                  @onclick="@(() => ToggleExpanded(capturedReview.Id))">
+                                            <LucideIconCn Name="message-square" Size="12" Class="size-3" />
+                                            Reply
+                                        </ButtonCn>
+                                    }
+                                </div>
+
+                                @* Reply input *@
+                                @if (isExpanded)
+                                {
+                                    var capturedId = review.Id;
+                                    <div class="overflow-hidden">
+                                        <div class="mt-2.5 flex items-center gap-2">
+                                            <InputCn @bind-Value="_replyText"
+                                                     Placeholder="Write a reply..."
+                                                     Class="h-8 text-xs" />
+                                            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                                      Class="h-8 shrink-0 gap-1 px-3 text-xs"
+                                                      @onclick="@(() => HandleSendReply(capturedId))">
+                                                <LucideIconCn Name="send" Size="12" Class="size-3" />
+                                                Send
+                                            </ButtonCn>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Activity feed sidebar *@
+            <div>
+                <div class="border-b px-3 py-2.5">
+                    <span class="text-xs font-medium text-muted-foreground">Recent Activity</span>
+                </div>
+                <div class="relative px-3 py-2">
+                    @* Vertical timeline line *@
+                    <div class="absolute left-[18px] top-2 bottom-2 w-px bg-border" />
+
+                    @foreach (var item in _activityFeed)
+                    {
+                        <div class="relative flex gap-2.5 py-2">
+                            @* Timeline node *@
+                            <div class="@Cn.Merge("z-10 mt-0.5 size-2 shrink-0 rounded-full ring-2 ring-background", ActivityNodeColor(item.Type))" />
+                            <div class="min-w-0">
+                                <p class="text-[10px] leading-relaxed text-muted-foreground">@item.Text</p>
+                                <span class="text-[10px] text-muted-foreground/60">@item.Time</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                Response rate improved 4% this month
+            </div>
+            <span class="text-[10px] text-muted-foreground">Last updated: 2 min ago</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class DashboardStat
+    {
+        public string Label { get; set; } = "";
+        public string Value { get; set; } = "";
+        public string Change { get; set; } = "";
+        public string Trend { get; set; } = "neutral";
+        public string Detail { get; set; } = "";
+    }
+
+    private class PendingReview
+    {
+        public string Id { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string Initials { get; set; } = "";
+        public int Rating { get; set; }
+        public string Date { get; set; } = "";
+        public string Body { get; set; } = "";
+        public string Product { get; set; } = "";
+        public bool Replied { get; set; }
+        public string Sentiment { get; set; } = "neutral";
+    }
+
+    private class ActivityItem
+    {
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Text { get; set; } = "";
+        public string Time { get; set; } = "";
+    }
+
+    private class SentimentData
+    {
+        public int Count { get; set; }
+        public int Percentage { get; set; }
+    }
+
+    private static readonly DashboardStat[] _stats =
+    [
+        new() { Label = "Total Reviews", Value = "2,847", Change = "+124", Trend = "up", Detail = "this month" },
+        new() { Label = "Average Rating", Value = "4.6", Change = "+0.2", Trend = "up", Detail = "vs last month" },
+        new() { Label = "Response Rate", Value = "89%", Change = "+4%", Trend = "up", Detail = "15 pending" },
+        new() { Label = "Avg Response Time", Value = "4.2h", Change = "-1.9h", Trend = "down", Detail = "down from 6.1h" },
+    ];
+
+    private static readonly Dictionary<string, SentimentData> _sentimentBreakdown = new()
+    {
+        ["positive"] = new() { Count = 2134, Percentage = 75 },
+        ["neutral"]  = new() { Count = 485,  Percentage = 17 },
+        ["negative"] = new() { Count = 228,  Percentage = 8  },
+    };
+
+    private static readonly ActivityItem[] _activityFeed =
+    [
+        new() { Id = "a1", Type = "reply_sent",      Text = "You replied to Zara Mitchell's review",  Time = "2h ago"    },
+        new() { Id = "a2", Type = "review_received", Text = "New 5-star review from Amelia Foster",   Time = "12 min ago" },
+        new() { Id = "a3", Type = "milestone",       Text = "Response rate reached 89% this month",  Time = "1d ago"    },
+        new() { Id = "a4", Type = "reply_sent",      Text = "You replied to Olivia Barnes' review",   Time = "1d ago"    },
+        new() { Id = "a5", Type = "review_received", Text = "New 3-star review from Raj Gupta",       Time = "1h ago"    },
+    ];
+
+    private List<PendingReview> _reviews = new()
+    {
+        new() { Id = "r1", Author = "Amelia Foster",  Initials = "AF", Rating = 5, Date = "12 min ago", Body = "Outstanding quality. The components integrated perfectly with our existing Next.js project and the TypeScript types are comprehensive. Will absolutely recommend to our partner teams.", Product = "Pro Dashboard Kit",       Replied = false, Sentiment = "positive" },
+        new() { Id = "r2", Author = "Raj Gupta",      Initials = "RG", Rating = 3, Date = "1h ago",     Body = "Good component library overall but I ran into a styling conflict with our custom Tailwind config. The sidebar block needed manual adjustments to fit our layout constraints.",                Product = "Full Component Suite",   Replied = false, Sentiment = "neutral"  },
+        new() { Id = "r3", Author = "Olivia Barnes",  Initials = "OB", Rating = 5, Date = "3h ago",     Body = "Purchased the team plan and it has been a game changer for our agency workflow. The blocks are consistent, well documented, and easy to customize.",                                        Product = "Team Plan",              Replied = true,  Sentiment = "positive" },
+        new() { Id = "r4", Author = "Ethan Nowak",    Initials = "EN", Rating = 4, Date = "8h ago",     Body = "The chart components are exactly what I needed for a client dashboard. Clean animations and responsive out of the box. Would love to see more financial chart variants.",                    Product = "Pro Dashboard Kit",       Replied = false, Sentiment = "positive" },
+        new() { Id = "r5", Author = "Zara Mitchell",  Initials = "ZM", Rating = 2, Date = "1d ago",     Body = "Some blocks do not render correctly on Safari mobile. The hero section had layout issues on iPhone SE and the dialog animations were choppy.",                                              Product = "Landing Page Blocks",    Replied = true,  Sentiment = "negative" },
+    };
+
+    private string? _expandedReply;
+    private string _replyText = "";
+
+    private int _pendingCount => _reviews.Count(r => !r.Replied);
+
+    private void ToggleExpanded(string reviewId)
+    {
+        _expandedReply = _expandedReply == reviewId ? null : reviewId;
+    }
+
+    private void HandleSendReply(string reviewId)
+    {
+        if (string.IsNullOrWhiteSpace(_replyText)) return;
+        var review = _reviews.FirstOrDefault(r => r.Id == reviewId);
+        if (review != null) review.Replied = true;
+        _replyText = "";
+        _expandedReply = null;
+    }
+
+    private static string TrendColor(string trend) => trend switch
+    {
+        "up"   => "text-emerald-600 dark:text-emerald-400",
+        "down" => "text-emerald-600 dark:text-emerald-400",
+        _      => "text-muted-foreground",
+    };
+
+    private static string SentimentDotColor(string sentiment) => sentiment switch
+    {
+        "positive" => "bg-emerald-500",
+        "neutral"  => "bg-amber-500",
+        "negative" => "bg-red-500",
+        _          => "bg-muted",
+    };
+
+    private static string SentimentTextColor(string sentiment) => sentiment switch
+    {
+        "positive" => "text-emerald-600 dark:text-emerald-400",
+        "neutral"  => "text-amber-600 dark:text-amber-400",
+        "negative" => "text-red-600 dark:text-red-400",
+        _          => "text-muted-foreground",
+    };
+
+    private static string SentimentBadgeClass(string sentiment) => sentiment switch
+    {
+        "positive" => "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        "neutral"  => "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+        "negative" => "bg-red-500/10 text-red-600 dark:text-red-400",
+        _          => "",
+    };
+
+    private static string ActivityNodeColor(string type) => type switch
+    {
+        "reply_sent"      => "bg-emerald-500",
+        "review_received" => "bg-blue-500",
+        "milestone"       => "bg-amber-500",
+        _                 => "bg-muted-foreground",
+    };
+}

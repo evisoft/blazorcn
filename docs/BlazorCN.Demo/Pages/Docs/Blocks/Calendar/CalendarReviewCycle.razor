@@ -1,0 +1,195 @@
+@* ============================================================
+   Block: calendar-review-cycle
+   Title: CalendarReviewCycle
+   Description: A performance review cycle calendar block for Next.js with review phases, self-assessments, manager reviews, calibration tracking, and deadline management using shadcn/ui and Tailwind CSS
+   Source: original/blocks/calendar/calendar-review-cycle.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideClipboardListCn Size="16" class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Q1 Review Cycle</span>
+                    <p class="text-muted-foreground text-xs">42 employees · 5 phases</p>
+                </div>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_completedCount/@_phases.Length phases done
+            </span>
+        </div>
+
+        @* Active phase highlight *@
+        @if (ActivePhase != null)
+        {
+            var pct = (int)Math.Round((double)ActivePhase.Progress / ActivePhase.Total * 100);
+            <div class="border-b bg-blue-500/5 px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <span class="font-medium text-sm">@ActivePhase.Name</span>
+                        <p class="mt-0.5 text-muted-foreground text-xs">
+                            Due @ActivePhase.EndDate · @ActivePhase.Description
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <span class="font-semibold text-lg tabular-nums">@pct%</span>
+                        <p class="text-muted-foreground text-xs">
+                            <span class="flex items-center gap-1">
+                                <LucideUsersCn Size="12" class="size-3" />
+                                @ActivePhase.Progress/@ActivePhase.Total submitted
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-2 h-1.5 rounded-full bg-muted">
+                    <div
+                        class="h-1.5 rounded-full bg-blue-500 transition-all"
+                        style="@($"width:{pct}%")" />
+                </div>
+            </div>
+        }
+
+        <div>
+            @for (var i = 0; i < _phases.Length; i++)
+            {
+                var phase = _phases[i];
+                var isLast = i == _phases.Length - 1;
+                var isExpanded = _expanded == phase.Id;
+                var config = GetStatusConfig(phase.Status);
+                var doneTasks = phase.Tasks.Count(t => t.Done);
+
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? "" : phase.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        @if (phase.Status == "completed")
+                        {
+                            <LucideCheckCircle2Cn Size="16" class="size-4 shrink-0 text-emerald-500" />
+                        }
+                        else
+                        {
+                            <span class="@Cn.Merge("size-2 shrink-0 rounded-full", config.Dot)"></span>
+                        }
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@phase.Name</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @phase.StartDate - @phase.EndDate
+                            </p>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" class="shrink-0 font-normal text-[10px]">
+                            @config.Label
+                        </BadgeCn>
+                        <LucideChevronRightCn Size="16" class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t px-4 pb-3 pt-2">
+                            <p class="mb-2 text-muted-foreground text-sm">@phase.Description</p>
+                            <div class="space-y-1">
+                                @foreach (var taskItem in phase.Tasks)
+                                {
+                                    <div class="flex items-center gap-2 px-1 py-0.5">
+                                        @if (taskItem.Done)
+                                        {
+                                            <LucideCheckCircle2Cn Size="14" class="size-3.5 shrink-0 text-emerald-500" />
+                                        }
+                                        else
+                                        {
+                                            <LucideCircleCn Size="14" class="size-3.5 shrink-0 text-muted-foreground/40" />
+                                        }
+                                        <span class="@Cn.Merge("text-sm", taskItem.Done ? "text-muted-foreground line-through" : "")">
+                                            @taskItem.Task
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                            <p class="mt-2 text-muted-foreground text-xs tabular-nums">
+                                @doneTasks/@phase.Tasks.Length admin tasks completed
+                            </p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="flex items-center gap-4 border-t bg-muted/20 px-4 py-2">
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                Completed
+            </span>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                Active
+            </span>
+            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="size-1.5 rounded-full bg-zinc-400"></span>
+                Upcoming
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TaskItem(string Id, string Task, bool Done);
+    private record ReviewPhaseData(string Id, string Name, string Description, string StartDate, string EndDate, string Status, int Progress, int Total, TaskItem[] Tasks);
+    private record StatusConfig(string Dot, string Label);
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "completed" => new("bg-emerald-500", "Completed"),
+        "active"    => new("bg-blue-500",    "Active"),
+        _           => new("bg-zinc-400",    "Upcoming"),
+    };
+
+    private static readonly ReviewPhaseData[] _phases =
+    [
+        new("1", "Goal Setting", "Employees set Q2 goals aligned with team OKRs",
+            "Mar 3", "Mar 14", "completed", 42, 42,
+        [
+            new("t1", "Send goal-setting kickoff email", true),
+            new("t2", "Open goal forms in platform", true),
+            new("t3", "Manager review of submitted goals", true),
+            new("t4", "Close goal submission window", true),
+        ]),
+        new("2", "Self-Assessment", "Employees complete self-assessments for Q1 performance",
+            "Mar 17", "Mar 28", "active", 28, 42,
+        [
+            new("t5", "Send self-assessment notification", true),
+            new("t6", "Open assessment forms", true),
+            new("t7", "Send midpoint reminder (50% incomplete)", true),
+            new("t8", "Send final reminder (2 days left)", false),
+            new("t9", "Close submission window", false),
+        ]),
+        new("3", "Peer Feedback", "Collect 360-degree feedback from 3 peers per employee",
+            "Mar 31", "Apr 11", "upcoming", 0, 126,
+        [
+            new("t10", "Assign peer reviewers", false),
+            new("t11", "Send feedback request emails", false),
+            new("t12", "Monitor completion rates", false),
+            new("t13", "Close feedback window", false),
+        ]),
+        new("4", "Manager Reviews", "Managers write performance narratives and propose ratings",
+            "Apr 14", "Apr 25", "upcoming", 0, 42,
+        [
+            new("t14", "Share compiled feedback with managers", false),
+            new("t15", "Managers draft reviews", false),
+            new("t16", "HR quality check on reviews", false),
+        ]),
+        new("5", "Calibration & Delivery", "Leadership calibration sessions followed by 1:1 delivery meetings",
+            "Apr 28", "May 9", "upcoming", 0, 42,
+        [
+            new("t17", "Schedule calibration sessions by dept", false),
+            new("t18", "Run calibration meetings", false),
+            new("t19", "Finalize ratings", false),
+            new("t20", "Managers deliver reviews in 1:1s", false),
+        ]),
+    ];
+
+    private int _completedCount => _phases.Count(p => p.Status == "completed");
+    private ReviewPhaseData? ActivePhase => _phases.FirstOrDefault(p => p.Status == "active");
+
+    private string _expanded = "2";
+}

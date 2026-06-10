@@ -1,0 +1,323 @@
+@* ============================================================
+   Block: map-supply-chain
+   Title: MapSupplyChain
+   Description: Interactive supply chain flow visualization map with supplier, factory, and warehouse markers, directional flow route lines, and inventory level indicators built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-supply-chain.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="package" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Supply Chain</span>
+                <span class="text-xs text-muted-foreground">
+                    @_nodes.Length nodes · @_flows.Length routes
+                </span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_activeFlows active
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_delayedFlows delayed
+                </span>
+            </div>
+        </div>
+
+        @* Map + Side Panel *@
+        <div class="flex">
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Flow route lines (SVG overlay) *@
+                    <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                        @foreach (var flow in _flows)
+                        {
+                            var f = flow;
+                            var color = GetFlowStatusColor(f.Status);
+                            var opacity = f.Status == "idle" ? "0.3" : "0.6";
+                            var strokeWidth = "2";
+                            var dashArray = f.Status == "active" ? "8 4" : f.Status == "delayed" ? "4 4" : "2 6";
+                            var points = string.Join(" ", f.Coordinates.Select(c =>
+                            {
+                                var p = GetMarkerPosition(c[0], c[1]);
+                                return $"{p.X:F1}%,{p.Y:F1}%";
+                            }));
+                            @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{strokeWidth}\" stroke-opacity=\"{opacity}\" stroke-dasharray=\"{dashArray}\" />")
+                        }
+                    </svg>
+
+                    @* Node markers *@
+                    @foreach (var node in _nodes)
+                    {
+                        var n = node;
+                        var cfg = GetNodeConfig(n.Type);
+                        var isSelected = _selectedNode == n.Id;
+                        var pos = GetMarkerPosition(n.Longitude, n.Latitude);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                            <button
+                                type="button"
+                                class="relative"
+                                title="@n.Name"
+                                @onclick="@(() => ToggleNode(n.Id))">
+                                <div class="@($"flex size-8 items-center justify-center rounded-full border-2 border-white shadow-md {cfg.Color}")">
+                                    @if (n.Type == "supplier")
+                                    {
+                                        <LucideIconCn Name="box" Size="16" Class="size-4 text-white" />
+                                    }
+                                    else if (n.Type == "factory")
+                                    {
+                                        <LucideIconCn Name="factory" Size="16" Class="size-4 text-white" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="warehouse" Size="16" Class="size-4 text-white" />
+                                    }
+                                </div>
+                            </button>
+
+                            @if (isSelected)
+                            {
+                                var invColor = InventoryColor(n.Inventory, n.MaxInventory);
+                                var invBg = InventoryBg(n.Inventory, n.MaxInventory);
+                                var invPct = (n.Inventory * 100.0 / n.MaxInventory);
+                                <div class="absolute left-1/2 top-full z-50 mt-1 w-56 -translate-x-1/2 rounded-lg border bg-card p-2.5 shadow-lg">
+                                    <div class="mb-2 flex items-center justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@n.Name</p>
+                                            <p class="text-xs text-muted-foreground">@n.Location</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                            @cfg.Label
+                                        </BadgeCn>
+                                    </div>
+                                    <div class="mb-2">
+                                        <div class="mb-1 flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Inventory</span>
+                                            <span class="@($"font-medium tabular-nums {invColor}")">
+                                                @n.Inventory.ToString("N0")/@n.MaxInventory.ToString("N0")
+                                            </span>
+                                        </div>
+                                        <div class="h-1.5 rounded-full bg-muted">
+                                            <div
+                                                class="@($"h-1.5 rounded-full {invBg}")"
+                                                style="@($"width:{invPct:F1}%")">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-muted-foreground">
+                                        Throughput: @n.Throughput
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                        Map view — Asia-Pacific &amp; Global
+                    </div>
+                </div>
+            </div>
+
+            @* Side Panel *@
+            <div class="w-64 border-l">
+                <div class="border-b px-4 py-3">
+                    <span class="text-sm font-medium">Facilities</span>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Inventory and flow status</p>
+                </div>
+                <div class="max-h-[440px] overflow-y-auto">
+                    @foreach (var nodeType in new[] { "supplier", "factory", "warehouse" })
+                    {
+                        var nt = nodeType;
+                        var cfg = GetNodeConfig(nt);
+                        var typeNodes = Array.FindAll(_nodes, x => x.Type == nt);
+                        <div>
+                            <div class="border-b bg-muted/30 px-4 py-2">
+                                <span class="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                    <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                                    @cfg.Label@("s") (@typeNodes.Length)
+                                </span>
+                            </div>
+                            @for (var idx = 0; idx < typeNodes.Length; idx++)
+                            {
+                                var n = typeNodes[idx];
+                                var isLast = idx == typeNodes.Length - 1;
+                                var nodeFlows = Array.FindAll(_flows, f => f.From == n.Id || f.To == n.Id);
+                                var invPctSide = (int)Math.Round(n.Inventory * 100.0 / n.MaxInventory);
+                                var invBarPct = (n.Inventory * 100.0 / n.MaxInventory);
+                                var invColorSide = InventoryColor(n.Inventory, n.MaxInventory);
+                                var invBgSide = InventoryBg(n.Inventory, n.MaxInventory);
+                                <div class="@(isLast ? "" : "border-b")">
+                                    <div class="px-4 py-3">
+                                        <div class="mb-1 flex items-center justify-between">
+                                            <span class="text-sm font-medium">@n.Name</span>
+                                        </div>
+                                        <p class="mb-2 text-xs text-muted-foreground">@n.Location</p>
+                                        @* Inventory bar *@
+                                        <div class="mb-2">
+                                            <div class="mb-1 flex items-center justify-between text-xs">
+                                                <span class="text-muted-foreground">Stock</span>
+                                                <span class="@($"tabular-nums {invColorSide}")">
+                                                    @invPctSide%
+                                                </span>
+                                            </div>
+                                            <div class="h-1 rounded-full bg-muted">
+                                                <div
+                                                    class="@($"h-1 rounded-full {invBgSide}")"
+                                                    style="@($"width:{invBarPct:F1}%")">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @* Connected flows *@
+                                        @if (nodeFlows.Length > 0)
+                                        {
+                                            <div class="space-y-1">
+                                                @foreach (var flow in nodeFlows)
+                                                {
+                                                    var f = flow;
+                                                    var targetId = f.From == n.Id ? f.To : f.From;
+                                                    var target = Array.Find(_nodes, nd => nd.Id == targetId);
+                                                    var isOutgoing = f.From == n.Id;
+                                                    var dotCls = f.Status == "active" ? "bg-emerald-500" : f.Status == "delayed" ? "bg-red-500" : "bg-muted-foreground/40";
+                                                    var rotateCls = isOutgoing ? "" : " rotate-180";
+                                                    <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                        <LucideIconCn Name="arrow-right" Size="12" Class="@($"size-3{rotateCls}")" />
+                                                        <span class="truncate">@(target?.Name ?? "")</span>
+                                                        <span class="@($"size-1.5 shrink-0 rounded-full {dotCls}")"></span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var nodeType in new[] { "supplier", "factory", "warehouse" })
+            {
+                var nt = nodeType;
+                var cfg = GetNodeConfig(nt);
+                var cnt = Array.FindAll(_nodes, x => x.Type == nt).Length;
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                    @cnt @(cfg.Label.ToLower())s
+                </span>
+            }
+            <span class="text-xs text-muted-foreground">·</span>
+            <span class="text-xs text-muted-foreground">@_flows.Length routes</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SupplyNode(
+        string Id,
+        string Name,
+        string Type,
+        string Location,
+        double Longitude,
+        double Latitude,
+        int Inventory,
+        int MaxInventory,
+        string Throughput
+    );
+
+    private record SupplyFlow(
+        string Id,
+        string From,
+        string To,
+        string Status,
+        string Volume,
+        double[][] Coordinates
+    );
+
+    private record NodeConfig(string Color, string Label);
+
+    private static readonly SupplyNode[] _nodes =
+    [
+        new("s1", "Shenzhen Components", "supplier", "Shenzhen, China",        114.06, 22.54, 12400, 20000, "850 units/day"),
+        new("s2", "Seoul Semiconductors", "supplier", "Seoul, South Korea",    126.98, 37.57,  8200, 15000, "620 units/day"),
+        new("f1", "Taipei Assembly",      "factory",  "Taipei, Taiwan",        121.56, 25.03,  3100,  8000, "420 units/day"),
+        new("f2", "Ho Chi Minh Plant",    "factory",  "HCMC, Vietnam",         106.63, 10.82,  1800,  6000, "310 units/day"),
+        new("w1", "LA Distribution",      "warehouse","Los Angeles, USA",     -118.24, 34.05,  5600, 12000, "780 units/day"),
+        new("w2", "Rotterdam Hub",        "warehouse","Rotterdam, Netherlands",   4.47, 51.92,  4200, 10000, "650 units/day"),
+    ];
+
+    private static readonly SupplyFlow[] _flows =
+    [
+        new("fl1", "s1", "f1", "active",  "2,400 units", [[114.06, 22.54],[118.0, 24.0],[121.56, 25.03]]),
+        new("fl2", "s2", "f1", "active",  "1,200 units", [[126.98, 37.57],[124.0, 31.0],[121.56, 25.03]]),
+        new("fl3", "s1", "f2", "delayed", "900 units",   [[114.06, 22.54],[110.0, 16.0],[106.63, 10.82]]),
+        new("fl4", "f1", "w1", "active",  "1,800 units", [[121.56, 25.03],[160.0, 35.0],[-150.0, 38.0],[-118.24, 34.05]]),
+        new("fl5", "f1", "w2", "active",  "1,100 units", [[121.56, 25.03],[80.0, 30.0],[40.0, 40.0],[4.47, 51.92]]),
+        new("fl6", "f2", "w2", "idle",    "0 units",     [[106.63, 10.82],[70.0, 25.0],[40.0, 40.0],[4.47, 51.92]]),
+    ];
+
+    private string? _selectedNode = null;
+
+    private int _activeFlows  => Array.FindAll(_flows, f => f.Status == "active").Length;
+    private int _delayedFlows => Array.FindAll(_flows, f => f.Status == "delayed").Length;
+
+    private void ToggleNode(string id)
+    {
+        _selectedNode = _selectedNode == id ? null : id;
+    }
+
+    private static NodeConfig GetNodeConfig(string type) => type switch
+    {
+        "supplier"  => new NodeConfig("bg-blue-500",    "Supplier"),
+        "factory"   => new NodeConfig("bg-amber-500",   "Factory"),
+        "warehouse" => new NodeConfig("bg-emerald-500", "Warehouse"),
+        _           => new NodeConfig("bg-muted",       type),
+    };
+
+    private static string GetFlowStatusColor(string status) => status switch
+    {
+        "active"  => "#22c55e",
+        "delayed" => "#ef4444",
+        _         => "#9ca3af",
+    };
+
+    private static string InventoryColor(int current, int max)
+    {
+        var pct = current * 100.0 / max;
+        if (pct <= 25) return "text-red-600 dark:text-red-400";
+        if (pct <= 50) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+
+    private static string InventoryBg(int current, int max)
+    {
+        var pct = current * 100.0 / max;
+        if (pct <= 25) return "bg-red-500";
+        if (pct <= 50) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    // Map lon/lat -> CSS percentage. Viewport covers lon [-120, 135], lat [5, 60]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -125.0, lonMax = 135.0;
+        const double latMin = 5.0,    latMax = 60.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 2, 98);
+        y = Math.Clamp(y, 2, 98);
+        return (x, y);
+    }
+}

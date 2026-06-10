@@ -1,0 +1,294 @@
+@* ============================================================
+   Block: map-crime-heatmap
+   Title: MapCrimeHeatmap
+   Description: React crime statistics heatmap map block for Next.js with incident type filters, neighborhood safety scores, time-period selector, and incident detail overlays using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-crime-heatmap.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="shield-check" Size="16" Class="size-4 text-muted-foreground" />
+                    <span class="text-sm font-medium">Crime statistics</span>
+                    <span class="text-xs text-muted-foreground">@_totalIncidents incidents</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    @foreach (var tp in _timePeriods)
+                    {
+                        var tpItem = tp;
+                        <ButtonCn
+                            Variant="@(tpItem.Key == _timePeriod ? ButtonVariant.Default : ButtonVariant.Ghost)"
+                            Size="ButtonSize.Sm"
+                            Class="h-6 px-2 text-[10px]"
+                            OnClick="@(() => _timePeriod = tpItem.Key)"
+                        >@tpItem.Label</ButtonCn>
+                    }
+                </div>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+                @foreach (var kvp in _typeConfig)
+                {
+                    var incType = kvp.Key;
+                    var cfg = kvp.Value;
+                    <ButtonCn
+                        Variant="@(_activeTypes.Contains(incType) ? ButtonVariant.Default : ButtonVariant.Outline)"
+                        Size="ButtonSize.Sm"
+                        Class="h-7 gap-1.5 text-xs"
+                        OnClick="@(() => ToggleType(incType))"
+                    >
+                        <span class="@($"size-2 rounded-full {cfg.Color}")"></span>
+                        @cfg.Label
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Neighborhoods sidebar *@
+            <div class="w-56 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Neighborhood safety</span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var hood in _neighborhoods)
+                    {
+                        var neighborhood = hood;
+                        var isSelected = _selectedNeighborhood == neighborhood.Id;
+                        <button
+                            type="button"
+                            class="@Cn.Merge("flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "")"
+                            @onclick="@(() => _selectedNeighborhood = (_selectedNeighborhood == neighborhood.Id ? null : neighborhood.Id))"
+                        >
+                            <div class="@Cn.Merge("flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums", ScoreBg(neighborhood.SafetyScore), ScoreColor(neighborhood.SafetyScore))">
+                                @neighborhood.SafetyScore
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="truncate text-sm font-medium">@neighborhood.Name</span>
+                                <div class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <span class="tabular-nums">@neighborhood.Incidents incidents</span>
+                                    <span class="@Cn.Merge("text-[10px]", neighborhood.Trend == "down" ? "text-emerald-600 dark:text-emerald-400" : neighborhood.Trend == "up" ? "text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                                        @(neighborhood.Trend == "down" ? "Improving" : neighborhood.Trend == "up" ? "Worsening" : "Stable")
+                                    </span>
+                                </div>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map area — Map/MapClusterLayer/MapControls/MapPopup are not available in BlazorCN; rendered as a styled placeholder with incident markers *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated NYC map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Incident cluster markers positioned over approximate NYC neighborhoods *@
+                    @foreach (var hood in _neighborhoods)
+                    {
+                        var neighborhood = hood;
+                        var pos = GetNeighborhoodPosition(neighborhood.Id);
+                        var isSelected = _selectedNeighborhood == neighborhood.Id;
+                        var incidentColor = GetIncidentColor(neighborhood.SafetyScore);
+                        var markerSize = 24 + neighborhood.Incidents / 4;
+                        <button
+                            type="button"
+                            class="absolute flex items-center justify-center rounded-full border-2 border-white/80 shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform hover:scale-110 focus:outline-none"
+                            style="@($"width:{markerSize}px;height:{markerSize}px;left:{pos.X}%;top:{pos.Y}%;background-color:{incidentColor};opacity:{(isSelected ? 1.0 : 0.8)}")"
+                            @onclick="@(() => _selectedNeighborhood = (_selectedNeighborhood == neighborhood.Id ? null : neighborhood.Id))"
+                            title="@neighborhood.Name — @neighborhood.Incidents incidents"
+                        >
+                            <span class="text-[10px] font-medium text-white tabular-nums">@neighborhood.Incidents</span>
+                        </button>
+                    }
+
+                    @* Incident detail popup *@
+                    @if (_activeNeighborhood != null)
+                    {
+                        var active = _activeNeighborhood;
+                        var pos = GetNeighborhoodPosition(active.Id);
+                        <div
+                            class="absolute z-20 w-52 rounded-md border bg-popover p-3 shadow-md text-popover-foreground"
+                            style="@($"left:{pos.X}%;top:{pos.Y}%;transform:translate(-50%, calc(-100% - 16px))")"
+                        >
+                            <div class="mb-1.5 flex items-center justify-between">
+                                <span class="text-sm font-medium">@active.Name</span>
+                                <button type="button" class="text-muted-foreground hover:text-foreground" @onclick="@(() => _selectedNeighborhood = null)">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Safety score</span>
+                                    <span class="@Cn.Merge("font-medium", ScoreColor(active.SafetyScore))">@active.SafetyScore / 100</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Incidents</span>
+                                    <span class="font-medium tabular-nums">@active.Incidents</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-muted-foreground">Trend</span>
+                                    <span class="@Cn.Merge("font-medium", active.Trend == "down" ? "text-emerald-600 dark:text-emerald-400" : active.Trend == "up" ? "text-red-600 dark:text-red-400" : "text-muted-foreground")">
+                                        @(active.Trend == "down" ? "Improving" : active.Trend == "up" ? "Worsening" : "Stable")
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                    Map view — New York City
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var kvp in _typeConfig)
+            {
+                var incType = kvp.Key;
+                var cfg = kvp.Value;
+                var count = GetIncidentCount(incType);
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@($"size-1.5 rounded-full {cfg.Color}")"></span>
+                    @count @cfg.Label.ToLower()
+                </span>
+            }
+            <span class="ml-auto text-xs text-muted-foreground">
+                Last @(_timePeriods.Find(p => p.Key == _timePeriod)?.Label ?? _timePeriod)
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Neighborhood(string Id, string Name, int SafetyScore, int Incidents, string Trend);
+
+    private record TypeConfig(string Label, string Color);
+
+    private record TimePeriod(string Key, string Label);
+
+    private record IncidentFeature(string Type, string Description, string Date, string NeighborhoodName);
+
+    private static readonly Neighborhood[] _neighborhoods =
+    [
+        new("n1", "Upper East Side", 87, 12, "down"),
+        new("n2", "Midtown",         62, 48, "up"),
+        new("n3", "Chelsea",         78, 22, "stable"),
+        new("n4", "East Village",    71, 31, "up"),
+        new("n5", "SoHo",            74, 27, "stable"),
+        new("n6", "Harlem",          58, 53, "down"),
+        new("n7", "Financial District", 82, 15, "down"),
+        new("n8", "Williamsburg",    69, 35, "up"),
+    ];
+
+    private static readonly Dictionary<string, TypeConfig> _typeConfig = new()
+    {
+        ["theft"]     = new("Theft",     "bg-red-500"),
+        ["assault"]   = new("Assault",   "bg-orange-500"),
+        ["vandalism"] = new("Vandalism", "bg-amber-500"),
+        ["vehicle"]   = new("Vehicle",   "bg-blue-500"),
+        ["arson"]     = new("Arson",     "bg-rose-500"),
+    };
+
+    private readonly List<TimePeriod> _timePeriods =
+    [
+        new("7d",  "7 days"),
+        new("30d", "30 days"),
+        new("90d", "90 days"),
+        new("1y",  "1 year"),
+    ];
+
+    // Seed incident data (deterministic, mirrors TSX generateIncidentData logic)
+    private static readonly IncidentFeature[] _allIncidents = GenerateIncidents();
+
+    private static IncidentFeature[] GenerateIncidents()
+    {
+        string[] types = ["theft", "assault", "vandalism", "vehicle", "arson"];
+        var descMap = new Dictionary<string, string[]>
+        {
+            ["theft"]     = ["Shoplifting reported at retail store", "Bicycle stolen from bike rack", "Package theft from building lobby", "Pickpocket incident on subway"],
+            ["assault"]   = ["Altercation outside bar", "Robbery with assault reported", "Domestic disturbance call"],
+            ["vandalism"] = ["Graffiti on building facade", "Car window smashed", "Mailbox damaged", "Park bench destroyed"],
+            ["vehicle"]   = ["Car broken into overnight", "Catalytic converter theft", "Hit and run reported", "Vehicle stolen from street"],
+            ["arson"]     = ["Trash can fire reported", "Dumpster arson behind building"],
+        };
+        string[] dates = ["Mar 29, 2026", "Mar 28, 2026", "Mar 27, 2026", "Mar 25, 2026", "Mar 22, 2026", "Mar 18, 2026", "Mar 14, 2026", "Mar 10, 2026"];
+
+        double[] densities = [0.3, 1.0, 0.5, 0.7, 0.6, 1.1, 0.35, 0.8];
+        string[] hoodNames = ["Upper East Side", "Midtown", "Chelsea", "East Village", "SoHo", "Harlem", "Financial District", "Williamsburg"];
+
+        var features = new List<IncidentFeature>();
+        int seedIdx = 0;
+        for (int h = 0; h < hoodNames.Length; h++)
+        {
+            int count = (int)Math.Floor(densities[h] * 30);
+            for (int i = 0; i < count; i++)
+            {
+                var type = types[seedIdx % types.Length];
+                var descs = descMap[type];
+                features.Add(new IncidentFeature(type, descs[seedIdx % descs.Length], dates[seedIdx % dates.Length], hoodNames[h]));
+                seedIdx++;
+            }
+        }
+        return [.. features];
+    }
+
+    private static readonly int _totalIncidents = _neighborhoods.Sum(n => n.Incidents);
+
+    private readonly List<string> _activeTypes = [];
+    private string _timePeriod = "30d";
+    private string? _selectedNeighborhood = null;
+
+    private Neighborhood? _activeNeighborhood => _selectedNeighborhood != null
+        ? Array.Find(_neighborhoods, n => n.Id == _selectedNeighborhood)
+        : null;
+
+    private void ToggleType(string incType)
+    {
+        if (_activeTypes.Contains(incType))
+            _activeTypes.Remove(incType);
+        else
+            _activeTypes.Add(incType);
+    }
+
+    private int GetIncidentCount(string incType)
+    {
+        var active = _activeTypes.Count > 0 ? _activeTypes : new List<string>(["theft", "assault", "vandalism", "vehicle", "arson"]);
+        if (!active.Contains(incType)) return 0;
+        return _allIncidents.Count(f => f.Type == incType);
+    }
+
+    private static string ScoreColor(int score) =>
+        score >= 80 ? "text-emerald-600 dark:text-emerald-400"
+        : score >= 60 ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
+
+    private static string ScoreBg(int score) =>
+        score >= 80 ? "bg-emerald-500/10"
+        : score >= 60 ? "bg-amber-500/10"
+        : "bg-red-500/10";
+
+    private static string GetIncidentColor(int score) =>
+        score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
+
+    // Map neighborhood positions over an NYC viewport (lon [-74.03, -73.92], lat [40.695, 40.825])
+    private static (double X, double Y) GetNeighborhoodPosition(string id)
+    {
+        return id switch
+        {
+            "n1" => (72.0, 20.0),  // Upper East Side
+            "n2" => (52.0, 40.0),  // Midtown
+            "n3" => (43.0, 48.0),  // Chelsea
+            "n4" => (60.0, 60.0),  // East Village
+            "n5" => (44.0, 63.0),  // SoHo
+            "n6" => (64.0, 10.0),  // Harlem
+            "n7" => (38.0, 78.0),  // Financial District
+            "n8" => (82.0, 72.0),  // Williamsburg
+            _    => (50.0, 50.0),
+        };
+    }
+}

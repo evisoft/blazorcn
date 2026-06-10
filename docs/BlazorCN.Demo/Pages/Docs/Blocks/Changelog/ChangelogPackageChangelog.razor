@@ -1,0 +1,331 @@
+@* ============================================================
+   Block: changelog-package-changelog
+   Title: ChangelogPackageChangelog
+   Description: Track package releases with version diffs, download statistics, and breaking change indicators. Built with React, Next.js, shadcn/ui, and Tailwind CSS.
+   Source: original/blocks/changelog/changelog-package-changelog.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Package Releases</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @_filteredReleases.Length versions published
+                    </p>
+                </div>
+                <LucideIconCn Name="package" Size="16" Class="size-4 text-muted-foreground/60" />
+            </div>
+        </div>
+
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+                <select
+                    class="h-8 w-[140px] rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    value="@_typeFilter"
+                    @onchange="@((e) => OnTypeFilterChange(e.Value?.ToString() ?? "all"))">
+                    <option value="all">All releases</option>
+                    <option value="major">Major</option>
+                    <option value="minor">Minor</option>
+                    <option value="patch">Patch</option>
+                    <option value="prerelease">Pre-release</option>
+                </select>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Publish release
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="divide-y">
+            @foreach (var release in _filteredReleases)
+            {
+                var rel = release;
+                var isExpanded = _expandedId == rel.Id;
+                var config = GetTypeConfig(rel.Type);
+                var iconBgClass = Cn.Merge("flex size-8 shrink-0 items-center justify-center rounded-md", config.Bg);
+                var tagIconClass = Cn.Merge("size-4", config.Color);
+                var badgeClass = Cn.Merge("text-xs", config.Border, config.Bg, config.Color);
+                var chevronClass = Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "");
+                var trendClass = Cn.Merge("flex items-center gap-1", rel.DownloadsChange > 0 ? "text-emerald-600" : "text-red-600");
+                <div>
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpanded(rel.Id))"
+                        class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="@iconBgClass">
+                            <LucideIconCn Name="tag" Size="16" Class="@tagIconClass" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-mono text-sm font-medium">v@rel.Version</span>
+                                        <BadgeCn Variant="BadgeVariant.Outline" Class="@badgeClass">
+                                            @config.Label
+                                        </BadgeCn>
+                                        @if (!string.IsNullOrEmpty(rel.Tag))
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs">
+                                                @rel.Tag
+                                            </BadgeCn>
+                                        }
+                                        @if (rel.Breaking.Length > 0)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1 border-red-500/20 bg-red-500/10 text-red-600">
+                                                <LucideIconCn Name="triangle-alert" Size="12" Class="size-3" />
+                                                Breaking
+                                            </BadgeCn>
+                                        }
+                                    </div>
+                                    <div class="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span>@rel.PublishedAt</span>
+                                        <span class="flex items-center gap-1">
+                                            <LucideIconCn Name="download" Size="12" Class="size-3" />
+                                            @((rel.DownloadsWeekly / 1000.0).ToString("F1"))k/week
+                                        </span>
+                                        <span class="@trendClass">
+                                            @if (rel.DownloadsChange > 0)
+                                            {
+                                                <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                                            }
+                                            else
+                                            {
+                                                <LucideIconCn Name="trending-up" Size="12" Class="size-3 rotate-180" />
+                                            }
+                                            @Math.Abs(rel.DownloadsChange)%
+                                        </span>
+                                    </div>
+                                    <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                        @if (rel.Features.Length > 0)
+                                        {
+                                            <span>@rel.Features.Length features</span>
+                                        }
+                                        @if (rel.Fixes.Length > 0)
+                                        {
+                                            <span>@rel.Fixes.Length fixes</span>
+                                        }
+                                        @if (rel.Dependencies.Length > 0)
+                                        {
+                                            <span>@rel.Dependencies.Length dep updates</span>
+                                        }
+                                    </div>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="16" Class="@chevronClass" />
+                            </div>
+                        </div>
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t bg-muted/30 px-4 py-3">
+                            <div class="space-y-3 pl-11">
+                                @if (rel.Breaking.Length > 0)
+                                {
+                                    <div>
+                                        <p class="mb-2 text-xs font-medium text-red-600">Breaking changes</p>
+                                        <ul class="space-y-1.5">
+                                            @foreach (var change in rel.Breaking)
+                                            {
+                                                <li class="text-sm text-foreground">• @change</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                                @if (rel.Features.Length > 0)
+                                {
+                                    <div>
+                                        <p class="mb-2 text-xs font-medium text-muted-foreground">New features</p>
+                                        <ul class="space-y-1.5">
+                                            @foreach (var change in rel.Features)
+                                            {
+                                                <li class="text-sm text-foreground">• @change</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                                @if (rel.Fixes.Length > 0)
+                                {
+                                    <div>
+                                        <p class="mb-2 text-xs font-medium text-muted-foreground">Bug fixes</p>
+                                        <ul class="space-y-1.5">
+                                            @foreach (var change in rel.Fixes)
+                                            {
+                                                <li class="text-sm text-foreground">• @change</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                                @if (rel.Dependencies.Length > 0)
+                                {
+                                    <div>
+                                        <p class="mb-2 text-xs font-medium text-muted-foreground">Dependency updates</p>
+                                        <div class="space-y-1.5">
+                                            @foreach (var dep in rel.Dependencies)
+                                            {
+                                                <div class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                                                    <span class="font-mono text-xs font-medium">@dep.Name</span>
+                                                    <span class="font-mono text-xs text-muted-foreground">@dep.From @("→") @dep.To</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                <div class="flex gap-2">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                                        <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3" />
+                                        View on npm
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                                        Migration guide
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record DepUpdate(string Name, string From, string To);
+
+    private record PackageRelease(
+        string Id,
+        string Version,
+        string Type,
+        string PublishedAt,
+        int DownloadsWeekly,
+        int DownloadsChange,
+        string[] Breaking,
+        string[] Features,
+        string[] Fixes,
+        DepUpdate[] Dependencies,
+        string Author,
+        string Tag = ""
+    );
+
+    private record TypeConfig(string Label, string Color, string Bg, string Border);
+
+    private string _typeFilter = "all";
+    private string? _expandedId;
+
+    private PackageRelease[] _filteredReleases => _typeFilter == "all"
+        ? _releases
+        : [.. _releases.Where(r => r.Type == _typeFilter)];
+
+    private void OnTypeFilterChange(string value)
+    {
+        _typeFilter = value;
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+
+    private static TypeConfig GetTypeConfig(string type) => type switch
+    {
+        "major"      => new("Major",       "text-red-600",     "bg-red-500/10",     "border-red-500/20"),
+        "minor"      => new("Minor",       "text-blue-600",    "bg-blue-500/10",    "border-blue-500/20"),
+        "patch"      => new("Patch",       "text-emerald-600", "bg-emerald-500/10", "border-emerald-500/20"),
+        "prerelease" => new("Pre-release", "text-amber-600",   "bg-amber-500/10",   "border-amber-500/20"),
+        _            => new("Unknown",     "",                 "",                  ""),
+    };
+
+    private static readonly PackageRelease[] _releases =
+    [
+        new(
+            Id: "rel-1",
+            Version: "3.0.0",
+            Type: "major",
+            PublishedAt: "2026-03-28",
+            DownloadsWeekly: 145000,
+            DownloadsChange: 12,
+            Breaking:
+            [
+                "Removed deprecated `createContext` API - use `useContext` instead",
+                "Changed default export to named exports for tree-shaking",
+            ],
+            Features:
+            [
+                "Added TypeScript 5.4 strict mode support",
+                "New `useAsyncData` hook for data fetching",
+            ],
+            Fixes: ["Fixed memory leak in event listeners", "Improved SSR hydration"],
+            Dependencies:
+            [
+                new("react",      "^18.0.0", "^18.3.0"),
+                new("typescript", "^5.0.0",  "^5.4.0"),
+            ],
+            Author: "Core Team"
+        ),
+        new(
+            Id: "rel-2",
+            Version: "2.8.1",
+            Type: "patch",
+            PublishedAt: "2026-03-15",
+            DownloadsWeekly: 89000,
+            DownloadsChange: -45,
+            Breaking: [],
+            Features: [],
+            Fixes:
+            [
+                "Fixed infinite loop in `useMemo` dependency detection",
+                "Corrected TypeScript types for generic components",
+                "Patched XSS vulnerability in HTML sanitizer",
+            ],
+            Dependencies: [],
+            Author: "Security Team"
+        ),
+        new(
+            Id: "rel-3",
+            Version: "2.8.0",
+            Type: "minor",
+            PublishedAt: "2026-02-20",
+            DownloadsWeekly: 67000,
+            DownloadsChange: -8,
+            Breaking: [],
+            Features:
+            [
+                "Added `useDebounce` and `useThrottle` utility hooks",
+                "Experimental RSC support (behind feature flag)",
+                "New component playground in documentation",
+            ],
+            Fixes: ["Performance improvements for large lists"],
+            Dependencies: [new("react-dom", "^18.2.0", "^18.3.0")],
+            Author: "Core Team"
+        ),
+        new(
+            Id: "rel-4",
+            Version: "3.0.0-beta.2",
+            Type: "prerelease",
+            PublishedAt: "2026-03-10",
+            DownloadsWeekly: 3400,
+            DownloadsChange: 67,
+            Breaking: ["API changes for v3 migration"],
+            Features: ["Beta testing for new context API"],
+            Fixes: ["Fixed beta.1 regression in SSR"],
+            Dependencies: [],
+            Author: "Core Team",
+            Tag: "beta"
+        ),
+        new(
+            Id: "rel-5",
+            Version: "2.7.0",
+            Type: "minor",
+            PublishedAt: "2026-01-12",
+            DownloadsWeekly: 12000,
+            DownloadsChange: -78,
+            Breaking: [],
+            Features: ["Added dark mode support", "New animation presets library"],
+            Fixes: ["Bug fixes and stability improvements"],
+            Dependencies: [],
+            Author: "Core Team"
+        ),
+    ];
+}

@@ -1,0 +1,272 @@
+@* ============================================================
+   Block: file-upload-markdown-preview
+   Title: FileUploadMarkdownPreview
+   Description: Markdown file upload block for React and Next.js with split-view raw editor and rendered preview, word count, heading count, and HTML export using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-markdown-preview.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2 min-w-0">
+                <LucideIconCn Name="file-text" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <span class="truncate font-medium text-sm">
+                    @(_source != null ? _fileName : "Markdown Preview")
+                </span>
+                @if (_stats != null)
+                {
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">@_stats.Words words</span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">@_stats.Headings headings</span>
+                }
+            </div>
+            @if (_source != null)
+            {
+                <div class="flex items-center gap-1 shrink-0">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs" OnClick="CopySource">
+                        @if (_copied)
+                        {
+                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                            <span>Copied</span>
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                            <span>Copy</span>
+                        }
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs">
+                        <LucideIconCn Name="download" Size="12" Class="size-3" />
+                        Export HTML
+                    </ButtonCn>
+                </div>
+            }
+        </div>
+
+        @if (_source == null)
+        {
+            @* Upload area *@
+            <div class="p-4">
+                <div
+                    role="button"
+                    tabindex="0"
+                    @onclick="HandleUpload"
+                    class="@Cn.Merge("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-12 transition-colors", _isDragging ? "border-foreground/30 bg-muted/50" : "border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/30")">
+                    <LucideIconCn Name="cloud-upload" Size="32" Class="size-8 text-muted-foreground/60" />
+                    <span class="font-medium text-sm">Drop a Markdown file here</span>
+                    <p class="text-muted-foreground text-xs">Supports .md and .mdx files</p>
+                    <input type="file" accept=".md,.mdx,.markdown" class="hidden" @onchange="HandleUpload" />
+                </div>
+            </div>
+        }
+        else
+        {
+            @* Tab bar *@
+            <div class="flex items-center gap-0 border-b">
+                <button
+                    type="button"
+                    @onclick="@(() => _activeTab = "source")"
+                    class="@Cn.Merge("flex items-center gap-1.5 px-4 py-2 text-xs transition-colors", _activeTab == "source" ? "border-b-2 border-foreground font-medium text-foreground" : "text-muted-foreground hover:text-foreground")">
+                    <LucideIconCn Name="code" Size="12" Class="size-3" />
+                    Source
+                </button>
+                <button
+                    type="button"
+                    @onclick="@(() => _activeTab = "preview")"
+                    class="@Cn.Merge("flex items-center gap-1.5 px-4 py-2 text-xs transition-colors", _activeTab == "preview" ? "border-b-2 border-foreground font-medium text-foreground" : "text-muted-foreground hover:text-foreground")">
+                    <LucideIconCn Name="eye" Size="12" Class="size-3" />
+                    Preview
+                </button>
+            </div>
+
+            @* Content *@
+            <div class="h-80 overflow-y-auto">
+                @if (_activeTab == "source")
+                {
+                    <pre class="whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed text-foreground">@_source</pre>
+                }
+                else
+                {
+                    <div class="p-4 space-y-2">
+                        @{
+                            var inCode = false;
+                            foreach (var rendLine in _preview)
+                            {
+                                if (rendLine == "code")
+                                {
+                                    inCode = !inCode;
+                                }
+                                else if (inCode)
+                                {
+                                    <p class="rounded bg-zinc-950 px-3 py-1 font-mono text-xs text-zinc-300">@(rendLine.StartsWith("p:") ? rendLine[2..] : rendLine)</p>
+                                }
+                                else if (rendLine.StartsWith("h1:"))
+                                {
+                                    <h3 class="font-semibold text-lg">@rendLine[3..]</h3>
+                                }
+                                else if (rendLine.StartsWith("h2:"))
+                                {
+                                    <h4 class="mt-2 font-semibold text-sm">@rendLine[3..]</h4>
+                                }
+                                else if (rendLine.StartsWith("h3:"))
+                                {
+                                    <h5 class="mt-1 font-medium text-sm">@rendLine[3..]</h5>
+                                }
+                                else if (rendLine.StartsWith("li:"))
+                                {
+                                    <p class="flex items-start gap-2 text-sm">
+                                        <span class="mt-2 size-1 shrink-0 rounded-full bg-foreground"></span>
+                                        @rendLine[3..]
+                                    </p>
+                                }
+                                else if (rendLine.StartsWith("bq:"))
+                                {
+                                    <p class="border-l-2 border-muted-foreground/30 pl-3 text-sm text-muted-foreground italic">@rendLine[3..]</p>
+                                }
+                                else if (rendLine.StartsWith("tbl:"))
+                                {
+                                    <p class="font-mono text-xs text-muted-foreground">@rendLine[4..]</p>
+                                }
+                                else if (rendLine == "br")
+                                {
+                                    <div class="h-1"></div>
+                                }
+                                else
+                                {
+                                    <p class="text-sm leading-relaxed">@(rendLine.Length >= 2 ? rendLine[2..] : rendLine)</p>
+                                }
+                            }
+                        }
+                    </div>
+                }
+            </div>
+
+            @* Footer stats *@
+            <div class="flex items-center gap-3 border-t px-4 py-2">
+                <span class="text-muted-foreground text-xs">@_stats?.Lines lines</span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="text-muted-foreground text-xs">@_stats?.Characters characters</span>
+                <div class="ml-auto">
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                        Markdown
+                    </BadgeCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record MarkdownStats(int Words, int Headings, int Lines, int Characters);
+
+    private static readonly string SampleMarkdown =
+        "# Project Overview\n" +
+        "\n" +
+        "A comprehensive guide to building modern web applications with **React** and **Next.js**.\n" +
+        "\n" +
+        "## Getting Started\n" +
+        "\n" +
+        "Install the dependencies and run the development server:\n" +
+        "\n" +
+        "```bash\n" +
+        "npm install\n" +
+        "npm run dev\n" +
+        "```\n" +
+        "\n" +
+        "## Architecture\n" +
+        "\n" +
+        "The application uses the **App Router** with React Server Components for optimal performance.\n" +
+        "\n" +
+        "### Key Features\n" +
+        "\n" +
+        "- Server-side rendering with streaming\n" +
+        "- Automatic code splitting\n" +
+        "- Built-in image optimization\n" +
+        "- TypeScript support out of the box\n" +
+        "\n" +
+        "### Directory Structure\n" +
+        "\n" +
+        "| Directory | Purpose |\n" +
+        "|-----------|----------|\n" +
+        "| `app/` | Routes and layouts |\n" +
+        "| `components/` | Reusable UI components |\n" +
+        "| `lib/` | Utility functions |\n" +
+        "\n" +
+        "## Deployment\n" +
+        "\n" +
+        "Deploy to Vercel with a single command:\n" +
+        "\n" +
+        "```bash\n" +
+        "npx vercel\n" +
+        "```\n" +
+        "\n" +
+        "> Note: Ensure all environment variables are configured before deploying to production.";
+
+    private string? _source = null;
+    private string _fileName = "";
+    private string _activeTab = "preview";
+    private bool _copied = false;
+    private bool _isDragging = false;
+
+    private MarkdownStats? _stats => _source != null ? GetStats(_source) : null;
+    private string[] _preview => _source != null ? RenderPreview(_source) : [];
+
+    private void HandleUpload()
+    {
+        _source = SampleMarkdown;
+        _fileName = "project-overview.md";
+    }
+
+    private async Task CopySource()
+    {
+        if (_source == null) return;
+        _copied = true;
+        await Task.Delay(2000);
+        _copied = false;
+    }
+
+    private static MarkdownStats GetStats(string text)
+    {
+        var words = text.Split(new char[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        var lines = text.Split('\n');
+        var headings = 0;
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart('#');
+            if (trimmed.Length < line.Length && trimmed.StartsWith(" "))
+                headings++;
+        }
+        return new MarkdownStats(words, headings, lines.Length, text.Length);
+    }
+
+    private static string[] RenderPreview(string markdown)
+    {
+        var lines = markdown.Split('\n');
+        var result = new string[lines.Length];
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.StartsWith("### "))
+                result[i] = "h3:" + line[4..];
+            else if (line.StartsWith("## "))
+                result[i] = "h2:" + line[3..];
+            else if (line.StartsWith("# "))
+                result[i] = "h1:" + line[2..];
+            else if (line.StartsWith("- "))
+                result[i] = "li:" + line[2..];
+            else if (line.StartsWith("> "))
+                result[i] = "bq:" + line[2..];
+            else if (line.StartsWith("```"))
+                result[i] = "code";
+            else if (line.StartsWith("|"))
+                result[i] = "tbl:" + line;
+            else if (line.Trim() == "")
+                result[i] = "br";
+            else
+                result[i] = "p:" + line;
+        }
+        return result;
+    }
+}

@@ -1,0 +1,264 @@
+@* ============================================================
+   Block: reviews-heatmap-activity
+   Title: ReviewsHeatmapActivity
+   Description: A GitHub-style review activity heatmap for React and Next.js with color-coded cells, interactive hover tooltips, month labels, weekday axis, summary statistics, and streak tracking built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-heatmap-activity.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with stats *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">Review Activity</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_months[0]&ndash;@_months[_months.Length - 1] 2026
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                <span class="font-semibold tabular-nums text-foreground">@_totalReviews</span>
+                <span>reviews</span>
+                <span class="text-muted-foreground/40">in</span>
+                <span class="font-medium tabular-nums text-foreground">@_activeDays</span>
+                <span>days</span>
+            </div>
+        </div>
+
+        @* Stats strip *@
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-1 border-b px-4 py-2.5">
+            <div class="flex items-center gap-1.5">
+                <span class="text-muted-foreground text-xs">Daily avg</span>
+                <span class="font-semibold text-sm tabular-nums">@_avgPerDay</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="text-muted-foreground text-xs">Peak</span>
+                <span class="font-semibold text-sm tabular-nums">@_peakDay.Count</span>
+                <span class="text-muted-foreground text-[10px]">on @_peakDay.Date</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="flame" Size="12" Class="size-3 text-amber-500" />
+                <span class="text-muted-foreground text-xs">Streak</span>
+                <span class="font-semibold text-sm tabular-nums">@_currentStreak d</span>
+                <span class="text-muted-foreground/40 text-[10px]">/</span>
+                <span class="text-muted-foreground text-[10px]">best @_longestStreak d</span>
+            </div>
+        </div>
+
+        @* Heatmap grid *@
+        <div class="px-4 pt-4 pb-3">
+            @* Month labels row *@
+            <div class="mb-1.5 flex">
+                <div class="w-8 shrink-0"></div>
+                <div class="relative flex-1">
+                    @foreach (var ml in _monthLabels)
+                    {
+                        var leftPct = $"{((double)ml.ColStart / _weeks.Length) * 100:F2}%";
+                        <span class="absolute text-muted-foreground text-[10px]" style="@($"left:{leftPct}")">
+                            @ml.Label
+                        </span>
+                    }
+                </div>
+            </div>
+
+            @* Grid rows (one per day of week) *@
+            <div class="flex flex-col gap-[3px]">
+                @foreach (var dayLabel in _dayLabels)
+                {
+                    var dayIdx = Array.IndexOf(_dayLabels, dayLabel);
+                    <div class="flex items-center gap-[3px]">
+                        <span class="w-8 shrink-0 text-right text-muted-foreground text-[10px] pr-2">
+                            @(dayIdx % 2 == 0 ? dayLabel : "")
+                        </span>
+                        @foreach (var week in _weeks)
+                        {
+                            var cell = week.Days[dayIdx];
+                            var cellItem = cell;
+                            var intensity = GetIntensity(cell.Count);
+                            var intensityCls = _intensityClasses[intensity];
+                            var isHovered = _hoveredCell?.Date == cell.Date;
+                            var ringCls = isHovered ? "ring-1 ring-foreground/30" : "";
+                            <div class="relative group">
+                                <button type="button"
+                                        class="@Cn.Merge("size-3.5 rounded-sm transition-all", intensityCls, ringCls)"
+                                        aria-label="@($"{cell.Date}: {cell.Count} reviews")"
+                                        @onmouseenter="@(() => _hoveredCell = cellItem)"
+                                        @onmouseleave="@(() => _hoveredCell = null)"
+                                        @onfocus="@(() => _hoveredCell = cellItem)"
+                                        @onblur="@(() => _hoveredCell = null)">
+                                </button>
+                                @if (isHovered)
+                                {
+                                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-50 pointer-events-none">
+                                        <div class="rounded bg-popover border px-2 py-1 shadow-md text-center whitespace-nowrap">
+                                            <span class="font-semibold text-xs tabular-nums block">
+                                                @cell.Count review@(cell.Count != 1 ? "s" : "")
+                                            </span>
+                                            <span class="block text-muted-foreground text-[10px]">
+                                                @cell.Date, 2026
+                                            </span>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Legend footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-2">
+                <span class="text-muted-foreground text-[10px]">Less</span>
+                <div class="flex items-center gap-[3px]">
+                    @foreach (var lvl in new[] { 0, 1, 2, 3, 4 })
+                    {
+                        <div class="@Cn.Merge("size-3 rounded-sm", _intensityClasses[lvl])"></div>
+                    }
+                </div>
+                <span class="text-muted-foreground text-[10px]">More</span>
+            </div>
+
+            @if (_hoveredCell != null)
+            {
+                <div class="flex items-center gap-1.5">
+                    <span class="text-muted-foreground text-[10px]">@_hoveredCell.Date</span>
+                    <span class="font-medium text-xs tabular-nums">
+                        @_hoveredCell.Count review@(_hoveredCell.Count != 1 ? "s" : "")
+                    </span>
+                </div>
+            }
+            else
+            {
+                <span class="text-muted-foreground text-[10px]">Hover a cell for details</span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record DayCell(string Date, int Count, int DayOfWeek);
+    private record WeekData(int WeekIndex, string Month, DayCell[] Days);
+    private record MonthLabel(string Label, int ColStart);
+
+    private static readonly string[] _months = ["Jan", "Feb", "Mar"];
+    private static readonly string[] _dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    private static readonly Dictionary<int, string> _intensityClasses = new()
+    {
+        { 0, "bg-muted/50" },
+        { 1, "bg-emerald-500/20" },
+        { 2, "bg-emerald-500/40" },
+        { 3, "bg-emerald-500/60" },
+        { 4, "bg-emerald-500/80" },
+    };
+
+    private static readonly WeekData[] _weeks =
+    [
+        new(0, "Jan", [
+            new("Jan 6",  2, 0), new("Jan 7",  5, 1), new("Jan 8",  0, 2), new("Jan 9",  3, 3),
+            new("Jan 10", 7, 4), new("Jan 11", 1, 5), new("Jan 12", 0, 6),
+        ]),
+        new(1, "Jan", [
+            new("Jan 13", 4, 0), new("Jan 14", 8, 1), new("Jan 15", 6, 2), new("Jan 16",  3, 3),
+            new("Jan 17", 11, 4), new("Jan 18", 2, 5), new("Jan 19", 0, 6),
+        ]),
+        new(2, "Jan", [
+            new("Jan 20", 6, 0), new("Jan 21", 14, 1), new("Jan 22", 9, 2), new("Jan 23", 12, 3),
+            new("Jan 24", 18, 4), new("Jan 25", 5, 5), new("Jan 26", 1, 6),
+        ]),
+        new(3, "Jan", [
+            new("Jan 27", 3, 0), new("Jan 28", 7, 1), new("Jan 29", 4, 2), new("Jan 30", 6, 3),
+            new("Jan 31", 9, 4), new("Feb 1",  2, 5), new("Feb 2",  0, 6),
+        ]),
+        new(4, "Feb", [
+            new("Feb 3",  8, 0), new("Feb 4",  13, 1), new("Feb 5",  7, 2), new("Feb 6",  10, 3),
+            new("Feb 7",  15, 4), new("Feb 8",  4, 5), new("Feb 9",  1, 6),
+        ]),
+        new(5, "Feb", [
+            new("Feb 10", 5, 0), new("Feb 11", 9, 1), new("Feb 12", 11, 2), new("Feb 13", 6, 3),
+            new("Feb 14", 20, 4), new("Feb 15", 3, 5), new("Feb 16", 2, 6),
+        ]),
+        new(6, "Feb", [
+            new("Feb 17", 7, 0), new("Feb 18", 4, 1), new("Feb 19", 3, 2), new("Feb 20", 5, 3),
+            new("Feb 21", 8, 4), new("Feb 22", 1, 5), new("Feb 23", 0, 6),
+        ]),
+        new(7, "Feb", [
+            new("Feb 24", 10, 0), new("Feb 25", 16, 1), new("Feb 26", 12, 2), new("Feb 27", 8, 3),
+            new("Feb 28", 14, 4), new("Mar 1",  6, 5), new("Mar 2",  3, 6),
+        ]),
+        new(8, "Mar", [
+            new("Mar 3",  9, 0), new("Mar 4",  11, 1), new("Mar 5",  7, 2), new("Mar 6",  13, 3),
+            new("Mar 7",  17, 4), new("Mar 8",  5, 5), new("Mar 9",  2, 6),
+        ]),
+        new(9, "Mar", [
+            new("Mar 10", 6, 0), new("Mar 11", 8, 1), new("Mar 12", 19, 2), new("Mar 13", 10, 3),
+            new("Mar 14", 22, 4), new("Mar 15", 7, 5), new("Mar 16", 4, 6),
+        ]),
+        new(10, "Mar", [
+            new("Mar 17", 11, 0), new("Mar 18", 15, 1), new("Mar 19", 8, 2), new("Mar 20", 12, 3),
+            new("Mar 21", 16, 4), new("Mar 22", 3, 5), new("Mar 23", 1, 6),
+        ]),
+        new(11, "Mar", [
+            new("Mar 24", 14, 0), new("Mar 25", 18, 1), new("Mar 26", 10, 2), new("Mar 27", 9, 3),
+            new("Mar 28", 21, 4), new("Mar 29", 8, 5), new("Mar 30", 5, 6),
+        ]),
+    ];
+
+    private static DayCell[] AllDays() => _weeks.SelectMany(w => w.Days).ToArray();
+
+    private static readonly int _totalReviews = AllDays().Sum(d => d.Count);
+    private static readonly int _activeDays = AllDays().Count(d => d.Count > 0);
+    private static readonly string _avgPerDay = ((double)_totalReviews / AllDays().Length).ToString("F1");
+    private static readonly DayCell _peakDay = AllDays().Aggregate((best, d) => d.Count > best.Count ? d : best);
+    private static readonly int _currentStreak;
+    private static readonly int _longestStreak;
+    private static readonly MonthLabel[] _monthLabels;
+
+    static ReviewsHeatmapActivity()
+    {
+        var allDays = AllDays();
+        int current = 0, longest = 0, streak = 0;
+        for (int i = allDays.Length - 1; i >= 0; i--)
+        {
+            if (allDays[i].Count > 0)
+            {
+                streak++;
+                if (i == allDays.Length - 1 || current == streak - 1)
+                    current = streak;
+                if (streak > longest)
+                    longest = streak;
+            }
+            else
+            {
+                streak = 0;
+            }
+        }
+        _currentStreak = current;
+        _longestStreak = longest;
+
+        var labels = new List<MonthLabel>();
+        string lastMonth = "";
+        for (int i = 0; i < _weeks.Length; i++)
+        {
+            string m = _weeks[i].Month;
+            if (m != lastMonth)
+            {
+                labels.Add(new MonthLabel(m, i));
+                lastMonth = m;
+            }
+        }
+        _monthLabels = labels.ToArray();
+    }
+
+    private DayCell? _hoveredCell = null;
+
+    private static int GetIntensity(int count)
+    {
+        if (count == 0) return 0;
+        if (count <= 3) return 1;
+        if (count <= 8) return 2;
+        if (count <= 14) return 3;
+        return 4;
+    }
+}

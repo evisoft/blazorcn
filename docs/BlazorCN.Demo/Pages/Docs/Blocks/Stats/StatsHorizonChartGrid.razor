@@ -1,0 +1,263 @@
+@* ============================================================
+   Block: stats-horizon-chart-grid
+   Title: StatsHorizonChartGrid
+   Description: A multi-row horizon chart stats card for React and Next.js with layered opacity band encoding per metric, deterministic SVG area rendering for SSR safety, NumberFlow animated aggregate throughput, per-row peak markers, and tabular-nums current values built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-horizon-chart-grid.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="activity" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <p class="text-sm font-medium">Service throughput</p>
+                </div>
+                <p class="mt-0.5 text-xs text-muted-foreground">Last 72 minutes · 60s resolution</p>
+            </div>
+            <div class="text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                    <span aria-label="Live" class="relative flex size-1.5" role="img">
+                        <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/60 opacity-75"></span>
+                        <span class="relative inline-flex size-1.5 rounded-full bg-emerald-500"></span>
+                    </span>
+                    <span class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                        Live
+                    </span>
+                </div>
+                <div class="mt-1 min-w-[120px]">
+                    <span class="text-xl font-semibold tabular-nums">@FormatCompact(_totalThroughput)</span>
+                    <span class="ml-1 text-xs text-muted-foreground">req/s total</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="divide-y">
+            @foreach (var row in _rows)
+            {
+                var series = GetSeries(row.Id);
+                var deltaPositive = row.Delta >= 0;
+                var deltaClass = row.Status == "critical"
+                    ? "text-red-600 dark:text-red-400"
+                    : deltaPositive
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-amber-600 dark:text-amber-400";
+
+                <div class="grid grid-cols-[140px_1fr_96px] items-center gap-3 px-4 py-2.5" key="@row.Id">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <span
+                                aria-label="@GetStatusLabel(row.Status)"
+                                class="@Cn.Merge("size-1.5 shrink-0 rounded-full", GetStatusDot(row.Status))"
+                                role="img">
+                            </span>
+                            <code class="truncate font-mono text-xs font-medium">@row.Label</code>
+                        </div>
+                        <p class="mt-0.5 truncate text-[11px] text-muted-foreground">
+                            @row.Description
+                        </p>
+                    </div>
+
+                    @{
+                        var tc = GetToneClasses(row.Tone);
+                        var peakIdx = PeakIndex(series);
+                        var peakX = (peakIdx / (double)(series.Length - 1)) * ViewW;
+                        var peakY = ViewH - series[peakIdx] * ViewH;
+                        var ariaLabel = $"{row.Label} throughput, currently {row.CurrentDisplay} {row.Unit}";
+                    }
+                    <svg
+                        aria-label="@ariaLabel"
+                        class="block h-9 w-full overflow-hidden rounded-sm bg-muted/40"
+                        preserveAspectRatio="none"
+                        role="img"
+                        viewBox="0 0 320 36">
+                        <title>@ariaLabel</title>
+                        @for (int b = 0; b < Bands; b++)
+                        {
+                            var bandIdx = b;
+                            var opacity = 0.18 + bandIdx * 0.28;
+                            var d = BuildBandPath(series, bandIdx);
+                            <path class="@tc.Fill" d="@d" opacity="@opacity.ToString("F2")" />
+                        }
+                        <line
+                            class="@tc.Peak"
+                            stroke-dasharray="1 2"
+                            stroke-width="1"
+                            x1="@peakX.ToString("F2")"
+                            x2="@peakX.ToString("F2")"
+                            y1="0"
+                            y2="@ViewH" />
+                        <circle class="@tc.Fill" cx="@peakX.ToString("F2")" cy="@peakY.ToString("F2")" r="1.75" />
+                    </svg>
+
+                    <div class="text-right">
+                        <p class="text-sm font-semibold tabular-nums">@row.CurrentDisplay</p>
+                        <p class="@Cn.Merge("text-[11px] font-medium tabular-nums", deltaClass)">
+                            @(deltaPositive ? "+" : "")@row.Delta.ToString("F1")%
+                        </p>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="flex items-center justify-between gap-3 border-t bg-muted/30 px-4 py-2">
+            <p class="text-[11px] text-muted-foreground">
+                Band intensity encodes throughput magnitude.
+            </p>
+            <div class="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <div class="flex items-center gap-1.5">
+                    @RenderLegendSwatch("emerald")
+                    <span>healthy</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    @RenderLegendSwatch("amber")
+                    <span>warning</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    @RenderLegendSwatch("red")
+                    <span>critical</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private const int SampleCount = 72;
+    private const int Bands = 3;
+    private const double ViewW = 320.0;
+    private const double ViewH = 36.0;
+
+    private record HorizonSeries(
+        string Id,
+        string Label,
+        string Description,
+        string Unit,
+        string CurrentDisplay,
+        int CurrentValue,
+        double Delta,
+        string Status,
+        string Tone,
+        double Seed
+    );
+
+    private record ToneClass(string Fill, string Peak, string Label);
+
+    private static readonly HorizonSeries[] _rows =
+    [
+        new("api-gateway",   "api-gateway",   "us-east-1 · edge",     "req/s",  "12,480", 12480,  4.2,  "healthy",  "emerald", 0.71),
+        new("auth-service",  "auth-service",  "global · oauth",       "req/s",  "3,128",  3128,   1.1,  "healthy",  "neutral", 1.83),
+        new("checkout-api",  "checkout-api",  "us-west-2 · billing",  "req/s",  "842",    842,   -2.4,  "warning",  "amber",   2.42),
+        new("cache-edge",    "cache-edge",    "anycast · cdn",        "hit/s",  "48,201", 48201,  8.7,  "healthy",  "emerald", 3.11),
+        new("db-primary",    "db-primary",    "postgres · rw",        "q/s",    "612",    612,   12.8,  "critical", "red",     4.05),
+        new("worker-queue",  "worker-queue",  "sidekiq · jobs",       "job/s",  "97",     97,     0.3,  "healthy",  "neutral", 5.27),
+    ];
+
+    private static readonly int _totalThroughput = 12480 + 3128 + 842 + 48201 + 612 + 97;
+
+    // Precomputed series data (deterministic, SSR-safe)
+    private static readonly Dictionary<string, double[]> _seriesCache = BuildSeriesCache();
+
+    private static Dictionary<string, double[]> BuildSeriesCache()
+    {
+        var map = new Dictionary<string, double[]>();
+        foreach (var row in _rows)
+            map[row.Id] = GenerateSeries(row.Seed);
+        return map;
+    }
+
+    private double[] GetSeries(string id) =>
+        _seriesCache.TryGetValue(id, out var s) ? s : [];
+
+    private static double[] GenerateSeries(double seed)
+    {
+        var out_ = new double[SampleCount];
+        for (int i = 0; i < SampleCount; i++)
+        {
+            double t = (double)i / SampleCount;
+            double low   = 0.45 + 0.28 * Math.Sin(t * Math.PI * 3.4 + seed);
+            double mid   = 0.14 * Math.Sin(t * Math.PI * 8.1 + seed * 1.7);
+            double high  = 0.08 * Math.Sin(t * Math.PI * 19  + seed * 2.3);
+            double spike = Math.Max(0, 0.22 * Math.Pow(Math.Sin(t * Math.PI * 5 + seed * 0.6), 5));
+            out_[i] = Math.Min(1, Math.Max(0.04, low + mid + high + spike));
+        }
+        return out_;
+    }
+
+    private static string BuildBandPath(double[] series, int bandIdx)
+    {
+        double step = ViewW / (series.Length - 1);
+        double bandMin = (double)bandIdx / Bands;
+        var pts = new System.Text.StringBuilder();
+        for (int i = 0; i < series.Length; i++)
+        {
+            double bandNorm = Math.Max(0, Math.Min(1, (series[i] - bandMin) * Bands));
+            double x = i * step;
+            double y = ViewH - bandNorm * ViewH;
+            pts.Append($"{x:F2},{y:F2} L");
+        }
+        // Remove trailing " L"
+        string pointStr = pts.ToString().TrimEnd(' ', 'L').TrimEnd(' ');
+        return $"M0,{ViewH:F2} L{pointStr} L{ViewW:F2},{ViewH:F2} Z";
+    }
+
+    private static int PeakIndex(double[] series)
+    {
+        int idx = 0;
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < series.Length; i++)
+        {
+            if (series[i] > max) { max = series[i]; idx = i; }
+        }
+        return idx;
+    }
+
+    private static ToneClass GetToneClasses(string tone) => tone switch
+    {
+        "emerald" => new("fill-emerald-500 dark:fill-emerald-400", "stroke-emerald-500/50", "text-emerald-600 dark:text-emerald-400"),
+        "amber"   => new("fill-amber-500 dark:fill-amber-400",     "stroke-amber-500/50",   "text-amber-600 dark:text-amber-400"),
+        "red"     => new("fill-red-500 dark:fill-red-400",         "stroke-red-500/60",     "text-red-600 dark:text-red-400"),
+        _         => new("fill-foreground",                         "stroke-foreground/30",  "text-foreground"),
+    };
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "healthy"  => "bg-emerald-500",
+        "warning"  => "bg-amber-500",
+        "critical" => "bg-red-500",
+        _          => "bg-muted-foreground",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "healthy"  => "Healthy",
+        "warning"  => "Warning",
+        "critical" => "Critical",
+        _          => status,
+    };
+
+    private static string FormatCompact(int value)
+    {
+        if (value >= 1000) return $"{value / 1000.0:F1}K";
+        return value.ToString();
+    }
+
+    private RenderFragment RenderLegendSwatch(string tone) => builder =>
+    {
+        var tc = GetToneClasses(tone);
+        // Convert fill-X to bg-X for swatch
+        var bgClass = tc.Fill.Replace("fill-", "bg-").Replace("dark:fill-", "dark:bg-");
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "aria-hidden", "true");
+        builder.AddAttribute(2, "class", "inline-flex h-2.5 overflow-hidden rounded-sm");
+        for (int b = 0; b < 3; b++)
+        {
+            double opacity = 0.18 + b * 0.28;
+            builder.OpenElement(3 + b * 2, "span");
+            builder.AddAttribute(4 + b * 2, "class", $"block w-2.5 {bgClass}");
+            builder.AddAttribute(5 + b * 2, "style", $"opacity:{opacity:F2}");
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
+}

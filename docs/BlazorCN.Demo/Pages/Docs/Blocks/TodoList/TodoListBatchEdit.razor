@@ -1,0 +1,174 @@
+@* ============================================================
+   Block: todo-list-batch-edit
+   Title: TodoListBatchEdit
+   Description: A todo list block with inline batch editing mode for React and Next.js featuring edit mode toggle, inline text inputs, change highlighting, per-row undo, and batch save/cancel actions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-batch-edit.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="pencil" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Batch Edit</span>
+                @if (_editing)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                        Editing
+                    </BadgeCn>
+                }
+            </div>
+            <div class="flex items-center gap-1.5">
+                @if (_editing)
+                {
+                    @if (ChangedCount > 0)
+                    {
+                        <span class="mr-1 text-muted-foreground text-xs tabular-nums">@ChangedCount changed</span>
+                    }
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" @onclick="SaveEdits">
+                        <LucideIconCn Name="save" Size="12" Class="size-3" />
+                        Save
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" @onclick="CancelEditing">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        Cancel
+                    </ButtonCn>
+                }
+                else
+                {
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" @onclick="StartEditing">
+                        <LucideIconCn Name="pencil" Size="12" Class="size-3" />
+                        Edit Mode
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < _todos.Count; i++)
+            {
+                var todo = _todos[i];
+                var isLast = i == _todos.Count - 1;
+                var isChanged = ChangedIds.Contains(todo.Id);
+                <div class="@Cn.Merge(isLast ? "" : "border-b", isChanged ? "border-l-2 border-l-amber-500" : "", "transition-colors hover:bg-muted/50")">
+                    <div class="flex w-full items-center gap-3 px-4 py-3">
+                        <span class="shrink-0">
+                            <CheckboxCn Checked="@todo.Completed" CheckedChanged="@((bool v) => ToggleTodo(todo.Id))" Disabled="@_editing" />
+                        </span>
+                        @if (_editing)
+                        {
+                            <InputCn @bind-Value="_drafts[todo.Id]" Class="h-8 min-w-0 flex-1 text-sm" />
+                        }
+                        else
+                        {
+                            <span class="@Cn.Merge("min-w-0 flex-1 text-sm transition-all duration-200", todo.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                                @todo.Text
+                            </span>
+                        }
+                        @if (_editing && isChanged)
+                        {
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground" @onclick="@(() => UndoRow(todo.Id))">
+                                <LucideIconCn Name="rotate-ccw" Size="12" Class="size-3" />
+                                Undo
+                            </ButtonCn>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-2 border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs tabular-nums">@_todos.Count tasks</span>
+            <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+            <span class="text-muted-foreground text-xs tabular-nums">@CompletedCount completed</span>
+            @if (_editing && ChangedCount > 0)
+            {
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span class="text-amber-600 text-xs tabular-nums dark:text-amber-400">@ChangedCount unsaved</span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class TodoItem
+    {
+        public string Id { get; set; } = "";
+        public string Text { get; set; } = "";
+        public bool Completed { get; set; }
+    }
+
+    private List<TodoItem> _todos =
+    [
+        new() { Id = "1", Text = "Refactor authentication service to use Better Auth", Completed = false },
+        new() { Id = "2", Text = "Add pagination to the users API endpoint", Completed = false },
+        new() { Id = "3", Text = "Write integration tests for Stripe webhooks", Completed = true },
+        new() { Id = "4", Text = "Update Docker compose for local development", Completed = false },
+        new() { Id = "5", Text = "Implement rate limiting middleware", Completed = false },
+        new() { Id = "6", Text = "Fix timezone bug in scheduling module", Completed = true },
+        new() { Id = "7", Text = "Add OpenTelemetry tracing to API routes", Completed = false },
+        new() { Id = "8", Text = "Migrate database indexes for query optimization", Completed = false },
+    ];
+
+    private bool _editing = false;
+    private Dictionary<string, string> _drafts = new();
+
+    private HashSet<string> ChangedIds
+    {
+        get
+        {
+            var ids = new HashSet<string>();
+            foreach (var todo in _todos)
+            {
+                if (_drafts.TryGetValue(todo.Id, out var draft) && draft != todo.Text)
+                    ids.Add(todo.Id);
+            }
+            return ids;
+        }
+    }
+
+    private int ChangedCount => ChangedIds.Count;
+    private int CompletedCount => _todos.Count(t => t.Completed);
+
+    private void StartEditing()
+    {
+        _drafts = new Dictionary<string, string>();
+        foreach (var todo in _todos)
+            _drafts[todo.Id] = todo.Text;
+        _editing = true;
+    }
+
+    private void CancelEditing()
+    {
+        _drafts = new Dictionary<string, string>();
+        _editing = false;
+    }
+
+    private void SaveEdits()
+    {
+        foreach (var todo in _todos)
+        {
+            if (_drafts.TryGetValue(todo.Id, out var draft) && draft != todo.Text)
+                todo.Text = draft;
+        }
+        _drafts = new Dictionary<string, string>();
+        _editing = false;
+    }
+
+    private void UndoRow(string id)
+    {
+        var original = _todos.FirstOrDefault(t => t.Id == id);
+        if (original != null)
+            _drafts[id] = original.Text;
+    }
+
+    private void ToggleTodo(string id)
+    {
+        if (_editing) return;
+        var todo = _todos.FirstOrDefault(t => t.Id == id);
+        if (todo != null) todo.Completed = !todo.Completed;
+    }
+}

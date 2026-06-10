@@ -1,0 +1,285 @@
+@* ============================================================
+   Block: file-upload-approval-workflow
+   Title: FileUploadApprovalWorkflow
+   Description: File upload with approval workflow block for React and Next.js with reviewer assignment, status progression, comment threads, and approval badges using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-approval-workflow.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">Approval workflow</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">Review and approve uploaded files</p>
+        </div>
+
+        @* Status summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <span class="text-muted-foreground text-xs">@_files.Count files</span>
+            <div class="ml-auto flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-muted-foreground"></span>
+                    @_files.Count(f => f.Status == "pending")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @_files.Count(f => f.Status == "under_review")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_files.Count(f => f.Status == "approved")
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_files.Count(f => f.Status == "rejected")
+                </span>
+            </div>
+        </div>
+
+        @* File list *@
+        <div>
+            @for (int i = 0; i < _files.Count; i++)
+            {
+                var file = _files[i];
+                var isLast = i == _files.Count - 1;
+                var isExpanded = _expanded == file.Id;
+                var cfg = GetStatusConfig(file.Status);
+                <div class="@Cn.Merge(isLast && !isExpanded ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpand(file.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", cfg.Dot)"></span>
+                        <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@file.Name</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @file.Size · @file.SubmittedBy · @file.SubmittedAt
+                            </p>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 font-normal text-xs">
+                            @cfg.Label
+                        </BadgeCn>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        var expandedFile = file;
+                        <div class="px-4 pb-4 pl-9">
+                            @* Reviewer & actions *@
+                            <div class="mb-3 flex items-center gap-3">
+                                <span class="text-muted-foreground text-xs">
+                                    Reviewer: <span class="font-medium text-foreground">@expandedFile.Reviewer</span>
+                                </span>
+                                @if (expandedFile.Status == "pending")
+                                {
+                                    var pendingFileId = expandedFile.Id;
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Outline"
+                                        Size="ButtonSize.Sm"
+                                        Class="ml-auto h-6 gap-1 px-2 text-xs"
+                                        OnClick="@((MouseEventArgs e) => UpdateStatus(pendingFileId, "under_review"))">
+                                        Start Review
+                                    </ButtonCn>
+                                }
+                                @if (expandedFile.Status == "under_review")
+                                {
+                                    var reviewFileId = expandedFile.Id;
+                                    <div class="ml-auto flex items-center gap-1.5">
+                                        <ButtonCn
+                                            Variant="ButtonVariant.Outline"
+                                            Size="ButtonSize.Sm"
+                                            Class="h-6 gap-1 px-2 text-xs"
+                                            OnClick="@((MouseEventArgs e) => UpdateStatus(reviewFileId, "rejected"))">
+                                            <LucideIconCn Name="x-circle" Size="12" Class="size-3" />
+                                            Reject
+                                        </ButtonCn>
+                                        <ButtonCn
+                                            Size="ButtonSize.Sm"
+                                            Class="h-6 gap-1 px-2 text-xs"
+                                            OnClick="@((MouseEventArgs e) => UpdateStatus(reviewFileId, "approved"))">
+                                            <LucideIconCn Name="check-circle-2" Size="12" Class="size-3" />
+                                            Approve
+                                        </ButtonCn>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Comments thread *@
+                            @if (expandedFile.Comments.Count > 0)
+                            {
+                                <div class="mb-3 space-y-2">
+                                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                                        <LucideIconCn Name="message-square" Size="12" Class="size-3" />
+                                        @expandedFile.Comments.Count @(expandedFile.Comments.Count == 1 ? "comment" : "comments")
+                                    </span>
+                                    @foreach (var comment in expandedFile.Comments)
+                                    {
+                                        <div class="rounded-md bg-muted/50 p-3">
+                                            <div class="mb-1 flex items-center gap-2">
+                                                <span class="font-medium text-xs">@comment.Author</span>
+                                                <span class="text-muted-foreground text-xs">@comment.Time</span>
+                                            </div>
+                                            <p class="text-sm leading-relaxed">@comment.Text</p>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @* Add comment *@
+                            @{
+                                var commentFileId = expandedFile.Id;
+                                _commentInputs.TryGetValue(commentFileId, out var commentValue);
+                            }
+                            <div class="flex items-center gap-2">
+                                <InputCn
+                                    Value="@(commentValue ?? "")"
+                                    ValueChanged="@((string v) => SetCommentInput(commentFileId, v))"
+                                    Placeholder="Add a comment..."
+                                    Class="h-8 text-sm"
+                                    @onkeydown="@((KeyboardEventArgs e) => HandleCommentKeyDown(e, commentFileId))" />
+                                <ButtonCn
+                                    Variant="ButtonVariant.Ghost"
+                                    Size="ButtonSize.Sm"
+                                    Class="h-8 shrink-0 px-2"
+                                    OnClick="@(() => AddComment(commentFileId))">
+                                    <LucideIconCn Name="send" Size="14" Class="size-3.5" />
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CommentEntry(string Id, string Author, string Text, string Time);
+
+    private class ReviewFile
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Size { get; set; } = "";
+        public string SubmittedBy { get; set; } = "";
+        public string Reviewer { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string SubmittedAt { get; set; } = "";
+        public List<CommentEntry> Comments { get; set; } = [];
+    }
+
+    private record StatusConfig(string Label, string Dot, string IconName);
+
+    private List<ReviewFile> _files =
+    [
+        new ReviewFile
+        {
+            Id = "1",
+            Name = "brand-guidelines-v3.pdf",
+            Size = "4.8 MB",
+            SubmittedBy = "Sarah Chen",
+            Reviewer = "Mark Thompson",
+            Status = "approved",
+            SubmittedAt = "Mar 18",
+            Comments =
+            [
+                new CommentEntry("c1", "Mark Thompson", "Logo spacing looks good. Approved.", "Mar 19"),
+            ],
+        },
+        new ReviewFile
+        {
+            Id = "2",
+            Name = "product-launch-assets.zip",
+            Size = "28.3 MB",
+            SubmittedBy = "Alex Rivera",
+            Reviewer = "Sarah Chen",
+            Status = "under_review",
+            SubmittedAt = "Mar 20",
+            Comments =
+            [
+                new CommentEntry("c2", "Sarah Chen", "Reviewing the social media assets now. The banner dimensions look off for Twitter.", "Mar 21"),
+                new CommentEntry("c3", "Alex Rivera", "I'll update the Twitter banner to 1500x500. Should I adjust the LinkedIn one too?", "Mar 21"),
+            ],
+        },
+        new ReviewFile
+        {
+            Id = "3",
+            Name = "q1-compliance-report.docx",
+            Size = "1.2 MB",
+            SubmittedBy = "Jordan Lee",
+            Reviewer = "Lisa Park",
+            Status = "rejected",
+            SubmittedAt = "Mar 22",
+            Comments =
+            [
+                new CommentEntry("c4", "Lisa Park", "Missing sections 4.2 and 4.3 from the regulatory checklist. Please resubmit.", "Mar 23"),
+            ],
+        },
+        new ReviewFile
+        {
+            Id = "4",
+            Name = "onboarding-deck-2026.pptx",
+            Size = "12.6 MB",
+            SubmittedBy = "Sarah Chen",
+            Reviewer = "Unassigned",
+            Status = "pending",
+            SubmittedAt = "Mar 24",
+            Comments = [],
+        },
+    ];
+
+    private string? _expanded = "2";
+    private Dictionary<string, string> _commentInputs = new();
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "pending"      => new StatusConfig("Pending",      "bg-muted-foreground", "clock"),
+        "under_review" => new StatusConfig("Under Review", "bg-blue-500",         "circle-dot"),
+        "approved"     => new StatusConfig("Approved",     "bg-emerald-500",      "check-circle-2"),
+        "rejected"     => new StatusConfig("Rejected",     "bg-red-500",          "x-circle"),
+        _              => new StatusConfig(status,         "bg-muted-foreground", "file"),
+    };
+
+    private void ToggleExpand(string fileId)
+    {
+        _expanded = _expanded == fileId ? null : fileId;
+    }
+
+    private void UpdateStatus(string fileId, string newStatus)
+    {
+        var file = _files.FirstOrDefault(f => f.Id == fileId);
+        if (file is not null)
+            file.Status = newStatus;
+    }
+
+    private void SetCommentInput(string fileId, string value)
+    {
+        _commentInputs[fileId] = value;
+    }
+
+    private void AddComment(string fileId)
+    {
+        _commentInputs.TryGetValue(fileId, out var text);
+        var trimmed = text?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+
+        var file = _files.FirstOrDefault(f => f.Id == fileId);
+        if (file is null) return;
+
+        file.Comments.Add(new CommentEntry(
+            $"c-{file.Comments.Count + 1}",
+            "You",
+            trimmed,
+            "Just now"
+        ));
+        _commentInputs[fileId] = "";
+    }
+
+    private void HandleCommentKeyDown(KeyboardEventArgs e, string fileId)
+    {
+        if (e.Key == "Enter")
+            AddComment(fileId);
+    }
+}

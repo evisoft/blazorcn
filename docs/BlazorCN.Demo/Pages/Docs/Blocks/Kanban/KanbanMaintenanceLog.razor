@@ -1,0 +1,234 @@
+@* ============================================================
+   Block: kanban-maintenance-log
+   Title: KanbanMaintenanceLog
+   Description: An equipment maintenance kanban board for React and Next.js with bulk selection via shadcn/ui Checkbox, maintenance type badges, priority indicators, and floating action bar built with Tailwind CSS
+   Source: original/blocks/kanban/kanban-maintenance-log.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="relative overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="wrench" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Maintenance Log</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_tasks.Count tasks
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var mtype in _maintenanceTypes)
+                {
+                    var t = mtype;
+                    <span class="text-muted-foreground text-xs">
+                        @_tasks.Count(task => task.MaintenanceType == t) @t
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-3 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var columnTasks = _tasks.Where(t => t.Column == column.Id).ToList();
+                var columnIds = columnTasks.Select(t => t.Id).ToList();
+                var allSelected = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+                var someSelected = columnIds.Any(id => _selected.Contains(id));
+                var isIndeterminate = !allSelected && someSelected;
+
+                <div>
+                    @* Column header *@
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                        <span class="flex items-center" role="button" tabindex="0"
+                              @onclick="@(() => ToggleColumnAll(column.Id))">
+                            <button type="button"
+                                    role="checkbox"
+                                    aria-checked="@(allSelected ? "true" : isIndeterminate ? "mixed" : "false")"
+                                    data-slot="checkbox"
+                                    data-state="@(allSelected ? "checked" : "unchecked")"
+                                    class="cn-checkbox peer shrink-0 outline-none">
+                                @if (isIndeterminate)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                }
+                                else if (allSelected)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M20 6 9 17l-5-5" /></svg>
+                                }
+                            </button>
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@columnTasks.Count</span>
+                    </div>
+
+                    @* Tasks *@
+                    <div>
+                        @foreach (var task in columnTasks)
+                        {
+                            var isLast = task == columnTasks[columnTasks.Count - 1];
+                            var isChecked = _selected.Contains(task.Id);
+                            var capturedTask = task;
+                            <div class="@Cn.Merge("flex items-start gap-2.5 px-4 py-2.5 transition-colors hover:bg-muted/50", !isLast ? "border-b" : "", isChecked ? "bg-muted/30" : "")">
+                                <span class="mt-0.5 flex shrink-0 items-center">
+                                    <CheckboxCn Checked="@isChecked"
+                                                CheckedChanged="@((bool _) => ToggleSelect(capturedTask.Id))" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", PriorityDot(capturedTask.Priority))"></span>
+                                        <span class="@Cn.Merge("truncate font-medium text-sm", column.Id == "completed" ? "text-muted-foreground line-through" : "")">
+                                            @capturedTask.Equipment
+                                        </span>
+                                    </div>
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <BadgeCn Variant="BadgeVariant.Secondary"
+                                                 Class="@Cn.Merge("border-0 font-normal text-[10px]", TypeColor(capturedTask.MaintenanceType))">
+                                            @capturedTask.MaintenanceType
+                                        </BadgeCn>
+                                        <span class="text-muted-foreground text-xs">
+                                            Last: @capturedTask.LastService
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @(_tasks.Count(t => t.Column == "completed")) of @_tasks.Count completed
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Schedule refreshed 8 min ago</span>
+        </div>
+
+        @* Floating Action Bar *@
+        @if (_selected.Count > 0)
+        {
+            <div class="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-lg border bg-card px-4 py-2.5 shadow-lg">
+                <span class="font-medium text-sm">@_selected.Count selected</span>
+                <div class="flex items-center gap-2">
+                    <SelectCn Value="@_moveTarget" ValueChanged="@((string? val) => MoveSelected(val ?? ""))">
+                        <SelectTriggerCn Class="h-7 w-[130px] text-xs">
+                            <SelectValueCn Placeholder="Move to..." />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var col in _columns)
+                            {
+                                var c = col;
+                                <SelectItemCn Value="@c.Id" Class="text-xs">@c.Title</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="ArchiveSelected">
+                        <LucideIconCn Name="archive" Size="12" Class="size-3" />
+                        Archive
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="DeselectAll">
+                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                        Deselect
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private sealed class MaintenanceTask
+    {
+        public string Id { get; init; } = "";
+        public string Equipment { get; init; } = "";
+        public string MaintenanceType { get; init; } = "";
+        public string Priority { get; init; } = "";
+        public string LastService { get; init; } = "";
+        public string Column { get; set; } = "";
+    }
+
+    private sealed record ColumnDef(string Id, string Title);
+
+    private static readonly string[] _maintenanceTypes = ["preventive", "corrective", "calibration"];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("scheduled",   "Scheduled"),
+        new("in-progress", "In Progress"),
+        new("completed",   "Completed"),
+    ];
+
+    private List<MaintenanceTask> _tasks =
+    [
+        new() { Id = "mt1",  Equipment = "CNC Lathe — Unit 4",             MaintenanceType = "preventive",  Priority = "medium", LastService = "Feb 12", Column = "scheduled"   },
+        new() { Id = "mt2",  Equipment = "HVAC Compressor — Building A",   MaintenanceType = "corrective",  Priority = "high",   LastService = "Jan 28", Column = "scheduled"   },
+        new() { Id = "mt3",  Equipment = "Conveyor Belt — Line 2",         MaintenanceType = "preventive",  Priority = "low",    LastService = "Mar 5",  Column = "scheduled"   },
+        new() { Id = "mt4",  Equipment = "Pressure Gauge — Tank 7",        MaintenanceType = "calibration", Priority = "medium", LastService = "Dec 14", Column = "scheduled"   },
+        new() { Id = "mt5",  Equipment = "Hydraulic Press — Bay 3",        MaintenanceType = "corrective",  Priority = "high",   LastService = "Mar 1",  Column = "in-progress" },
+        new() { Id = "mt6",  Equipment = "Welding Robot — Cell 1",         MaintenanceType = "preventive",  Priority = "medium", LastService = "Feb 20", Column = "in-progress" },
+        new() { Id = "mt7",  Equipment = "Temperature Sensor — Oven 2",    MaintenanceType = "calibration", Priority = "high",   LastService = "Nov 30", Column = "in-progress" },
+        new() { Id = "mt8",  Equipment = "Air Handler — Floor 2",          MaintenanceType = "corrective",  Priority = "medium", LastService = "Jan 15", Column = "in-progress" },
+        new() { Id = "mt9",  Equipment = "Packaging Machine — Line 1",     MaintenanceType = "preventive",  Priority = "low",    LastService = "Mar 18", Column = "completed"   },
+        new() { Id = "mt10", Equipment = "Flow Meter — Pipe 9",            MaintenanceType = "calibration", Priority = "medium", LastService = "Mar 22", Column = "completed"   },
+        new() { Id = "mt11", Equipment = "Generator — Backup Unit B",      MaintenanceType = "corrective",  Priority = "high",   LastService = "Mar 25", Column = "completed"   },
+    ];
+
+    private HashSet<string> _selected = [];
+    private string _moveTarget = "";
+
+    private static string PriorityDot(string priority) => priority switch
+    {
+        "high"   => "bg-red-500",
+        "medium" => "bg-amber-500",
+        "low"    => "bg-blue-500",
+        _        => "",
+    };
+
+    private static string TypeColor(string maintenanceType) => maintenanceType switch
+    {
+        "preventive"  => "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        "corrective"  => "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        "calibration" => "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+        _             => "",
+    };
+
+    private void ToggleSelect(string id)
+    {
+        if (!_selected.Remove(id))
+            _selected.Add(id);
+    }
+
+    private void ToggleColumnAll(string columnId)
+    {
+        var columnIds = _tasks.Where(t => t.Column == columnId).Select(t => t.Id).ToList();
+        var allSel = columnIds.Count > 0 && columnIds.All(id => _selected.Contains(id));
+        foreach (var id in columnIds)
+        {
+            if (allSel) _selected.Remove(id);
+            else _selected.Add(id);
+        }
+    }
+
+    private void MoveSelected(string targetColumn)
+    {
+        if (string.IsNullOrEmpty(targetColumn)) return;
+        foreach (var t in _tasks.Where(t => _selected.Contains(t.Id)))
+            t.Column = targetColumn;
+        _selected.Clear();
+        _moveTarget = "";
+    }
+
+    private void ArchiveSelected(MouseEventArgs e)
+    {
+        _tasks = _tasks.Where(t => !_selected.Contains(t.Id)).ToList();
+        _selected.Clear();
+    }
+
+    private void DeselectAll(MouseEventArgs e)
+    {
+        _selected.Clear();
+    }
+}

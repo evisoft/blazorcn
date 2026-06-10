@@ -1,0 +1,204 @@
+@* ============================================================
+   Block: comments-escalation-alerts
+   Title: CommentsEscalationAlerts
+   Description: A comment escalation alert system for React and Next.js with SLA tracking, auto-escalation rules, priority queues, and team assignment built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-escalation-alerts.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Escalation Queue</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                @if (_breachCount > 0)
+                {
+                    @($"{_breachCount} SLA breach · ")
+                }
+                @(_escalations.Length) active escalations
+            </p>
+        </div>
+
+        @* Filter bar *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <button type="button"
+                        @onclick="@(() => _filter = "all")"
+                        class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                    All
+                </button>
+                <button type="button"
+                        @onclick="@(() => _filter = "critical")"
+                        class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == "critical" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                    Critical
+                </button>
+                <button type="button"
+                        @onclick="@(() => _filter = "high")"
+                        class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == "high" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                    High
+                </button>
+                <button type="button"
+                        @onclick="@(() => _filter = "medium")"
+                        class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == "medium" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                    Medium
+                </button>
+            </div>
+        </div>
+
+        @* Escalation list *@
+        <div>
+            @{
+                var filtered = _filteredEscalations;
+            }
+            @for (int i = 0; i < filtered.Length; i++)
+            {
+                var esc = filtered[i];
+                var isLast = i == filtered.Length - 1;
+                var remaining = esc.SlaMinutes - esc.ElapsedMinutes;
+                var isBreach = remaining <= 0;
+                var isWarning = remaining > 0 && remaining <= esc.SlaMinutes * 0.2;
+                var initials = GetInitials(esc.Author);
+                var dotColor = GetPriorityDotColor(esc.Priority);
+                var badgeClass = GetPriorityBadgeClass(esc.Priority);
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="px-4 py-3">
+                        <div class="flex items-start gap-3">
+                            <span class="@($"mt-1 size-2 shrink-0 rounded-full {dotColor}")" />
+                            <div class="min-w-0 flex-1">
+                                <div class="mb-1.5 flex items-center gap-2">
+                                    <AvatarCn Class="size-6 shrink-0">
+                                        <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <span class="text-sm font-medium">@esc.Author</span>
+                                    <span class="text-xs text-muted-foreground">·</span>
+                                    <span class="text-xs text-muted-foreground">@esc.CreatedAt</span>
+                                </div>
+                                <p class="mb-2 text-sm leading-relaxed">@esc.Comment</p>
+                                <div class="flex items-center gap-2">
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("text-xs font-normal", badgeClass)">
+                                        @esc.Priority
+                                    </BadgeCn>
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs font-normal">
+                                        @GetStatusLabel(esc.Status)
+                                    </BadgeCn>
+                                    @if (isBreach)
+                                    {
+                                        <span class="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                                            <LucideIconCn Name="alert-triangle" Size="12" Class="size-3" />
+                                            SLA breach
+                                        </span>
+                                    }
+                                    else if (isWarning)
+                                    {
+                                        <span class="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            @($"{remaining}m remaining")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                            @($"{remaining}m remaining")
+                                        </span>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrEmpty(esc.AssignedTo))
+                                {
+                                    <div class="mt-2">
+                                        <span class="text-xs text-muted-foreground">Assigned to @esc.AssignedTo</span>
+                                    </div>
+                                }
+                                @if (string.IsNullOrEmpty(esc.AssignedTo))
+                                {
+                                    <div class="mt-2 flex items-center gap-2">
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs">
+                                            <LucideIconCn Name="user-plus" Size="12" Class="size-3" />
+                                            Assign
+                                        </ButtonCn>
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs">
+                                            <LucideIconCn Name="bell" Size="12" Class="size-3" />
+                                            Escalate
+                                        </ButtonCn>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>Critical: 30m SLA</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span>High: 2h SLA</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span>Medium: 8h SLA</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string _filter = "all";
+
+    private record Escalation(
+        string Id,
+        string CommentId,
+        string Author,
+        string Avatar,
+        string Comment,
+        string Priority,
+        string Status,
+        string CreatedAt,
+        int SlaMinutes,
+        int ElapsedMinutes,
+        string AssignedTo
+    );
+
+    private static readonly Escalation[] _escalations =
+    [
+        new("1", "c-1", "Sarah Chen",  "", "Critical payment processing failure affecting multiple customers. Need immediate resolution.", "critical", "escalated", "25 min ago", 30,  25,  "Alex Morgan"),
+        new("2", "c-2", "James Wilson","", "Data export feature not working. Customer waiting for compliance report.",                    "high",     "pending",   "1 hour ago",  120, 60,  ""),
+        new("3", "c-3", "Maya Patel",  "", "Feature request: Add dark mode to mobile app settings.",                                     "medium",   "assigned",  "3 hours ago", 480, 180, "Chris Taylor"),
+    ];
+
+    private int _breachCount => _escalations.Count(e => e.ElapsedMinutes >= e.SlaMinutes);
+
+    private Escalation[] _filteredEscalations =>
+        _filter == "all"
+            ? _escalations
+            : _escalations.Where(e => e.Priority == _filter).ToArray();
+
+    private static string GetInitials(string name) =>
+        string.Concat(name.Split(' ').Select(n => n[0])).ToUpper();
+
+    private static string GetPriorityDotColor(string priority) => priority switch
+    {
+        "critical" => "bg-red-500",
+        "high"     => "bg-amber-500",
+        "medium"   => "bg-blue-500",
+        _          => "bg-blue-500",
+    };
+
+    private static string GetPriorityBadgeClass(string priority) => priority switch
+    {
+        "critical" => "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400",
+        "high"     => "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        "medium"   => "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        _          => "",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "pending"   => "Pending",
+        "escalated" => "Escalated",
+        "assigned"  => "Assigned",
+        _           => status,
+    };
+}

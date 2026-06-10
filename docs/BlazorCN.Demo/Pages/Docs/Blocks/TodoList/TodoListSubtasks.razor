@@ -1,0 +1,137 @@
+@* ============================================================
+   Block: todo-list-subtasks
+   Title: TodoListSubtasks
+   Description: A todo list block for React and Next.js with expandable nested subtasks, progress indicators, and parent-child completion tracking built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-subtasks.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Tasks</span>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @CompletedSubtasks of @TotalSubtasks subtasks
+            </span>
+        </div>
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < _todos.Count; i++)
+            {
+                var todo = _todos[i];
+                var todoId = todo.Id;
+                var isExpanded = _expanded.Contains(todo.Id);
+                var isLast = i == _todos.Count - 1;
+                var completedCount = todo.Subtasks.Count(st => st.Completed);
+                var totalCount = todo.Subtasks.Length;
+                var allDone = completedCount == totalCount;
+                var progressPercent = totalCount > 0 ? (int)Math.Round((double)completedCount / totalCount * 100) : 0;
+
+                <div class="@((isLast && !isExpanded) ? "" : "border-b")">
+                    @* Parent row *@
+                    <button type="button"
+                            @onclick="@(() => ToggleExpanded(todoId))"
+                            aria-expanded="@(isExpanded ? "true" : "false")"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <LucideIconCn Name="chevron-right"
+                                      Size="16"
+                                      Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        <span class="@Cn.Merge("min-w-0 flex-1 font-medium text-sm transition-colors duration-200", allDone ? "text-muted-foreground line-through" : "text-foreground")">
+                            @todo.Text
+                        </span>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <div role="progressbar"
+                                 aria-valuenow="@completedCount"
+                                 aria-valuemin="0"
+                                 aria-valuemax="@totalCount"
+                                 aria-label="@($"{completedCount} of {totalCount} subtasks complete")"
+                                 class="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                                <div class="h-full rounded-full bg-foreground transition-all duration-300"
+                                     style="@($"width:{progressPercent}%")" />
+                            </div>
+                            <span class="text-muted-foreground text-xs tabular-nums">
+                                @completedCount/@totalCount
+                            </span>
+                        </div>
+                    </button>
+
+                    @* Subtasks *@
+                    @if (isExpanded)
+                    {
+                        @foreach (var subtask in todo.Subtasks)
+                        {
+                            var subtaskId = subtask.Id;
+                            <label for="@($"subtask-{subtask.Id}")"
+                                   class="flex w-full cursor-pointer items-center gap-3 py-2.5 pr-4 pl-9 transition-colors hover:bg-muted/50">
+                                <CheckboxCn Id="@($"subtask-{subtask.Id}")"
+                                            Checked="@subtask.Completed"
+                                            CheckedChanged="@((bool _) => ToggleSubtask(todoId, subtaskId))" />
+                                <span class="@Cn.Merge("min-w-0 flex-1 text-sm transition-all duration-200", subtask.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                                    @subtask.Text
+                                </span>
+                            </label>
+                        }
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">
+                @_todos.Count @(_todos.Count == 1 ? "task" : "tasks") · @CompletedSubtasks of @TotalSubtasks subtasks complete
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SubtaskItem(string Id, string Text, bool Completed);
+    private record TodoItem(string Id, string Text, SubtaskItem[] Subtasks);
+
+    private HashSet<string> _expanded = ["1"];
+
+    private List<TodoItem> _todos =
+    [
+        new("1", "Design project milestone",
+        [
+            new("1a", "Create wireframes", true),
+            new("1b", "Set up project repository", true),
+            new("1c", "Prepare documentation", false),
+        ]),
+        new("2", "Purchase blocks from shadcnblocks.com",
+        [
+            new("2a", "Set up project repository", false),
+            new("2b", "Write documentation", false),
+        ]),
+        new("3", "Revise budget",
+        [
+            new("3a", "Review Q1 expenses", true),
+            new("3b", "Forecast Q2 costs", false),
+            new("3c", "Submit budget proposal", false),
+        ]),
+    ];
+
+    private int TotalSubtasks => _todos.Sum(t => t.Subtasks.Length);
+    private int CompletedSubtasks => _todos.Sum(t => t.Subtasks.Count(st => st.Completed));
+
+    private void ToggleExpanded(string id)
+    {
+        if (_expanded.Contains(id))
+            _expanded.Remove(id);
+        else
+            _expanded.Add(id);
+    }
+
+    private void ToggleSubtask(string todoId, string subtaskId)
+    {
+        var idx = _todos.FindIndex(t => t.Id == todoId);
+        if (idx < 0) return;
+        var todo = _todos[idx];
+        var subtasks = todo.Subtasks
+            .Select(st => st.Id == subtaskId ? st with { Completed = !st.Completed } : st)
+            .ToArray();
+        _todos[idx] = todo with { Subtasks = subtasks };
+    }
+}

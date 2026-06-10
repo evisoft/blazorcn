@@ -1,0 +1,157 @@
+@* ============================================================
+   Block: stats-histogram-log-scale
+   Title: StatsHistogramLogScale
+   Description: A log-scale histogram stats card for React and Next.js with a ChartContainer-wrapped Recharts BarChart using YAxis scale='log' to visualize wide dynamic range distributions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-histogram-log-scale.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">API latency distribution</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    @_totalRequests.ToString("N0") requests · Last hour
+                </p>
+            </div>
+            <div class="flex gap-3">
+                @foreach (var p in _percentiles)
+                {
+                    <div class="text-right">
+                        <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                            @p.Label
+                        </p>
+                        <p class="mt-0.5 text-xs font-semibold tabular-nums">@p.Value</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="px-4 pt-4 pb-2">
+            <div class="h-[200px] w-full">
+                @{
+                    // SVG chart dimensions
+                    var svgWidth = 560;
+                    var svgHeight = 200;
+                    var marginLeft = 28;
+                    var marginRight = 4;
+                    var marginTop = 4;
+                    var marginBottom = 20;
+                    var chartWidth = svgWidth - marginLeft - marginRight;
+                    var chartHeight = svgHeight - marginTop - marginBottom;
+
+                    // Log scale: domain [1, 100_000]
+                    var logMin = Math.Log10(1.0);
+                    var logMax = Math.Log10(100_000.0);
+
+                    double LogY(double val)
+                    {
+                        var logVal = Math.Log10(Math.Max(val, 1.0));
+                        var ratio = (logVal - logMin) / (logMax - logMin);
+                        return chartHeight - ratio * chartHeight;
+                    }
+
+                    var barCount = _buckets.Length;
+                    var barTotalWidth = chartWidth / (double)barCount;
+                    var barPadding = 3.0;
+                    var barWidth = barTotalWidth - barPadding;
+
+                    int[] yTicks = [1, 10, 100, 1000, 10000, 100000];
+                }
+                <svg viewBox="0 0 @svgWidth @svgHeight" class="h-full w-full overflow-visible" aria-label="API latency distribution histogram">
+                    <g transform="translate(@marginLeft, @marginTop)">
+
+                        @* Horizontal grid lines *@
+                        @foreach (var tick in yTicks)
+                        {
+                            var ty = LogY(tick);
+                            <line x1="0" y1="@ty.ToString("F2")" x2="@chartWidth" y2="@ty.ToString("F2")"
+                                  stroke="currentColor" stroke-opacity="0.15" stroke-dasharray="3 3" />
+                        }
+
+                        @* Bars *@
+                        @for (var i = 0; i < _buckets.Length; i++)
+                        {
+                            var bucket = _buckets[i];
+                            var x = i * barTotalWidth + barPadding / 2.0;
+                            var yTop = LogY(bucket.Count);
+                            var yBottom = LogY(1.0);
+                            var bh = yBottom - yTop;
+                            <rect x="@x.ToString("F2")"
+                                  y="@yTop.ToString("F2")"
+                                  width="@barWidth.ToString("F2")"
+                                  height="@(Math.Max(bh, 0).ToString("F2"))"
+                                  rx="2" ry="2"
+                                  fill="oklch(0.488 0.243 264.376)"
+                                  class="fill-[oklch(0.488_0.243_264.376)] dark:fill-[oklch(0.646_0.222_41.116)]" />
+                        }
+
+                        @* X Axis labels *@
+                        @for (var i = 0; i < _buckets.Length; i++)
+                        {
+                            var bucket = _buckets[i];
+                            var cx = i * barTotalWidth + barTotalWidth / 2.0;
+                            var labelY = chartHeight + 14;
+                            @((MarkupString)$"<text x=\"{cx:F2}\" y=\"{labelY}\" text-anchor=\"middle\" font-size=\"10\" fill=\"currentColor\" fill-opacity=\"0.6\">{bucket.Range}</text>")
+                        }
+
+                        @* Y Axis tick labels *@
+                        @foreach (var tick in yTicks)
+                        {
+                            var ty = LogY(tick);
+                            var label = FormatCount(tick);
+                            @((MarkupString)$"<text x=\"-4\" y=\"{ty:F2}\" text-anchor=\"end\" dominant-baseline=\"middle\" font-size=\"10\" fill=\"currentColor\" fill-opacity=\"0.6\">{label}</text>")
+                        }
+
+                    </g>
+                </svg>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 border-t px-4 py-2.5 text-xs text-muted-foreground">
+            <LucideIconCn Name="info" Size="12" Class="size-3" />
+            <span>
+                Y axis uses a log scale (1, 10, 100, 1k, 10k) to fit the long tail of slow requests.
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Bucket(string Range, int Count);
+    private record Percentile(string Label, string Value);
+
+    private static readonly Bucket[] _buckets =
+    [
+        new("0–10",    14820),
+        new("10–25",   28140),
+        new("25–50",   19420),
+        new("50–100",   9480),
+        new("100–250",  3260),
+        new("250–500",  1184),
+        new("500–1k",    412),
+        new("1k–2.5k",   148),
+        new("2.5k–5k",    42),
+        new("5k–10k",     11),
+        new("10k+",        3),
+    ];
+
+    private static readonly Percentile[] _percentiles =
+    [
+        new("p50", "32ms"),
+        new("p95", "184ms"),
+        new("p99", "742ms"),
+    ];
+
+    private static readonly int _totalRequests = _buckets.Sum(b => b.Count);
+
+    private static string FormatCount(int value)
+    {
+        if (value >= 1000)
+        {
+            var k = value / 1000.0;
+            return k >= 10 ? $"{(int)k}k" : $"{k:F1}k";
+        }
+        return value.ToString();
+    }
+}

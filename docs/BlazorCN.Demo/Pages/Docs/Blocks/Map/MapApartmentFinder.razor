@@ -1,0 +1,241 @@
+@* ============================================================
+   Block: map-apartment-finder
+   Title: MapApartmentFinder
+   Description: React apartment finder map block for Next.js with price range markers, bedroom and bathroom filters, radius search circle, and apartment detail popup cards using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-apartment-finder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="building" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Apartments</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length listings</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    &lt;$1.5k
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    $1.5&#x2013;2.5k
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    &gt;$2.5k
+                </span>
+            </div>
+        </div>
+
+        @* Filters *@
+        <div class="flex items-center gap-4 border-b px-4 py-2">
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="bed-double" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="text-xs text-muted-foreground">Beds</span>
+                @foreach (var b in _bedOptions)
+                {
+                    var bedVal = b;
+                    <ButtonCn
+                        Variant="@(_beds == bedVal ? ButtonVariant.Default : ButtonVariant.Outline)"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 min-w-7 px-2 text-xs"
+                        OnClick="@(() => SetBeds(bedVal))">
+                        @(bedVal == 0 ? "Studio" : bedVal.ToString())
+                    </ButtonCn>
+                }
+            </div>
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="bath" Size="14" Class="size-3.5 text-muted-foreground" />
+                <span class="text-xs text-muted-foreground">Baths</span>
+                @foreach (var b in _bathOptions)
+                {
+                    var bathVal = b;
+                    <ButtonCn
+                        Variant="@(_baths == bathVal ? ButtonVariant.Default : ButtonVariant.Outline)"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 min-w-7 px-2 text-xs"
+                        OnClick="@(() => SetBaths(bathVal))">
+                        @bathVal
+                    </ButtonCn>
+                }
+            </div>
+            @if (_hasFilters)
+            {
+                <ButtonCn
+                    Variant="ButtonVariant.Ghost"
+                    Size="ButtonSize.Sm"
+                    Class="ml-auto h-6 gap-1 px-2 text-xs text-muted-foreground"
+                    OnClick="@ClearFilters">
+                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                    Clear
+                </ButtonCn>
+            }
+        </div>
+
+        @* Map area — rendered as a styled mock since BlazorCN has no MapCn component *@
+        <div class="relative h-[500px] bg-muted/30">
+            @* Map background grid to suggest a map tile *@
+            <div class="absolute inset-0 overflow-hidden">
+                <svg class="h-full w-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                </svg>
+                @* Radius circle indicator *@
+                <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <div class="size-64 rounded-full border border-blue-500/30 bg-blue-500/8"></div>
+                </div>
+            </div>
+
+            @* Map controls placeholder (top-right) *@
+            <div class="absolute right-3 top-3 z-10 flex flex-col gap-1">
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+                <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="locate" Size="14" Class="size-3.5 text-foreground" />
+                </button>
+            </div>
+
+            @* Apartment markers *@
+            @foreach (var apt in _filtered)
+            {
+                var aptItem = apt;
+                @* Convert lat/lng to approximate CSS positions within the viewport *@
+                var leftPct = (int)Math.Round((aptItem.Lng - (-73.993)) / ((-73.944) - (-73.993)) * 80 + 5);
+                var topPct = (int)Math.Round((40.714 - aptItem.Lat) / (40.714 - 40.664) * 80 + 5);
+                <div class="absolute z-10" style="@($"left:{leftPct}%;top:{topPct}%")">
+                    <div class="relative">
+                        <button type="button"
+                            class="flex items-center rounded-full border-2 bg-card px-2 py-0.5 shadow-sm @(PriceBorder(aptItem.Price))"
+                            @onclick="@(() => ToggleSelected(aptItem.Id))">
+                            <span class="mr-1.5 size-1.5 rounded-full @(PriceColor(aptItem.Price))"></span>
+                            <span class="text-xs font-medium tabular-nums">$@((aptItem.Price / 1000.0).ToString("F1"))k</span>
+                        </button>
+
+                        @* Popup card *@
+                        @if (_selected == aptItem.Id)
+                        {
+                            <div class="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-56 rounded-md border bg-card p-3 shadow-md">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-sm font-medium">@aptItem.Name</span>
+                                    <span class="text-sm font-semibold tabular-nums">$@aptItem.Price.ToString("N0")</span>
+                                </div>
+                                <p class="text-xs text-muted-foreground">@aptItem.Address</p>
+                                <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="bed-double" Size="12" Class="size-3" />
+                                        @(aptItem.Beds == 0 ? "Studio" : aptItem.Beds.ToString())
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="bath" Size="12" Class="size-3" />
+                                        @aptItem.Baths
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="ruler" Size="12" Class="size-3" />
+                                        @aptItem.Sqft sqft
+                                    </span>
+                                </div>
+                                <div class="mt-2 flex flex-wrap gap-1">
+                                    @foreach (var amenity in aptItem.Amenities)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">@amenity</BadgeCn>
+                                    }
+                                </div>
+                                <div class="mt-2.5 flex items-center justify-between">
+                                    <span class="text-[10px] text-muted-foreground">
+                                        Available @aptItem.Available
+                                    </span>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 text-xs">Contact</ButtonCn>
+                                </div>
+                                @* Close button *@
+                                <button type="button"
+                                    class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/50"
+                                    @onclick="@(() => _selected = null)">
+                                    <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Apartment(
+        string Id, string Name, string Address, int Price,
+        int Beds, int Baths, int Sqft,
+        double Lng, double Lat,
+        string Available, string[] Amenities);
+
+    private static readonly int[] _bedOptions = [0, 1, 2, 3];
+    private static readonly int[] _bathOptions = [1, 2];
+
+    private static readonly Apartment[] _apartments =
+    [
+        new("a1", "Riverside Lofts #4B", "142 River St, Brooklyn, NY", 2850, 2, 1, 1050, -73.993, 40.698, "Apr 1", ["Doorman", "Gym", "Rooftop"]),
+        new("a2", "Park View Studio", "88 Prospect Park W, Brooklyn, NY", 1350, 0, 1, 420, -73.972, 40.664, "Immediate", ["Laundry", "Pet-friendly"]),
+        new("a3", "Crown Heights 1BR", "561 Franklin Ave, Brooklyn, NY", 1950, 1, 1, 680, -73.957, 40.679, "Apr 15", ["Dishwasher", "Laundry"]),
+        new("a4", "Williamsburg Penthouse", "220 Bedford Ave, Brooklyn, NY", 4200, 3, 2, 1600, -73.961, 40.714, "May 1", ["Doorman", "Gym", "Rooftop", "Parking"]),
+        new("a5", "DUMBO Flex 2BR", "50 Main St, Brooklyn, NY", 3400, 2, 2, 1200, -73.991, 40.703, "Apr 1", ["Doorman", "Gym", "Parking"]),
+        new("a6", "Bed-Stuy Garden 1BR", "334 Tompkins Ave, Brooklyn, NY", 1650, 1, 1, 600, -73.944, 40.686, "Immediate", ["Pet-friendly", "Backyard"]),
+    ];
+
+    private int? _beds = null;
+    private int? _baths = null;
+    private string? _selected = null;
+
+    private Apartment[] _filtered => _apartments
+        .Where(a => (_beds == null || a.Beds == _beds) && (_baths == null || a.Baths == _baths))
+        .ToArray();
+
+    private bool _hasFilters => _beds != null || _baths != null;
+
+    private void SetBeds(int val)
+    {
+        _beds = _beds == val ? null : val;
+        _selected = null;
+    }
+
+    private void SetBaths(int val)
+    {
+        _baths = _baths == val ? null : val;
+        _selected = null;
+    }
+
+    private void ClearFilters()
+    {
+        _beds = null;
+        _baths = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static string PriceColor(int price)
+    {
+        if (price < 1500) return "bg-emerald-500";
+        if (price <= 2500) return "bg-amber-500";
+        return "bg-red-500";
+    }
+
+    private static string PriceBorder(int price)
+    {
+        if (price < 1500) return "border-emerald-500";
+        if (price <= 2500) return "border-amber-500";
+        return "border-red-500";
+    }
+}

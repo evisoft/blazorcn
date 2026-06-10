@@ -1,0 +1,233 @@
+@* ============================================================
+   Block: file-upload-json-validator
+   Title: FileUploadJsonValidator
+   Description: JSON file upload block for React and Next.js with syntax validation, formatted preview, key count, nesting depth, copy and download prettified output using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-json-validator.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2 min-w-0">
+                <LucideIconCn Name="file-json" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <span class="truncate font-medium text-sm">
+                    @(_json != null ? _fileName : "JSON Validator")
+                </span>
+            </div>
+            @if (_json != null)
+            {
+                <div class="flex items-center gap-2 shrink-0">
+                    @if (_isValid)
+                    {
+                        <span class="flex items-center gap-1 text-emerald-600 text-xs dark:text-emerald-400">
+                            <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5" />
+                            Valid
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="flex items-center gap-1 text-red-600 text-xs dark:text-red-400">
+                            <LucideIconCn Name="x-circle" Size="14" Class="size-3.5" />
+                            Invalid
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (_json == null)
+        {
+            @* Upload area *@
+            <div class="p-4">
+                <div
+                    role="button"
+                    tabindex="0"
+                    @onclick="HandleUpload"
+                    @ondragover:preventDefault="true"
+                    @ondragleave:preventDefault="true"
+                    class="@Cn.Merge("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-12 transition-colors", _isDragging ? "border-foreground/30 bg-muted/50" : "border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/30")">
+                    <LucideIconCn Name="cloud-upload" Size="32" Class="size-8 text-muted-foreground/60" />
+                    <span class="font-medium text-sm">Drop a JSON file here</span>
+                    <p class="text-muted-foreground text-xs">Supports .json and .jsonc files</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            @* Error message *@
+            @if (_errorMsg != null)
+            {
+                <div class="border-b px-4 py-2">
+                    <div class="rounded-md bg-red-500/10 px-3 py-2">
+                        <span class="font-mono text-xs text-red-600 dark:text-red-400">
+                            @_errorMsg
+                        </span>
+                    </div>
+                </div>
+            }
+
+            @* Stats *@
+            @if (_stats != null)
+            {
+                <div class="flex items-center gap-3 border-b px-4 py-2.5">
+                    <span class="text-muted-foreground text-xs">@_stats.KeyCount keys</span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">Depth @_stats.MaxDepth</span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">
+                        @_stats.ArrayCount @(_stats.ArrayCount == 1 ? "array" : "arrays")
+                    </span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">@_stats.Size</span>
+                </div>
+            }
+
+            @* JSON preview *@
+            <div class="h-72 overflow-y-auto border-b">
+                <pre class="whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed text-foreground">@_json</pre>
+            </div>
+
+            @* Actions *@
+            <div class="flex items-center justify-between px-4 py-2.5">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    JSON
+                </BadgeCn>
+                <div class="flex items-center gap-1">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs" OnClick="CopyJson">
+                        @if (_copied)
+                        {
+                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                            <span>Copied</span>
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                            <span>Copy</span>
+                        }
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs">
+                        <LucideIconCn Name="download" Size="12" Class="size-3" />
+                        <span>Download</span>
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record JsonStats(int KeyCount, int MaxDepth, string Size, int ArrayCount);
+
+    private string? _json = null;
+    private bool _isValid = false;
+    private string? _errorMsg = null;
+    private JsonStats? _stats = null;
+    private string _fileName = "";
+    private bool _copied = false;
+    private bool _isDragging = false;
+
+    // Sample JSON content (the package.json from the TSX source)
+    private static readonly string _sampleJsonRaw =
+        "{\n" +
+        "  \"name\": \"acme-dashboard\",\n" +
+        "  \"version\": \"2.4.1\",\n" +
+        "  \"private\": true,\n" +
+        "  \"scripts\": {\n" +
+        "    \"dev\": \"next dev --turbopack\",\n" +
+        "    \"build\": \"next build\",\n" +
+        "    \"start\": \"next start\",\n" +
+        "    \"lint\": \"biome check --write .\"\n" +
+        "  },\n" +
+        "  \"dependencies\": {\n" +
+        "    \"next\": \"15.1.0\",\n" +
+        "    \"react\": \"19.0.0\",\n" +
+        "    \"react-dom\": \"19.0.0\",\n" +
+        "    \"tailwindcss\": \"4.0.0\",\n" +
+        "    \"lucide-react\": \"0.468.0\",\n" +
+        "    \"prisma\": \"6.2.0\"\n" +
+        "  },\n" +
+        "  \"devDependencies\": {\n" +
+        "    \"typescript\": \"5.7.0\",\n" +
+        "    \"@types/react\": \"19.0.0\",\n" +
+        "    \"@biomejs/biome\": \"1.9.4\"\n" +
+        "  },\n" +
+        "  \"engines\": {\n" +
+        "    \"node\": \">=20.0.0\"\n" +
+        "  }\n" +
+        "}";
+
+    private void HandleUpload()
+    {
+        ProcessJson(_sampleJsonRaw, "package.json");
+    }
+
+    private void ProcessJson(string raw, string name)
+    {
+        _fileName = name;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(raw);
+            var formatted = System.Text.Json.JsonSerializer.Serialize(
+                doc.RootElement,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            _json = formatted;
+            _isValid = true;
+            _errorMsg = null;
+            var (keys, maxDepth, arrays) = CountKeys(doc.RootElement, 0);
+            var sizeKb = (System.Text.Encoding.UTF8.GetByteCount(formatted) / 1024.0).ToString("F1");
+            _stats = new JsonStats(keys, maxDepth, $"{sizeKb} KB", arrays);
+        }
+        catch (Exception ex)
+        {
+            _json = raw;
+            _isValid = false;
+            _errorMsg = ex.Message;
+            _stats = null;
+        }
+    }
+
+    private static (int Keys, int MaxDepth, int Arrays) CountKeys(System.Text.Json.JsonElement element, int depth)
+    {
+        if (element.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            int maxD = depth;
+            int totalKeys = 0;
+            int totalArrays = 1;
+            foreach (var item in element.EnumerateArray())
+            {
+                var (k, d, a) = CountKeys(item, depth + 1);
+                totalKeys += k;
+                totalArrays += a;
+                if (d > maxD) maxD = d;
+            }
+            return (totalKeys, maxD, totalArrays);
+        }
+
+        if (element.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            int maxD = depth;
+            int totalKeys = 0;
+            int totalArrays = 0;
+            foreach (var prop in element.EnumerateObject())
+            {
+                totalKeys++;
+                var (k, d, a) = CountKeys(prop.Value, depth + 1);
+                totalKeys += k;
+                totalArrays += a;
+                if (d > maxD) maxD = d;
+            }
+            return (totalKeys, maxD, totalArrays);
+        }
+
+        return (0, depth, 0);
+    }
+
+    private async Task CopyJson()
+    {
+        if (_json == null) return;
+        _copied = true;
+        await Task.Delay(2000);
+        _copied = false;
+    }
+}

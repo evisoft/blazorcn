@@ -1,0 +1,221 @@
+@* ============================================================
+   Block: todo-list-keyboard-shortcuts
+   Title: TodoListKeyboardShortcuts
+   Description: A keyboard navigation focused todo list block for React and Next.js with shortcut hints, active row highlighting, and toggleable shortcut legend built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-keyboard-shortcuts.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4" @onkeydown="HandleKeyDown">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="font-medium text-sm">Tasks</span>
+                <span class="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5">
+                    <span class="font-mono text-muted-foreground text-[10px]">?</span>
+                    <span class="text-muted-foreground text-[10px]">shortcuts</span>
+                </span>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_tasks.Count(t => t.Completed) of @_tasks.Count done
+            </span>
+        </div>
+
+        @* Shortcut legend *@
+        @if (_showLegend)
+        {
+            <div class="border-b bg-muted/30 px-4 py-3">
+                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                    Keyboard shortcuts
+                </span>
+                <div class="grid grid-cols-3 gap-2">
+                    @foreach (var sc in _shortcuts)
+                    {
+                        <div class="flex items-center gap-2">
+                            <span class="flex h-5 min-w-5 items-center justify-center rounded border bg-background px-1 font-mono text-[10px]">
+                                @sc.Key
+                            </span>
+                            <span class="text-muted-foreground text-xs">@sc.Description</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Add task *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <span class="flex h-5 min-w-5 shrink-0 items-center justify-center rounded border bg-background px-1 font-mono text-[10px] text-muted-foreground">
+                N
+            </span>
+            <InputCn @bind-Value="_newTask"
+                     id="kb-new-task-input"
+                     @onkeydown="HandleInputKeyDown"
+                     @onfocus="@(() => _isInputFocused = true)"
+                     @onblur="@(() => _isInputFocused = false)"
+                     Placeholder="Add a task..."
+                     Class="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" />
+            <ButtonCn Variant="ButtonVariant.Ghost"
+                      Size="ButtonSize.IconXs"
+                      @onclick="AddTask"
+                      Disabled="@(string.IsNullOrWhiteSpace(_newTask))"
+                      aria-label="Add task">
+                <LucideIconCn Name="plus" Size="16" Class="size-4" />
+            </ButtonCn>
+        </div>
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < _tasks.Count; i++)
+            {
+                var task = _tasks[i];
+                var index = i;
+                var isFocused = index == _focusedIndex;
+                var isLast = index == _tasks.Count - 1;
+                var taskId = task.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="@Cn.Merge("group flex w-full items-center gap-3 px-4 py-3 transition-all", isFocused ? "bg-muted/50 ring-2 ring-inset ring-ring" : "hover:bg-muted/50")"
+                         @onclick="@(() => _focusedIndex = index)"
+                         @onkeydown="@((KeyboardEventArgs e) => HandleRowKeyDown(e, index))"
+                         role="button"
+                         tabindex="0">
+                        <CheckboxCn Id="@($"kb-todo-{task.Id}")"
+                                    Checked="@task.Completed"
+                                    CheckedChanged="@((bool _) => ToggleTask(taskId))" />
+                        <span class="@Cn.Merge("min-w-0 flex-1 text-sm transition-all duration-200", task.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                            @task.Text
+                        </span>
+                        @if (isFocused)
+                        {
+                            <div class="flex shrink-0 items-center gap-1">
+                                <span class="flex h-5 min-w-5 items-center justify-center rounded border bg-background px-1 font-mono text-[10px] text-muted-foreground">
+                                    X
+                                </span>
+                                <span class="flex h-5 min-w-5 items-center justify-center rounded border bg-background px-1 font-mono text-[10px] text-muted-foreground">
+                                    D
+                                </span>
+                            </div>
+                        }
+                        @if (!isFocused)
+                        {
+                            <div @onclick:stopPropagation>
+                                <ButtonCn Variant="ButtonVariant.Ghost"
+                                          Size="ButtonSize.IconXs"
+                                          @onclick="@(() => DeleteTask(index))"
+                                          Class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                          aria-label="@DeleteLabel(task.Text)">
+                                    <LucideIconCn Name="trash-2" Size="12" Class="size-3 text-muted-foreground" />
+                                </ButtonCn>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">
+                @_tasks.Count tasks · Use <span class="font-mono">J</span>/<span class="font-mono">K</span> to navigate
+            </span>
+            <span class="font-mono text-muted-foreground text-xs tabular-nums">
+                [@(_focusedIndex + 1)/@_tasks.Count]
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TaskItem(string Id, string Text, bool Completed);
+    private record ShortcutItem(string Key, string Description);
+
+    private static readonly ShortcutItem[] _shortcuts =
+    [
+        new("N", "New task"),
+        new("J", "Move down"),
+        new("K", "Move up"),
+        new("X", "Toggle complete"),
+        new("D", "Delete task"),
+        new("?", "Toggle shortcuts"),
+    ];
+
+    private int _nextId = 8;
+
+    private List<TaskItem> _tasks =
+    [
+        new("1", "Refactor authentication module", false),
+        new("2", "Write migration scripts for v2", false),
+        new("3", "Update API documentation", true),
+        new("4", "Fix sidebar navigation bug", false),
+        new("5", "Add rate limiting middleware", false),
+        new("6", "Review open pull requests", true),
+        new("7", "Set up error monitoring alerts", false),
+    ];
+
+    private int _focusedIndex = 0;
+    private bool _showLegend = false;
+    private string _newTask = "";
+    private bool _isInputFocused = false;
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Completed = !_tasks[idx].Completed };
+    }
+
+    private void DeleteTask(int index)
+    {
+        if (index >= 0 && index < _tasks.Count)
+        {
+            _tasks.RemoveAt(index);
+            _focusedIndex = Math.Min(_focusedIndex, Math.Max(0, _tasks.Count - 1));
+        }
+    }
+
+    private void AddTask()
+    {
+        var trimmed = _newTask.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        _tasks.Add(new TaskItem(_nextId.ToString(), trimmed, false));
+        _nextId++;
+        _newTask = "";
+    }
+
+    private void HandleInputKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddTask();
+    }
+
+    private void HandleRowKeyDown(KeyboardEventArgs e, int index)
+    {
+        if (e.Key == "Enter" || e.Key == " ") _focusedIndex = index;
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (_isInputFocused) return;
+
+        switch (e.Key.ToLower())
+        {
+            case "j":
+                _focusedIndex = Math.Min(_focusedIndex + 1, _tasks.Count - 1);
+                break;
+            case "k":
+                _focusedIndex = Math.Max(_focusedIndex - 1, 0);
+                break;
+            case "x":
+                if (_focusedIndex >= 0 && _focusedIndex < _tasks.Count)
+                    ToggleTask(_tasks[_focusedIndex].Id);
+                break;
+            case "d":
+                if (_focusedIndex >= 0 && _focusedIndex < _tasks.Count)
+                    DeleteTask(_focusedIndex);
+                break;
+            case "?":
+                _showLegend = !_showLegend;
+                break;
+        }
+    }
+
+    private static string DeleteLabel(string text) => $"Delete {text}";
+}

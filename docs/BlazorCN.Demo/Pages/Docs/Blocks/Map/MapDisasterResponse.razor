@@ -1,0 +1,336 @@
+@* ============================================================
+   Block: map-disaster-response
+   Title: MapDisasterResponse
+   Description: React disaster response coordination map block for Next.js with incident markers, resource deployment, evacuation routes, and command center markers using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-disaster-response.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="siren" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Disaster Response</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                    @_incidents.Length incidents
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_countCritical
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-orange-500"></span>
+                    @_countMajor
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_countMinor
+                </span>
+            </div>
+        </div>
+
+        @* Controls *@
+        <div class="flex items-center gap-3 border-b px-4 py-2">
+            <div class="flex items-center gap-1.5">
+                <span class="text-xs text-muted-foreground">Severity</span>
+                @foreach (var sev in new[] { "critical", "major", "minor" })
+                {
+                    var s = sev;
+                    <ButtonCn
+                        Variant="@(_filter == s ? ButtonVariant.Default : ButtonVariant.Outline)"
+                        Size="ButtonSize.Sm"
+                        Class="h-6 px-2 text-xs capitalize"
+                        OnClick="@(() => SetFilter(s))">
+                        @s
+                    </ButtonCn>
+                }
+            </div>
+            <div class="ml-auto flex items-center gap-2">
+                <ButtonCn
+                    Variant="@(_showResources ? ButtonVariant.Default : ButtonVariant.Outline)"
+                    Size="ButtonSize.Sm"
+                    Class="h-6 gap-1 px-2 text-xs"
+                    OnClick="@(() => _showResources = !_showResources)">
+                    <LucideIconCn Name="truck" Size="12" Class="size-3" />
+                    Resources
+                </ButtonCn>
+                <ButtonCn
+                    Variant="@(_showEvac ? ButtonVariant.Default : ButtonVariant.Outline)"
+                    Size="ButtonSize.Sm"
+                    Class="h-6 gap-1 px-2 text-xs"
+                    OnClick="@(() => _showEvac = !_showEvac)">
+                    <LucideIconCn Name="users" Size="12" Class="size-3" />
+                    Evacuation
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Stats bar *@
+        <div class="flex items-center gap-4 border-b px-4 py-2">
+            <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="users" Size="12" Class="size-3" />
+                <span class="font-medium tabular-nums text-foreground">@_totalResponders</span>
+                responders deployed
+            </div>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="truck" Size="12" Class="size-3" />
+                <span class="font-medium tabular-nums text-foreground">@_resources.Length</span>
+                units active
+            </div>
+            <span class="text-xs text-muted-foreground">&middot;</span>
+            <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="shield" Size="12" Class="size-3" />
+                <span class="font-medium tabular-nums text-foreground">@_evacRoutes.Length</span>
+                evac routes
+            </div>
+        </div>
+
+        @* Map placeholder *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Evacuation route lines (SVG overlay) *@
+                @if (_showEvac)
+                {
+                    <svg class="absolute inset-0 h-full w-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                        @foreach (var route in _evacRoutes)
+                        {
+                            var coords = route.Coordinates;
+                            var points = string.Join(" ", coords.Select(c => {
+                                var p = GetMarkerPosition(c[0], c[1]);
+                                return $"{p.X}%,{p.Y}%";
+                            }));
+                            @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"3\" stroke-opacity=\"0.5\" stroke-dasharray=\"6 4\" />")
+                        }
+                    </svg>
+                }
+
+                @* Resource markers *@
+                @if (_showResources)
+                {
+                    @foreach (var resource in _resources)
+                    {
+                        var resItem = resource;
+                        var resPos = GetMarkerPosition(resource.Lng, resource.Lat);
+                        var resColors = GetResourceColors(resource.Type);
+                        var resIcon = GetResourceIcon(resource.Type);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{resPos.X}%;top:{resPos.Y}%")"
+                            title="@($"{resource.Name} · {resource.Status} · {resource.Personnel} personnel")">
+                            <div class="@($"flex size-6 items-center justify-center rounded-full border-2 shadow-sm {resColors} text-white")">
+                                <LucideIconCn Name="@resIcon" Size="12" Class="size-3" />
+                            </div>
+                        </div>
+                    }
+                }
+
+                @* Incident markers *@
+                @foreach (var incident in GetFiltered())
+                {
+                    var inc = incident;
+                    var incPos = GetMarkerPosition(incident.Lng, incident.Lat);
+                    var incConfig = GetSeverityConfig(incident.Severity);
+                    var incIcon = GetIncidentIcon(incident.Type);
+                    var borderClass = incident.Severity == "critical" ? "border-red-500"
+                        : incident.Severity == "major" ? "border-orange-500"
+                        : "border-amber-500";
+                    var isSelected = _selected == incident.Id;
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{incPos.X}%;top:{incPos.Y}%")">
+                        <button
+                            type="button"
+                            class="relative"
+                            title="@($"{incident.Title} · {incident.Severity}")"
+                            @onclick="@(() => ToggleSelected(inc.Id))">
+                            @if (incident.Severity == "critical")
+                            {
+                                <span class="absolute inset-0 animate-ping rounded-full bg-red-500/40"></span>
+                            }
+                            <div class="@Cn.Merge("relative flex size-8 items-center justify-center rounded-full border-2 bg-card shadow-sm", borderClass)">
+                                <LucideIconCn Name="@incIcon" Size="16" Class="@($"size-4 {incConfig.Text}")" />
+                            </div>
+                        </button>
+
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 w-64 rounded-lg border bg-card p-3 shadow-lg">
+                                <div class="mb-1 flex items-center justify-between">
+                                    <span class="text-sm font-medium">@incident.Title</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"text-[10px] font-normal capitalize {incConfig.Text}")">
+                                        @incident.Severity
+                                    </BadgeCn>
+                                </div>
+                                <p class="text-xs text-muted-foreground">@incident.Location</p>
+
+                                <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span class="flex items-center gap-1">
+                                        <span class="@($"size-1.5 rounded-full {incConfig.Dot}")"></span>
+                                        @incident.Status
+                                    </span>
+                                    <span>&middot;</span>
+                                    <span>@incident.ReportedAt</span>
+                                    <span>&middot;</span>
+                                    <span>@incident.Responders responders</span>
+                                </div>
+
+                                <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                    @incident.Description
+                                </p>
+
+                                <div class="mt-2.5 flex items-center gap-2">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 gap-1 text-xs">
+                                        <LucideIconCn Name="radio" Size="12" Class="size-3" />
+                                        Dispatch
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 text-xs">
+                                        Details
+                                    </ButtonCn>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded absolute bottom-2 left-1/2 -translate-x-1/2">
+                Map view — Manhattan, NYC
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Incident(
+        string Id,
+        string Type,
+        string Title,
+        string Location,
+        string Severity,
+        double Lng,
+        double Lat,
+        string ReportedAt,
+        int Responders,
+        string Status,
+        string Description
+    );
+
+    private record Resource(
+        string Id,
+        string Type,
+        string Name,
+        double Lng,
+        double Lat,
+        string Status,
+        int Personnel
+    );
+
+    private record EvacRoute(
+        string Id,
+        string Name,
+        double[][] Coordinates,
+        string Destination
+    );
+
+    private record SeverityConfig(string Color, string Dot, string Text);
+
+    private static readonly Incident[] _incidents =
+    [
+        new("i1", "fire",       "3-Alarm Structure Fire",   "415 W 42nd St, Manhattan",  "critical", -73.993, 40.760, "12 min ago", 42, "Active",    "Multi-story commercial building fire with heavy smoke conditions. All occupants evacuated. Fire spreading to adjacent structure."),
+        new("i2", "flood",      "Flash Flooding",            "FDR Drive at E 34th St",    "major",    -73.972, 40.745, "28 min ago", 18, "Active",    "Roadway flooding from storm drain overflow. 3 vehicles stranded. Water rescue teams deployed."),
+        new("i3", "hazmat",     "Chemical Spill",            "Pier 76, Hudson River",     "major",    -74.003, 40.764, "45 min ago", 14, "Contained", "Industrial solvent spill from delivery truck. 200ft perimeter established. HazMat unit on scene performing cleanup."),
+        new("i4", "medical",    "Mass Casualty Incident",    "Penn Station, 7th Ave",     "critical", -73.993, 40.750, "8 min ago",  35, "Active",    "Escalator malfunction with multiple injuries. Triage area established at 33rd St exit. 12 patients, 3 critical."),
+        new("i5", "structural", "Partial Building Collapse", "228 W 47th St",             "minor",    -73.987, 40.759, "1 hr ago",    8, "Monitoring","Facade section collapsed onto sidewalk. No injuries reported. Structural engineer on scene. Block cordoned off."),
+    ];
+
+    private static readonly Resource[] _resources =
+    [
+        new("r1", "command", "Incident Command",  -73.990, 40.755, "Active",   12),
+        new("r2", "fire",    "Engine 54",         -73.988, 40.763, "Deployed",  6),
+        new("r3", "fire",    "Ladder 4",          -73.991, 40.758, "Deployed",  6),
+        new("r4", "ems",     "EMS Unit 8",        -73.985, 40.752, "On Scene",  4),
+        new("r5", "ems",     "EMS Unit 12",       -73.975, 40.748, "En Route",  4),
+        new("r6", "police",  "NYPD Midtown South",-73.988, 40.748, "Deployed",  8),
+    ];
+
+    private static readonly EvacRoute[] _evacRoutes =
+    [
+        new("e1", "Route Alpha", [[-73.993, 40.760], [-73.990, 40.758], [-73.985, 40.754], [-73.983, 40.752]], "Safe Zone A — Bryant Park"),
+        new("e2", "Route Bravo", [[-73.993, 40.750], [-73.997, 40.752], [-74.001, 40.754], [-74.002, 40.756]], "Safe Zone B — Hudson Yards"),
+    ];
+
+    private string? _selected = null;
+    private string? _filter = null;
+    private bool _showEvac = true;
+    private bool _showResources = true;
+
+    private int _countCritical => Array.FindAll(_incidents, i => i.Severity == "critical").Length;
+    private int _countMajor    => Array.FindAll(_incidents, i => i.Severity == "major").Length;
+    private int _countMinor    => Array.FindAll(_incidents, i => i.Severity == "minor").Length;
+    private int _totalResponders => _incidents.Sum(i => i.Responders);
+
+    private Incident[] GetFiltered() =>
+        _filter is null ? _incidents : Array.FindAll(_incidents, i => i.Severity == _filter);
+
+    private void SetFilter(string sev)
+    {
+        _filter = _filter == sev ? null : sev;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static SeverityConfig GetSeverityConfig(string severity) => severity switch
+    {
+        "critical" => new("bg-red-500",    "bg-red-500",    "text-red-600 dark:text-red-400"),
+        "major"    => new("bg-orange-500", "bg-orange-500", "text-orange-600 dark:text-orange-400"),
+        "minor"    => new("bg-amber-500",  "bg-amber-500",  "text-amber-600 dark:text-amber-400"),
+        _          => new("bg-muted",      "bg-muted",      "text-muted-foreground"),
+    };
+
+    private static string GetIncidentIcon(string type) => type switch
+    {
+        "fire"       => "flame",
+        "medical"    => "heart-pulse",
+        _            => "triangle-alert",
+    };
+
+    private static string GetResourceIcon(string type) => type switch
+    {
+        "fire"    => "truck",
+        "ems"     => "heart-pulse",
+        "police"  => "shield",
+        "command" => "radio",
+        _         => "circle",
+    };
+
+    private static string GetResourceColors(string type) => type switch
+    {
+        "fire"    => "border-red-500 bg-red-500",
+        "ems"     => "border-blue-500 bg-blue-500",
+        "police"  => "border-indigo-500 bg-indigo-500",
+        "command" => "border-emerald-500 bg-emerald-500",
+        _         => "border-muted bg-muted",
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-74.015, -73.960], lat [40.738, 40.775]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.015, lonMax = -73.960;
+        const double latMin = 40.738,  latMax = 40.775;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+}

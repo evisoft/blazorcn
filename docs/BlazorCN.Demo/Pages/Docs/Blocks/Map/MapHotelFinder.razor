@@ -1,0 +1,224 @@
+@* ============================================================
+   Block: map-hotel-finder
+   Title: MapHotelFinder
+   Description: React hotel search map block for Next.js with star-rated markers, price badges, amenity filters, and hotel detail popup cards with ratings using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-hotel-finder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with filters *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">Hotels</span>
+                    <span class="text-xs text-muted-foreground">@_filtered.Length results</span>
+                </div>
+                <span class="text-xs text-muted-foreground">New York City</span>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+                @foreach (var filter in _amenityFilters)
+                {
+                    var f = filter;
+                    <ButtonCn
+                        Variant="@(_activeFilters.Contains(f.Key) ? ButtonVariant.Default : ButtonVariant.Outline)"
+                        Size="ButtonSize.Sm"
+                        Class="h-7 gap-1.5 text-xs"
+                        OnClick="@(() => ToggleFilter(f.Key))">
+                        <LucideIconCn Name="@f.Icon" Size="12" Class="size-3" />
+                        @f.Label
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Results sidebar *@
+            <div class="w-60 shrink-0 divide-y border-r">
+                @foreach (var hotel in _filtered)
+                {
+                    var h = hotel;
+                    <button
+                        type="button"
+                        class="@Cn.Merge("flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedHotel == h.Id ? "bg-muted/50" : "")"
+                        @onclick="@(() => HandleMarkerClick(h))">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-sm font-medium leading-tight">@h.Name</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            @for (int i = 0; i < h.Stars; i++)
+                            {
+                                <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                            }
+                            <span class="ml-1 text-xs text-muted-foreground">@h.Neighborhood</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1.5">
+                                <span class="@Cn.Merge("inline-flex size-5 items-center justify-center rounded text-[10px] font-medium text-white", RatingColor(h.Rating))">
+                                    @h.Rating
+                                </span>
+                                <span class="text-xs text-muted-foreground">
+                                    @h.ReviewCount.ToString("N0") reviews
+                                </span>
+                            </div>
+                            <span class="text-sm font-semibold tabular-nums">
+                                $@h.Price<span class="text-xs font-normal text-muted-foreground">/nt</span>
+                            </span>
+                        </div>
+                    </button>
+                }
+            </div>
+
+            @* Map area — rendered as a styled mock since BlazorCN has no MapCn component *@
+            <div class="relative h-[500px] flex-1 bg-muted/30">
+                @* Map background grid to suggest map tiles *@
+                <div class="absolute inset-0 overflow-hidden">
+                    <svg class="h-full w-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <pattern id="hotel-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" stroke-width="1" />
+                            </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill="url(#hotel-grid)" />
+                    </svg>
+                </div>
+
+                @* Map controls placeholder (bottom-right) *@
+                <div class="absolute bottom-3 right-3 z-10 flex flex-col gap-1">
+                    <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="plus" Size="14" Class="size-3.5 text-foreground" />
+                    </button>
+                    <button type="button" class="flex size-8 items-center justify-center rounded border bg-card shadow-sm hover:bg-muted/50">
+                        <LucideIconCn Name="minus" Size="14" Class="size-3.5 text-foreground" />
+                    </button>
+                </div>
+
+                @* Hotel markers *@
+                @foreach (var hotel in _filtered)
+                {
+                    var h = hotel;
+                    @* Map bounds: lng [-74.015, -73.965], lat [40.68, 40.775] *@
+                    var leftPct = (int)Math.Round((h.Lng - (-74.015)) / ((-73.965) - (-74.015)) * 80 + 5);
+                    var topPct = (int)Math.Round((40.775 - h.Lat) / (40.775 - 40.68) * 80 + 5);
+                    <div class="absolute z-10" style="@($"left:{leftPct}%;top:{topPct}%")">
+                        <div class="relative">
+                            <button
+                                type="button"
+                                class="@Cn.Merge("rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums shadow-md transition-colors", _selectedHotel == h.Id ? "border-foreground bg-foreground text-background" : "border-border bg-background text-foreground")"
+                                @onclick="@(() => HandleMarkerClick(h))">
+                                $@h.Price
+                            </button>
+
+                            @* Popup card *@
+                            @if (_popupHotel?.Id == h.Id)
+                            {
+                                <div class="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-56 rounded-md border bg-card p-3 shadow-md">
+                                    <div class="mb-1 flex items-center justify-between">
+                                        <span class="text-sm font-medium">@_popupHotel.Name</span>
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-1">
+                                        @for (int i = 0; i < _popupHotel.Stars; i++)
+                                        {
+                                            <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                        }
+                                        <span class="ml-1 text-xs text-muted-foreground">@_popupHotel.Neighborhood</span>
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-2">
+                                        <span class="@Cn.Merge("inline-flex h-5 items-center justify-center rounded px-1 text-[10px] font-medium text-white", RatingColor(_popupHotel.Rating))">
+                                            @_popupHotel.Rating
+                                        </span>
+                                        <span class="text-xs text-muted-foreground">
+                                            @_popupHotel.ReviewCount.ToString("N0") reviews
+                                        </span>
+                                    </div>
+                                    <div class="mb-2 flex flex-wrap gap-1">
+                                        @foreach (var amenity in _popupHotel.Amenities)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">@amenity</BadgeCn>
+                                        }
+                                    </div>
+                                    <div class="flex items-center justify-between border-t pt-2">
+                                        <span class="text-lg font-semibold tabular-nums">
+                                            $@_popupHotel.Price<span class="text-xs font-normal text-muted-foreground">/night</span>
+                                        </span>
+                                        <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs">Book now</ButtonCn>
+                                    </div>
+                                    @* Close button *@
+                                    <button
+                                        type="button"
+                                        class="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/50"
+                                        @onclick="@(() => _popupHotel = null)">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Hotel(
+        string Id, string Name,
+        double Lng, double Lat,
+        int Stars, int Price,
+        double Rating, int ReviewCount,
+        string[] Amenities, string Neighborhood);
+
+    private record AmenityFilter(string Key, string Label, string Icon);
+
+    private static readonly AmenityFilter[] _amenityFilters =
+    [
+        new("wifi",      "WiFi",      "wifi"),
+        new("pool",      "Pool",      "waves"),
+        new("gym",       "Gym",       "dumbbell"),
+        new("parking",   "Parking",   "car"),
+        new("breakfast", "Breakfast", "coffee"),
+    ];
+
+    private static readonly Hotel[] _hotels =
+    [
+        new("h1", "The Greenwich Hotel",  -74.0085, 40.7195, 5, 489, 4.8, 1243, ["wifi","pool","gym","breakfast"],         "Tribeca"),
+        new("h2", "Park Hyatt New York",  -73.9796, 40.7648, 5, 595, 4.7,  892, ["wifi","pool","gym","parking","breakfast"],"Midtown"),
+        new("h3", "The Standard High Line",-74.0079,40.7409, 4, 315, 4.4, 2156, ["wifi","gym","parking"],                  "Meatpacking"),
+        new("h4", "citizenM Bowery",       -73.9935,40.7223, 3, 189, 4.3, 3412, ["wifi","gym"],                            "Lower East Side"),
+        new("h5", "The Peninsula",         -73.975, 40.7615, 5, 725, 4.9,  654, ["wifi","pool","gym","parking","breakfast"],"Midtown"),
+        new("h6", "Ace Hotel Brooklyn",    -73.9855,40.6892, 4, 245, 4.2, 1876, ["wifi","gym","breakfast"],                "Boerum Hill"),
+        new("h7", "Pod 39",                -73.978, 40.7485, 3, 149, 4.0, 4210, ["wifi"],                                  "Murray Hill"),
+    ];
+
+    private List<string> _activeFilters = new();
+    private string? _selectedHotel = null;
+    private Hotel? _popupHotel = null;
+
+    private Hotel[] _filtered =>
+        _activeFilters.Count == 0
+            ? _hotels
+            : _hotels.Where(h => _activeFilters.All(f => h.Amenities.Contains(f))).ToArray();
+
+    private void ToggleFilter(string amenity)
+    {
+        if (_activeFilters.Contains(amenity))
+            _activeFilters.Remove(amenity);
+        else
+            _activeFilters.Add(amenity);
+        _popupHotel = null;
+    }
+
+    private void HandleMarkerClick(Hotel hotel)
+    {
+        _popupHotel = _popupHotel?.Id == hotel.Id ? null : hotel;
+        _selectedHotel = hotel.Id;
+    }
+
+    private static string RatingColor(double rating)
+    {
+        if (rating >= 4.5) return "bg-emerald-500";
+        if (rating >= 4.0) return "bg-blue-500";
+        return "bg-amber-500";
+    }
+}

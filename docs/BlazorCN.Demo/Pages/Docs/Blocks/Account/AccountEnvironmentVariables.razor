@@ -1,0 +1,305 @@
+@* ============================================================
+   Block: account-environment-variables
+   Title: AccountEnvironmentVariables
+   Description: A developer environment variable management block for React and Next.js with key-value table, masked value reveal, environment scope badges, search filtering, bulk import, and CRUD operations built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-environment-variables.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Environment Variables</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Manage secrets and configuration across environments
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                        <LucideFileUpCn Size="12" />
+                        Import .env
+                    </ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs" @onclick="@(() => _showAddForm = !_showAddForm)">
+                        <LucidePlusCn Size="12" />
+                        Add Variable
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+
+        @* Add Form *@
+        @if (_showAddForm)
+        {
+            <div class="overflow-hidden">
+                <div class="border-b bg-muted/20 px-4 py-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-muted-foreground">NEW VARIABLE</span>
+                        <button type="button" @onclick="@(() => _showAddForm = false)" class="text-muted-foreground transition-colors hover:text-foreground">
+                            <LucideXCn Size="16" />
+                        </button>
+                    </div>
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                        <InputCn @bind-Value="_newKey" @bind-Value:event="oninput" Placeholder="VARIABLE_NAME" Class="font-mono text-sm" />
+                        <TextareaCn @bind-Value="_newValue" @bind-Value:event="oninput" Placeholder="Variable value..." Class="min-h-[36px] resize-none text-sm" rows="1" />
+                    </div>
+                    <div class="mt-2 flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <span class="text-[10px] font-medium text-muted-foreground">SCOPE</span>
+                            @foreach (var env in Environments)
+                            {
+                                var capturedEnv = env;
+                                <span class="flex items-center gap-1.5">
+                                    <CheckboxCn Checked="@_newEnvs.Contains(capturedEnv)" CheckedChanged="@(_ => ToggleNewEnv(capturedEnv))" id="@($"new-env-{capturedEnv}")" />
+                                    <span class="text-xs text-muted-foreground">@capturedEnv</span>
+                                </span>
+                            }
+                            <span class="ml-2 flex items-center gap-1.5">
+                                <CheckboxCn Checked="@_newSensitive" CheckedChanged="@(v => _newSensitive = v)" id="new-sensitive" />
+                                <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <LucideLockCn Size="12" />
+                                    Sensitive
+                                </span>
+                            </span>
+                        </div>
+                        <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs" Disabled="@(!IsAddValid)" @onclick="HandleAdd">
+                            Add
+                        </ButtonCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Search + Filter Bar *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideSearchCn Size="14" Class="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn @bind-Value="_searchQuery" @bind-Value:event="oninput" Placeholder="Search variables..." Class="h-7 border-0 bg-transparent pl-7 text-xs shadow-none focus-visible:ring-0" />
+            </div>
+            <div class="flex items-center gap-1">
+                <button type="button" @onclick="@(() => _filterEnv = null)"
+                        class="@(Cn.Merge("rounded px-2 py-0.5 text-[10px] transition-colors", _filterEnv == null ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"))">
+                    All (@_vars.Count)
+                </button>
+                @foreach (var env in Environments)
+                {
+                    var capturedEnv = env;
+                    <button type="button" @onclick="@(() => _filterEnv = _filterEnv == capturedEnv ? null : capturedEnv)"
+                            class="@(Cn.Merge("rounded px-2 py-0.5 text-[10px] transition-colors", _filterEnv == capturedEnv ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"))">
+                        @(capturedEnv.Substring(0, 4)) (@EnvCount(capturedEnv))
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Table *@
+        <div class="overflow-x-auto">
+            <TableCn>
+                <TableHeaderCn>
+                    <TableRowCn Class="hover:bg-transparent">
+                        <TableHeadCn Class="h-8 text-[10px] font-medium">NAME</TableHeadCn>
+                        <TableHeadCn Class="h-8 text-[10px] font-medium">VALUE</TableHeadCn>
+                        <TableHeadCn Class="h-8 text-[10px] font-medium">SCOPE</TableHeadCn>
+                        <TableHeadCn Class="h-8 text-right text-[10px] font-medium">MODIFIED</TableHeadCn>
+                        <TableHeadCn Class="h-8 w-24" />
+                    </TableRowCn>
+                </TableHeaderCn>
+                <TableBodyCn>
+                    @{
+                        var filteredVars = FilteredVars;
+                    }
+                    @if (filteredVars.Count == 0)
+                    {
+                        <TableRowCn>
+                            <TableCellCn colspan="5" Class="py-8 text-center text-sm text-muted-foreground">
+                                @(!string.IsNullOrEmpty(_searchQuery) || _filterEnv != null ? "No variables match your search" : "No environment variables configured")
+                            </TableCellCn>
+                        </TableRowCn>
+                    }
+                    @foreach (var envVar in filteredVars)
+                    {
+                        var isRevealed = _revealedIds.Contains(envVar.Id);
+                        var isCopied = _copiedId == envVar.Id;
+                        <TableRowCn Class="group border-b transition-colors last:border-0 hover:bg-muted/50">
+                            <TableCellCn Class="py-2">
+                                <div class="flex items-center gap-1.5">
+                                    @if (envVar.Sensitive)
+                                    {
+                                        <LucideLockCn Size="12" Class="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                                    }
+                                    <code class="font-mono text-xs font-medium">@envVar.Key</code>
+                                </div>
+                            </TableCellCn>
+                            <TableCellCn Class="max-w-[240px] py-2">
+                                <code class="block truncate font-mono text-xs text-muted-foreground">
+                                    @(envVar.Sensitive && !isRevealed ? "••••••••••••••••••••" : envVar.Value)
+                                </code>
+                            </TableCellCn>
+                            <TableCellCn Class="py-2">
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach (var envName in envVar.Environments)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@(Cn.Merge("h-4 border-0 px-1.5 text-[10px]", EnvColors.GetValueOrDefault(envName, "")))">
+                                            @(envName.Substring(0, 4))
+                                        </BadgeCn>
+                                    }
+                                </div>
+                            </TableCellCn>
+                            <TableCellCn Class="py-2 text-right">
+                                <span class="text-[10px] text-muted-foreground">@envVar.LastModified</span>
+                            </TableCellCn>
+                            <TableCellCn Class="py-2">
+                                <div class="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                    @if (envVar.Sensitive)
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 w-6 p-0" @onclick="@(() => ToggleReveal(envVar.Id))">
+                                            @if (isRevealed)
+                                            {
+                                                <LucideEyeOffCn Size="12" Class="h-3 w-3 text-muted-foreground" />
+                                            }
+                                            else
+                                            {
+                                                <LucideEyeCn Size="12" Class="h-3 w-3 text-muted-foreground" />
+                                            }
+                                        </ButtonCn>
+                                    }
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 w-6 p-0" @onclick="@(() => HandleCopy(envVar.Id, envVar.Value))">
+                                        @if (isCopied)
+                                        {
+                                            <LucideCheckCn Size="12" Class="h-3 w-3 text-emerald-600" />
+                                        }
+                                        else
+                                        {
+                                            <LucideClipboardCopyCn Size="12" Class="h-3 w-3 text-muted-foreground" />
+                                        }
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" @onclick="@(() => HandleDelete(envVar.Id))">
+                                        <LucideTrash2Cn Size="12" Class="h-3 w-3" />
+                                    </ButtonCn>
+                                </div>
+                            </TableCellCn>
+                        </TableRowCn>
+                    }
+                </TableBodyCn>
+            </TableCn>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span class="tabular-nums">@_vars.Count variables</span>
+                <span class="text-muted-foreground/40">•</span>
+                <span class="flex items-center gap-1 tabular-nums">
+                    <LucideLockCn Size="12" />
+                    @SensitiveCount sensitive
+                </span>
+            </div>
+            <p class="text-[10px] text-muted-foreground">
+                Sensitive values encrypted at rest with AES-256
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record EnvVar(string Id, string Key, string Value, string[] Environments, bool Sensitive, string LastModified);
+
+    private static readonly string[] Environments = ["Production", "Staging", "Development"];
+
+    private static readonly Dictionary<string, string> EnvColors = new()
+    {
+        ["Production"] = "bg-emerald-500/10 text-emerald-700",
+        ["Staging"] = "bg-amber-500/10 text-amber-700",
+        ["Development"] = "bg-blue-500/10 text-blue-700",
+    };
+
+    private List<EnvVar> _vars = new()
+    {
+        new("v1", "DATABASE_URL", "postgresql://admin:s3cur3p4ss@db.acme.com:5432/production", ["Production"], true, "Mar 28, 2026"),
+        new("v2", "NEXT_PUBLIC_API_URL", "https://api.acme.com/v2", ["Production", "Staging", "Development"], false, "Mar 25, 2026"),
+        new("v3", "STRIPE_SECRET_KEY", "sk_live_51NxB2kJq8r7Yz3mKpQw0L4Xc9Vh6Dn", ["Production"], true, "Mar 22, 2026"),
+        new("v4", "REDIS_URL", "redis://default:r3d1sp4ss@cache.acme.com:6379/0", ["Production", "Staging"], true, "Mar 18, 2026"),
+        new("v5", "NEXT_PUBLIC_SENTRY_DSN", "https://abc123@o456789.ingest.sentry.io/987654", ["Production", "Staging"], false, "Mar 15, 2026"),
+        new("v6", "OPENAI_API_KEY", "sk-proj-aBcDeFgHiJkLmNoPqRsTuVwXyZ012345", ["Production", "Staging", "Development"], true, "Mar 12, 2026"),
+        new("v7", "NEXT_PUBLIC_APP_ENV", "production", ["Production"], false, "Feb 28, 2026"),
+        new("v8", "SMTP_PASSWORD", "SG.xYzAbCdEfGhIjKlMnOpQrS.TuVwXyZ0123456789", ["Production"], true, "Feb 20, 2026"),
+    };
+
+    private string _searchQuery = "";
+    private string? _filterEnv;
+    private HashSet<string> _revealedIds = new();
+    private string? _copiedId;
+    private bool _showAddForm;
+    private string _newKey = "";
+    private string _newValue = "";
+    private HashSet<string> _newEnvs = new() { "Development" };
+    private bool _newSensitive;
+
+    private List<EnvVar> FilteredVars
+    {
+        get
+        {
+            var result = _vars.AsEnumerable();
+            if (!string.IsNullOrEmpty(_searchQuery))
+            {
+                var q = _searchQuery.ToLower();
+                result = result.Where(v => v.Key.ToLower().Contains(q) || v.Value.ToLower().Contains(q));
+            }
+            if (_filterEnv != null)
+            {
+                result = result.Where(v => v.Environments.Contains(_filterEnv));
+            }
+            return result.ToList();
+        }
+    }
+
+    private int EnvCount(string env) => _vars.Count(v => v.Environments.Contains(env));
+    private int SensitiveCount => _vars.Count(v => v.Sensitive);
+    private bool IsAddValid => !string.IsNullOrWhiteSpace(_newKey) && !string.IsNullOrWhiteSpace(_newValue) && _newEnvs.Count > 0;
+
+    private void ToggleReveal(string id)
+    {
+        if (_revealedIds.Contains(id)) _revealedIds.Remove(id);
+        else _revealedIds.Add(id);
+    }
+
+    private async Task HandleCopy(string id, string value)
+    {
+        _copiedId = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedId = null;
+    }
+
+    private void HandleDelete(string id)
+    {
+        _vars.RemoveAll(v => v.Id == id);
+        _revealedIds.Remove(id);
+    }
+
+    private void ToggleNewEnv(string env)
+    {
+        if (_newEnvs.Contains(env)) _newEnvs.Remove(env);
+        else _newEnvs.Add(env);
+    }
+
+    private void HandleAdd()
+    {
+        if (!IsAddValid) return;
+        var newVar = new EnvVar(
+            $"v{_vars.Count + 20}",
+            _newKey.Trim().ToUpper().Replace(" ", "_"),
+            _newValue.Trim(),
+            [.. _newEnvs],
+            _newSensitive,
+            "Apr 5, 2026"
+        );
+        _vars.Insert(0, newVar);
+        _newKey = "";
+        _newValue = "";
+        _newEnvs = new() { "Development" };
+        _newSensitive = false;
+        _showAddForm = false;
+    }
+}

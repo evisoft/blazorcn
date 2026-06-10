@@ -1,0 +1,215 @@
+@* ============================================================
+   Block: kanban-dependency-board
+   Title: KanbanDependencyBoard
+   Description: React kanban dependency management board for Next.js with shadcn/ui Command palette search by package name and version, breaking change indicators, and four-column update pipeline using Tailwind CSS
+   Source: original/blocks/kanban/kanban-dependency-board.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="package" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Dependencies</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_dependencies.Length packages
+                </BadgeCn>
+            </div>
+            <PopoverCn @bind-Open="_open">
+                <PopoverTriggerCn Class="flex h-7 items-center gap-1.5 rounded-md border bg-muted/50 px-2.5 text-muted-foreground text-xs transition-colors hover:bg-muted">
+                    <LucideIconCn Name="search" Size="12" Class="size-3" />
+                    Search packages
+                </PopoverTriggerCn>
+                <PopoverContentCn Class="w-80 p-0" Align="FloatingAlign.End">
+                    <CommandCn Class="border-0">
+                        <CommandInputCn Placeholder="Search names, versions, severity..." @bind-Value="_search" />
+                        <CommandListCn>
+                            @if (!string.IsNullOrWhiteSpace(_search) && MatchedIds.Count > 0)
+                            {
+                                <CommandGroupCn Heading="Packages">
+                                    @foreach (var dep in _dependencies.Where(d => MatchedIds.Contains(d.Id)))
+                                    {
+                                        var item = dep;
+                                        <CommandItemCn OnSelect="@(() => CloseSearch())">
+                                            <span class="@Cn.Merge("size-1.5 rounded-full", _severityDot[item.Severity])"></span>
+                                            <div class="min-w-0 flex-1">
+                                                <span class="block truncate font-mono text-sm">@item.Name</span>
+                                                <span class="text-muted-foreground text-xs">@item.CurrentVersion @("→") @item.LatestVersion</span>
+                                            </div>
+                                            @if (item.IsBreaking)
+                                            {
+                                                <span class="size-1.5 rounded-full bg-red-500"></span>
+                                            }
+                                        </CommandItemCn>
+                                    }
+                                </CommandGroupCn>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_search) && MatchedIds.Count == 0)
+                            {
+                                <CommandEmptyCn>No matching packages.</CommandEmptyCn>
+                            }
+                            <CommandGroupCn Heading="Quick Actions">
+                                <CommandItemCn OnSelect="@(() => CloseSearch())">
+                                    <LucideIconCn Name="arrow-up-circle" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Update all minor
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => CloseSearch())">
+                                    <LucideIconCn Name="shield-alert" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    View security advisories
+                                </CommandItemCn>
+                                <CommandItemCn OnSelect="@(() => CloseSearch())">
+                                    <LucideIconCn Name="refresh-cw" Size="14" Class="size-3.5 text-muted-foreground" />
+                                    Run audit check
+                                </CommandItemCn>
+                            </CommandGroupCn>
+                        </CommandListCn>
+                    </CommandCn>
+                </PopoverContentCn>
+            </PopoverCn>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var colDeps = _dependencies.Where(d => d.Status == column.Id).ToArray();
+                <div>
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+                        <span class="text-muted-foreground">
+                            @if (column.Id == "outdated")
+                            {
+                                <LucideIconCn Name="alert-triangle" Size="14" Class="size-3.5" />
+                            }
+                            else if (column.Id == "updating")
+                            {
+                                <LucideIconCn Name="refresh-cw" Size="14" Class="size-3.5" />
+                            }
+                            else if (column.Id == "testing")
+                            {
+                                <LucideIconCn Name="flask-conical" Size="14" Class="size-3.5" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5" />
+                            }
+                        </span>
+                        <span class="font-medium text-muted-foreground text-xs">@column.Title</span>
+                        <span class="text-muted-foreground/60 text-xs">@colDeps.Length</span>
+                    </div>
+                    <div class="p-2">
+                        <div class="flex flex-col gap-1.5">
+                            @foreach (var dep in colDeps)
+                            {
+                                var item = dep;
+                                var isMatch = MatchedIds.Count == 0 || MatchedIds.Contains(item.Id);
+                                var isDimmed = MatchedIds.Count > 0 && !MatchedIds.Contains(item.Id);
+                                <div class="@Cn.Merge("rounded-md border bg-card p-2.5 transition-all hover:bg-muted/50", isMatch && MatchedIds.Count > 0 ? "ring-2 ring-foreground" : "", isDimmed ? "opacity-30" : "")">
+                                    <div class="mb-1 flex items-center gap-2">
+                                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", _severityDot[item.Severity])"></span>
+                                        <span class="min-w-0 flex-1 truncate font-mono font-medium text-sm">@item.Name</span>
+                                    </div>
+                                    <div class="mb-1.5 flex items-center gap-1.5 pl-3.5">
+                                        <span class="font-mono text-muted-foreground text-xs">@item.CurrentVersion</span>
+                                        <span class="text-muted-foreground/40">@("→")</span>
+                                        <span class="font-mono text-xs">@item.LatestVersion</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 pl-3.5">
+                                        <span class="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground">@item.Severity</span>
+                                        @if (item.IsBreaking)
+                                        {
+                                            <span class="size-1.5 rounded-full bg-red-500"></span>
+                                            <span class="text-[10px] text-red-600 dark:text-red-400">breaking</span>
+                                        }
+                                        <span class="ml-auto text-muted-foreground/60 text-[10px]">@item.LastUpdated</span>
+                                    </div>
+                                </div>
+                            }
+                            @if (colDeps.Length == 0)
+                            {
+                                <div class="py-8 text-center text-muted-foreground/60 text-xs">No packages</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @_dependencies.Count(d => d.Status == "outdated") outdated · @_dependencies.Count(d => d.IsBreaking) breaking
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Audit ran 12 min ago</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Dependency(string Id, string Name, string CurrentVersion, string LatestVersion, string Status, string Severity, bool IsBreaking, string LastUpdated);
+    private record Column(string Id, string Title);
+
+    private static readonly Dictionary<string, string> _severityDot = new()
+    {
+        ["critical"] = "bg-red-500",
+        ["major"]    = "bg-amber-500",
+        ["minor"]    = "bg-blue-500",
+        ["patch"]    = "bg-zinc-400",
+    };
+
+    private static readonly Column[] _columns =
+    [
+        new("outdated", "Outdated"),
+        new("updating", "Updating"),
+        new("testing",  "Testing"),
+        new("current",  "Current"),
+    ];
+
+    private static readonly Dependency[] _dependencies =
+    [
+        new("dep1",  "next",                    "14.2.3",  "15.1.0",  "outdated", "major",    true,  "3 months ago"),
+        new("dep2",  "react",                   "18.3.1",  "19.0.0",  "outdated", "major",    true,  "4 months ago"),
+        new("dep3",  "typescript",              "5.3.3",   "5.7.2",   "outdated", "minor",    false, "6 months ago"),
+        new("dep4",  "@prisma/client",          "5.10.2",  "6.2.0",   "outdated", "major",    true,  "2 months ago"),
+        new("dep5",  "tailwindcss",             "3.4.1",   "4.0.0",   "updating", "major",    true,  "1 week ago"),
+        new("dep6",  "eslint",                  "8.56.0",  "9.17.0",  "updating", "major",    true,  "2 weeks ago"),
+        new("dep7",  "zod",                     "3.22.4",  "3.24.1",  "updating", "patch",    false, "3 days ago"),
+        new("dep8",  "framer-motion",           "11.0.3",  "11.15.0", "testing",  "minor",    false, "1 day ago"),
+        new("dep9",  "stripe",                  "14.14.0", "17.4.0",  "testing",  "major",    true,  "2 days ago"),
+        new("dep10", "@radix-ui/react-dialog",  "1.0.5",   "1.1.4",   "testing",  "minor",    false, "1 day ago"),
+        new("dep11", "lucide-react",            "0.462.0", "0.462.0", "current",  "patch",    false, "Today"),
+        new("dep12", "cmdk",                    "1.0.4",   "1.0.4",   "current",  "patch",    false, "Today"),
+        new("dep13", "clsx",                    "2.1.1",   "2.1.1",   "current",  "patch",    false, "Today"),
+    ];
+
+    private bool _open;
+    private string _search = "";
+
+    private HashSet<string> MatchedIds
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_search)) return [];
+            var query = _search.ToLowerInvariant();
+            var ids = new HashSet<string>();
+            foreach (var dep in _dependencies)
+            {
+                if (dep.Name.ToLowerInvariant().Contains(query) ||
+                    dep.CurrentVersion.ToLowerInvariant().Contains(query) ||
+                    dep.LatestVersion.ToLowerInvariant().Contains(query) ||
+                    dep.Severity.ToLowerInvariant().Contains(query))
+                {
+                    ids.Add(dep.Id);
+                }
+            }
+            return ids;
+        }
+    }
+
+    private void CloseSearch()
+    {
+        _open = false;
+        _search = "";
+    }
+}

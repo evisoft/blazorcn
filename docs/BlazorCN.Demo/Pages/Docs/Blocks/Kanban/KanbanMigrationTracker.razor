@@ -1,0 +1,172 @@
+@* ============================================================
+   Block: kanban-migration-tracker
+   Title: KanbanMigrationTracker
+   Description: React data migration kanban board for Next.js with concurrent job progress bars, record counts, error rate tracking, and capacity limits using shadcn/ui Progress and Tailwind CSS
+   Source: original/blocks/kanban/kanban-migration-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Board header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="database" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Data Migration</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_migrationJobs.Length jobs
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="layers" Size="12" Class="size-3" />
+                    @FormatRecords(_totalRecords) records
+                </span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", _errorRate > 0.01 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")">
+                    <LucideIconCn Name="alert-circle" Size="12" Class="size-3" />
+                    @(_errorRate < 0.01 ? "<0.01" : _errorRate.ToString("F3"))% errors
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var colJobs = GetColumnJobs(column.Id);
+                var count = colJobs.Length;
+                var ratio = (double)count / column.Capacity;
+                var percent = Math.Min(ratio * 100.0, 100.0);
+                var colRecords = colJobs.Sum(j => j.Records);
+                var isLast = column.Id == _columns[_columns.Length - 1].Id;
+                <div class="@Cn.Merge(!isLast ? "border-r" : "")">
+                    @* Column header with progress *@
+                    <div class="border-b px-3 py-3">
+                        <div class="mb-2 flex items-center justify-between">
+                            <span class="font-medium text-sm">@column.Label</span>
+                            <span class="@Cn.Merge("font-mono text-xs tabular-nums", GetProgressTextColor(ratio))">
+                                @count/@column.Capacity
+                            </span>
+                        </div>
+                        @* ProgressCn has no IndicatorClass param; render raw progress bar to support dynamic color *@
+                        <div class="cn-progress relative flex h-2 w-full items-center overflow-x-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow="@((int)percent)" aria-valuemin="0" aria-valuemax="100">
+                            <div class="@Cn.Merge("h-full transition-all duration-700", GetProgressColor(ratio))" style="@($"width:{percent:F1}%")"></div>
+                        </div>
+                        <div class="mt-1.5 flex items-center justify-between">
+                            <span class="text-muted-foreground text-xs">
+                                @FormatRecords(colRecords) records
+                            </span>
+                            @if (ratio > 1)
+                            {
+                                <span class="font-medium text-red-600 text-xs dark:text-red-400">
+                                    Over limit!
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    @* Job cards *@
+                    <div class="flex flex-col gap-1 p-2">
+                        @foreach (var job in colJobs)
+                        {
+                            var jobItem = job;
+                            <div class="flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors hover:bg-muted/50">
+                                @if (jobItem.Errors > 0)
+                                {
+                                    <span class="size-1.5 shrink-0 rounded-full bg-red-500"></span>
+                                }
+                                <div class="min-w-0 flex-1">
+                                    <span class="line-clamp-1 text-xs">@jobItem.Name</span>
+                                </div>
+                                <span class="font-mono text-muted-foreground/60 text-[10px]">
+                                    @FormatRecords(jobItem.Records)
+                                </span>
+                                @if (jobItem.Errors > 0)
+                                {
+                                    <span class="font-mono text-red-500 text-[10px]">@(jobItem.Errors)err</span>
+                                }
+                                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium">
+                                    @jobItem.Owner
+                                </span>
+                            </div>
+                        }
+                        @if (colJobs.Length == 0)
+                        {
+                            <div class="rounded-md border border-dashed border-muted-foreground/20 px-2 py-3 text-center text-muted-foreground/40 text-xs">
+                                No jobs
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @(_migrationJobs.Count(j => j.Status == "complete")) of @_migrationJobs.Length complete · @_jobsWithErrors with errors
+            </span>
+            <span class="font-mono text-muted-foreground/60 text-xs">
+                @(Math.Round((double)_migrationJobs.Count(j => j.Status == "complete") / _migrationJobs.Length * 100))% migrated
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record MigrationJob(string Id, string Name, string Status, int Records, int Errors, string Owner);
+    private record ColumnDef(string Id, string Label, int Capacity);
+
+    private static readonly MigrationJob[] _migrationJobs =
+    [
+        new("m1",  "Users table",           "pending",   245000,  0,  "SC"),
+        new("m2",  "Orders archive",        "pending",   1820000, 0,  "MR"),
+        new("m3",  "Product catalog",       "pending",   89000,   0,  "PP"),
+        new("m4",  "Payment records",       "migrating", 534000,  12, "JO"),
+        new("m5",  "Session logs",          "migrating", 3200000, 0,  "SC"),
+        new("m6",  "Audit trail",           "migrating", 1450000, 3,  "MR"),
+        new("m7",  "Customer profiles",     "validating",178000,  0,  "PP"),
+        new("m8",  "Invoice history",       "validating",620000,  8,  "JO"),
+        new("m9",  "Email templates",       "complete",  2400,    0,  "SC"),
+        new("m10", "Config settings",       "complete",  850,     0,  "MR"),
+        new("m11", "Access control lists",  "complete",  15000,   1,  "PP"),
+    ];
+
+    private static readonly ColumnDef[] _columns =
+    [
+        new("pending",   "Pending",   5),
+        new("migrating", "Migrating", 3),
+        new("validating","Validating",3),
+        new("complete",  "Complete",  5),
+    ];
+
+    private static readonly int _totalRecords   = _migrationJobs.Sum(j => j.Records);
+    private static readonly int _totalErrors    = _migrationJobs.Sum(j => j.Errors);
+    private static readonly int _jobsWithErrors = _migrationJobs.Count(j => j.Errors > 0);
+    private static readonly double _errorRate   = _totalRecords > 0 ? ((double)_totalErrors / _totalRecords) * 100.0 : 0.0;
+
+    private static MigrationJob[] GetColumnJobs(string status) =>
+        _migrationJobs.Where(j => j.Status == status).ToArray();
+
+    private static string FormatRecords(int n)
+    {
+        if (n >= 1000000) return $"{(n / 1000000.0):F1}M";
+        if (n >= 1000)    return $"{(n / 1000):F0}K";
+        return n.ToString();
+    }
+
+    private static string GetProgressColor(double ratio)
+    {
+        if (ratio > 1)    return "bg-red-500";
+        if (ratio >= 0.7) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    private static string GetProgressTextColor(double ratio)
+    {
+        if (ratio > 1)    return "text-red-600 dark:text-red-400";
+        if (ratio >= 0.7) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+}

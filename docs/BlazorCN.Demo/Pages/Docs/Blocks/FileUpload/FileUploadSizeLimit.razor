@@ -1,0 +1,188 @@
+@* ============================================================
+   Block: file-upload-size-limit
+   Title: FileUploadSizeLimit
+   Description: React file upload block for Next.js with per-file size limits, total upload capacity bar, approaching-limit warnings, and size validation indicators using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-size-limit.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Upload files</span>
+            <div class="flex items-center gap-2">
+                <span class="text-muted-foreground text-xs">Max @MaxFileSizeMb MB per file</span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="text-muted-foreground text-xs">@MaxTotalSizeMb MB total</span>
+            </div>
+        </div>
+
+        @* Total capacity bar *@
+        <div class="border-b px-4 py-3">
+            <div class="mb-2 flex items-center justify-between">
+                <span class="text-muted-foreground text-xs">Total usage</span>
+                <span class="tabular-nums text-xs">
+                    <span class="@(_isCritical ? "text-red-600 dark:text-red-400" : _isWarning ? "text-amber-600 dark:text-amber-400" : "text-foreground")">
+                        @FormatSize(_totalSizeMb)
+                    </span>
+                    <span class="text-muted-foreground"> / @MaxTotalSizeMb MB</span>
+                </span>
+            </div>
+            <ProgressCn Value="@((int)Math.Round(_usagePercent))" Class="@Cn.Merge("h-1.5", _isCritical ? "[&>[data-slot=indicator]]:bg-red-500" : _isWarning ? "[&>[data-slot=indicator]]:bg-amber-500" : "")" />
+            <div class="mt-1.5 flex items-center justify-between">
+                <span class="text-muted-foreground text-xs tabular-nums">@(_usagePercent.ToString("F0"))% used</span>
+                <span class="text-muted-foreground text-xs tabular-nums">@FormatSize(_remainingMb) remaining</span>
+            </div>
+        </div>
+
+        @* Warning banner *@
+        @if (_isWarning)
+        {
+            <div class="flex items-center gap-2 border-b bg-muted/30 px-4 py-2.5">
+                <LucideIconCn Name="triangle-alert" Size="14" Class="@Cn.Merge("size-3.5 shrink-0", _isCritical ? "text-red-500" : "text-amber-500")" />
+                <span class="@(_isCritical ? "text-xs text-red-600 dark:text-red-400" : "text-xs text-amber-600 dark:text-amber-400")">
+                    @(_isCritical
+                        ? "Almost at capacity. Remove files to upload more."
+                        : "Approaching upload limit. Consider removing unused files.")
+                </span>
+            </div>
+        }
+
+        @* Drop zone *@
+        <div class="border-b px-4 py-4">
+            <div class="flex flex-col items-center justify-center rounded-md border border-dashed px-4 py-6">
+                <LucideIconCn Name="upload" Size="20" Class="mb-2 size-5 text-muted-foreground/60" />
+                <p class="font-medium text-sm">Drop files here</p>
+                <p class="mt-0.5 text-muted-foreground text-xs">Up to @MaxFileSizeMb MB per file</p>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-3 h-7 text-xs">Browse files</ButtonCn>
+            </div>
+        </div>
+
+        @* Accepted files *@
+        @if (_validFiles.Count > 0)
+        {
+            <div class="@(_rejectedFiles.Count > 0 ? "border-b" : "")">
+                <div class="border-b px-4 py-2">
+                    <span class="text-muted-foreground text-xs">
+                        @_validFiles.Count files · @FormatSize(_totalSizeMb)
+                    </span>
+                </div>
+                @for (int i = 0; i < _validFiles.Count; i++)
+                {
+                    var idx = i;
+                    var file = _validFiles[i];
+                    var sizePercent = (file.SizeMb / MaxFileSizeMb) * 100.0;
+                    var fileWarning = sizePercent >= 80;
+                    var hasBorder = idx < _validFiles.Count - 1 || _rejectedFiles.Count > 0;
+                    <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5", hasBorder ? "border-b" : "")">
+                        <LucideIconCn Name="check-circle" Size="16" Class="size-4 shrink-0 text-emerald-500" />
+                        <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground/60" />
+                        <div class="min-w-0 flex-1">
+                            <span class="block truncate font-medium text-sm">@file.Name</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="@Cn.Merge("tabular-nums text-xs", fileWarning ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")">
+                                    @FormatSize(file.SizeMb)
+                                </span>
+                                <span class="text-muted-foreground text-xs">/ @MaxFileSizeMb MB</span>
+                            </div>
+                        </div>
+                        <div class="w-16 shrink-0">
+                            <ProgressCn Value="@((int)Math.Min(Math.Round(sizePercent), 100))" Class="@Cn.Merge("h-1", fileWarning ? "[&>[data-slot=indicator]]:bg-amber-500" : "")" />
+                        </div>
+                        @{ var capturedValidId = file.Id; }
+                        <button
+                            type="button"
+                            @onclick="@(() => RemoveFile(capturedValidId))"
+                            class="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground">
+                            <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+
+        @* Rejected files *@
+        @if (_rejectedFiles.Count > 0)
+        {
+            <div>
+                <div class="border-b px-4 py-2">
+                    <span class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                        <LucideIconCn Name="x-circle" Size="12" Class="size-3" />
+                        @_rejectedFiles.Count rejected
+                    </span>
+                </div>
+                @for (int j = 0; j < _rejectedFiles.Count; j++)
+                {
+                    var jdx = j;
+                    var rfile = _rejectedFiles[j];
+                    var isLastRej = jdx == _rejectedFiles.Count - 1;
+                    <div class="@Cn.Merge("px-4 py-2.5", !isLastRej ? "border-b" : "")">
+                        <div class="flex items-center gap-3">
+                            <LucideIconCn Name="x-circle" Size="16" Class="size-4 shrink-0 text-red-500" />
+                            <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground/60" />
+                            <div class="min-w-0 flex-1">
+                                <span class="block truncate font-medium text-sm">@rfile.Name</span>
+                                <span class="text-muted-foreground text-xs tabular-nums">@FormatSize(rfile.SizeMb)</span>
+                            </div>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs text-red-600 dark:text-red-400">Too large</BadgeCn>
+                            @{ var capturedRejId = rfile.Id; }
+                            <button
+                                type="button"
+                                @onclick="@(() => RemoveFile(capturedRejId))"
+                                class="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground">
+                                <LucideIconCn Name="x" Size="14" Class="size-3.5" />
+                            </button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(rfile.Reason))
+                        {
+                            <p class="mt-1 pl-[3.25rem] text-red-600 text-xs dark:text-red-400">@rfile.Reason</p>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private const int MaxFileSizeMb = 10;
+    private const int MaxTotalSizeMb = 50;
+
+    private class UploadedFile
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public double SizeMb { get; set; }
+        public bool Valid { get; set; }
+        public string Reason { get; set; } = "";
+    }
+
+    private List<UploadedFile> _files =
+    [
+        new UploadedFile { Id = "1", Name = "presentation-deck.pdf", SizeMb = 8.2,  Valid = true  },
+        new UploadedFile { Id = "2", Name = "product-mockup.png",    SizeMb = 4.7,  Valid = true  },
+        new UploadedFile { Id = "3", Name = "user-research.pdf",     SizeMb = 6.1,  Valid = true  },
+        new UploadedFile { Id = "4", Name = "analytics-export.csv",  SizeMb = 3.9,  Valid = true  },
+        new UploadedFile { Id = "5", Name = "raw-footage.mp4",       SizeMb = 18.4, Valid = false, Reason = $"File exceeds {MaxFileSizeMb} MB per-file limit" },
+        new UploadedFile { Id = "6", Name = "team-photo.jpg",        SizeMb = 2.3,  Valid = true  },
+    ];
+
+    private List<UploadedFile> _validFiles    => _files.Where(f => f.Valid).ToList();
+    private List<UploadedFile> _rejectedFiles => _files.Where(f => !f.Valid).ToList();
+    private double _totalSizeMb    => _validFiles.Sum(f => f.SizeMb);
+    private double _usagePercent   => Math.Min((_totalSizeMb / MaxTotalSizeMb) * 100.0, 100.0);
+    private double _remainingMb    => Math.Max(MaxTotalSizeMb - _totalSizeMb, 0);
+    private bool   _isWarning      => _usagePercent >= 80;
+    private bool   _isCritical     => _usagePercent >= 95;
+
+    private static string FormatSize(double mb)
+    {
+        if (mb < 1) return $"{(int)Math.Round(mb * 1024)} KB";
+        return $"{mb:F1} MB";
+    }
+
+    private void RemoveFile(string id)
+    {
+        _files.RemoveAll(f => f.Id == id);
+    }
+}

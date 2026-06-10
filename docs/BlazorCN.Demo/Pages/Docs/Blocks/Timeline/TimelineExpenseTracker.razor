@@ -1,0 +1,197 @@
+@* ============================================================
+   Block: timeline-expense-tracker
+   Title: TimelineExpenseTracker
+   Description: React expense timeline with weekly totals, merchant entries, and receipt status tracking using Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/timeline/timeline-expense-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Expenses</span>
+            <div class="flex items-center gap-3">
+                <span class="text-muted-foreground text-xs">@_totalExpenses entries</span>
+                @if (_missingReceipts > 0)
+                {
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @_missingReceipts missing receipts
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Weeks *@
+        @foreach (var week in _weeks)
+        {
+            var weekIndex = System.Array.IndexOf(_weeks, week);
+            var isLastWeek = weekIndex == _weeks.Length - 1;
+
+            <div>
+                @* Week header *@
+                <div class="@Cn.Merge("flex items-center justify-between border-b bg-muted/30 px-4 py-2.5", weekIndex > 0 ? "border-t" : "")">
+                    <div class="flex items-center gap-2">
+                        <span class="font-medium text-xs">@week.Label</span>
+                        <span class="text-muted-foreground text-xs">@week.DateRange</span>
+                    </div>
+                    <span class="font-semibold text-sm tabular-nums">$@week.Total</span>
+                </div>
+
+                @* Expenses timeline *@
+                <div class="py-1">
+                    @foreach (var expense in week.Expenses)
+                    {
+                        var expIndex = System.Array.IndexOf(week.Expenses, expense);
+                        var isLastExp = isLastWeek && expIndex == week.Expenses.Length - 1;
+                        var isLastInWeek = expIndex == week.Expenses.Length - 1;
+                        var isExpanded = _expanded == expense.Id;
+                        var receiptColor = GetReceiptColor(expense.ReceiptStatus);
+                        var expenseId = expense.Id;
+                        var chevronClass = isExpanded
+                            ? "size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200 rotate-90"
+                            : "size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200";
+
+                        <div class="@Cn.Merge("", isLastInWeek ? "" : "border-b")">
+                            <button type="button"
+                                    @onclick="@(() => Toggle(expenseId))"
+                                    class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                                @* Timeline node with category icon *@
+                                <div class="relative flex flex-col items-center self-stretch">
+                                    <div class="relative z-10 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                                        <LucideIconCn Name="@GetCategoryIcon(expense.Category)" Size="14" Class="size-3.5" />
+                                    </div>
+                                    @if (!isLastExp)
+                                    {
+                                        <div class="w-px flex-1 bg-border"></div>
+                                    }
+                                </div>
+
+                                @* Content *@
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium text-sm">@expense.Merchant</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@GetCategoryLabel(expense.Category)</BadgeCn>
+                                    </div>
+                                    <div class="mt-0.5 flex items-center gap-1.5 text-muted-foreground text-xs">
+                                        <span>@expense.Date</span>
+                                        <span>·</span>
+                                        <span class="@receiptColor">
+                                            @if (expense.ReceiptStatus == ReceiptStatus.Attached)
+                                            {
+                                                <span class="inline-flex items-center gap-1">
+                                                    <LucideIconCn Name="check-circle-2" Size="12" Class="size-3" />
+                                                    Receipt
+                                                </span>
+                                            }
+                                            else if (expense.ReceiptStatus == ReceiptStatus.Missing)
+                                            {
+                                                <span class="inline-flex items-center gap-1">
+                                                    <LucideIconCn Name="paperclip" Size="12" Class="size-3" />
+                                                    Missing receipt
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="inline-flex items-center gap-1">
+                                                    <LucideIconCn Name="paperclip" Size="12" Class="size-3" />
+                                                    Pending
+                                                </span>
+                                            }
+                                        </span>
+                                    </div>
+                                </div>
+
+                                @* Amount + chevron *@
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium text-sm tabular-nums">$@expense.Amount</span>
+                                    <LucideIconCn Name="chevron-right" Size="16" Class="@chevronClass" />
+                                </div>
+                            </button>
+
+                            @* Expanded detail *@
+                            @if (isExpanded)
+                            {
+                                <div class="px-4 pb-3 pl-14">
+                                    <div class="rounded-md bg-muted/50 p-3">
+                                        <p class="text-sm leading-relaxed">@expense.Note</p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private enum ExpenseCategory { Food, Software, Travel, Office, Utilities, Marketing, Supplies }
+    private enum ReceiptStatus { Attached, Missing, Pending }
+
+    private record Expense(string Id, string Date, string Merchant, string Amount, ExpenseCategory Category, ReceiptStatus ReceiptStatus, string Note);
+    private record Week(string Id, string Label, string DateRange, string Total, Expense[] Expenses);
+
+    private static readonly Week[] _weeks =
+    [
+        new("w1", "This week", "Mar 18 – 24, 2026", "1,247.50",
+        [
+            new("e1", "Mar 24", "Notion", "96.00", ExpenseCategory.Software, ReceiptStatus.Attached, "Team workspace — 8 members, annual billing."),
+            new("e2", "Mar 23", "United Airlines", "487.00", ExpenseCategory.Travel, ReceiptStatus.Attached, "SFO → NYC round trip for client meeting."),
+            new("e3", "Mar 22", "Blue Bottle Coffee", "34.50", ExpenseCategory.Food, ReceiptStatus.Missing, "Team coffee run — 6 people."),
+            new("e4", "Mar 21", "Google Workspace", "180.00", ExpenseCategory.Software, ReceiptStatus.Attached, "Business Standard plan — 12 users."),
+            new("e5", "Mar 19", "Staples", "450.00", ExpenseCategory.Supplies, ReceiptStatus.Pending, "Monitor arms and keyboard trays for 3 desks."),
+        ]),
+        new("w2", "Last week", "Mar 11 – 17, 2026", "892.30",
+        [
+            new("e6", "Mar 17", "Linear", "80.00", ExpenseCategory.Software, ReceiptStatus.Attached, "Pro plan — 10 seats, monthly billing."),
+            new("e7", "Mar 15", "Uber", "42.30", ExpenseCategory.Travel, ReceiptStatus.Attached, "Client site visit — downtown."),
+            new("e8", "Mar 14", "Sweetgreen", "89.00", ExpenseCategory.Food, ReceiptStatus.Attached, "Team lunch — 7 people."),
+            new("e9", "Mar 12", "Meta Ads", "500.00", ExpenseCategory.Marketing, ReceiptStatus.Attached, "March campaign — product launch awareness."),
+            new("e10", "Mar 11", "Con Edison", "181.00", ExpenseCategory.Utilities, ReceiptStatus.Attached, "Office electricity — March billing cycle."),
+        ]),
+    ];
+
+    private int _totalExpenses => _weeks.Sum(w => w.Expenses.Length);
+    private int _missingReceipts => _weeks.Sum(w => w.Expenses.Count(e => e.ReceiptStatus == ReceiptStatus.Missing));
+
+    private string? _expanded = "e2";
+
+    private void Toggle(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private static string GetCategoryIcon(ExpenseCategory category) => category switch
+    {
+        ExpenseCategory.Food => "utensils",
+        ExpenseCategory.Software => "monitor",
+        ExpenseCategory.Travel => "car",
+        ExpenseCategory.Office => "coffee",
+        ExpenseCategory.Utilities => "zap",
+        ExpenseCategory.Marketing => "globe",
+        ExpenseCategory.Supplies => "shopping-bag",
+        _ => "tag",
+    };
+
+    private static string GetCategoryLabel(ExpenseCategory category) => category switch
+    {
+        ExpenseCategory.Food => "Food & Dining",
+        ExpenseCategory.Software => "Software",
+        ExpenseCategory.Travel => "Travel",
+        ExpenseCategory.Office => "Office",
+        ExpenseCategory.Utilities => "Utilities",
+        ExpenseCategory.Marketing => "Marketing",
+        ExpenseCategory.Supplies => "Supplies",
+        _ => "",
+    };
+
+    private static string GetReceiptColor(ReceiptStatus status) => status switch
+    {
+        ReceiptStatus.Attached => "text-emerald-500",
+        ReceiptStatus.Missing => "text-red-500",
+        _ => "text-muted-foreground/40",
+    };
+}

@@ -1,0 +1,121 @@
+@* ============================================================
+   Block: monitoring-sidekiq-job-stats
+   Title: MonitoringSidekiqJobStats
+   Description: Professional Sidekiq monitoring dashboard featuring background job throughput, retry rates, and worker utilization metrics with shadcn/ui and Framer Motion.
+   Source: original/blocks/monitoring/monitoring-sidekiq-job-stats.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-red-500/10">
+                    <LucideIconCn Name="activity" Size="16" Class="size-4 text-red-600" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">Sidekiq Jobs</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">
+                        Real-time worker performance
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="size-1.5 rounded-full bg-emerald-500"></div>
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Active</span>
+            </div>
+        </div>
+
+        @* Stats Grid *@
+        <div class="grid grid-cols-2 md:grid-cols-4 border-b">
+            @foreach (var stat in _stats)
+            {
+                var stat2 = stat;
+                var borderRight = stat2.Index != 3 ? "border-r" : "";
+                var borderTop = stat2.Index > 1 ? "border-t md:border-t-0" : "";
+                <div class="p-4 @(borderRight) @(borderTop)">
+                    <div class="flex items-center gap-1.5 mb-1">
+                        <LucideIconCn Name="@stat2.IconName" Size="12" Class="@($"size-3 {stat2.Color}")" />
+                        <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">@stat2.Label</span>
+                    </div>
+                    <div class="text-xl font-semibold tabular-nums tracking-tight">
+                        @stat2.Value
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Throughput Chart *@
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Throughput (jobs/min)</span>
+                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">Avg: 168 j/m</BadgeCn>
+            </div>
+            <div class="h-32 w-full">
+                @{
+                    var pts = _throughputTrend;
+                    var maxVal = 0.0;
+                    foreach (var pt in pts) { if (pt > maxVal) maxVal = pt; }
+                    var count = pts.Length;
+                    // SVG viewport: 100 x 100 (percentage-based)
+                    // Build polyline points for area path
+                    var pathData = new System.Text.StringBuilder();
+                    var lineData = new System.Text.StringBuilder();
+                    for (var i = 0; i < count; i++)
+                    {
+                        var x = (double)i / (count - 1) * 100.0;
+                        var y = 100.0 - (pts[i] / maxVal * 85.0); // leave top 5% headroom
+                        if (i == 0)
+                        {
+                            pathData.Append($"M {x:F2} {y:F2}");
+                            lineData.Append($"M {x:F2} {y:F2}");
+                        }
+                        else
+                        {
+                            var prevX = (double)(i - 1) / (count - 1) * 100.0;
+                            var prevY = 100.0 - (pts[i - 1] / maxVal * 85.0);
+                            var cpX = (prevX + x) / 2;
+                            pathData.Append($" C {cpX:F2} {prevY:F2} {cpX:F2} {y:F2} {x:F2} {y:F2}");
+                            lineData.Append($" C {cpX:F2} {prevY:F2} {cpX:F2} {y:F2} {x:F2} {y:F2}");
+                        }
+                    }
+                    // Close area path along bottom
+                    pathData.Append($" L 100 100 L 0 100 Z");
+                }
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                    <path d="@pathData.ToString()" fill="#ef4444" fill-opacity="0.05" />
+                    <path d="@lineData.ToString()" fill="none" stroke="#ef4444" stroke-width="2" vector-effect="non-scaling-stroke" />
+                </svg>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between border-t">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span class="font-medium">12 Workers · 250 Threads</span>
+            </div>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                Worker Dashboard →
+            </button>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, int Value, string IconName, string Color, int Index);
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Processed", 12450, "check-circle-2", "text-emerald-500", 0),
+        new("Failed",        12, "alert-circle",   "text-red-500",     1),
+        new("Scheduled",     85, "clock",           "text-blue-500",    2),
+        new("Retry",          4, "activity",        "text-amber-500",   3),
+    ];
+
+    private static readonly double[] _throughputTrend =
+    [
+        120, 150, 130, 180, 210, 190, 250, 220, 180, 160, 140, 130
+    ];
+}

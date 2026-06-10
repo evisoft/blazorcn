@@ -1,0 +1,265 @@
+@* ============================================================
+   Block: map-hiking-trails
+   Title: MapHikingTrails
+   Description: Hiking trail explorer map with trail route lines, difficulty badges, elevation profiles, trailhead markers, and trail info panels built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-hiking-trails.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="trees" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Hiking Trails</span>
+                <span class="text-xs text-muted-foreground">Zion National Park</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _diffFilter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _diffFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All (@_trails.Length)
+                </button>
+                @foreach (var diff in _difficulties)
+                {
+                    var d = diff;
+                    var cfg = GetConfig(d);
+                    var count = _trails.Count(t => t.Difficulty == d);
+                    <button
+                        type="button"
+                        @onclick="@(() => _diffFilter = (_diffFilter == d ? null : d))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _diffFilter == d ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Dot)" />
+                        @cfg.Label (@count)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[420px] border-b overflow-hidden bg-muted/20">
+            @* Subtle grid background *@
+            <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+            @* Map label *@
+            <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                Zion National Park
+            </div>
+
+            @* Trail routes (SVG) *@
+            <svg class="absolute inset-0 h-full w-full" viewBox="0 0 500 500" preserveAspectRatio="none">
+                @foreach (var trail in Filtered)
+                {
+                    var t = trail;
+                    var cfg = GetConfig(t.Difficulty);
+                    var isSelected = _selectedTrail == t.Id;
+                    var pts = string.Join(" ", t.Coordinates.Select((c, i) =>
+                    {
+                        var px = MapLonToPercent(c[0]) * 500;
+                        var py = MapLatToPercent(c[1]) * 500;
+                        return (i == 0 ? "M" : "L") + $" {px:F1} {py:F1}";
+                    }));
+                    <path d="@pts" fill="none" stroke="@cfg.RouteColor"
+                          stroke-width="@(isSelected ? "4" : "2.5")"
+                          stroke-opacity="@(isSelected ? "1" : "0.6")"
+                          style="cursor:pointer"
+                          @onclick="@(() => _selectedTrail = t.Id)" />
+                }
+            </svg>
+
+            @* Trailhead markers *@
+            @foreach (var trail in Filtered)
+            {
+                var t = trail;
+                var cfg = GetConfig(t.Difficulty);
+                var leftPct = MapLonToPercent(t.Trailhead[0]) * 100;
+                var topPct = MapLatToPercent(t.Trailhead[1]) * 100;
+                <div class="absolute" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%)")">
+                    @* Marker button *@
+                    <button
+                        type="button"
+                        @onclick="@(() => _selectedTrail = (_selectedTrail == t.Id ? null : t.Id))"
+                        class="@Cn.Merge("flex size-5 items-center justify-center rounded-full border-2 border-white shadow-md", cfg.Dot)">
+                        <LucideIconCn Name="mountain" Size="10" Class="size-2.5 text-white" />
+                    </button>
+
+                    @* Marker tooltip *@
+                    <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                        <div class="flex items-center gap-1.5">
+                            <span class="font-medium">@t.Name</span>
+                            <span class="text-muted-foreground">· @t.Distance</span>
+                        </div>
+                    </div>
+
+                    @* Popup *@
+                    @if (_selectedTrail == t.Id)
+                    {
+                        <div class="absolute left-1/2 top-full z-10 mt-7 w-60 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                            <div class="mb-2 flex items-start justify-between">
+                                <p class="text-sm font-medium">@t.Name</p>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"text-xs font-normal {cfg.Color}")">@cfg.Label</BadgeCn>
+                            </div>
+                            <p class="mb-2 text-xs text-muted-foreground leading-relaxed">
+                                @t.Description
+                            </p>
+                            <div class="mb-2 grid grid-cols-3 gap-2">
+                                <div class="flex items-center gap-1">
+                                    <LucideIconCn Name="ruler" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs font-medium">@t.Distance</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <LucideIconCn Name="mountain" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs font-medium">@t.Elevation</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="text-xs font-medium">@t.Duration</span>
+                                </div>
+                            </div>
+                            @* Mini elevation profile *@
+                            <div class="rounded-md bg-muted/50 p-2">
+                                <p class="mb-1 text-[10px] font-medium text-muted-foreground">
+                                    Elevation profile
+                                </p>
+                                <div class="flex h-8 items-end gap-px">
+                                    @foreach (var h in t.ElevationProfile)
+                                    {
+                                        <div class="flex-1 rounded-sm bg-foreground/20" style="@($"height:{h}%")"></div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Controls placeholder *@
+            <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+            </div>
+        </div>
+
+        @* Trail list *@
+        <div>
+            @for (var i = 0; i < Filtered.Length; i++)
+            {
+                var trail = Filtered[i];
+                var isLast = i == Filtered.Length - 1;
+                var isExpanded = _expandedTrail == trail.Id;
+                var t = trail;
+                var cfg = GetConfig(t.Difficulty);
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expandedTrail = (isExpanded ? null : t.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", cfg.Dot)" />
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@t.Name</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@t.Terrain</p>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="font-medium tabular-nums">@t.Distance</span>
+                            <span class="text-muted-foreground">·</span>
+                            <span class="tabular-nums text-muted-foreground">@t.Elevation</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"text-xs font-normal {cfg.Color}")">@cfg.Label</BadgeCn>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-9">
+                            <p class="mb-2 text-sm text-muted-foreground leading-relaxed">
+                                @t.Description
+                            </p>
+                            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                    @t.Duration
+                                </span>
+                                <span>·</span>
+                                <span>@t.Terrain</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Trail(
+        string Id,
+        string Name,
+        string Difficulty,
+        string Distance,
+        string Elevation,
+        string Duration,
+        string Terrain,
+        string Description,
+        double[] Trailhead,
+        double[][] Coordinates,
+        int[] ElevationProfile
+    );
+
+    private record DifficultyConfig(string Color, string RouteColor, string Label, string Dot);
+
+    private static DifficultyConfig GetConfig(string difficulty) => difficulty switch
+    {
+        "easy" => new("text-emerald-600 dark:text-emerald-400", "#22c55e", "Easy", "bg-emerald-500"),
+        "moderate" => new("text-amber-600 dark:text-amber-400", "#f59e0b", "Moderate", "bg-amber-500"),
+        "hard" => new("text-red-600 dark:text-red-400", "#ef4444", "Hard", "bg-red-500"),
+        _ => new("text-muted-foreground", "#888", difficulty, "bg-muted-foreground"),
+    };
+
+    private static readonly Trail[] _trails =
+    [
+        new("h1", "Angel's Landing", "hard", "5.4 mi", "1,488 ft", "4-5 hrs", "Sandstone, chains section",
+            "Iconic ridge-top trail with dramatic exposure and chain-assisted sections. Outstanding views of Zion Canyon from the summit.",
+            [-112.9507, 37.2594],
+            [[-112.9507, 37.2594], [-112.9515, 37.2605], [-112.953, 37.261], [-112.9545, 37.2622], [-112.956, 37.2618], [-112.9568, 37.2625], [-112.9572, 37.264], [-112.9565, 37.2655], [-112.9555, 37.2662]],
+            [40, 55, 70, 78, 82, 88, 92, 96, 100]),
+        new("h2", "Riverside Walk", "easy", "2.2 mi", "57 ft", "1-1.5 hrs", "Paved, flat",
+            "Paved path along the Virgin River through a narrow canyon. Wheelchair accessible. Starting point for The Narrows hike.",
+            [-112.9475, 37.285],
+            [[-112.9475, 37.285], [-112.9472, 37.2865], [-112.9478, 37.288], [-112.948, 37.2895], [-112.9474, 37.2908], [-112.9468, 37.292]],
+            [10, 11, 12, 12, 13, 13]),
+        new("h3", "Observation Point", "hard", "8.0 mi", "2,148 ft", "5-7 hrs", "Switchbacks, slickrock",
+            "Strenuous climb through Echo Canyon with sweeping views from 6,521 ft. Higher vantage point than Angel's Landing.",
+            [-112.9395, 37.272],
+            [[-112.9395, 37.272], [-112.9408, 37.2732], [-112.942, 37.274], [-112.9435, 37.2752], [-112.9428, 37.2768], [-112.9418, 37.278], [-112.9405, 37.2795], [-112.9398, 37.281]],
+            [35, 48, 60, 72, 80, 88, 94, 100]),
+        new("h4", "Emerald Pools", "moderate", "3.0 mi", "400 ft", "2-3 hrs", "Rock, dirt, some stairs",
+            "Loop trail visiting lower, middle, and upper emerald pools with seasonal waterfalls. Moderate elevation gain with some uneven terrain.",
+            [-112.954, 37.2545],
+            [[-112.954, 37.2545], [-112.9548, 37.2558], [-112.9555, 37.2572], [-112.956, 37.2585], [-112.9552, 37.2598], [-112.9542, 37.2605], [-112.9535, 37.259], [-112.954, 37.2545]],
+            [30, 40, 52, 60, 55, 45, 35, 30]),
+        new("h5", "Canyon Overlook", "easy", "1.0 mi", "163 ft", "0.5-1 hr", "Rock, sand, fenced ledges",
+            "Short trail to a panoramic overlook of Pine Creek Canyon and lower Zion. Best at sunrise or sunset for photography.",
+            [-112.937, 37.2485],
+            [[-112.937, 37.2485], [-112.938, 37.249], [-112.9392, 37.2498], [-112.94, 37.251]],
+            [50, 62, 78, 85]),
+    ];
+
+    private static readonly string[] _difficulties = ["easy", "moderate", "hard"];
+
+    // Bounding box for the visible map area
+    private const double _lonMin = -112.965;
+    private const double _lonMax = -112.930;
+    private const double _latMin = 37.245;
+    private const double _latMax = 37.295;
+
+    private string? _selectedTrail = "h1";
+    private string? _expandedTrail;
+    private string? _diffFilter;
+
+    private Trail[] Filtered => _diffFilter != null
+        ? _trails.Where(t => t.Difficulty == _diffFilter).ToArray()
+        : _trails;
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+}

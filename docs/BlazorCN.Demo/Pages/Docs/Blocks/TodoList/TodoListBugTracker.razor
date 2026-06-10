@@ -1,0 +1,198 @@
+@* ============================================================
+   Block: todo-list-bug-tracker
+   Title: TodoListBugTracker
+   Description: A bug tracking list block for React and Next.js with severity filtering, expandable reproduction steps, status management, and reporter info built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-bug-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bug" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Bug Tracker</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @CriticalCount
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @MajorCount
+                </span>
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @MinorCount
+                </span>
+            </div>
+        </div>
+
+        @* Filters *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-3">
+            <button type="button" @onclick="@(() => _filter = null)" aria-pressed="@(_filter == null)">
+                <BadgeCn Variant="@(_filter == null ? BadgeVariant.Default : BadgeVariant.Secondary)"
+                         Class="@FilterBadgeClass(_filter == null)">
+                    All
+                </BadgeCn>
+            </button>
+            @foreach (var sev in _severities)
+            {
+                var severity = sev;
+                var isActive = _filter == severity;
+                <button type="button"
+                        @onclick="@(() => _filter = (_filter == severity ? (BugSeverity?)null : severity))"
+                        aria-pressed="@isActive">
+                    <BadgeCn Variant="@(isActive ? BadgeVariant.Default : BadgeVariant.Secondary)"
+                             Class="@FilterBadgeClass(isActive)">
+                        @severity.ToString().ToLower()
+                    </BadgeCn>
+                </button>
+            }
+        </div>
+
+        @* Bug list *@
+        <div>
+            @for (int i = 0; i < FilteredBugs.Count; i++)
+            {
+                var bug = FilteredBugs[i];
+                var isLast = i == FilteredBugs.Count - 1;
+                var isExpanded = _expanded == bug.Id;
+                var statusInfo = StatusBadgeInfo(bug.Status);
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => _expanded = (isExpanded ? null : bug.Id))"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", SeverityDotClass(bug.Severity))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@bug.Title</span>
+                            <div class="mt-0.5 flex items-center gap-2">
+                                <span class="text-muted-foreground text-xs">@bug.Reporter</span>
+                                <span class="text-muted-foreground text-xs">·</span>
+                                <span class="font-mono text-muted-foreground text-xs">@bug.Component</span>
+                            </div>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary"
+                                 Class="@Cn.Merge("shrink-0 font-normal text-xs", statusInfo.ClassName)">
+                            @statusInfo.Label
+                        </BadgeCn>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                                    Steps to reproduce
+                                </span>
+                                <ol class="list-inside list-decimal space-y-1">
+                                    @foreach (var step in bug.StepsToReproduce)
+                                    {
+                                        <li class="text-sm leading-relaxed">@step</li>
+                                    }
+                                </ol>
+                            </div>
+                            <div class="mt-3 flex items-center gap-2">
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                                          OnClick="@((MouseEventArgs _) => CycleStatus(bug.Id))">
+                                    Advance Status
+                                </ButtonCn>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (FilteredBugs.Count == 0)
+            {
+                <div class="px-4 py-8 text-center text-muted-foreground text-sm">
+                    No bugs matching filter
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-2 border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @FilteredBugs.Count @(FilteredBugs.Count == 1 ? "bug" : "bugs")
+            </span>
+            @if (_filter != null)
+            {
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span class="text-muted-foreground text-xs capitalize">@_filter.Value.ToString().ToLower()</span>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private enum BugSeverity { Critical, Major, Minor }
+    private enum BugStatus { Open, InProgress, Fixed, Verified }
+
+    private record BugItem(string Id, string Title, BugSeverity Severity, BugStatus Status, string Reporter, string Component, string[] StepsToReproduce);
+
+    private static readonly BugSeverity[] _severities = [BugSeverity.Critical, BugSeverity.Major, BugSeverity.Minor];
+
+    private List<BugItem> _bugs =
+    [
+        new("b1", "Login form crashes on empty submit", BugSeverity.Critical, BugStatus.Open, "Maya Patel", "AuthForm",
+            ["Navigate to /login", "Leave all fields empty", "Click Submit button", "Application crashes with unhandled TypeError"]),
+        new("b2", "Dashboard chart renders incorrect data after timezone change", BugSeverity.Major, BugStatus.InProgress, "James Rivera", "AnalyticsChart",
+            ["Open dashboard with chart data", "Change system timezone to UTC+12", "Refresh the page", "Chart bars show previous day's data shifted by 12 hours"]),
+        new("b3", "File upload silently fails above 10MB", BugSeverity.Major, BugStatus.Open, "Sarah Chen", "FileUploader",
+            ["Navigate to file upload page", "Select a file larger than 10MB", "Click Upload", "Progress bar completes but file is not saved"]),
+        new("b4", "Tooltip clipped by overflow container", BugSeverity.Minor, BugStatus.Fixed, "Alex Kim", "DataTable",
+            ["Open data table with long cell values", "Hover over a truncated cell in the last column", "Tooltip is cut off by the table's overflow-hidden container"]),
+        new("b5", "Search results flash on slow connections", BugSeverity.Minor, BugStatus.Verified, "Maya Patel", "SearchBar",
+            ["Throttle network to Slow 3G", "Type a search query", "Previous results flash before new results load"]),
+        new("b6", "Session expires without warning during form edit", BugSeverity.Critical, BugStatus.InProgress, "James Rivera", "SessionManager",
+            ["Start editing a long form", "Wait for session to expire (30 min idle)", "Submit the form", "Data is lost with a redirect to login"]),
+    ];
+
+    private BugSeverity? _filter = null;
+    private string? _expanded = null;
+
+    private List<BugItem> FilteredBugs =>
+        _filter == null ? _bugs : _bugs.Where(b => b.Severity == _filter).ToList();
+
+    private int CriticalCount => _bugs.Count(b => b.Severity == BugSeverity.Critical);
+    private int MajorCount => _bugs.Count(b => b.Severity == BugSeverity.Major);
+    private int MinorCount => _bugs.Count(b => b.Severity == BugSeverity.Minor);
+
+    private static string SeverityDotClass(BugSeverity s) => s switch
+    {
+        BugSeverity.Critical => "bg-red-500",
+        BugSeverity.Major    => "bg-amber-500",
+        BugSeverity.Minor    => "bg-blue-500",
+        _                    => "",
+    };
+
+    private static (string Label, string ClassName) StatusBadgeInfo(BugStatus s) => s switch
+    {
+        BugStatus.Open        => ("Open",        "bg-red-500/10 text-red-600 dark:text-red-400"),
+        BugStatus.InProgress  => ("In Progress",  "bg-amber-500/10 text-amber-600 dark:text-amber-400"),
+        BugStatus.Fixed       => ("Fixed",         "bg-blue-500/10 text-blue-600 dark:text-blue-400"),
+        BugStatus.Verified    => ("Verified",      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"),
+        _                     => ("",             ""),
+    };
+
+    private static string FilterBadgeClass(bool active) =>
+        Cn.Merge("cursor-pointer text-xs font-normal", active ? "bg-foreground text-background hover:bg-foreground/90" : "");
+
+    private void CycleStatus(string id)
+    {
+        var order = new[] { BugStatus.Open, BugStatus.InProgress, BugStatus.Fixed, BugStatus.Verified };
+        var idx = _bugs.FindIndex(b => b.Id == id);
+        if (idx >= 0)
+        {
+            var current = _bugs[idx];
+            var currentIndex = Array.IndexOf(order, current.Status);
+            var nextStatus = order[(currentIndex + 1) % order.Length];
+            _bugs[idx] = current with { Status = nextStatus };
+        }
+    }
+}

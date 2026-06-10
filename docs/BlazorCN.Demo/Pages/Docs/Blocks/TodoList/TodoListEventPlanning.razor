@@ -1,0 +1,181 @@
+@* ============================================================
+   Block: todo-list-event-planning
+   Title: TodoListEventPlanning
+   Description: An event planning checklist block for React and Next.js with venue, catering, entertainment, logistics, and marketing sections, budget tracking, vendor assignments, and status indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-event-planning.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="party-popper" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Annual Company Gala</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="calendar" Size="12" Class="size-3 text-muted-foreground" />
+                <span class="text-muted-foreground text-xs">Apr 20, 2026</span>
+            </div>
+        </div>
+
+        @* Overall budget *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <div class="min-w-0 flex-1">
+                <div class="mb-1.5 flex items-center justify-between">
+                    <span class="text-muted-foreground text-xs">Overall Budget</span>
+                    <span class="font-mono text-xs tabular-nums">
+                        $@(TotalSpent.ToString("N0")) / $@(TotalBudget.ToString("N0"))
+                    </span>
+                </div>
+                <ProgressCn Value="@((double)OverallPercent)" Class="h-1.5" />
+            </div>
+            <span class="font-medium text-xs tabular-nums">@OverallPercent%</span>
+        </div>
+
+        @* Sections *@
+        @foreach (var secName in _sections)
+        {
+            var secTasks = _tasks.Where(t => t.Section == secName).ToList();
+            if (secTasks.Count == 0) continue;
+            var isCollapsed = _collapsed.Contains(secName);
+            var secCompleted = secTasks.Count(t => t.Completed);
+            var secSpent = secTasks.Sum(t => t.Cost);
+            var budgetEntry = _sectionBudgets.FirstOrDefault(b => b.Name == secName);
+            var secBudget = budgetEntry?.Budget ?? 0;
+            var secPercent = secBudget > 0 ? (int)Math.Round((double)secSpent / secBudget * 100) : 0;
+            var capturedName = secName;
+
+            <div>
+                <button type="button"
+                        @onclick="@(() => ToggleSection(capturedName))"
+                        class="flex w-full items-center gap-2 border-b bg-muted/30 px-4 py-2 text-left transition-colors hover:bg-muted/50">
+                    <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 text-muted-foreground/60 transition-transform duration-200", isCollapsed ? "" : "rotate-90")" />
+                    <span class="font-medium text-xs">@secName</span>
+                    <span class="text-muted-foreground text-xs tabular-nums">
+                        @secCompleted/@secTasks.Count
+                    </span>
+                    <span class="ml-auto font-mono text-muted-foreground text-xs tabular-nums">
+                        $@(secSpent.ToString("N0")) / $@(secBudget.ToString("N0"))
+                    </span>
+                    <span class="text-muted-foreground text-xs tabular-nums">
+                        @secPercent%
+                    </span>
+                </button>
+
+                @if (!isCollapsed)
+                {
+                    @for (int ti = 0; ti < secTasks.Count; ti++)
+                    {
+                        var task = secTasks[ti];
+                        var isLastInSection = ti == secTasks.Count - 1;
+                        var isLastSec = secName == _sections[_sections.Length - 1];
+                        var showBorder = !(isLastInSection && isLastSec);
+                        var taskId = task.Id;
+
+                        <div class="@Cn.Merge("group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", showBorder ? "border-b" : "")">
+                            <CheckboxCn Id="@($"event-{task.Id}")"
+                                        Checked="@task.Completed"
+                                        CheckedChanged="@((bool _) => ToggleTask(taskId))" />
+                            <div class="min-w-0 flex-1">
+                                <span class="@Cn.Merge("font-medium text-sm", task.Completed ? "text-muted-foreground line-through" : "")">
+                                    @task.Name
+                                </span>
+                                <p class="mt-0.5 text-muted-foreground text-xs">
+                                    @task.Vendor
+                                    @if (task.Cost > 0)
+                                    {
+                                        <span class="mx-1">·</span>
+                                        <span class="font-mono tabular-nums">$@(task.Cost.ToString("N0"))</span>
+                                    }
+                                </p>
+                            </div>
+                            <span class="text-muted-foreground text-xs">@task.DueDate</span>
+                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", StatusDotClass(task.Status))"></span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs">
+                                @StatusLabel(task.Status)
+                            </BadgeCn>
+                        </div>
+                    }
+                }
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private enum TaskStatus { Booked, InProgress, NotStarted }
+
+    private record EventTask(string Id, string Name, string Section, string Vendor, int Cost, string DueDate, TaskStatus Status, bool Completed);
+
+    private record BudgetEntry(string Name, int Budget);
+
+    private static readonly string[] _sections = ["Venue", "Catering", "Entertainment", "Logistics", "Marketing"];
+
+    private static readonly BudgetEntry[] _sectionBudgets =
+    [
+        new("Venue",         8000),
+        new("Catering",      6000),
+        new("Entertainment", 3000),
+        new("Logistics",     2500),
+        new("Marketing",     1500),
+    ];
+
+    private List<EventTask> _tasks =
+    [
+        new("1",  "Book event space",             "Venue",         "Skyline Loft",    5500, "Mar 15", TaskStatus.Booked,      true),
+        new("2",  "Arrange table setup",          "Venue",         "Skyline Loft",     800, "Apr 1",  TaskStatus.InProgress,  false),
+        new("3",  "AV equipment rental",          "Venue",         "TechRent Co.",    1200, "Apr 5",  TaskStatus.InProgress,  false),
+        new("4",  "Confirm menu selection",       "Catering",      "Harvest Kitchen", 3200, "Mar 20", TaskStatus.Booked,      true),
+        new("5",  "Order dietary accommodations", "Catering",      "Harvest Kitchen",  600, "Apr 1",  TaskStatus.InProgress,  false),
+        new("6",  "Beverage service setup",       "Catering",      "CityBar Events",  1800, "Apr 10", TaskStatus.NotStarted,  false),
+        new("7",  "Book DJ",                      "Entertainment", "DJ Marcus",       1500, "Mar 10", TaskStatus.Booked,      true),
+        new("8",  "Photo booth rental",           "Entertainment", "SnapStation",      800, "Apr 5",  TaskStatus.InProgress,  false),
+        new("9",  "Lighting design",              "Entertainment", "Ambiance Co.",     650, "Apr 8",  TaskStatus.NotStarted,  false),
+        new("10", "Guest transportation",         "Logistics",     "Metro Shuttle",   1200, "Apr 10", TaskStatus.NotStarted,  false),
+        new("11", "Event signage & wayfinding",   "Logistics",     "PrintPro",         350, "Apr 8",  TaskStatus.InProgress,  false),
+        new("12", "Staff coordination plan",      "Logistics",     "Internal",           0, "Apr 12", TaskStatus.NotStarted,  false),
+        new("13", "Send email invitations",       "Marketing",     "Internal",           0, "Mar 1",  TaskStatus.Booked,      true),
+        new("14", "Social media campaign",        "Marketing",     "Internal",         500, "Mar 15", TaskStatus.InProgress,  false),
+        new("15", "Print event programs",         "Marketing",     "PrintPro",         400, "Apr 10", TaskStatus.NotStarted,  false),
+    ];
+
+    private HashSet<string> _collapsed = new();
+
+    private int TotalBudget => _sectionBudgets.Sum(b => b.Budget);
+    private int TotalSpent => _tasks.Sum(t => t.Cost);
+    private int OverallPercent => TotalBudget > 0 ? (int)Math.Round((double)TotalSpent / TotalBudget * 100) : 0;
+
+    private void ToggleTask(string id)
+    {
+        var idx = _tasks.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _tasks[idx] = _tasks[idx] with { Completed = !_tasks[idx].Completed };
+    }
+
+    private void ToggleSection(string name)
+    {
+        if (_collapsed.Contains(name))
+            _collapsed.Remove(name);
+        else
+            _collapsed.Add(name);
+    }
+
+    private static string StatusDotClass(TaskStatus s) => s switch
+    {
+        TaskStatus.Booked      => "bg-emerald-500",
+        TaskStatus.InProgress  => "bg-amber-500",
+        TaskStatus.NotStarted  => "bg-muted-foreground/40",
+        _                      => "",
+    };
+
+    private static string StatusLabel(TaskStatus s) => s switch
+    {
+        TaskStatus.Booked      => "Booked",
+        TaskStatus.InProgress  => "In Progress",
+        TaskStatus.NotStarted  => "Not Started",
+        _                      => "",
+    };
+}

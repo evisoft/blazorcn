@@ -1,0 +1,122 @@
+@* ============================================================
+   Block: tables-cron-jobs
+   Title: TablesCronJobs
+   Description: Scheduled task management table with cron expressions, execution status, and toggle controls. Built for React DevOps dashboards with Next.js, shadcn/ui, and Tailwind CSS.
+   Source: original/blocks/tables/tables-cron-jobs.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <h3 class="text-sm font-medium">Cron Jobs</h3>
+                <p class="text-xs text-muted-foreground">
+                    @_jobs.Count(j => j.Enabled) active &middot; @_jobs.Count(j => j.Status == JobStatus.Failed) failed
+                </p>
+            </div>
+        </div>
+        <TableCn Class="w-full">
+            <TableHeaderCn>
+                <TableRowCn Class="bg-muted/50">
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">On</TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">Job</TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">Schedule</TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">Status</TableHeadCn>
+                    <TableHeadCn Class="text-xs font-medium text-muted-foreground">Last Run</TableHeadCn>
+                    <TableHeadCn Class="text-right text-xs font-medium text-muted-foreground">Next Run</TableHeadCn>
+                </TableRowCn>
+            </TableHeaderCn>
+            <TableBodyCn>
+                @foreach (var job in _jobs)
+                {
+                    var item = job;
+                    var statusCfg = GetStatusConfig(item.Status);
+                    <TableRowCn Class="@Cn.Merge("hover:bg-muted/50", !item.Enabled ? "opacity-50" : "", item.ConsecutiveFailures >= 3 ? "bg-red-500/5" : "")">
+                        <TableCellCn>
+                            <SwitchCn Checked="@item.Enabled" CheckedChanged="@((bool v) => ToggleJob(item.Id))" Class="scale-75" />
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div>
+                                <p class="font-mono text-sm font-medium">@item.Name</p>
+                                <p class="text-xs text-muted-foreground">@item.Description</p>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div>
+                                <p class="text-xs">@item.Schedule</p>
+                                <p class="font-mono text-[10px] text-muted-foreground">@item.Expression</p>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div class="flex items-center gap-1.5">
+                                <LucideIconCn Name="@statusCfg.IconName" Size="14" Class="@Cn.Merge("size-3.5", statusCfg.ClassName, item.Status == JobStatus.Running ? "animate-pulse" : "")" />
+                                <span class="@Cn.Merge("text-xs", statusCfg.ClassName)">@statusCfg.Label</span>
+                            </div>
+                            @if (item.ConsecutiveFailures > 0)
+                            {
+                                <span class="text-[10px] text-red-600">@(item.ConsecutiveFailures)x consecutive</span>
+                            }
+                        </TableCellCn>
+                        <TableCellCn>
+                            <div>
+                                <p class="text-xs text-muted-foreground">@item.LastRun</p>
+                                <p class="text-[10px] text-muted-foreground">Duration: @item.LastDuration</p>
+                            </div>
+                        </TableCellCn>
+                        <TableCellCn Class="text-right text-xs text-muted-foreground">
+                            @item.NextRun
+                        </TableCellCn>
+                    </TableRowCn>
+                }
+            </TableBodyCn>
+        </TableCn>
+    </div>
+</section>
+
+@code {
+    private enum JobStatus { Success, Failed, Running, Idle }
+
+    private class CronJob
+    {
+        public string Id { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string Description { get; init; } = "";
+        public string Expression { get; init; } = "";
+        public string Schedule { get; init; } = "";
+        public bool Enabled { get; set; }
+        public JobStatus Status { get; init; }
+        public string LastRun { get; init; } = "";
+        public string LastDuration { get; init; } = "";
+        public string NextRun { get; init; } = "";
+        public int ConsecutiveFailures { get; init; }
+    }
+
+    private record StatusConfig(string Label, string IconName, string ClassName);
+
+    private List<CronJob> _jobs =
+    [
+        new CronJob { Id="1", Name="daily-backup",      Description="Database backup to S3",            Expression="0 2 * * *",    Schedule="Daily at 2:00 AM",           Enabled=true,  Status=JobStatus.Success, LastRun="Mar 24, 2026 02:00", LastDuration="4m 23s",  NextRun="Mar 25, 2026 02:00", ConsecutiveFailures=0 },
+        new CronJob { Id="2", Name="email-digest",      Description="Send daily email digest",          Expression="0 8 * * 1-5",  Schedule="Weekdays at 8:00 AM",        Enabled=true,  Status=JobStatus.Success, LastRun="Mar 24, 2026 08:00", LastDuration="1m 45s",  NextRun="Mar 25, 2026 08:00", ConsecutiveFailures=0 },
+        new CronJob { Id="3", Name="cleanup-sessions",  Description="Remove expired sessions",          Expression="*/30 * * * *", Schedule="Every 30 minutes",           Enabled=true,  Status=JobStatus.Running, LastRun="Mar 24, 2026 14:30", LastDuration="12s",     NextRun="Mar 24, 2026 15:00", ConsecutiveFailures=0 },
+        new CronJob { Id="4", Name="sync-analytics",    Description="Sync data to analytics warehouse", Expression="0 */4 * * *",  Schedule="Every 4 hours",              Enabled=true,  Status=JobStatus.Failed,  LastRun="Mar 24, 2026 12:00", LastDuration="2m 10s",  NextRun="Mar 24, 2026 16:00", ConsecutiveFailures=3 },
+        new CronJob { Id="5", Name="generate-reports",  Description="Generate monthly reports",         Expression="0 6 1 * *",    Schedule="1st of month at 6:00 AM",    Enabled=true,  Status=JobStatus.Success, LastRun="Mar 1, 2026 06:00",  LastDuration="12m 48s", NextRun="Apr 1, 2026 06:00",  ConsecutiveFailures=0 },
+        new CronJob { Id="6", Name="prune-logs",        Description="Delete logs older than 90 days",   Expression="0 3 * * 0",    Schedule="Sundays at 3:00 AM",         Enabled=false, Status=JobStatus.Idle,    LastRun="Mar 16, 2026 03:00", LastDuration="8m 15s",  NextRun="Disabled",           ConsecutiveFailures=0 },
+        new CronJob { Id="7", Name="ssl-check",         Description="Check SSL certificate expiry",     Expression="0 9 * * 1",    Schedule="Mondays at 9:00 AM",         Enabled=true,  Status=JobStatus.Success, LastRun="Mar 24, 2026 09:00", LastDuration="34s",     NextRun="Mar 31, 2026 09:00", ConsecutiveFailures=0 },
+    ];
+
+    private static StatusConfig GetStatusConfig(JobStatus status) => status switch
+    {
+        JobStatus.Success => new StatusConfig("Success", "circle-check-big", "text-green-600"),
+        JobStatus.Failed  => new StatusConfig("Failed",  "x-circle",         "text-red-600"),
+        JobStatus.Running => new StatusConfig("Running", "play",             "text-blue-600"),
+        JobStatus.Idle    => new StatusConfig("Idle",    "clock",            "text-muted-foreground"),
+        _                 => new StatusConfig(status.ToString(), "clock", ""),
+    };
+
+    private void ToggleJob(string id)
+    {
+        var job = _jobs.FirstOrDefault(j => j.Id == id);
+        if (job is not null)
+            job.Enabled = !job.Enabled;
+    }
+}

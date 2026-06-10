@@ -1,0 +1,145 @@
+@* ============================================================
+   Block: crud-pipeline-editor
+   Title: CrudPipelineEditor
+   Description: Pipeline stage editor with stage ordering, deal values, conversion rates, and drag-to-reorder
+   Source: original/blocks/crud/crud-pipeline-editor.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideGitBranchCn Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Sales Pipeline</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_stages.Count stages · @_totalDeals deals · @FormatValue(_totalValue) total
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucidePlusCn Size="14" Class="size-3.5" />
+                    Add Stage
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div>
+            @for (var i = 0; i < _stages.Count; i++)
+            {
+                var stage = _stages[i];
+                var idx = i;
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <div class="flex flex-col items-center gap-1 pt-0.5">
+                            <span class="@Cn.Merge("size-2 rounded-full", stage.Color)" />
+                            @if (idx < _stages.Count - 1)
+                            {
+                                <div class="h-6 w-px bg-border"></div>
+                            }
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@stage.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">
+                                    Stage @stage.Order
+                                </BadgeCn>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@stage.Description</p>
+                            <div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                <span class="tabular-nums font-medium text-foreground">
+                                    @stage.Deals deals
+                                </span>
+                                <span class="tabular-nums">@FormatValue(stage.TotalValue)</span>
+                                <span class="tabular-nums">@stage.ConversionRate% conversion</span>
+                                <span>Avg @stage.AvgDays days</span>
+                            </div>
+                            @if (stage.ConversionRate > 0)
+                            {
+                                <div class="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
+                                    <div
+                                        class="h-full rounded-full bg-foreground/20"
+                                        style="@($"width:{stage.ConversionRate}%")"
+                                    ></div>
+                                </div>
+                            }
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideMoreHorizontalCn Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>Edit Stage</DropdownMenuItemCn>
+                                <DropdownMenuItemCn @onclick="@(() => HandleMoveUp(stage.Id))">
+                                    Move Up
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn @onclick="@(() => HandleMoveDown(stage.Id))">
+                                    Move Down
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View Deals</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" @onclick="@(() => HandleDelete(stage.Id))">
+                                    <LucideTrashCn Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record PipelineStage(int Id, string Name, string Description, int Deals, int TotalValue, int ConversionRate, int AvgDays, string Color, int Order);
+
+    private List<PipelineStage> _stages =
+    [
+        new(1, "Lead", "Initial contact or inbound inquiry received", 142, 2840000, 100, 0, "bg-muted-foreground/40", 1),
+        new(2, "Qualified", "Lead meets qualification criteria and budget confirmed", 89, 1780000, 63, 5, "bg-blue-500", 2),
+        new(3, "Proposal", "Custom proposal sent with pricing and timeline", 45, 1125000, 32, 12, "bg-amber-500", 3),
+        new(4, "Negotiation", "Contract terms under negotiation with stakeholders", 28, 840000, 20, 21, "bg-amber-500", 4),
+        new(5, "Closed Won", "Deal signed and payment received or scheduled", 18, 594000, 13, 35, "bg-emerald-500", 5),
+        new(6, "Closed Lost", "Deal not proceeding — moved to lost pipeline", 32, 640000, 0, 28, "bg-red-500", 6),
+    ];
+
+    private int _totalDeals => _stages.Sum(s => s.Deals);
+    private int _totalValue => _stages.Sum(s => s.TotalValue);
+
+    private void HandleDelete(int id)
+    {
+        _stages = _stages.Where(s => s.Id != id).ToList();
+    }
+
+    private void HandleMoveUp(int id)
+    {
+        var idx = _stages.FindIndex(s => s.Id == id);
+        if (idx <= 0) return;
+        var updated = _stages.ToList();
+        var temp = updated[idx];
+        updated[idx] = updated[idx - 1];
+        updated[idx - 1] = temp;
+        _stages = updated.Select((s, i) => s with { Order = i + 1 }).ToList();
+    }
+
+    private void HandleMoveDown(int id)
+    {
+        var idx = _stages.FindIndex(s => s.Id == id);
+        if (idx >= _stages.Count - 1) return;
+        var updated = _stages.ToList();
+        var temp = updated[idx];
+        updated[idx] = updated[idx + 1];
+        updated[idx + 1] = temp;
+        _stages = updated.Select((s, i) => s with { Order = i + 1 }).ToList();
+    }
+
+    private static string FormatValue(int n)
+    {
+        if (n >= 1000000) return $"${(n / 1000000.0):F1}M";
+        if (n >= 1000) return $"${(n / 1000):F0}K";
+        return $"${n}";
+    }
+}

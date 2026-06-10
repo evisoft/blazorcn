@@ -1,0 +1,305 @@
+@* ============================================================
+   Block: reviews-upvote-system
+   Title: ReviewsUpvoteSystem
+   Description: A Reddit-style review upvote system for React and Next.js with animated vote counts, sorting by score, reply threading, and award badges built with shadcn/ui and Tailwind CSS.
+   Source: original/blocks/reviews/reviews-upvote-system.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Top Reviews</span>
+                <p class="mt-0.5 text-xs text-muted-foreground">Sorted by community votes</p>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span class="tabular-nums">@_reviews.Length reviews</span>
+                <span>-</span>
+                <span class="tabular-nums">@TotalVotes total votes</span>
+            </div>
+        </div>
+
+        @* Reviews *@
+        <div>
+            @foreach (var review in SortedReviews)
+            {
+                var reviewId = review.Id;
+                var currentVote = _votes.TryGetValue(reviewId, out var v) ? v : null;
+                var showReplies = _expandedReplies.TryGetValue(reviewId, out var ex) && ex;
+                var hasReplies = review.Replies.Length > 0;
+                var isLast = SortedReviews[SortedReviews.Length - 1].Id == reviewId;
+
+                <div class="@Cn.Merge(!isLast ? "border-b" : "")">
+                    <div class="flex gap-3 px-4 py-3">
+                        @* Vote column *@
+                        <div class="flex flex-col items-center gap-0.5 pt-1">
+                            <button type="button"
+                                    @onclick="@(() => HandleVote(reviewId, "up"))"
+                                    class="@Cn.Merge("flex size-7 items-center justify-center rounded-md transition-colors", currentVote == "up" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/40 hover:bg-muted hover:text-muted-foreground")"
+                                    aria-label="Upvote">
+                                <LucideIconCn Name="arrow-big-up" Size="20" Class="@Cn.Merge("size-5", currentVote == "up" ? "fill-emerald-600 dark:fill-emerald-400" : "")" />
+                            </button>
+                            <span class="@Cn.Merge("text-xs font-semibold tabular-nums", currentVote == "up" ? "text-emerald-600 dark:text-emerald-400" : currentVote == "down" ? "text-red-500" : "text-foreground")">
+                                @review.Score
+                            </span>
+                            <button type="button"
+                                    @onclick="@(() => HandleVote(reviewId, "down"))"
+                                    class="@Cn.Merge("flex size-7 items-center justify-center rounded-md transition-colors", currentVote == "down" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "text-muted-foreground/40 hover:bg-muted hover:text-muted-foreground")"
+                                    aria-label="Downvote">
+                                <LucideIconCn Name="arrow-big-down" Size="20" Class="@Cn.Merge("size-5", currentVote == "down" ? "fill-red-600 dark:fill-red-400" : "")" />
+                            </button>
+                        </div>
+
+                        @* Review content *@
+                        <div class="min-w-0 flex-1">
+                            @* Author row *@
+                            <div class="flex items-center gap-2">
+                                <div class="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+                                    @review.Avatar
+                                </div>
+                                <span class="text-sm font-medium">@review.Author</span>
+                                @if (review.Verified)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-0.5 px-1 text-[10px] font-normal">Verified</BadgeCn>
+                                }
+                                <span class="text-xs text-muted-foreground">@review.TimeAgo</span>
+                            </div>
+
+                            @* Title + stars *@
+                            <div class="mt-1.5 flex items-center gap-2">
+                                <span class="text-sm font-medium">@review.Title</span>
+                                <div class="flex items-center gap-0.5">
+                                    @for (int si = 0; si < 5; si++)
+                                    {
+                                        var starIdx = si;
+                                        <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", starIdx < review.Rating ? "fill-foreground text-foreground" : "fill-muted text-muted")" />
+                                    }
+                                </div>
+                            </div>
+
+                            @* Content *@
+                            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                @review.Content
+                            </p>
+
+                            @* Awards *@
+                            @if (review.Awards.Length > 0)
+                            {
+                                <div class="mt-2 flex items-center gap-1.5">
+                                    @foreach (var award in review.Awards)
+                                    {
+                                        var awardLabel = award.Label;
+                                        var awardCount = award.Count;
+                                        <TooltipProviderCn>
+                                            <TooltipCn>
+                                                <TooltipTriggerCn>
+                                                    <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-400">
+                                                        <LucideIconCn Name="award" Size="10" Class="size-2.5" />
+                                                        @awardLabel
+                                                        @if (awardCount > 1)
+                                                        {
+                                                            <span class="tabular-nums">x@(awardCount)</span>
+                                                        }
+                                                    </span>
+                                                </TooltipTriggerCn>
+                                                <TooltipContentCn>
+                                                    <p class="text-xs">@(awardCount) users gave the @awardLabel award</p>
+                                                </TooltipContentCn>
+                                            </TooltipCn>
+                                        </TooltipProviderCn>
+                                    }
+                                </div>
+                            }
+
+                            @* Action bar *@
+                            <div class="mt-2 flex items-center gap-1">
+                                @if (hasReplies)
+                                {
+                                    var rid = reviewId;
+                                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs text-muted-foreground" @onclick="@(() => ToggleReplies(rid))">
+                                        <LucideIconCn Name="message-square" Size="12" Class="size-3" />
+                                        @review.ReplyCount @(review.ReplyCount == 1 ? "reply" : "replies")
+                                        <LucideIconCn Name="chevron-down" Size="12" Class="@Cn.Merge("size-3 transition-transform duration-200", showReplies ? "rotate-180" : "")" />
+                                    </ButtonCn>
+                                }
+                                <TooltipProviderCn>
+                                    <TooltipCn>
+                                        <TooltipTriggerCn>
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs text-muted-foreground">
+                                                <LucideIconCn Name="share" Size="12" Class="size-3" />
+                                                Share
+                                            </ButtonCn>
+                                        </TooltipTriggerCn>
+                                        <TooltipContentCn>
+                                            <p class="text-xs">Copy link to review</p>
+                                        </TooltipContentCn>
+                                    </TooltipCn>
+                                </TooltipProviderCn>
+                                <TooltipProviderCn>
+                                    <TooltipCn>
+                                        <TooltipTriggerCn>
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-xs text-muted-foreground">
+                                                <LucideIconCn Name="flag" Size="12" Class="size-3" />
+                                                Report
+                                            </ButtonCn>
+                                        </TooltipTriggerCn>
+                                        <TooltipContentCn>
+                                            <p class="text-xs">Flag this review</p>
+                                        </TooltipContentCn>
+                                    </TooltipCn>
+                                </TooltipProviderCn>
+                            </div>
+
+                            @* Replies *@
+                            @if (showReplies && hasReplies)
+                            {
+                                <div class="overflow-hidden">
+                                    <div class="mt-2 space-y-0 border-l-2 border-muted pl-3">
+                                        @foreach (var reply in review.Replies)
+                                        {
+                                            <div class="py-2">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="@Cn.Merge("flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-medium", reply.Author == "Seller Response" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-muted")">
+                                                        @reply.Avatar
+                                                    </div>
+                                                    <span class="@Cn.Merge("text-xs font-medium", reply.Author == "Seller Response" ? "text-blue-600 dark:text-blue-400" : "")">
+                                                        @reply.Author
+                                                    </span>
+                                                    <span class="text-[10px] text-muted-foreground">@reply.TimeAgo</span>
+                                                    <span class="ml-auto text-[10px] tabular-nums text-muted-foreground">@reply.Score pts</span>
+                                                </div>
+                                                <p class="mt-1 text-xs leading-relaxed text-muted-foreground">@reply.Content</p>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">Votes determine review visibility</span>
+            <div class="flex items-center gap-3 text-[10px] text-muted-foreground">
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="arrow-big-up" Size="12" Class="size-3" />
+                    Upvote helpful reviews
+                </span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="arrow-big-down" Size="12" Class="size-3" />
+                    Downvote unhelpful
+                </span>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ReviewReply(string Id, string Author, string Avatar, string Content, string TimeAgo, int Score);
+    private record ReviewAward(string Id, string Label, int Count);
+    private record ReviewData(string Id, string Author, string Avatar, bool Verified, int Rating, string TimeAgo, string Title, string Content, int Score, int ReplyCount, ReviewReply[] Replies, ReviewAward[] Awards);
+
+    private ReviewData[] _reviews =
+    [
+        new("r1", "Elena Vasquez", "EV", true, 5, "3 days ago",
+            "Best developer tool of the year",
+            "Hands down the best developer tool I have used this year. The API is intuitive, the docs are thorough, and the community is incredibly helpful. Migrated our entire stack in a weekend. The TypeScript support is first-class and the component library saved us weeks of work.",
+            47, 3,
+            [
+                new("r1-reply-1", "Jake Morrison", "JM", "Completely agree about the docs. They are some of the best I have seen in any open source project.", "2 days ago", 12),
+                new("r1-reply-2", "Seller Response", "SR", "Thank you Elena! We are thrilled to hear about your migration success. Let us know if you need anything.", "2 days ago", 8),
+            ],
+            [
+                new("helpful", "Helpful", 3),
+                new("insightful", "Insightful", 1),
+            ]),
+        new("r2", "Mei-Ling Chang", "MC", true, 5, "2 weeks ago",
+            "Measurable productivity gains",
+            "Our team productivity increased measurably after switching. The integrations with our existing workflow tools saved us from building custom connectors. Clean UI, fast performance. We went from prototype to production in half the usual time.",
+            38, 1,
+            [
+                new("r2-reply-1", "David Park", "DP", "What workflow tools did you integrate with? We are evaluating for a similar stack.", "10 days ago", 5),
+            ],
+            [
+                new("helpful", "Helpful", 2),
+            ]),
+        new("r3", "Fiona Gallagher", "FG", true, 5, "1 month ago",
+            "Three years and still impressed",
+            "Third year as a customer. Every major release has been a step forward. The recent performance improvements cut our build times in half. This team ships quality consistently. The breaking changes are minimal and always well documented.",
+            52, 2,
+            [
+                new("r3-reply-1", "Tom Bradley", "TB", "Same here. Year two customer and the improvements keep coming. The v4 release was a game changer.", "3 weeks ago", 9),
+            ],
+            [
+                new("helpful", "Helpful", 5),
+                new("quality", "Quality", 2),
+            ]),
+        new("r4", "David Kowalski", "DK", false, 4, "1 week ago",
+            "Solid product with minor rough edges",
+            "Solid product with a few rough edges. The onboarding wizard could be smoother and I hit a bug with the export feature. Support fixed it within 24 hours though. The core functionality is excellent and I would recommend it for mid-size teams.",
+            23, 1,
+            [
+                new("r4-reply-1", "Seller Response", "SR", "Thanks for the feedback David. We have a new onboarding flow shipping next week that addresses your concerns.", "5 days ago", 15),
+            ],
+            []),
+        new("r5", "Ravi Anand", "RA", true, 3, "3 weeks ago",
+            "Good but pricing needs work for solos",
+            "Works as advertised but the pricing feels steep for solo developers. The free tier is too limited to evaluate properly. Would love a more generous trial period before committing. The product itself is well built.",
+            11, 0,
+            [],
+            []),
+    ];
+
+    private Dictionary<string, string?> _votes = new();
+    private Dictionary<string, bool> _expandedReplies = new();
+
+    private ReviewData[] SortedReviews => _reviews.OrderByDescending(r => r.Score).ToArray();
+
+    private int TotalVotes => _reviews.Sum(r => r.Score);
+
+    private void HandleVote(string reviewId, string direction)
+    {
+        _votes.TryGetValue(reviewId, out var currentVote);
+
+        int scoreDelta;
+        string? newVote;
+
+        if (currentVote == direction)
+        {
+            scoreDelta = direction == "up" ? -1 : 1;
+            newVote = null;
+        }
+        else if (currentVote == null)
+        {
+            scoreDelta = direction == "up" ? 1 : -1;
+            newVote = direction;
+        }
+        else
+        {
+            scoreDelta = direction == "up" ? 2 : -2;
+            newVote = direction;
+        }
+
+        _votes[reviewId] = newVote;
+
+        for (int i = 0; i < _reviews.Length; i++)
+        {
+            if (_reviews[i].Id == reviewId)
+            {
+                var r = _reviews[i];
+                _reviews[i] = new ReviewData(r.Id, r.Author, r.Avatar, r.Verified, r.Rating, r.TimeAgo, r.Title, r.Content, r.Score + scoreDelta, r.ReplyCount, r.Replies, r.Awards);
+                break;
+            }
+        }
+    }
+
+    private void ToggleReplies(string reviewId)
+    {
+        _expandedReplies.TryGetValue(reviewId, out var current);
+        _expandedReplies[reviewId] = !current;
+    }
+}

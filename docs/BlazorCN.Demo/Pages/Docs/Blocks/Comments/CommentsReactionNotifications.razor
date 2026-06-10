@@ -1,0 +1,196 @@
+@* ============================================================
+   Block: comments-reaction-notifications
+   Title: CommentsReactionNotifications
+   Description: A reaction-based notification system for React and Next.js with emoji alerts, aggregated reactions, and notification preferences built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-reaction-notifications.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Reaction Notifications</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @_unreadCount unread • Emoji engagement
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1.5 text-xs">
+                    <LucideIconCn Name="heart" Size="12" Class="size-3" />
+                    @_unreadCount
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Notification mode selector *@
+        <div class="border-b bg-muted/30 px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="bell" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="text-xs text-muted-foreground">Notification mode:</span>
+                </div>
+                <div class="flex gap-1">
+                    @foreach (var pref in _preferences)
+                    {
+                        var p = pref;
+                        <button type="button"
+                                @onclick="@(() => SetPreference(p.Value))"
+                                class="@Cn.Merge("rounded-sm px-2 py-1 text-xs font-medium transition-all", _preference == p.Value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                            @p.Label
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Notification list *@
+        <div>
+            @for (int i = 0; i < _notificationList.Count; i++)
+            {
+                var notif = _notificationList[i];
+                var isLast = i == _notificationList.Count - 1;
+                var reactorCount = notif.Reactors.Length;
+                var visibleReactors = notif.Reactors.Take(3).ToArray();
+                <div class="@(isLast ? "p-4" : "border-b p-4")">
+                    <button type="button"
+                            @onclick="@(() => MarkAsRead(notif.Id))"
+                            class="@Cn.Merge("flex w-full gap-3 text-left transition-opacity", notif.Read ? "opacity-60" : "")">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-2xl">
+                            @notif.Emoji
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                @if (!notif.Read)
+                                {
+                                    <span class="size-2 shrink-0 rounded-full bg-blue-500"></span>
+                                }
+                                @if (notif.IsAggregated)
+                                {
+                                    <span class="text-sm font-medium">
+                                        @reactorCount @(reactorCount == 1 ? "person" : "people") reacted @notif.Emoji
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-sm font-medium">
+                                        @notif.Reactors[0].Name reacted @notif.Emoji
+                                    </span>
+                                }
+                            </div>
+
+                            <div class="mt-1.5 flex items-center gap-2">
+                                <div class="flex -space-x-2">
+                                    @foreach (var reactor in visibleReactors)
+                                    {
+                                        var initials = GetInitials(reactor.Name);
+                                        <AvatarCn Class="size-5 border-2 border-background">
+                                            <AvatarImageCn Src="@reactor.Avatar" Alt="@reactor.Name" />
+                                            <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                                        </AvatarCn>
+                                    }
+                                </div>
+                                @if (reactorCount > 3)
+                                {
+                                    <span class="text-xs text-muted-foreground">
+                                        +@(reactorCount - 3) more
+                                    </span>
+                                }
+                            </div>
+
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="mt-2 text-[10px] font-normal">
+                                @notif.Thread
+                            </BadgeCn>
+
+                            <p class="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+                                "@notif.Comment"
+                            </p>
+
+                            <span class="mt-1 text-xs text-muted-foreground">
+                                @notif.Timestamp
+                            </span>
+                        </div>
+                    </button>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <LucideIconCn Name="smile" Size="12" Class="size-3" />
+                    <span>Aggregated when 5+ reactions</span>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1.5 text-xs">
+                    <LucideIconCn Name="bell" Size="12" Class="size-3" />
+                    Configure
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string _preference = "all";
+
+    private record PreferenceOption(string Value, string Label);
+
+    private static readonly PreferenceOption[] _preferences =
+    [
+        new("all",   "All reactions"),
+        new("first", "First only"),
+        new("none",  "None"),
+    ];
+
+    private record Reactor(string Name, string Avatar);
+
+    private record ReactionNotification(string Id, string Emoji, Reactor[] Reactors, string Comment, string Thread, string Timestamp, bool IsAggregated)
+    {
+        public bool Read { get; set; } = false;
+    }
+
+    private List<ReactionNotification> _notificationList =
+    [
+        new("1", "❤️",
+            [
+                new("Sarah Chen",   ""),
+                new("James Wilson", ""),
+                new("Maya Patel",   ""),
+                new("Alex Morgan",  ""),
+                new("Chris Taylor", ""),
+            ],
+            "Great work on the new authentication flow!",
+            "API Documentation", "10 min ago", true)  { Read = false },
+        new("2", "🎉",
+            [ new("Jordan Lee", "") ],
+            "Shipped the mobile app redesign!",
+            "Product Roadmap", "1 hour ago", false) { Read = false },
+        new("3", "👍",
+            [
+                new("Sarah Chen", ""),
+                new("Maya Patel", ""),
+            ],
+            "The new color palette looks fantastic.",
+            "Design System", "3 hours ago", true) { Read = true },
+        new("4", "🔥",
+            [ new("Chris Taylor", "") ],
+            "Performance improvements are incredible!",
+            "Optimization Sprint", "5 hours ago", false) { Read = true },
+    ];
+
+    private int _unreadCount => _notificationList.Count(n => !n.Read);
+
+    private void SetPreference(string pref) => _preference = pref;
+
+    private void MarkAsRead(string id)
+    {
+        var notif = _notificationList.FirstOrDefault(n => n.Id == id);
+        if (notif is not null) notif.Read = true;
+    }
+
+    private static string GetInitials(string name) =>
+        string.Concat(name.Split(' ').Select(n => n[0])).ToUpper();
+}

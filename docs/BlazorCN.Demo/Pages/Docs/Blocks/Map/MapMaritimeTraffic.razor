@@ -1,0 +1,313 @@
+@* ============================================================
+   Block: map-maritime-traffic
+   Title: MapMaritimeTraffic
+   Description: Interactive maritime traffic map with vessel type markers, shipping route paths, cargo info tooltips, port markers, and vessel detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-maritime-traffic.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="ship" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Maritime Traffic</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length vessels</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    class="@($"rounded-full px-2.5 py-0.5 text-xs transition-colors {(_filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")}")"
+                    @onclick="@(() => SetFilter(null))">
+                    All
+                </button>
+                @foreach (var t in _types)
+                {
+                    var vesselType = t;
+                    <button
+                        type="button"
+                        class="@($"flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors {(_filter == vesselType ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")}")"
+                        @onclick="@(() => ToggleFilter(vesselType))">
+                        <span class="@($"size-1.5 rounded-full {GetVesselColor(vesselType)}")"></span>
+                        @GetVesselLabel(vesselType)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            <div>
+                <span class="text-xs text-muted-foreground">Active vessels</span>
+                <p class="text-2xl font-semibold tabular-nums">@_vessels.Length</p>
+            </div>
+            <div>
+                <span class="text-xs text-muted-foreground">Avg speed</span>
+                <p class="text-2xl font-semibold tabular-nums">@_avgSpeed kn</p>
+            </div>
+            <div>
+                <span class="text-xs text-muted-foreground">Ports</span>
+                <p class="text-2xl font-semibold tabular-nums">@_ports.Length</p>
+            </div>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-sky-100 to-blue-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Route lines (SVG overlay) *@
+                <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                    @foreach (var vessel in _filtered)
+                    {
+                        var v = vessel;
+                        if (v.Route != null && v.Route.Length >= 2)
+                        {
+                            var routeColor = GetVesselRouteColor(v.Type);
+                            var points = string.Join(" ", v.Route.Select(c =>
+                            {
+                                var p = GetMarkerPosition(c[0], c[1]);
+                                return $"{p.X:F1}%,{p.Y:F1}%";
+                            }));
+                            @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"{routeColor}\" stroke-width=\"2\" stroke-opacity=\"0.5\" stroke-dasharray=\"4 4\" />")
+                        }
+                    }
+                </svg>
+
+                @* Port markers *@
+                @foreach (var port in _ports)
+                {
+                    var p = port;
+                    var pos = GetMarkerPosition(p.Longitude, p.Latitude);
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                        <div class="group relative">
+                            <div class="flex size-6 items-center justify-center rounded-full border-2 border-white bg-foreground shadow-md">
+                                <LucideIconCn Name="anchor" Size="12" Class="size-3 text-background" />
+                            </div>
+                            @* Port tooltip *@
+                            <div class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden -translate-x-1/2 rounded-md border bg-card px-2 py-1 shadow-md group-hover:block">
+                                <div class="flex items-center gap-1.5 whitespace-nowrap">
+                                    <span class="font-medium text-xs">@p.Name</span>
+                                    <span class="text-xs text-muted-foreground">@p.Vessels vessels</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* Vessel markers *@
+                @foreach (var vessel in _filtered)
+                {
+                    var v = vessel;
+                    var pos = GetMarkerPosition(v.Longitude, v.Latitude);
+                    var isSelected = _selectedId == v.Id;
+                    var vesselColor = GetVesselColor(v.Type);
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                        <div class="group relative">
+                            <button
+                                type="button"
+                                class="@($"flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md {vesselColor}")"
+                                @onclick="@(() => ToggleSelected(v.Id))">
+                                <LucideIconCn Name="navigation" Size="14" Class="size-3.5 text-white" />
+                            </button>
+                            @* Vessel tooltip (shown on hover when not selected) *@
+                            @if (!isSelected)
+                            {
+                                <div class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden -translate-x-1/2 rounded-md border bg-card px-2 py-1 shadow-md group-hover:block">
+                                    <div class="flex items-center gap-1.5 whitespace-nowrap">
+                                        <span class="font-medium text-xs">@v.Name</span>
+                                        <span class="text-xs text-muted-foreground">@v.Speed kn</span>
+                                    </div>
+                                </div>
+                            }
+                            @* Vessel popup (shown when selected) *@
+                            @if (isSelected)
+                            {
+                                <div class="absolute left-1/2 top-full z-50 mt-1 w-60 -translate-x-1/2 rounded-lg border bg-card p-3 shadow-lg">
+                                    <div class="mb-2 flex items-start justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@v.Name</p>
+                                            <p class="text-xs text-muted-foreground">@GetVesselLabel(v.Type) · @v.Flag</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                            @v.Speed kn
+                                        </BadgeCn>
+                                    </div>
+                                    <div class="mb-2 grid grid-cols-2 gap-2">
+                                        <div class="rounded-md bg-muted/50 p-2">
+                                            <div class="flex items-center gap-1">
+                                                <LucideIconCn Name="anchor" Size="12" Class="size-3 text-muted-foreground" />
+                                                <span class="text-[10px] text-muted-foreground">Destination</span>
+                                            </div>
+                                            <p class="text-sm font-medium">@v.Destination</p>
+                                        </div>
+                                        <div class="rounded-md bg-muted/50 p-2">
+                                            <div class="flex items-center gap-1">
+                                                <LucideIconCn Name="fuel" Size="12" Class="size-3 text-muted-foreground" />
+                                                <span class="text-[10px] text-muted-foreground">Draft</span>
+                                            </div>
+                                            <p class="text-sm font-medium tabular-nums">@(v.Draft)m</p>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-1.5 border-t pt-2">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs text-muted-foreground">ETA</span>
+                                            <span class="text-xs font-medium">@v.Eta</span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs text-muted-foreground">Heading</span>
+                                            <span class="text-xs font-medium tabular-nums">@(v.Heading)°</span>
+                                        </div>
+                                        <div class="flex items-start justify-between">
+                                            <span class="text-xs text-muted-foreground">Cargo</span>
+                                            <span class="max-w-[140px] text-right text-xs font-medium">@v.Cargo</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                Map view — North Sea / English Channel
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var t in _types)
+            {
+                var vesselType = t;
+                var count = Array.FindAll(_vessels, v => v.Type == vesselType).Length;
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@($"size-1.5 rounded-full {GetVesselColor(vesselType)}")"></span>
+                    @GetVesselLabel(vesselType) (@count)
+                </span>
+            }
+            <span class="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                <LucideIconCn Name="box" Size="12" Class="size-3" />
+                @_ports.Sum(p => p.Vessels) in port
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Vessel(
+        string Id,
+        string Name,
+        string Type,
+        string Flag,
+        double Speed,
+        int Heading,
+        string Destination,
+        string Eta,
+        string Cargo,
+        double Draft,
+        double Longitude,
+        double Latitude,
+        double[][] Route
+    );
+
+    private record Port(
+        string Id,
+        string Name,
+        int Vessels,
+        double Longitude,
+        double Latitude
+    );
+
+    private static readonly Port[] _ports =
+    [
+        new("p1", "Rotterdam",   42, 4.0,  51.9),
+        new("p2", "Hamburg",     28, 9.95, 53.55),
+        new("p3", "Antwerp",     35, 4.4,  51.22),
+        new("p4", "Le Havre",    18, 0.12, 49.49),
+        new("p5", "Felixstowe",  22, 1.32, 51.96),
+    ];
+
+    private static readonly Vessel[] _vessels =
+    [
+        new("v1", "MSC Aurora",     "container", "PA", 18.4, 42,  "Rotterdam", "Mar 31, 14:00", "Electronics, machinery",      14.2, 2.8,  51.2,
+            [[1.5, 50.5], [2.0, 50.8], [2.8, 51.2], [4.0, 51.9]]),
+        new("v2", "Nordic Spirit",  "tanker",    "NO", 12.8, 95,  "Hamburg",   "Apr 1, 08:30",  "Crude oil, 280K barrels",     16.8, 5.5,  53.0,
+            [[3.5, 52.5], [4.5, 52.8], [5.5, 53.0], [7.5, 53.4], [9.95, 53.55]]),
+        new("v3", "Green Horizon",  "cargo",     "LR", 14.2, 210, "Antwerp",   "Mar 31, 22:15", "Steel coils, timber",         11.5, 3.2,  51.8,
+            [[4.5, 52.4], [3.8, 52.0], [3.2, 51.8], [4.4, 51.22]]),
+        new("v4", "Pacific Trader", "bulk",      "SG", 11.6, 315, "Le Havre",  "Apr 2, 06:00",  "Grain, 45K metric tons",      13.4, 0.8,  49.9,
+            [[-0.5, 49.3], [0.1, 49.5], [0.8, 49.9], [0.12, 49.49]]),
+        new("v5", "Maersk Voyager", "container", "DK", 20.1, 68,  "Felixstowe","Mar 31, 18:45", "Consumer goods, pharma",      15.0, 0.5,  51.5,
+            [[-0.8, 51.0], [-0.2, 51.2], [0.5, 51.5], [1.32, 51.96]]),
+        new("v6", "Stena Bulk",     "tanker",    "SE", 13.5, 180, "Rotterdam", "Apr 1, 11:00",  "Refined petroleum",           12.8, 3.5,  52.5,
+            [[3.0, 53.2], [3.2, 52.8], [3.5, 52.5], [4.0, 51.9]]),
+    ];
+
+    private static readonly string[] _types = ["container", "tanker", "cargo", "bulk"];
+
+    private string? _filter = null;
+    private string? _selectedId = null;
+
+    private Vessel[] _filtered => _filter != null
+        ? Array.FindAll(_vessels, v => v.Type == _filter)
+        : _vessels;
+
+    private string _avgSpeed => (_vessels.Sum(v => v.Speed) / _vessels.Length).ToString("F1");
+
+    private void SetFilter(string? f) => _filter = f;
+
+    private void ToggleFilter(string t)
+    {
+        _filter = _filter == t ? null : t;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+    }
+
+    private static string GetVesselColor(string type) => type switch
+    {
+        "container" => "bg-blue-500",
+        "tanker"    => "bg-red-500",
+        "cargo"     => "bg-emerald-500",
+        "bulk"      => "bg-amber-500",
+        _           => "bg-muted",
+    };
+
+    private static string GetVesselRouteColor(string type) => type switch
+    {
+        "container" => "#3b82f6",
+        "tanker"    => "#ef4444",
+        "cargo"     => "#22c55e",
+        "bulk"      => "#f59e0b",
+        _           => "#888888",
+    };
+
+    private static string GetVesselLabel(string type) => type switch
+    {
+        "container" => "Container",
+        "tanker"    => "Tanker",
+        "cargo"     => "Cargo",
+        "bulk"      => "Bulk Carrier",
+        _           => type,
+    };
+
+    // Map longitude/latitude to CSS percentage positions.
+    // Viewport: lon [-1.0, 10.5], lat [49.0, 54.0]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -1.0, lonMax = 10.5;
+        const double latMin = 49.0, latMax = 54.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

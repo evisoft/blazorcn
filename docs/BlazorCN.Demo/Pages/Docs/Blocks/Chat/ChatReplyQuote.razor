@@ -1,0 +1,189 @@
+@* ============================================================
+   Block: chat-reply-quote
+   Title: ChatReplyQuote
+   Description: React chat block with reply quoting for Next.js featuring quoted parent messages, border-left indicators, truncated previews, and inline reply threading using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-reply-quote.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="reply" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Engineering</span>
+            <span class="text-muted-foreground text-xs">Search Indexer</span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs">
+                @_messages.Length messages
+            </BadgeCn>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto py-2">
+            @for (int i = 0; i < _messages.Length; i++)
+            {
+                var msg = _messages[i];
+                var idx = i;
+                var parentMsg = msg.ReplyToId != null ? GetMessageById(msg.ReplyToId) : null;
+                var grouped = !IsNewGroup(idx);
+                var rowClass = Cn.Merge(
+                    "group flex gap-2 px-4 transition-colors hover:bg-accent",
+                    grouped ? "py-0.5" : "mt-3 first:mt-0"
+                );
+
+                <div class="@rowClass">
+                    @* Avatar column *@
+                    <div class="w-8 shrink-0 pt-0.5">
+                        @if (!grouped)
+                        {
+                            <AvatarCn Class="size-8">
+                                <AvatarFallbackCn Class="text-xs font-medium">@msg.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                        }
+                        else
+                        {
+                            <span class="hidden text-[10px] text-muted-foreground group-hover:inline">@msg.Timestamp</span>
+                        }
+                    </div>
+
+                    @* Body *@
+                    <div class="min-w-0 flex-1">
+                        @* Quoted parent *@
+                        @if (parentMsg != null)
+                        {
+                            <div class="mb-1 rounded border-l-2 border-blue-500 bg-muted/50 py-1 pl-2 pr-3">
+                                <span class="text-muted-foreground text-xs">Replying to </span>
+                                <span class="font-medium text-xs">@parentMsg.Sender</span>
+                                <p class="mt-0.5 truncate text-muted-foreground text-xs">@parentMsg.Content</p>
+                            </div>
+                        }
+
+                        @if (!grouped)
+                        {
+                            var msgCapture = msg;
+                            <div class="flex items-baseline gap-2">
+                                <span class="font-medium text-sm">@msg.Sender</span>
+                                <span class="text-muted-foreground text-xs">@msg.Timestamp</span>
+
+                                @* Reply button on hover *@
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon"
+                                          @onclick="@(() => SetReplyTo(msgCapture.Id))"
+                                          Class="ml-auto size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <LucideIconCn Name="reply" Size="12" Class="size-3 text-muted-foreground" />
+                                </ButtonCn>
+                            </div>
+                        }
+                        <div class="text-sm leading-relaxed">@msg.Content</div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Reply bar + Toolbar *@
+        <div class="border-t">
+            @* Active reply indicator *@
+            @if (_replyMessage != null)
+            {
+                var rm = _replyMessage;
+                <div class="overflow-hidden">
+                    <div class="flex items-center gap-2 border-b px-4 py-2">
+                        <div class="min-w-0 flex-1 rounded border-l-2 border-blue-500 bg-muted/50 px-2 py-1.5">
+                            <div class="flex items-center gap-1.5">
+                                <LucideIconCn Name="reply" Size="12" Class="size-3 shrink-0 text-muted-foreground" />
+                                <span class="text-muted-foreground text-xs">Replying to</span>
+                                <span class="font-medium text-xs">@rm.Sender</span>
+                            </div>
+                            <p class="mt-0.5 truncate text-muted-foreground text-xs">@rm.Content</p>
+                        </div>
+                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Icon"
+                                  @onclick="ClearReply"
+                                  Class="size-5 shrink-0">
+                            <LucideIconCn Name="x" Size="12" Class="size-3 text-muted-foreground" />
+                        </ButtonCn>
+                    </div>
+                </div>
+            }
+
+            <div class="px-4 py-3">
+                <form @onsubmit="HandleSubmit" class="relative">
+                    <div class="rounded-md border bg-background">
+                        <textarea @bind="_input" @bind:event="oninput"
+                                  placeholder="@(_replyTo != null ? "Type your reply..." : "Type a message...")"
+                                  rows="1"
+                                  class="min-h-0 max-h-32 w-full resize-none border-0 bg-transparent pr-10 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 px-3 py-2 outline-none"></textarea>
+                        <ButtonCn type="submit"
+                                  Size="ButtonSize.Icon"
+                                  Variant="ButtonVariant.Ghost"
+                                  Disabled="@string.IsNullOrWhiteSpace(_input)"
+                                  Class="absolute top-1/2 right-1 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                            <LucideIconCn Name="arrow-up" Size="16" Class="size-4" />
+                        </ButtonCn>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(
+        string Id,
+        string Sender,
+        string Initials,
+        string Content,
+        string Timestamp,
+        string? ReplyToId = null
+    );
+
+    private static readonly ChatMessage[] _messages =
+    [
+        new("m1",  "Olivia Hart", "OH", "Has anyone tested the new search indexer on the production dataset? I am seeing inconsistent results on faceted queries.",                                                                               "11:05 AM"),
+        new("m2",  "Ryan Zhao",   "RZ", "I ran benchmarks yesterday. The indexer handles 50K documents per second but faceted queries slow down significantly above 1M documents.",                                                             "11:08 AM"),
+        new("m3",  "Nadia Petrov","NP", "That matches what I saw in staging. The bottleneck is the aggregation pipeline. We need to pre-compute facet counts instead of calculating them at query time.",                                        "11:11 AM", "m2"),
+        new("m4",  "Olivia Hart", "OH", "Good call. Should we use materialized views or a separate facet cache? I am leaning toward Redis for the cache layer since we already have it in the stack.",                                          "11:14 AM", "m3"),
+        new("m5",  "Ryan Zhao",   "RZ", "Redis works but keep in mind cache invalidation. Every document write needs to update the facet counts. We could batch the updates on a 30-second interval to avoid write amplification.",             "11:18 AM", "m4"),
+        new("m6",  "Tomas Silva", "TS", "Quick note from the infrastructure side: our Redis cluster is at 78% memory. If we add facet caching, we should provision an additional node before going to production.",                             "11:22 AM"),
+        new("m7",  "Nadia Petrov","NP", "I will create the provisioning ticket. Tomas, can you estimate the memory footprint for facet caching across our 12M document corpus?",                                                                "11:25 AM", "m6"),
+        new("m8",  "Tomas Silva", "TS", "Rough estimate: each facet key-value pair is about 120 bytes. With 200 facets across 50 categories, that is roughly 1.2 GB. Manageable with an extra node.",                                          "11:30 AM", "m7"),
+        new("m9",  "Olivia Hart", "OH", "Sounds like a plan. Let us go with Redis facet caching with 30-second batched invalidation. Ryan, can you prototype the invalidation logic this sprint?",                                              "11:33 AM"),
+        new("m10", "Ryan Zhao",   "RZ", "On it. I will have a working prototype by Wednesday and we can load test Thursday. Will share the branch once it is ready for review.",                                                                "11:36 AM", "m9"),
+    ];
+
+    private string? _replyTo = null;
+    private string _input = "";
+
+    private ChatMessage? _replyMessage => _replyTo != null ? GetMessageById(_replyTo) : null;
+
+    private ChatMessage? GetMessageById(string id) =>
+        System.Array.Find(_messages, m => m.Id == id);
+
+    private bool IsNewGroup(int idx)
+    {
+        if (idx == 0) return true;
+        var curr = _messages[idx];
+        var prev = _messages[idx - 1];
+        if (curr.Sender != prev.Sender) return true;
+        if (curr.ReplyToId != null) return true;
+        return false;
+    }
+
+    private void SetReplyTo(string id)
+    {
+        _replyTo = id;
+    }
+
+    private void ClearReply()
+    {
+        _replyTo = null;
+    }
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+        {
+            _input = "";
+            _replyTo = null;
+        }
+    }
+}

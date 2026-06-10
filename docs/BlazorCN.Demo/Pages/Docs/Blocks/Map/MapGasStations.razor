@@ -1,0 +1,277 @@
+@* ============================================================
+   Block: map-gas-stations
+   Title: MapGasStations
+   Description: React gas station finder map block for Next.js with fuel price badges, brand markers, amenity indicators, and price comparison tooltips using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-gas-stations.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="fuel" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Gas Stations</span>
+                <span class="text-xs text-muted-foreground">@_stations.Length nearby</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    Cheap
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    Average
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    Expensive
+                </span>
+            </div>
+        </div>
+
+        @* Fuel grade selector *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <span class="text-xs text-muted-foreground">Grade</span>
+            @foreach (var g in _gradeKeys)
+            {
+                var gKey = g;
+                <ButtonCn
+                    Variant="@(_grade == gKey ? ButtonVariant.Default : ButtonVariant.Outline)"
+                    Size="ButtonSize.Sm"
+                    Class="h-6 px-2.5 text-xs"
+                    OnClick="@(() => SetGrade(gKey))">
+                    @GetGradeLabel(gKey)
+                </ButtonCn>
+            }
+            <div class="ml-auto flex items-center gap-1.5">
+                <span class="text-xs text-muted-foreground">Best price</span>
+                <span class="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    $@GetCheapestPrice().ToString("F2")
+                </span>
+            </div>
+        </div>
+
+        @* Map area — Map/MapMarker/MarkerContent/MarkerTooltip/MarkerPopup are custom registry
+           components with no BlazorCN equivalent; rendered as a styled static map placeholder
+           showing all markers and popup detail for the selected station. *@
+        <div class="relative h-[500px] bg-muted/30">
+            @* Map background grid lines to suggest a map *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                New York City — Lower Manhattan
+            </div>
+
+            @* Map zoom controls (top-right) *@
+            <div class="absolute right-4 top-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* Station markers plotted by relative position *@
+            @foreach (var station in _stations)
+            {
+                var st = station;
+                var price = GetPrice(st, _grade);
+                var pos = GetMarkerPosition(st);
+                <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSelected(st.Id))"
+                        class="group relative flex flex-col items-center">
+                        @* Price badge marker *@
+                        <div class="@Cn.Merge("flex items-center rounded-full border bg-card px-2 py-0.5 shadow-sm", PriceBadgeClass(price))">
+                            <span class="@Cn.Merge("mr-1.5 size-1.5 rounded-full", PriceColor(price))"></span>
+                            <span class="text-xs font-medium tabular-nums">$@price.ToString("F2")</span>
+                        </div>
+                        @* Hover tooltip *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            @st.Brand &middot; @GetGradeLabel(_grade) $@price.ToString("F2")
+                        </div>
+                    </button>
+
+                    @* Popup (shown when selected) *@
+                    @if (_selected == st.Id)
+                    {
+                        <div class="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                            <div class="mb-1 flex items-center justify-between">
+                                <span class="text-sm font-medium">@st.Brand</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                    @st.Hours
+                                </BadgeCn>
+                            </div>
+                            <p class="text-xs text-muted-foreground">@st.Address</p>
+
+                            @* All prices *@
+                            <div class="mt-2 space-y-1">
+                                @foreach (var gk in _gradeKeys)
+                                {
+                                    var gradeKey = gk;
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">@GetGradeLabel(gradeKey)</span>
+                                        <span class="font-medium tabular-nums">$@GetPrice(st, gradeKey).ToString("F2")</span>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Amenities *@
+                            <div class="mt-2 flex flex-wrap gap-1">
+                                @foreach (var amenity in st.Amenities)
+                                {
+                                    var am = amenity;
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-[10px] font-normal">
+                                        <LucideIconCn Name="@GetAmenityIcon(am)" Size="10" Class="size-2.5" />
+                                        @am
+                                    </BadgeCn>
+                                }
+                            </div>
+
+                            <div class="mt-2 flex items-center justify-between">
+                                <span class="text-[10px] text-muted-foreground">
+                                    Updated @st.LastUpdated
+                                </span>
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 text-xs">
+                                    Directions
+                                </ButtonCn>
+                            </div>
+
+                            @* Close button *@
+                            <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Station(
+        string Id,
+        string Brand,
+        string Address,
+        double Lng,
+        double Lat,
+        double Regular,
+        double Midgrade,
+        double Premium,
+        string[] Amenities,
+        string LastUpdated,
+        string Hours
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly Station[] _stations =
+    [
+        new("s1", "Shell",  "450 W Broadway, New York, NY",       -74.0005, 40.724, 3.59, 3.89, 4.19, ["Convenience Store", "Car Wash", "Air Pump"],          "2 hrs ago",  "24/7"),
+        new("s2", "BP",     "265 Lafayette St, New York, NY",     -73.9965, 40.721, 3.45, 3.75, 4.05, ["Convenience Store", "Restrooms"],                     "4 hrs ago",  "5am–12am"),
+        new("s3", "Mobil",  "110 E Houston St, New York, NY",     -73.993,  40.723, 3.15, 3.45, 3.79, ["Car Wash", "Air Pump", "EV Charging"],                "1 hr ago",   "24/7"),
+        new("s4", "Citgo",  "199 Bowery, New York, NY",           -73.993,  40.719, 3.29, 3.59, 3.89, ["Convenience Store", "Restrooms", "Air Pump"],         "6 hrs ago",  "6am–11pm"),
+        new("s5", "Sunoco", "302 Canal St, New York, NY",         -73.998,  40.718, 3.65, 3.95, 4.29, ["Convenience Store"],                                  "3 hrs ago",  "24/7"),
+        new("s6", "Gulf",   "87 Allen St, New York, NY",          -73.989,  40.717, 3.19, 3.49, 3.79, ["Restrooms", "Air Pump", "EV Charging"],               "30 min ago", "5am–1am"),
+    ];
+
+    private static readonly string[] _gradeKeys = ["regular", "midgrade", "premium"];
+
+    private string _grade = "regular";
+    private string? _selected = null;
+
+    private void SetGrade(string grade)
+    {
+        _grade = grade;
+        _selected = null;
+    }
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static string GetGradeLabel(string grade) => grade switch
+    {
+        "regular"  => "Regular",
+        "midgrade" => "Mid-Grade",
+        "premium"  => "Premium",
+        _          => grade,
+    };
+
+    private static double GetPrice(Station st, string grade) => grade switch
+    {
+        "midgrade" => st.Midgrade,
+        "premium"  => st.Premium,
+        _          => st.Regular,
+    };
+
+    private double GetCheapestPrice()
+    {
+        if (_stations.Length == 0) return 0;
+        var min = double.MaxValue;
+        foreach (var st in _stations)
+        {
+            var p = GetPrice(st, _grade);
+            if (p < min) min = p;
+        }
+        return min;
+    }
+
+    private static string PriceColor(double price)
+    {
+        if (price < 3.2) return "bg-emerald-500";
+        if (price <= 3.6) return "bg-amber-500";
+        return "bg-red-500";
+    }
+
+    private static string PriceBadgeClass(double price)
+    {
+        if (price < 3.2) return "border-emerald-500/40 text-emerald-700 dark:text-emerald-400";
+        if (price <= 3.6) return "border-amber-500/40 text-amber-700 dark:text-amber-400";
+        return "border-red-500/40 text-red-700 dark:text-red-400";
+    }
+
+    private static string GetAmenityIcon(string amenity) => amenity switch
+    {
+        "Car Wash"          => "car",
+        "Convenience Store" => "store",
+        "EV Charging"       => "zap",
+        "Air Pump"          => "droplet",
+        _                   => "circle",
+    };
+
+    // Map bounding box: lon [-74.002, -73.987], lat [40.716, 40.726]
+    private static MarkerPos GetMarkerPosition(Station st)
+    {
+        const double lonMin = -74.002;
+        const double lonMax = -73.987;
+        const double latMin = 40.716;
+        const double latMax = 40.726;
+        var left = (st.Lng - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - st.Lat) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

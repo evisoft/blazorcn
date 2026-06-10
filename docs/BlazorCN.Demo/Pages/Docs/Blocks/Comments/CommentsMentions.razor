@@ -1,0 +1,208 @@
+@* ============================================================
+   Block: comments-mentions
+   Title: CommentsMentions
+   Description: A comment system with @mention autocomplete for React and Next.js featuring user suggestions, notification triggers, and highlighted mentions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-mentions.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Team Discussion</h2>
+            <p class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="at-sign" Size="12" Class="size-3" />
+                Type @@ to mention someone
+            </p>
+        </div>
+
+        @* Input area with mention suggestions *@
+        <div class="relative border-b p-4">
+            <TextareaCn Value="@_content" ValueChanged="@((string v) => HandleInput(v))" Placeholder="@("Write a comment... Type @ to mention teammates")" Class="min-h-[100px]" />
+
+            @if (_showSuggestions && _filteredUsers.Length > 0)
+            {
+                <div class="absolute bottom-20 left-4 right-4 z-10">
+                    <div class="rounded-lg border bg-popover shadow-md">
+                        @if (_filteredUsers.Length == 0)
+                        {
+                            <div class="px-3 py-2 text-xs text-muted-foreground">No users found</div>
+                        }
+                        <div class="px-2 py-1.5">
+                            <p class="px-1 py-1 text-xs font-medium text-muted-foreground">Suggest teammates</p>
+                            @foreach (var usr in _filteredUsers)
+                            {
+                                var u = usr;
+                                var initials = GetInitials(u.Name);
+                                <button type="button"
+                                        class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                                        @onclick="@(() => InsertMention(u.Username))">
+                                    <AvatarCn Class="size-6">
+                                        <AvatarImageCn Src="@u.Avatar" Alt="@u.Name" />
+                                        <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium">@u.Name</span>
+                                        <span class="text-xs text-muted-foreground">@@@u.Username</span>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="mt-2 flex justify-end">
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 text-xs">
+                    Post comment
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Existing comments *@
+        <div class="divide-y">
+            @foreach (var comment in _existingComments)
+            {
+                var c = comment;
+                <div class="p-4">
+                    @RenderMentionableComment(c)
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record UserData(string Id, string Name, string Username, string Avatar);
+    private record CommentData(string Id, UserData Author, string Content, string Timestamp, string[] Mentions);
+
+    private static readonly UserData[] _teamMembers =
+    [
+        new("1", "Sarah Chen",   "sarah",  ""),
+        new("2", "Alex Morgan",  "alex",   ""),
+        new("3", "Maya Patel",   "maya",   ""),
+        new("4", "Chris Taylor", "chris",  ""),
+        new("5", "Jordan Lee",   "jordan", ""),
+    ];
+
+    private static readonly CommentData[] _existingComments =
+    [
+        new("1", _teamMembers[0],
+            "Hey @alex, can you review the new authentication flow? I think @maya might also want to weigh in on the UX.",
+            "2h ago",
+            ["alex", "maya"]),
+        new("2", _teamMembers[1],
+            "Sure thing @sarah! Looks good overall. @chris, do we need to update the security docs?",
+            "1h ago",
+            ["sarah", "chris"]),
+    ];
+
+    private string _content = "";
+    private bool _showSuggestions = false;
+    private string _mentionQuery = "";
+
+    private UserData[] _filteredUsers = [];
+
+    private void HandleInput(string value)
+    {
+        _content = value;
+
+        // Find the last @ before end of the string (simple cursor-agnostic approach)
+        var atIndex = value.LastIndexOf('@');
+        if (atIndex >= 0)
+        {
+            var afterAt = value.Substring(atIndex + 1);
+            // Only show suggestions if afterAt contains only word characters (no space after @)
+            if (afterAt.Length == 0 || System.Text.RegularExpressions.Regex.IsMatch(afterAt, @"^\w*$"))
+            {
+                _mentionQuery = afterAt;
+                _showSuggestions = true;
+                _filteredUsers = _teamMembers
+                    .Where(u => u.Name.Contains(_mentionQuery, StringComparison.OrdinalIgnoreCase)
+                             || u.Username.Contains(_mentionQuery, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                return;
+            }
+        }
+
+        _showSuggestions = false;
+        _filteredUsers = [];
+    }
+
+    private void InsertMention(string username)
+    {
+        var atIndex = _content.LastIndexOf('@');
+        if (atIndex >= 0)
+        {
+            var beforeAt = _content.Substring(0, atIndex);
+            _content = $"{beforeAt}@{username} ";
+        }
+        else
+        {
+            _content += $"@{username} ";
+        }
+        _showSuggestions = false;
+        _filteredUsers = [];
+    }
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ');
+        var result = "";
+        foreach (var p in parts)
+        {
+            if (p.Length > 0) result += char.ToUpper(p[0]);
+        }
+        return result;
+    }
+
+    private RenderFragment RenderMentionableComment(CommentData comment) => __builder =>
+    {
+        var initials = GetInitials(comment.Author.Name);
+        <div class="flex gap-3">
+            <AvatarCn Class="size-8 shrink-0">
+                <AvatarImageCn Src="@comment.Author.Avatar" Alt="@comment.Author.Name" />
+                <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-baseline gap-2">
+                    <span class="text-sm font-medium">@comment.Author.Name</span>
+                    <span class="text-xs text-muted-foreground">@@@comment.Author.Username</span>
+                    <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                    <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                </div>
+                <p class="mt-1 text-sm leading-relaxed">
+                    @RenderMentionContent(comment.Content, comment.Mentions)
+                </p>
+            </div>
+        </div>
+    };
+
+    private RenderFragment RenderMentionContent(string text, string[] mentions) => __builder =>
+    {
+        // Split on @word tokens
+        var parts = System.Text.RegularExpressions.Regex.Split(text, @"(@\w+)");
+        foreach (var part in parts)
+        {
+            var p = part;
+            if (p.StartsWith("@"))
+            {
+                var username = p.Substring(1);
+                if (mentions.Contains(username))
+                {
+                    <span class="rounded bg-blue-500/10 px-1 font-medium text-blue-600 dark:text-blue-400">@p</span>
+                }
+                else
+                {
+                    <text>@p</text>
+                }
+            }
+            else
+            {
+                <text>@p</text>
+            }
+        }
+    };
+}

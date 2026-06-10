@@ -1,0 +1,379 @@
+@* ============================================================
+   Block: reviews-flagged-queue
+   Title: ReviewsFlaggedQueue
+   Description: A flagged review moderation queue block for React and Next.js with severity levels, flag reasons, reporter details, timeline layout, and dismiss/remove actions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-flagged-queue.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield-alert" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Flagged Queue</span>
+                @if (_counts.Pending > 0)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                        @_counts.Pending pending
+                    </BadgeCn>
+                }
+            </div>
+            <span class="text-xs text-muted-foreground">
+                @_counts.ProcessedPercent% processed
+            </span>
+        </div>
+
+        @* Progress bar + severity filter *@
+        <div class="border-b px-4 py-2.5">
+            @* Resolution progress *@
+            <div class="mb-2.5 flex items-center gap-3">
+                <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div class="flex h-full">
+                        @if (_counts.Resolved > 0)
+                        {
+                            <div class="h-full bg-emerald-500 transition-all duration-300"
+                                 style="@($"width:{(_counts.Resolved * 100.0 / _counts.Total):F0}%")" />
+                        }
+                        @if (_counts.Dismissed > 0)
+                        {
+                            <div class="h-full bg-muted-foreground/30 transition-all duration-300"
+                                 style="@($"width:{(_counts.Dismissed * 100.0 / _counts.Total):F0}%")" />
+                        }
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 text-[10px] text-muted-foreground">
+                    <span class="flex items-center gap-1">
+                        <span class="size-1.5 rounded-full bg-amber-500"></span>
+                        @_counts.Pending
+                    </span>
+                    <span class="flex items-center gap-1">
+                        <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                        @_counts.Resolved
+                    </span>
+                    <span class="flex items-center gap-1">
+                        <span class="size-1.5 rounded-full bg-muted-foreground/30"></span>
+                        @_counts.Dismissed
+                    </span>
+                </div>
+            </div>
+
+            @* Severity filter pills *@
+            <div class="flex items-center gap-1.5">
+                <span class="text-[10px] text-muted-foreground">Severity:</span>
+                @foreach (var sev in _severityOptions)
+                {
+                    var sevCopy = sev;
+                    <button type="button"
+                            class="@Cn.Merge("rounded-full px-2 py-0.5 text-[10px] transition-colors", _filterSeverity == sevCopy ? "bg-foreground text-background" : "bg-muted/60 text-muted-foreground hover:bg-muted")"
+                            @onclick="@(() => _filterSeverity = sevCopy)">
+                        @(sevCopy == "all" ? "All" : GetSeverityLabel(sevCopy))
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Timeline flag items *@
+        <div class="relative">
+            @* Timeline vertical line *@
+            <div class="absolute bottom-0 left-[27px] top-0 w-px bg-border"></div>
+
+            @{
+                var visibleFlags = GetVisibleFlags();
+            }
+            @foreach (var flag in visibleFlags)
+            {
+                var flagItem = flag;
+                var isPending = flagItem.Status == "pending";
+                var isExpanded = _expandedId == flagItem.Id;
+                var config = GetSeverityConfig(flagItem.Severity);
+                var isLast = flagItem == visibleFlags[visibleFlags.Count - 1];
+
+                <div class="@(isLast ? "" : "border-b")" style="@(isPending ? "" : "opacity:0.5")">
+                    <button type="button"
+                            class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+                            @onclick="@(() => _expandedId = (isExpanded ? null : flagItem.Id))">
+                        @* Timeline node *@
+                        <div class="relative z-10 mt-1 flex shrink-0 flex-col items-center">
+                            <span class="@Cn.Merge("size-2.5 rounded-full ring-2 ring-card", config.Dot)"></span>
+                        </div>
+
+                        @* Flag content *@
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@flagItem.Content.ReviewAuthor</span>
+                                <span class="@Cn.Merge("rounded px-1.5 py-0.5 text-[10px]", config.Bg)">
+                                    @config.Label
+                                </span>
+                                <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                    @GetReasonLabel(flagItem.Reason)
+                                </span>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Reported by @flagItem.Reporter.Name · @flagItem.ReportDate
+                                @if (flagItem.ReportCount > 1)
+                                {
+                                    <span class="ml-1">· @flagItem.ReportCount reports</span>
+                                }
+                            </p>
+                            @if (!isPending)
+                            {
+                                <div class="mt-1">
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                        @(flagItem.Status == "resolved" ? "Removed" : "Dismissed")
+                                    </BadgeCn>
+                                </div>
+                            }
+                        </div>
+
+                        <LucideIconCn Name="chevron-down" Size="16"
+                                      Class="@Cn.Merge("mt-1 size-4 shrink-0 text-muted-foreground/50 transition-transform duration-200", isExpanded ? "rotate-180" : "")" />
+                    </button>
+
+                    @* Expanded detail *@
+                    @if (isExpanded)
+                    {
+                        <div class="overflow-hidden">
+                            <div class="pb-4 pl-[40px] pr-4">
+                                @* Reporter detail *@
+                                <div class="mb-3 flex items-center gap-2">
+                                    <AvatarCn Class="size-5">
+                                        <AvatarFallbackCn Class="text-[8px]">@flagItem.Reporter.Initials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <span class="text-xs text-muted-foreground">@flagItem.Reporter.Name</span>
+                                    <span class="text-[10px] text-muted-foreground">
+                                        Trust score: @flagItem.Reporter.TrustScore%
+                                    </span>
+                                </div>
+
+                                @* Original review content *@
+                                <div class="@Cn.Merge("rounded-md border-l-2 p-3 bg-muted/30", config.Border)">
+                                    <div class="mb-1.5 flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <AvatarCn Class="size-5">
+                                                <AvatarFallbackCn Class="text-[8px]">@flagItem.Content.ReviewAuthorInitials</AvatarFallbackCn>
+                                            </AvatarCn>
+                                            <span class="text-xs font-medium">@flagItem.Content.ReviewAuthor</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            @for (int i = 0; i < 5; i++)
+                                            {
+                                                var starIndex = i;
+                                                <LucideIconCn Name="star" Size="10"
+                                                              Class="@Cn.Merge("size-2.5", starIndex < flagItem.Content.ReviewRating ? "fill-amber-500 text-amber-500" : "text-muted-foreground/30")" />
+                                            }
+                                        </div>
+                                    </div>
+                                    <p class="text-sm leading-relaxed">@flagItem.Content.ReviewBody</p>
+                                    <p class="mt-1.5 text-[10px] text-muted-foreground">
+                                        Posted @flagItem.Content.ReviewDate
+                                    </p>
+                                </div>
+
+                                @* Moderator note *@
+                                @if (flagItem.ModeratorNote != null)
+                                {
+                                    <div class="mt-2 rounded-md bg-muted/50 px-3 py-2">
+                                        <p class="text-xs text-muted-foreground">@flagItem.ModeratorNote</p>
+                                    </div>
+                                }
+
+                                @* Action buttons *@
+                                @if (isPending)
+                                {
+                                    <div class="mt-3 flex items-center gap-2">
+                                        <div @onclick:stopPropagation>
+                                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                                      Class="h-7 gap-1 px-2.5 text-xs text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400 dark:hover:text-red-400"
+                                                      @onclick="@(() => HandleAction(flagItem.Id, "resolved"))">
+                                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                                Remove Review
+                                            </ButtonCn>
+                                        </div>
+                                        <div @onclick:stopPropagation>
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                      Class="h-7 gap-1 px-2.5 text-xs"
+                                                      @onclick="@(() => HandleAction(flagItem.Id, "dismissed"))">
+                                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                                Dismiss Flag
+                                            </ButtonCn>
+                                        </div>
+                                        <div @onclick:stopPropagation class="ml-auto">
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                      Class="h-7 gap-1 px-2.5 text-xs text-muted-foreground">
+                                                <LucideIconCn Name="eye" Size="12" Class="size-3" />
+                                                View Full
+                                            </ButtonCn>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer summary *@
+        <div class="flex items-center justify-between border-t bg-muted/20 px-4 py-2.5">
+            <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="message-square-warning" Size="12" Class="size-3" />
+                <span>
+                    @_counts.Total total flags · @_counts.Pending require action
+                </span>
+            </div>
+            @if (_counts.Pending == 0 && _counts.Total > 0)
+            {
+                <BadgeCn Variant="BadgeVariant.Secondary"
+                         Class="text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                    Queue clear
+                </BadgeCn>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class Reporter
+    {
+        public string Name { get; set; } = "";
+        public string Initials { get; set; } = "";
+        public int TrustScore { get; set; }
+    }
+
+    private class FlaggedContent
+    {
+        public string ReviewId { get; set; } = "";
+        public string ReviewAuthor { get; set; } = "";
+        public string ReviewAuthorInitials { get; set; } = "";
+        public int ReviewRating { get; set; }
+        public string ReviewBody { get; set; } = "";
+        public string ReviewDate { get; set; } = "";
+    }
+
+    private class FlagItem
+    {
+        public string Id { get; set; } = "";
+        public string Severity { get; set; } = "";
+        public string Reason { get; set; } = "";
+        public Reporter Reporter { get; set; } = new();
+        public FlaggedContent Content { get; set; } = new();
+        public string ReportDate { get; set; } = "";
+        public int ReportCount { get; set; }
+        public string Status { get; set; } = "pending";
+        public string? ModeratorNote { get; set; }
+    }
+
+    private class SeverityConfig
+    {
+        public string Label { get; set; } = "";
+        public string Dot { get; set; } = "";
+        public string Border { get; set; } = "";
+        public string Bg { get; set; } = "";
+    }
+
+    private class Counts
+    {
+        public int Pending { get; set; }
+        public int Resolved { get; set; }
+        public int Dismissed { get; set; }
+        public int Total { get; set; }
+        public int ProcessedPercent { get; set; }
+    }
+
+    private static readonly string[] _severityOptions = ["all", "critical", "high", "medium", "low"];
+
+    private List<FlagItem> _flags = new()
+    {
+        new() { Id = "flag-1", Severity = "critical", Reason = "hate-speech",
+            Reporter = new() { Name = "Sarah Chen", Initials = "SC", TrustScore = 95 },
+            Content = new() { ReviewId = "rv-881", ReviewAuthor = "Anonymous_User", ReviewAuthorInitials = "AU", ReviewRating = 1,
+                ReviewBody = "This product is terrible and everyone involved in making it should feel embarrassed. I cannot believe any competent person would release something this broken and charge money for it.",
+                ReviewDate = "2 hours ago" },
+            ReportDate = "45 min ago", ReportCount = 4, Status = "pending", ModeratorNote = null },
+        new() { Id = "flag-2", Severity = "high", Reason = "spam",
+            Reporter = new() { Name = "Marcus Johnson", Initials = "MJ", TrustScore = 88 },
+            Content = new() { ReviewId = "rv-903", ReviewAuthor = "BestDeals2026", ReviewAuthorInitials = "BD", ReviewRating = 5,
+                ReviewBody = "AMAZING PRODUCT!! Visit our site for similar deals and exclusive offers. Use code SAVE50 for half off. Limited time offer, act now before stocks run out!",
+                ReviewDate = "1 hour ago" },
+            ReportDate = "38 min ago", ReportCount = 7, Status = "pending", ModeratorNote = null },
+        new() { Id = "flag-3", Severity = "high", Reason = "fake-review",
+            Reporter = new() { Name = "Elena Petrov", Initials = "EP", TrustScore = 92 },
+            Content = new() { ReviewId = "rv-856", ReviewAuthor = "HappyCustomer99", ReviewAuthorInitials = "HC", ReviewRating = 5,
+                ReviewBody = "Best product ever made in the history of products. Everything is perfect, no flaws whatsoever. I bought 50 of them for everyone I know. 10 out of 10 would recommend to absolutely everyone.",
+                ReviewDate = "5 hours ago" },
+            ReportDate = "2 hours ago", ReportCount = 3, Status = "pending", ModeratorNote = null },
+        new() { Id = "flag-4", Severity = "medium", Reason = "off-topic",
+            Reporter = new() { Name = "Priya Sharma", Initials = "PS", TrustScore = 76 },
+            Content = new() { ReviewId = "rv-812", ReviewAuthor = "Alex Rivera", ReviewAuthorInitials = "AR", ReviewRating = 3,
+                ReviewBody = "I ordered pizza from DoorDash last week and it arrived cold. Also my neighbor's dog keeps barking at night. Anyway the weather has been nice lately. This product is okay I guess.",
+                ReviewDate = "8 hours ago" },
+            ReportDate = "5 hours ago", ReportCount = 2, Status = "pending", ModeratorNote = null },
+        new() { Id = "flag-5", Severity = "low", Reason = "inappropriate",
+            Reporter = new() { Name = "David Kim", Initials = "DK", TrustScore = 64 },
+            Content = new() { ReviewId = "rv-798", ReviewAuthor = "Frustrated_Dev", ReviewAuthorInitials = "FD", ReviewRating = 2,
+                ReviewBody = "Spent three days trying to get this working with our stack. The documentation is misleading and the error messages are useless. Support took 48 hours to respond with a generic template answer.",
+                ReviewDate = "1 day ago" },
+            ReportDate = "8 hours ago", ReportCount = 1, Status = "pending", ModeratorNote = null },
+    };
+
+    private string? _expandedId = null;
+    private string _filterSeverity = "all";
+
+    private Counts _counts => new()
+    {
+        Pending = _flags.Count(f => f.Status == "pending"),
+        Resolved = _flags.Count(f => f.Status == "resolved"),
+        Dismissed = _flags.Count(f => f.Status == "dismissed"),
+        Total = _flags.Count,
+        ProcessedPercent = _flags.Count > 0
+            ? (int)Math.Round((_flags.Count(f => f.Status != "pending") * 100.0) / _flags.Count)
+            : 0,
+    };
+
+    private List<FlagItem> GetVisibleFlags()
+    {
+        if (_filterSeverity == "all") return _flags;
+        return _flags.Where(f => f.Severity == _filterSeverity).ToList();
+    }
+
+    private SeverityConfig GetSeverityConfig(string severity) => severity switch
+    {
+        "critical" => new() { Label = "Critical", Dot = "bg-red-500", Border = "border-l-red-500", Bg = "bg-red-500/10" },
+        "high"     => new() { Label = "High",     Dot = "bg-amber-500", Border = "border-l-amber-500", Bg = "bg-amber-500/10" },
+        "medium"   => new() { Label = "Medium",   Dot = "bg-blue-500", Border = "border-l-blue-500", Bg = "bg-blue-500/10" },
+        _          => new() { Label = "Low",      Dot = "bg-muted-foreground/40", Border = "border-l-muted-foreground/40", Bg = "bg-muted/50" },
+    };
+
+    private static string GetSeverityLabel(string sev) => sev switch
+    {
+        "critical" => "Critical",
+        "high"     => "High",
+        "medium"   => "Medium",
+        "low"      => "Low",
+        _          => sev,
+    };
+
+    private static string GetReasonLabel(string reason) => reason switch
+    {
+        "spam"          => "Spam / Promotional",
+        "harassment"    => "Harassment",
+        "fake-review"   => "Fake Review",
+        "hate-speech"   => "Hate Speech",
+        "off-topic"     => "Off-Topic Content",
+        "inappropriate" => "Inappropriate Language",
+        _               => reason,
+    };
+
+    private void HandleAction(string id, string action)
+    {
+        var flag = _flags.FirstOrDefault(f => f.Id == id);
+        if (flag == null) return;
+        flag.Status = action;
+        flag.ModeratorNote = action == "resolved"
+            ? "Review removed from public listing"
+            : "Flag dismissed, review remains visible";
+        if (_expandedId == id)
+            _expandedId = null;
+    }
+}

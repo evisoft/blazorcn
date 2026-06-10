@@ -1,0 +1,293 @@
+@* ============================================================
+   Block: changelog-feature-gate-status
+   Title: ChangelogFeatureGateStatus
+   Description: Monitor feature flag rollout percentages across environments with user targeting and override controls. Built with React, Next.js, shadcn/ui, and Tailwind CSS.
+   Source: original/blocks/changelog/changelog-feature-gate-status.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Feature Gates</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @FilteredGates.Length feature flags across 3 environments
+                    </p>
+                </div>
+                <LucideIconCn Name="flag" Size="16" Class="size-4 text-muted-foreground/60" />
+            </div>
+        </div>
+
+        @* Filter + New button *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+                <SelectCn @bind-Value="_statusFilter">
+                    <SelectTriggerCn Class="h-8 w-[140px] text-xs">
+                        <SelectValueCn />
+                    </SelectTriggerCn>
+                    <SelectContentCn>
+                        <SelectItemCn Value="all">All features</SelectItemCn>
+                        <SelectItemCn Value="active">Active</SelectItemCn>
+                        <SelectItemCn Value="staged">Staged</SelectItemCn>
+                        <SelectItemCn Value="disabled">Disabled</SelectItemCn>
+                    </SelectContentCn>
+                </SelectCn>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    New feature gate
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Gate list *@
+        <div class="divide-y">
+            @foreach (var gate in FilteredGates)
+            {
+                var gateId = gate.Id;
+                var isExpanded = _expandedId == gateId;
+                var isEnabled = _gateStates.TryGetValue(gateId, out var gs) ? gs.Enabled : gate.Status == "active";
+                var rollouts = _gateStates.TryGetValue(gateId, out var gs2) ? gs2.Rollouts : gate.Environments;
+
+                <div>
+                    <div class="flex items-start gap-3 px-4 py-3">
+                        @* Switch *@
+                        <label class="flex items-center pt-0.5">
+                            <SwitchCn Checked="@isEnabled"
+                                      CheckedChanged="@((v) => ToggleGate(gateId))"
+                                      Class="scale-75" />
+                        </label>
+
+                        @* Expandable row button *@
+                        <button type="button"
+                                @onclick="@(() => ToggleExpanded(gateId))"
+                                class="min-w-0 flex-1 text-left">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-mono text-sm font-medium">@gate.Name</span>
+                                        @if (gate.Status == "active")
+                                        {
+                                            <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                        }
+                                        @if (gate.Status == "staged")
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline"
+                                                     Class="border-blue-500/20 bg-blue-500/10 text-blue-600">
+                                                Staged
+                                            </BadgeCn>
+                                        }
+                                    </div>
+                                    <p class="mt-1 text-xs text-muted-foreground">@gate.Description</p>
+
+                                    @* Rollout bars *@
+                                    <div class="mt-2 flex items-center gap-3">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs text-muted-foreground">Prod</span>
+                                            <div class="h-1.5 w-12 overflow-hidden rounded-full bg-muted/50">
+                                                <div class="h-full bg-emerald-500"
+                                                     style="@($"width:{rollouts["production"]}%")"></div>
+                                            </div>
+                                            <span class="text-xs font-medium tabular-nums">@rollouts["production"]%</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-xs text-muted-foreground">Staging</span>
+                                            <div class="h-1.5 w-12 overflow-hidden rounded-full bg-muted/50">
+                                                <div class="h-full bg-blue-500"
+                                                     style="@($"width:{rollouts["staging"]}%")"></div>
+                                            </div>
+                                            <span class="text-xs font-medium tabular-nums">@rollouts["staging"]%</span>
+                                        </div>
+                                    </div>
+
+                                    @* Meta row *@
+                                    <div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span>@gate.Owner</span>
+                                        <span>@gate.LastModified</span>
+                                        @if (gate.Targeting.Length > 0)
+                                        {
+                                            <span class="flex items-center gap-1">
+                                                <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                                @gate.Targeting.Length segments
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+
+                                <LucideIconCn Name="chevron-right"
+                                              Size="16"
+                                              Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </div>
+                        </button>
+                    </div>
+
+                    @* Expanded detail *@
+                    @if (isExpanded)
+                    {
+                        <div class="border-t bg-muted/30 px-4 py-3">
+                            <div class="space-y-4 pl-11">
+
+                                @* Environment rollout sliders *@
+                                <div>
+                                    <p class="mb-2 text-xs font-medium text-muted-foreground">
+                                        Environment rollout
+                                    </p>
+                                    <div class="space-y-3">
+                                        @foreach (var envKey in new[] { "production", "staging", "development" })
+                                        {
+                                            var env = envKey;
+                                            var pct = rollouts.TryGetValue(env, out var p) ? p : 0;
+                                            <div>
+                                                <div class="mb-1.5 flex items-center justify-between">
+                                                    <span class="text-xs font-medium capitalize">@env</span>
+                                                    <span class="text-xs font-medium tabular-nums">@pct%</span>
+                                                </div>
+                                                <SliderCn Value="@((double)pct)"
+                                                          ValueChanged="@((double v) => UpdateRollout(gateId, env, (int)v))"
+                                                          Max="100"
+                                                          Step="5"
+                                                          Disabled="@(!isEnabled)"
+                                                          Class="w-full" />
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                @* User targeting *@
+                                @if (gate.Targeting.Length > 0)
+                                {
+                                    <div>
+                                        <p class="mb-2 text-xs font-medium text-muted-foreground">
+                                            User targeting
+                                        </p>
+                                        <div class="space-y-1.5">
+                                            @foreach (var target in gate.Targeting)
+                                            {
+                                                <div class="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                                                    <div class="flex items-center gap-2">
+                                                        <LucideIconCn Name="users" Size="14" Class="size-3.5 text-muted-foreground" />
+                                                        <span class="text-xs font-medium">@target.Segment</span>
+                                                    </div>
+                                                    <BadgeCn Variant="BadgeVariant.Outline"
+                                                             Class="@Cn.Merge(target.Enabled ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600" : "border-muted-foreground/20 bg-muted text-muted-foreground")">
+                                                        @(target.Enabled ? "Enabled" : "Disabled")
+                                                    </BadgeCn>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @* Action buttons *@
+                                <div class="flex gap-2">
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                                        <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                                        View metrics
+                                    </ButtonCn>
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs">
+                                        <LucideIconCn Name="power" Size="12" Class="size-3" />
+                                        Kill switch
+                                    </ButtonCn>
+                                </div>
+
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    // ── Data types ──────────────────────────────────────────────────────────
+
+    private record TargetSegment(string Segment, bool Enabled);
+
+    private record FeatureGate(
+        string Id,
+        string Name,
+        string Description,
+        string Status,
+        Dictionary<string, int> Environments,
+        TargetSegment[] Targeting,
+        string LastModified,
+        string Owner);
+
+    private class GateState
+    {
+        public bool Enabled { get; set; }
+        public Dictionary<string, int> Rollouts { get; set; } = new();
+    }
+
+    // ── Static data ──────────────────────────────────────────────────────────
+
+    private static readonly FeatureGate[] _featureGates =
+    [
+        new("fg-1", "checkout-flow-v2", "Redesigned checkout with one-click purchase flow", "active",
+            new() { ["production"] = 25, ["staging"] = 100, ["development"] = 100 },
+            [new("Beta users", true), new("Enterprise", true)],
+            "4 hours ago", "Product Team"),
+
+        new("fg-2", "ai-chat-support", "GPT-4 powered customer support chatbot", "active",
+            new() { ["production"] = 5, ["staging"] = 50, ["development"] = 100 },
+            [new("Premium users", true)],
+            "12 hours ago", "AI Team"),
+
+        new("fg-3", "dark-mode-theme", "System-aware dark mode with custom theme picker", "active",
+            new() { ["production"] = 100, ["staging"] = 100, ["development"] = 100 },
+            [],
+            "2 days ago", "Design System"),
+
+        new("fg-4", "realtime-collaboration", "Live cursors and multiplayer editing", "staged",
+            new() { ["production"] = 0, ["staging"] = 100, ["development"] = 100 },
+            [new("Internal team", true)],
+            "6 hours ago", "Platform Team"),
+
+        new("fg-5", "legacy-dashboard", "Old analytics dashboard (deprecating)", "disabled",
+            new() { ["production"] = 0, ["staging"] = 0, ["development"] = 0 },
+            [],
+            "1 week ago", "Analytics Team"),
+    ];
+
+    // ── State ────────────────────────────────────────────────────────────────
+
+    private string _statusFilter = "all";
+    private string? _expandedId;
+
+    private Dictionary<string, GateState> _gateStates = _featureGates.ToDictionary(
+        g => g.Id,
+        g => new GateState
+        {
+            Enabled = g.Status == "active",
+            Rollouts = new Dictionary<string, int>(g.Environments),
+        });
+
+    // ── Computed ─────────────────────────────────────────────────────────────
+
+    private FeatureGate[] FilteredGates =>
+        _statusFilter == "all"
+            ? _featureGates
+            : _featureGates.Where(g => g.Status == _statusFilter).ToArray();
+
+    // ── Handlers ─────────────────────────────────────────────────────────────
+
+    private void ToggleExpanded(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+
+    private void ToggleGate(string id)
+    {
+        if (_gateStates.TryGetValue(id, out var state))
+            state.Enabled = !state.Enabled;
+    }
+
+    private void UpdateRollout(string id, string env, int value)
+    {
+        if (_gateStates.TryGetValue(id, out var state))
+            state.Rollouts[env] = value;
+    }
+}

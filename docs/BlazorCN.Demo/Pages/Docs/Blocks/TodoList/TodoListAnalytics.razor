@@ -1,0 +1,135 @@
+@* ============================================================
+   Block: todo-list-analytics
+   Title: TodoListAnalytics
+   Description: A task statistics dashboard todo list block for React and Next.js with stat cards, completion rate, week-over-week comparison, and productivity score built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-analytics.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Task Analytics</span>
+            <span class="text-muted-foreground text-xs">
+                Productivity score: <span class="font-semibold tabular-nums text-foreground">@_productivityScore</span>
+            </span>
+        </div>
+
+        @* Stat cards *@
+        <div class="grid grid-cols-4 border-b">
+            @foreach (var statEntry in GetStats().Select((s, i) => (Stat: s, Idx: i)))
+            {
+                var cls = statEntry.Idx < 3 ? "border-r px-4 py-3" : "px-4 py-3";
+                <div class="@cls">
+                    <span class="text-muted-foreground text-xs">@statEntry.Stat.Label</span>
+                    <span class="mt-0.5 block font-semibold text-2xl tabular-nums @statEntry.Stat.Color">@statEntry.Stat.Value</span>
+                </div>
+            }
+        </div>
+
+        @* Completion + weekly comparison *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full rounded-full bg-emerald-500" style="@($"width:{CompletionRate}%")"></div>
+                </div>
+                <span class="text-muted-foreground text-xs tabular-nums">@(CompletionRate)% done</span>
+            </div>
+            <span class="text-muted-foreground text-xs">·</span>
+            <div class="flex items-center gap-1">
+                @if (_weekChange >= 0)
+                {
+                    <LucideIconCn Name="arrow-up" Size="12" Class="size-3 text-emerald-500" />
+                }
+                else
+                {
+                    <LucideIconCn Name="arrow-down" Size="12" Class="size-3 text-red-500" />
+                }
+                <span class="text-muted-foreground text-xs tabular-nums">@(_weekChange >= 0 ? "+" : "")@(_weekChangePercent)% vs last week</span>
+            </div>
+            <span class="text-muted-foreground text-xs">·</span>
+            <span class="text-muted-foreground text-xs tabular-nums">@_thisWeekCompleted this week</span>
+        </div>
+
+        @* Task list *@
+        <div>
+            @for (int i = 0; i < _tasks.Count; i++)
+            {
+                var task = _tasks[i];
+                var isLast = i == _tasks.Count - 1;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="flex w-full items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50">
+                        <CheckboxCn Id="@($"analytics-{task.Id}")" Checked="@task.Completed" CheckedChanged="@((bool v) => ToggleTask(task.Id))" />
+                        <span class="@Cn.Merge("min-w-0 flex-1 text-sm transition-all duration-200", task.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                            @task.Text
+                        </span>
+                        <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", StatusDotClass(task.Status))"></span>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum TaskStatus { Completed, InProgress, Overdue }
+
+    private record TaskItem(string Id, string Text, TaskStatus Status, bool Completed);
+
+    private record StatItem(string Label, int Value, string Color);
+
+    private const int _productivityScore = 78;
+    private const int _thisWeekCompleted = 5;
+    private const int _lastWeekCompleted = 3;
+    private const int _weekChange = _thisWeekCompleted - _lastWeekCompleted;
+    private const int _weekChangePercent = 67; // Math.Round(2/3*100)
+
+    private List<TaskItem> _tasks =
+    [
+        new("1",  "Complete API documentation",       TaskStatus.Completed,  true),
+        new("2",  "Review security audit findings",   TaskStatus.InProgress, false),
+        new("3",  "Deploy v2.4 release candidate",    TaskStatus.Overdue,    false),
+        new("4",  "Update user onboarding flow",      TaskStatus.InProgress, false),
+        new("5",  "Fix payment webhook handler",      TaskStatus.Completed,  true),
+        new("6",  "Write database migration tests",   TaskStatus.Completed,  true),
+        new("7",  "Configure CDN caching rules",      TaskStatus.Overdue,    false),
+        new("8",  "Refactor notification service",    TaskStatus.InProgress, false),
+        new("9",  "Add rate limiting to search API",  TaskStatus.Completed,  true),
+        new("10", "Update SSL certificates",          TaskStatus.Completed,  true),
+    ];
+
+    private int CompletedCount => _tasks.Count(t => t.Status == TaskStatus.Completed);
+    private int InProgressCount => _tasks.Count(t => t.Status == TaskStatus.InProgress);
+    private int OverdueCount => _tasks.Count(t => t.Status == TaskStatus.Overdue);
+    private int CompletionRate => _tasks.Count > 0
+        ? (int)Math.Round((double)CompletedCount / _tasks.Count * 100)
+        : 0;
+
+    private StatItem[] GetStats() =>
+    [
+        new("Total",       _tasks.Count,    "text-foreground"),
+        new("Completed",   CompletedCount,  "text-emerald-600 dark:text-emerald-400"),
+        new("In Progress", InProgressCount, "text-blue-600 dark:text-blue-400"),
+        new("Overdue",     OverdueCount,    "text-red-600 dark:text-red-400"),
+    ];
+
+    private static string StatusDotClass(TaskStatus status) => status switch
+    {
+        TaskStatus.Completed  => "bg-emerald-500",
+        TaskStatus.InProgress => "bg-blue-500",
+        TaskStatus.Overdue    => "bg-red-500",
+        _                     => ""
+    };
+
+    private void ToggleTask(string id)
+    {
+        var index = _tasks.FindIndex(t => t.Id == id);
+        if (index < 0) return;
+        var t = _tasks[index];
+        _tasks[index] = t with
+        {
+            Completed = !t.Completed,
+            Status = t.Completed ? TaskStatus.InProgress : TaskStatus.Completed,
+        };
+    }
+}

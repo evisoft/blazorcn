@@ -1,0 +1,121 @@
+@* ============================================================
+   Block: monitoring-inference-latency
+   Title: MonitoringInferenceLatency
+   Description: High-performance ML monitoring dashboard featuring inference timing breakdowns, cold start analysis, and throughput metrics with shadcn/ui and Framer Motion.
+   Source: original/blocks/monitoring/monitoring-inference-latency.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-blue-500/10">
+                    <LucideIconCn Name="zap" Size="16" Class="size-4 text-blue-600" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">Inference Latency</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">Model: ResNet-50 v2 (Production)</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="size-1.5 rounded-full bg-emerald-500"></div>
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Optimal</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 border-b">
+            @for (int idx = 0; idx < _stats.Length; idx++)
+            {
+                var stat = _stats[idx];
+                var notLast = idx != 2;
+                <div class="@($"p-4{(notLast ? " md:border-r border-b md:border-b-0" : "")}")">
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">@stat.Label</p>
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-semibold tabular-nums tracking-tight">@stat.Value</span>
+                        <span class="text-xs text-muted-foreground font-medium">@stat.Unit</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Latency Percentiles (ms)</span>
+                <div class="flex gap-4">
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-1.5 rounded-full bg-blue-500"></div>
+                        <span class="text-[10px] text-muted-foreground">P99</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-1.5 rounded-full bg-muted-foreground"></div>
+                        <span class="text-[10px] text-muted-foreground">P50</span>
+                    </div>
+                </div>
+            </div>
+            <div class="h-32 w-full">
+                @{
+                    var data = _latencyData;
+                    var count = data.Length;
+                    var chartW = 400;
+                    var chartH = 128;
+                    var allVals = data.SelectMany(d => new[] { d.P50, d.P99 }).ToArray();
+                    var minVal = allVals.Min() - 50;
+                    var maxVal = allVals.Max() + 50;
+                    var valRange = maxVal - minVal == 0 ? 1 : maxVal - minVal;
+                    double StepX(int i) => count <= 1 ? 0 : (double)chartW / (count - 1) * i;
+                    double StepY(int v) => chartH - (double)(v - minVal) / valRange * chartH;
+
+                    var p50Points = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{StepY(data[i].P50):F1}"));
+                    var p99Points = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{StepY(data[i].P99):F1}"));
+                    var p99FillPoints = $"0,{chartH} " + p99Points + $" {chartW},{chartH}";
+                }
+                <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="infLatencyGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="#3b82f6" stop-opacity="0.05" />
+                            <stop offset="95%" stop-color="#3b82f6" stop-opacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <polygon points="@p99FillPoints" fill="url(#infLatencyGradient)" />
+                    <polyline points="@p99Points" fill="none" stroke="#3b82f6" stroke-width="2" />
+                    <polyline points="@p50Points" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="3 3" />
+                </svg>
+            </div>
+        </div>
+
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between border-t">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                <span>Last 5 mins · 12k inferences</span>
+            </div>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                Latency Analysis →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record LatencyPoint(int P50, int P99);
+    private record StatItem(string Label, int Value, string Unit);
+
+    private static readonly LatencyPoint[] _latencyData =
+    [
+        new(120, 450),
+        new(140, 520),
+        new(130, 480),
+        new(180, 1200),
+        new(150, 650),
+        new(140, 550),
+        new(160, 720),
+        new(150, 600),
+        new(130, 480),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("P50 Latency", 135, "ms"),
+        new("P99 Latency", 480, "ms"),
+        new("Throughput", 85, "inf/s"),
+    ];
+}

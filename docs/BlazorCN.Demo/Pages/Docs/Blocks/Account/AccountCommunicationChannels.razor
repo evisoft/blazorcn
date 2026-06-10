@@ -1,0 +1,333 @@
+@* ============================================================
+   Block: account-communication-channels
+   Title: AccountCommunicationChannels
+   Description: A notification channel management block for React and Next.js with stacked channel cards for email, SMS, Slack, Discord, and webhooks with connection status, test delivery, and priority ordering built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-communication-channels.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="space-y-2">
+        @* Header Card *@
+        <div class="overflow-hidden rounded-lg border bg-card px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Notification Channels</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Configure where alerts are delivered, ordered by priority
+                    </p>
+                </div>
+                <div class="flex items-center gap-4 text-right">
+                    <div>
+                        <p class="text-lg font-semibold tabular-nums">
+                            @_connectedCount
+                            <span class="text-sm font-normal text-muted-foreground">/@_channels.Count</span>
+                        </p>
+                        <p class="text-[10px] text-muted-foreground">connected</p>
+                    </div>
+                    <div class="h-8 w-px bg-border"></div>
+                    <div>
+                        <p class="text-lg font-semibold tabular-nums">@_enabledCount</p>
+                        <p class="text-[10px] text-muted-foreground">active</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Channel Cards *@
+        @for (var i = 0; i < _channels.Count; i++)
+        {
+            var channel = _channels[i];
+            var channelIndex = i;
+            var statusDot = GetStatusDot(channel.Status);
+            var statusText = GetStatusText(channel.Status);
+            var statusLabel = GetStatusLabel(channel.Status);
+            var isConnected = channel.Status == "connected";
+            var isTesting = _testingId == channel.Id;
+            var isTested = _testedId == channel.Id;
+            var isDragging = _draggedId == channel.Id;
+
+            <div class="@Cn.Merge("overflow-hidden rounded-lg border bg-card", isDragging ? "opacity-50" : "")"
+                 draggable="true"
+                 @ondragstart="@(() => HandleDragStart(channel.Id))"
+                 @ondragover:preventDefault="true"
+                 @ondragover="@(() => HandleDragOver(channel.Id))"
+                 @ondragend="HandleDragEnd">
+                <div class="flex items-start gap-3 px-4 py-3">
+                    @* Drag Handle + Priority *@
+                    <div class="flex flex-col items-center gap-1 pt-0.5">
+                        <span class="cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing">
+                            <LucideGripVerticalCn Size="16" Class="size-4" aria-hidden="true" />
+                        </span>
+                        <span class="text-[10px] font-medium text-muted-foreground tabular-nums">P@(channelIndex + 1)</span>
+                    </div>
+
+                    @* Channel Icon *@
+                    <div class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/50">
+                        @if (channel.Type == "email")
+                        {
+                            <LucideMailCn Size="16" Class="size-4 text-muted-foreground" />
+                        }
+                        else if (channel.Type == "sms")
+                        {
+                            <LucideSmartphoneCn Size="16" Class="size-4 text-muted-foreground" />
+                        }
+                        else if (channel.Type == "webhook")
+                        {
+                            <LucideWebhookCn Size="16" Class="size-4 text-muted-foreground" />
+                        }
+                        else
+                        {
+                            <LucideHashCn Size="16" Class="size-4 text-muted-foreground" />
+                        }
+                    </div>
+
+                    @* Info *@
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium">@channel.Name</span>
+                            <span class="@Cn.Merge("size-1.5 rounded-full", statusDot)"></span>
+                            <span class="@Cn.Merge("text-[10px]", statusText)">@statusLabel</span>
+                            @if (channel.Verified)
+                            {
+                                <LucideCircleCheckBigCn Size="12" Class="size-3 text-emerald-500" />
+                            }
+                        </div>
+                        <div class="mt-0.5 flex items-center gap-1.5">
+                            <LucideLinkCn Size="12" Class="size-3 text-muted-foreground" />
+                            <span class="truncate font-mono text-xs text-muted-foreground">@channel.Config.Endpoint</span>
+                        </div>
+                        <p class="mt-0.5 text-[10px] text-muted-foreground">@channel.Config.Label</p>
+
+                        @* Delivery Stats *@
+                        @if (isConnected)
+                        {
+                            <div class="mt-2 flex items-center gap-3 text-[10px] text-muted-foreground">
+                                <span>Last delivery: @channel.LastDelivery</span>
+                                <span class="text-muted-foreground/40">|</span>
+                                <span>
+                                    Success rate: <span class="@Cn.Merge("font-medium tabular-nums", channel.DeliveryRate >= 99 ? "text-emerald-600" : channel.DeliveryRate >= 95 ? "text-foreground" : "text-amber-600")">@(channel.DeliveryRate)%</span>
+                                </span>
+                            </div>
+                        }
+                    </div>
+
+                    @* Actions *@
+                    <div class="flex shrink-0 items-center gap-2">
+                        @* Test Button *@
+                        @if (isConnected)
+                        {
+                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                      Class="h-7 gap-1.5 text-xs"
+                                      Disabled="@(isTesting || !channel.Enabled)"
+                                      OnClick="@(() => HandleTestSend(channel.Id))">
+                                @if (isTested)
+                                {
+                                    <LucideCheckCn Size="12" Class="size-3 text-emerald-600" />
+                                    <span class="text-emerald-600">Sent!</span>
+                                }
+                                else if (isTesting)
+                                {
+                                    <LucideSendCn Size="12" Class="size-3 animate-pulse" />
+                                    <text>Sending...</text>
+                                }
+                                else
+                                {
+                                    <LucideSendCn Size="12" Class="size-3" />
+                                    <text>Test</text>
+                                }
+                            </ButtonCn>
+                        }
+
+                        @* Enable/Disable *@
+                        <SwitchCn Checked="@channel.Enabled"
+                                  CheckedChanged="@((bool _) => ToggleChannel(channel.Id))"
+                                  Disabled="@(!isConnected)" />
+
+                        @* More Menu *@
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="size-7 p-0">
+                                    <LucideEllipsisCn Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End" Class="w-40">
+                                <DropdownMenuItemCn>Configure</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View logs</DropdownMenuItemCn>
+                                <DropdownMenuSeparatorCn />
+                                @if (isConnected)
+                                {
+                                    <DropdownMenuItemCn Class="text-red-600" OnClick="@(() => HandleDisconnect(channel.Id))">
+                                        Disconnect
+                                    </DropdownMenuItemCn>
+                                }
+                                else
+                                {
+                                    <DropdownMenuItemCn>Connect</DropdownMenuItemCn>
+                                }
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Footer Card *@
+        <div class="overflow-hidden rounded-lg border bg-card px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span class="flex items-center gap-1.5">
+                        <LucideCircleCheckBigCn Size="12" Class="size-3 text-emerald-500" />
+                        @_channels.Count(c => c.Verified) verified
+                    </span>
+                    <span class="text-muted-foreground/40">|</span>
+                    <span class="flex items-center gap-1.5">
+                        <LucideCircleXCn Size="12" Class="size-3 text-muted-foreground/50" />
+                        @_channels.Count(c => !c.Verified) unverified
+                    </span>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Add Channel
+                </ButtonCn>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ChannelConfig(string Endpoint, string Label);
+
+    private class NotificationChannel
+    {
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Status { get; set; } = "disconnected";
+        public bool Verified { get; set; }
+        public bool Enabled { get; set; }
+        public ChannelConfig Config { get; set; } = new("", "");
+        public string LastDelivery { get; set; } = "";
+        public double DeliveryRate { get; set; }
+    }
+
+    private string? _testingId;
+    private string? _testedId;
+    private string? _draggedId;
+
+    private int _connectedCount => _channels.Count(c => c.Status == "connected");
+    private int _enabledCount => _channels.Count(c => c.Enabled);
+
+    private readonly List<NotificationChannel> _channels =
+    [
+        new()
+        {
+            Id = "ch-1", Type = "email", Name = "Email", Status = "connected",
+            Verified = true, Enabled = true,
+            Config = new("ops-team@acmecorp.com", "Operations team inbox"),
+            LastDelivery = "2 min ago", DeliveryRate = 99.8,
+        },
+        new()
+        {
+            Id = "ch-2", Type = "sms", Name = "SMS", Status = "connected",
+            Verified = true, Enabled = true,
+            Config = new("+1 (555) 867-5309", "On-call phone"),
+            LastDelivery = "1 hour ago", DeliveryRate = 98.2,
+        },
+        new()
+        {
+            Id = "ch-3", Type = "slack", Name = "Slack", Status = "connected",
+            Verified = true, Enabled = true,
+            Config = new("#incidents", "Acme Corp workspace"),
+            LastDelivery = "5 min ago", DeliveryRate = 99.5,
+        },
+        new()
+        {
+            Id = "ch-4", Type = "discord", Name = "Discord", Status = "disconnected",
+            Verified = false, Enabled = false,
+            Config = new("Not configured", "Requires bot authorization"),
+            LastDelivery = "Never", DeliveryRate = 0,
+        },
+        new()
+        {
+            Id = "ch-5", Type = "webhook", Name = "Webhook", Status = "connected",
+            Verified = true, Enabled = true,
+            Config = new("https://hooks.acmecorp.com/notify", "Custom HTTP endpoint"),
+            LastDelivery = "12 min ago", DeliveryRate = 97.1,
+        },
+    ];
+
+    private static string GetStatusDot(string status) => status switch
+    {
+        "connected" => "bg-emerald-500",
+        "error" => "bg-red-500",
+        _ => "bg-muted-foreground/40",
+    };
+
+    private static string GetStatusText(string status) => status switch
+    {
+        "connected" => "text-emerald-600",
+        "error" => "text-red-600",
+        _ => "text-muted-foreground",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "connected" => "Connected",
+        "error" => "Error",
+        _ => "Disconnected",
+    };
+
+    private void ToggleChannel(string id)
+    {
+        var channel = _channels.FirstOrDefault(c => c.Id == id);
+        if (channel is not null) channel.Enabled = !channel.Enabled;
+    }
+
+    private void HandleTestSend(string id)
+    {
+        _testingId = id;
+        _testedId = null;
+        _ = Task.Delay(1200).ContinueWith(_ =>
+        {
+            _testingId = null;
+            _testedId = id;
+            InvokeAsync(StateHasChanged);
+            _ = Task.Delay(2500).ContinueWith(_ =>
+            {
+                _testedId = null;
+                InvokeAsync(StateHasChanged);
+            });
+        });
+    }
+
+    private void HandleDisconnect(string id)
+    {
+        var channel = _channels.FirstOrDefault(c => c.Id == id);
+        if (channel is not null)
+        {
+            channel.Status = "disconnected";
+            channel.Verified = false;
+            channel.Enabled = false;
+        }
+    }
+
+    private void HandleDragStart(string id)
+    {
+        _draggedId = id;
+    }
+
+    private void HandleDragOver(string targetId)
+    {
+        if (_draggedId == null || _draggedId == targetId) return;
+        var draggedIdx = _channels.FindIndex(c => c.Id == _draggedId);
+        var targetIdx = _channels.FindIndex(c => c.Id == targetId);
+        if (draggedIdx == -1 || targetIdx == -1) return;
+        var item = _channels[draggedIdx];
+        _channels.RemoveAt(draggedIdx);
+        _channels.Insert(targetIdx, item);
+    }
+
+    private void HandleDragEnd()
+    {
+        _draggedId = null;
+    }
+}

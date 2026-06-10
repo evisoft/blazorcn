@@ -1,0 +1,297 @@
+@* ============================================================
+   Block: map-ocean-currents
+   Title: MapOceanCurrents
+   Description: Ocean current visualization map block for Next.js with globe projection, current flow route lines, sea temperature markers, and current detail tooltips using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-ocean-currents.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="waves" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Ocean Currents</span>
+                <span class="text-xs text-muted-foreground">
+                    @_filteredCurrents.Length currents · @_filteredTemps.Length stations
+                </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = (_filter == "warm" ? null : "warm"))"
+                    class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == "warm" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    <span class="size-1.5 rounded-full bg-red-500" />
+                    Warm
+                </button>
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = (_filter == "cold" ? null : "cold"))"
+                    class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == "cold" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    <span class="size-1.5 rounded-full bg-blue-500" />
+                    Cold
+                </button>
+            </div>
+        </div>
+
+        @* Map + Detail Panel *@
+        <div class="flex">
+            @* Map placeholder *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Subtle grid background to suggest a map *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    Globe projection · World oceans
+                </div>
+
+                @* Current route lines rendered as SVG *@
+                <svg class="absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                    @foreach (var cur in _filteredCurrents)
+                    {
+                        var current = cur;
+                        var pts = string.Join(" ", current.Coordinates.Select(coord => $"{MapLonToPercent(coord[0]) * 100:F2},{MapLatToPercent(coord[1]) * 100:F2}"));
+                        var strokeWidth = _selectedCurrent == current.Id ? 4 : 2.5;
+                        var opacity = _selectedCurrent == current.Id ? 0.9 : 0.4;
+                        @((MarkupString)$"<polyline points=\"{pts}\" fill=\"none\" stroke=\"{current.Color}\" stroke-width=\"{strokeWidth}\" stroke-linecap=\"round\" stroke-linejoin=\"round\" opacity=\"{opacity.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" vector-effect=\"non-scaling-stroke\" style=\"cursor:pointer\" />")
+                    }
+                </svg>
+
+                @* Temperature markers *@
+                @foreach (var tmpItem in _filteredTemps)
+                {
+                    var t = tmpItem;
+                    var leftPct = MapLonToPercent(t.Longitude) * 100;
+                    var topPct = MapLatToPercent(t.Latitude) * 100;
+                    <div class="absolute" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%)")">
+                        @* Marker button *@
+                        <button
+                            type="button"
+                            @onclick="@(() => _selectedTemp = (_selectedTemp == t.Id ? null : t.Id))"
+                            class="@Cn.Merge("flex size-5 items-center justify-center rounded-full border-2 border-white shadow-md", TempColor(t.Temp))">
+                            <LucideIconCn Name="thermometer" Size="10" Class="size-2.5 text-white" />
+                        </button>
+
+                        @* Tooltip *@
+                        <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@t.Label</span>
+                                <span class="font-mono tabular-nums">@t.Temp@t.Unit</span>
+                            </div>
+                        </div>
+
+                        @* Popup *@
+                        @if (_selectedTemp == t.Id)
+                        {
+                            var currentForT = _currents.FirstOrDefault(c => c.Id == t.CurrentId);
+                            <div class="absolute left-1/2 top-full z-10 mt-7 w-52 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <p class="text-sm font-medium">@t.Label</p>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-mono font-normal text-xs tabular-nums">@t.Temp@t.Unit</BadgeCn>
+                                </div>
+                                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="droplets" Size="12" Class="size-3" />
+                                        @t.Salinity
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="waves" Size="12" Class="size-3" />
+                                        @(currentForT?.Name ?? "")
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm">
+                        <LucideIconCn Name="locate" Size="14" Class="size-3.5 text-muted-foreground" />
+                    </button>
+                </div>
+            </div>
+
+            @* Current Detail Panel *@
+            <div class="w-64 shrink-0 border-l">
+                <div class="border-b px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <LucideIconCn Name="wind" Size="16" Class="size-4 text-muted-foreground" />
+                        <span class="text-sm font-medium">Current Details</span>
+                    </div>
+                </div>
+                <div class="max-h-[440px] overflow-y-auto">
+                    @for (var i = 0; i < _filteredCurrents.Length; i++)
+                    {
+                        var current = _filteredCurrents[i];
+                        var isLast = i == _filteredCurrents.Length - 1;
+                        var isExpanded = _expandedCurrent == current.Id;
+                        var cur = current;
+                        var temps = _temperatureMarkers.Where(t => t.CurrentId == cur.Id).ToArray();
+                        <div class="@(isLast ? "" : "border-b")">
+                            <button
+                                type="button"
+                                @onclick="@(() => { _expandedCurrent = (isExpanded ? null : cur.Id); _selectedCurrent = cur.Id; })"
+                                class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+                                <span class="size-2 shrink-0 rounded-full" style="@($"background-color:{cur.Color}")" />
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-xs font-medium">@cur.Name</span>
+                                    <p class="text-[10px] text-muted-foreground">
+                                        @(cur.Type == "warm" ? "Warm" : "Cold") · @cur.Speed
+                                    </p>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="14" Class="@Cn.Merge("size-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="px-4 pb-3 pl-9">
+                                    <p class="mb-2 text-xs leading-relaxed text-muted-foreground">
+                                        @cur.Description
+                                    </p>
+                                    <div class="mb-2 flex flex-wrap gap-1.5">
+                                        <span class="rounded-md bg-muted/50 px-2 py-0.5 font-mono text-xs">@cur.Speed</span>
+                                        <span class="rounded-md bg-muted/50 px-2 py-0.5 font-mono text-xs">@cur.Depth</span>
+                                    </div>
+                                    @if (temps.Length > 0)
+                                    {
+                                        <div>
+                                            <span class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                Stations
+                                            </span>
+                                            @foreach (var tmpItem in temps)
+                                            {
+                                                var t2 = tmpItem;
+                                                <div class="flex items-center gap-2 py-0.5">
+                                                    <span class="@Cn.Merge("size-1.5 rounded-full", TempColor(t2.Temp))" />
+                                                    <span class="text-xs">@t2.Label</span>
+                                                    <span class="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground">@t2.Temp@t2.Unit</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500" />
+                    Warm (@(_currents.Count(c => c.Type == "warm")))
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500" />
+                    Cold (@(_currents.Count(c => c.Type == "cold")))
+                </span>
+            </div>
+            <span class="text-xs text-muted-foreground">
+                Globe projection · @_temperatureMarkers.Length temperature stations
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record OceanCurrent(
+        string Id,
+        string Name,
+        string Type,
+        string Speed,
+        string Depth,
+        string Description,
+        string Color,
+        double[][] Coordinates
+    );
+
+    private record TemperatureMarker(
+        string Id,
+        string Label,
+        double Temp,
+        string Unit,
+        double Longitude,
+        double Latitude,
+        string Salinity,
+        string CurrentId
+    );
+
+    private static readonly OceanCurrent[] _currents =
+    [
+        new("gulf-stream", "Gulf Stream", "warm", "2.5 m/s", "0-1,000m",
+            "A powerful warm Atlantic current flowing from the Gulf of Mexico northeast along the US coast toward Europe, transporting significant heat energy",
+            "#ef4444",
+            [[-80.1,25.8],[-79.5,28.5],[-77.0,32.0],[-74.0,36.0],[-70.0,39.5],[-65.0,42.0],[-55.0,45.0],[-45.0,48.0],[-35.0,50.0],[-20.0,52.0]]),
+        new("kuroshio", "Kuroshio Current", "warm", "1.7 m/s", "0-800m",
+            "North Pacific western boundary current flowing northeast past Japan, the Pacific counterpart to the Atlantic Gulf Stream",
+            "#f97316",
+            [[121.5,18.0],[123.0,22.0],[126.0,26.0],[131.0,30.0],[135.0,33.0],[140.0,35.0],[145.0,37.0],[152.0,39.0]]),
+        new("labrador", "Labrador Current", "cold", "0.6 m/s", "0-2,000m",
+            "Cold Arctic current flowing south along the Canadian coast carrying icebergs into North Atlantic shipping lanes",
+            "#3b82f6",
+            [[-60.0,60.0],[-58.0,56.0],[-56.0,52.0],[-54.0,48.0],[-52.0,45.0],[-50.0,42.0]]),
+        new("humboldt", "Humboldt Current", "cold", "0.3 m/s", "0-300m",
+            "Cold, nutrient-rich upwelling current along the west coast of South America supporting one of the world's most productive marine ecosystems",
+            "#06b6d4",
+            [[-75.5,-42.0],[-75.0,-36.0],[-74.0,-30.0],[-73.0,-24.0],[-72.5,-18.0],[-72.0,-12.0],[-72.5,-6.0]]),
+        new("agulhas", "Agulhas Current", "warm", "2.0 m/s", "0-1,500m",
+            "Western boundary current of the Indian Ocean flowing along the east coast of Africa, one of the strongest ocean currents globally",
+            "#dc2626",
+            [[36.0,-18.0],[35.5,-22.0],[34.0,-27.0],[31.0,-30.0],[28.5,-33.0],[25.0,-35.0],[20.0,-37.0]]),
+    ];
+
+    private static readonly TemperatureMarker[] _temperatureMarkers =
+    [
+        new("t1", "Sargasso Sea",       24.3, "C", -64.0,  32.0, "36.5 psu", "gulf-stream"),
+        new("t2", "Cape Hatteras",      21.7, "C", -74.0,  35.0, "35.8 psu", "gulf-stream"),
+        new("t3", "Philippine Sea",     27.1, "C", 128.0,  24.0, "34.6 psu", "kuroshio"),
+        new("t4", "Grand Banks",         3.2, "C", -52.0,  46.0, "33.2 psu", "labrador"),
+        new("t5", "Atacama Coast",      14.8, "C", -73.0, -23.0, "34.9 psu", "humboldt"),
+        new("t6", "Mozambique Channel", 26.5, "C",  36.0, -20.0, "35.1 psu", "agulhas"),
+        new("t7", "North Sea",           9.4, "C",  -5.0,  52.0, "35.0 psu", "gulf-stream"),
+        new("t8", "Davis Strait",        1.1, "C", -58.0,  56.0, "32.8 psu", "labrador"),
+    ];
+
+    // Bounding box for the flat-map projection approximation
+    private const double _lonMin = -100.0;
+    private const double _lonMax = 160.0;
+    private const double _latMin = -50.0;
+    private const double _latMax = 65.0;
+
+    private string? _filter;
+    private string? _selectedCurrent = "gulf-stream";
+    private string? _expandedCurrent = "gulf-stream";
+    private string? _selectedTemp;
+
+    private OceanCurrent[] _filteredCurrents => _filter != null
+        ? _currents.Where(c => c.Type == _filter).ToArray()
+        : _currents;
+
+    private TemperatureMarker[] _filteredTemps => _filter != null
+        ? _temperatureMarkers.Where(t => _currents.FirstOrDefault(c => c.Id == t.CurrentId)?.Type == _filter).ToArray()
+        : _temperatureMarkers;
+
+    private static string TempColor(double temp)
+    {
+        if (temp >= 24) return "bg-red-500";
+        if (temp >= 18) return "bg-orange-500";
+        if (temp >= 10) return "bg-amber-500";
+        if (temp >= 4)  return "bg-cyan-500";
+        return "bg-blue-500";
+    }
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+}

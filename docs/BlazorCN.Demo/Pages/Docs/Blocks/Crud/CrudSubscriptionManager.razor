@@ -1,0 +1,201 @@
+@* ============================================================
+   Block: crud-subscription-manager
+   Title: CrudSubscriptionManager
+   Description: Subscription plan management with billing cycles, usage tracking, plan changes, and cancellation workflow
+   Source: original/blocks/crud/crud-subscription-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideCreditCardCn Class="size-4 text-muted-foreground" Size="16" />
+                    <div>
+                        <h2 class="text-sm font-medium">Subscriptions</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_subscriptions.Count subscriptions · @FormatCurrency(_totalMRR) MRR
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucidePlusCn Class="size-3.5" Size="14" />
+                    Add Subscription
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideSearchCn Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" Size="14" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search subscriptions..."
+                         Value="@_search"
+                         ValueChanged="@((string v) => { _search = v; })" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var s in new[] { "all", "active", "trialing", "past-due", "cancelled" })
+                {
+                    var filterKey = s;
+                    var label = filterKey == "all" ? "All" : (StatusLabel(filterKey));
+                    <button type="button"
+                            @onclick="@(() => _filter = filterKey)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == filterKey ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @label
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @foreach (var sub in _filtered)
+            {
+                var usagePct = sub.UsageLimit > 0 ? (int)Math.Round((double)sub.Usage / sub.UsageLimit * 100) : 0;
+                var dotColor = StatusDotColor(sub.Status);
+                var subItem = sub;
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", dotColor)"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@sub.Customer</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">
+                                    @sub.Plan
+                                </BadgeCn>
+                                @if (sub.Mrr > 0)
+                                {
+                                    <span class="ml-auto text-sm font-medium tabular-nums">
+                                        @FormatCurrency(sub.Mrr)/@(sub.BillingCycle == "monthly" ? "mo" : "yr")
+                                    </span>
+                                }
+                            </div>
+                            <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>@sub.Email</span>
+                                <span>·</span>
+                                <span>Since @sub.StartDate</span>
+                            </div>
+                            <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span class="tabular-nums">
+                                    @sub.Usage/@sub.UsageLimit usage (@(usagePct)%)
+                                </span>
+                                <span>·</span>
+                                <span>Renews: @sub.RenewsOn</span>
+                            </div>
+                            @if (usagePct > 0)
+                            {
+                                <div class="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
+                                    <div class="@Cn.Merge("h-full rounded-full", usagePct >= 90 ? "bg-red-500/40" : "bg-foreground/20")"
+                                         style="@($"width:{usagePct}%")">
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideMoreHorizontalCn Class="size-4" Size="16" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>View Details</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Change Plan</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View Invoices</DropdownMenuItemCn>
+                                @if (subItem.Status == "paused" || subItem.Status == "cancelled")
+                                {
+                                    <DropdownMenuItemCn OnClick="@(() => HandleResume(subItem.Id))">
+                                        Resume
+                                    </DropdownMenuItemCn>
+                                }
+                                @if (subItem.Status == "active")
+                                {
+                                    <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleCancel(subItem.Id))">
+                                        Cancel
+                                    </DropdownMenuItemCn>
+                                }
+                                <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(subItem.Id))">
+                                    <LucideTrashCn Class="mr-2 size-4" Size="16" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (!_filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No subscriptions found
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Subscription(int Id, string Customer, string Email, string Plan, string Status,
+        int Mrr, string BillingCycle, int Usage, int UsageLimit, string RenewsOn, string StartDate);
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private List<Subscription> _subscriptions = new(InitialData);
+
+    private IEnumerable<Subscription> _filtered => _subscriptions
+        .Where(s => _filter == "all" || s.Status == _filter)
+        .Where(s => s.Customer.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                 || s.Plan.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private int _totalMRR => _subscriptions.Where(s => s.Status == "active").Sum(s => s.Mrr);
+
+    private static string FormatCurrency(int n) => $"${n}";
+
+    private static string StatusDotColor(string status) => status switch
+    {
+        "active" => "bg-emerald-500",
+        "trialing" => "bg-blue-500",
+        "past-due" => "bg-red-500",
+        "cancelled" => "bg-muted-foreground/40",
+        "paused" => "bg-amber-500",
+        _ => "bg-muted-foreground"
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "active" => "Active",
+        "trialing" => "Trial",
+        "past-due" => "Past Due",
+        "cancelled" => "Cancelled",
+        "paused" => "Paused",
+        _ => status
+    };
+
+    private void HandleDelete(int id)
+    {
+        _subscriptions = _subscriptions.Where(s => s.Id != id).ToList();
+    }
+
+    private void HandleCancel(int id)
+    {
+        _subscriptions = _subscriptions
+            .Select(s => s.Id == id ? s with { Status = "cancelled", Mrr = 0 } : s)
+            .ToList();
+    }
+
+    private void HandleResume(int id)
+    {
+        _subscriptions = _subscriptions
+            .Select(s => s.Id == id ? s with { Status = "active" } : s)
+            .ToList();
+    }
+
+    private static readonly Subscription[] InitialData =
+    [
+        new(1, "Acme Corporation", "billing@acme.com", "Enterprise", "active", 299, "monthly", 78, 100, "Apr 1, 2026", "Jan 1, 2025"),
+        new(2, "StartupCo", "admin@startupco.io", "Pro", "active", 79, "yearly", 45, 50, "Dec 15, 2026", "Dec 15, 2025"),
+        new(3, "DesignStudio", "hello@designstudio.co", "Team", "trialing", 0, "monthly", 12, 25, "Apr 7, 2026", "Mar 24, 2026"),
+        new(4, "TechWave Inc", "billing@techwave.com", "Enterprise", "past-due", 299, "monthly", 92, 100, "Mar 15, 2026", "Mar 15, 2024"),
+        new(5, "Freelancer Jane", "jane@freelance.dev", "Individual", "active", 29, "monthly", 8, 10, "Apr 5, 2026", "Oct 5, 2025"),
+        new(6, "OldClient LLC", "team@oldclient.com", "Pro", "cancelled", 0, "yearly", 0, 50, "—", "Jun 1, 2024"),
+        new(7, "PauseMe Corp", "billing@pauseme.io", "Team", "paused", 0, "monthly", 0, 25, "Paused", "Aug 1, 2025"),
+    ];
+}

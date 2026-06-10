@@ -1,0 +1,247 @@
+@* ============================================================
+   Block: map-shipping-lanes
+   Title: MapShippingLanes
+   Description: Maritime shipping lane visualization map with route lines between ports, cargo volume indicators, port markers with throughput data, and lane detail tooltips built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-shipping-lanes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="ship" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Shipping Lanes</span>
+                <span class="text-xs text-muted-foreground">@_lanes.Length routes · @_ports.Length ports</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @_activeLanes active
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-amber-500"></span>
+                    @_congestedLanes congested
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    @_delayedLanes delayed
+                </span>
+            </div>
+        </div>
+
+        @* Map *@
+        <div class="relative h-[420px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-sky-100 to-blue-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Shipping lane routes (SVG overlay) *@
+                <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                    @foreach (var lane in _lanes)
+                    {
+                        var ln = lane;
+                        var cfg = GetStatusConfig(ln.Status);
+                        var isSelected = _selectedLane == ln.Id;
+                        var strokeWidth = isSelected ? 5 : (ln.Status == "active" ? 3 : 2);
+                        var opacity = (_selectedLane == null || isSelected) ? 0.75 : 0.2;
+                        var points = string.Join(" ", ln.Route.Select(c =>
+                        {
+                            var p = GetMarkerPosition(c[0], c[1]);
+                            return $"{p.X:F1}%,{p.Y:F1}%";
+                        }));
+                        var dashArray = ln.Status == "delayed" ? "8 4" : "none";
+                        @((MarkupString)$"<polyline points=\"{points}\" fill=\"none\" stroke=\"{cfg.Color}\" stroke-width=\"{strokeWidth}\" stroke-opacity=\"{opacity:F2}\" stroke-dasharray=\"{dashArray}\" />")
+                    }
+                </svg>
+
+                @* Port markers *@
+                @foreach (var port in _ports)
+                {
+                    var prt = port;
+                    var pos = GetMarkerPosition(prt.Longitude, prt.Latitude);
+                    var isSelected = _selectedPort == prt.Id;
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")">
+                        <div class="group relative">
+                            <button
+                                type="button"
+                                class="flex size-7 items-center justify-center rounded-full border-2 border-white bg-foreground shadow-md"
+                                @onclick="@(() => TogglePort(prt.Id))">
+                                <LucideIconCn Name="anchor" Size="14" Class="size-3.5 text-background" />
+                            </button>
+                            @* Marker tooltip (hover, when not selected) *@
+                            @if (!isSelected)
+                            {
+                                <div class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden -translate-x-1/2 rounded-md border bg-card px-2 py-1 shadow-md group-hover:block">
+                                    <div class="flex items-center gap-1.5 whitespace-nowrap">
+                                        <span class="text-xs font-medium">@prt.Name</span>
+                                        <span class="text-xs text-muted-foreground">@prt.TeuPerYear TEU/yr</span>
+                                    </div>
+                                </div>
+                            }
+                            @* Marker popup (shown when selected) *@
+                            @if (isSelected)
+                            {
+                                <div class="absolute left-1/2 top-full z-50 mt-1 w-60 -translate-x-1/2 rounded-lg border bg-card p-3 shadow-lg">
+                                    <div class="mb-2 flex items-start justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium">@prt.Name</p>
+                                            <p class="text-xs text-muted-foreground">@prt.Country</p>
+                                        </div>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                                            @prt.TeuPerYear TEU
+                                        </BadgeCn>
+                                    </div>
+                                    <div class="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span>@prt.VesselCallsPerMonth calls/mo</span>
+                                        <span>@(prt.AvgDwellDays)d avg dwell</span>
+                                    </div>
+                                    <div class="border-t pt-2">
+                                        <p class="mb-1 text-xs font-medium text-muted-foreground">
+                                            Top trade partners
+                                        </p>
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach (var partner in prt.TopPartners)
+                                            {
+                                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs font-normal">
+                                                    @partner
+                                                </BadgeCn>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground pointer-events-none">
+                Map view — Global shipping lanes
+            </div>
+        </div>
+
+        @* Lane detail rows *@
+        <div>
+            @for (var i = 0; i < _lanes.Length; i++)
+            {
+                var lane = _lanes[i];
+                var idx = i;
+                var cfg = GetStatusConfig(lane.Status);
+                var isLast = idx == _lanes.Length - 1;
+                var isSelected = _selectedLane == lane.Id;
+                <button
+                    type="button"
+                    class="@($"flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 {(isLast ? "" : "border-b")}")"
+                    @onclick="@(() => ToggleLane(lane.Id))">
+                    <span class="@($"size-2 shrink-0 rounded-full {cfg.DotColor}")"></span>
+                    <div class="min-w-0 flex-1">
+                        <span class="text-sm font-medium">@lane.Name</span>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @lane.Origin → @lane.Destination
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span class="flex items-center gap-1">
+                            <LucideIconCn Name="container" Size="12" Class="size-3" />
+                            @lane.TeuCapacity
+                        </span>
+                        <span>@lane.VesselsInTransit vessels</span>
+                        <span class="tabular-nums">@(lane.TransitDays)d</span>
+                    </div>
+                    <LucideIconCn Name="chevron-right" Size="16" Class="@($"size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200 {(isSelected ? "rotate-90" : "")}")" />
+                </button>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Port(
+        string Id,
+        string Name,
+        string Country,
+        string TeuPerYear,
+        int VesselCallsPerMonth,
+        double AvgDwellDays,
+        string[] TopPartners,
+        double Longitude,
+        double Latitude
+    );
+
+    private record ShippingLane(
+        string Id,
+        string Name,
+        string Origin,
+        string Destination,
+        string Status,
+        int TransitDays,
+        int VesselsInTransit,
+        string TeuCapacity,
+        double[][] Route
+    );
+
+    private record StatusConfig(string Color, string DotColor, string Label);
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "active"    => new("#3b82f6", "bg-blue-500",  "Active"),
+        "congested" => new("#eab308", "bg-amber-500", "Congested"),
+        "delayed"   => new("#ef4444", "bg-red-500",   "Delayed"),
+        _           => new("#888888", "bg-muted",      status),
+    };
+
+    private static readonly Port[] _ports =
+    [
+        new("port1", "Shanghai",    "China",         "47.3M", 2850, 2.1, ["Los Angeles", "Rotterdam", "Singapore"], 121.4737,   31.2304),
+        new("port2", "Singapore",   "Singapore",     "37.2M", 2640, 1.8, ["Shanghai", "Rotterdam", "Dubai"],        103.8198,    1.3521),
+        new("port3", "Rotterdam",   "Netherlands",   "14.5M", 1150, 2.4, ["Shanghai", "Singapore", "Antwerp"],       4.4777,    51.9225),
+        new("port4", "Los Angeles", "United States", "9.9M",   680, 3.2, ["Shanghai", "Busan", "Kaohsiung"],       -118.2437,   33.7458),
+        new("port5", "Dubai",       "UAE",           "14.8M", 1080, 2.0, ["Singapore", "Mumbai", "Rotterdam"],      55.2708,    25.2048),
+    ];
+
+    private static readonly ShippingLane[] _lanes =
+    [
+        new("lane1", "Trans-Pacific Eastbound", "Shanghai",   "Los Angeles", "active",    14, 42, "420K",
+            [[121.47, 31.23], [130.0, 33.0], [140.0, 35.0], [155.0, 38.0], [170.0, 40.0], [-175.0, 42.0], [-160.0, 42.0], [-145.0, 40.0], [-130.0, 37.0], [-118.24, 33.75]]),
+        new("lane2", "Asia-Europe via Suez",    "Shanghai",   "Rotterdam",   "congested", 28, 68, "680K",
+            [[121.47, 31.23], [114.0, 22.3], [103.82, 1.35], [80.0, 6.0], [55.27, 25.2], [43.0, 12.5], [32.5, 30.0], [30.0, 35.0], [15.0, 38.0], [5.0, 43.0], [4.48, 51.92]]),
+        new("lane3", "Intra-Asia Shuttle",      "Singapore",  "Shanghai",    "active",     5, 28, "210K",
+            [[103.82, 1.35], [106.0, 6.0], [110.0, 12.0], [114.0, 18.0], [118.0, 24.0], [121.47, 31.23]]),
+        new("lane4", "Middle East - Europe",    "Dubai",      "Rotterdam",   "delayed",   18, 31, "290K",
+            [[55.27, 25.2], [43.0, 12.5], [35.0, 20.0], [32.5, 30.0], [28.0, 35.0], [15.0, 38.0], [5.0, 43.0], [4.48, 51.92]]),
+        new("lane5", "Singapore - Dubai",       "Singapore",  "Dubai",       "active",     8, 19, "150K",
+            [[103.82, 1.35], [95.0, 4.0], [85.0, 8.0], [75.0, 12.0], [65.0, 18.0], [55.27, 25.2]]),
+    ];
+
+    private string? _selectedPort = null;
+    private string? _selectedLane = null;
+
+    private int _activeLanes    => Array.FindAll(_lanes, l => l.Status == "active").Length;
+    private int _congestedLanes => Array.FindAll(_lanes, l => l.Status == "congested").Length;
+    private int _delayedLanes   => Array.FindAll(_lanes, l => l.Status == "delayed").Length;
+
+    private void TogglePort(string id)
+    {
+        _selectedPort = _selectedPort == id ? null : id;
+    }
+
+    private void ToggleLane(string id)
+    {
+        _selectedLane = _selectedLane == id ? null : id;
+    }
+
+    // Map longitude/latitude to CSS percentage positions.
+    // Viewport: lon [-180, 160], lat [0, 56]  — covers all route coordinates.
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -180.0, lonMax = 160.0;
+        const double latMin = 0.0,    latMax = 56.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 1, 99);
+        y = Math.Clamp(y, 1, 99);
+        return (x, y);
+    }
+}

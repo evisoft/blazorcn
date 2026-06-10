@@ -1,0 +1,212 @@
+@* ============================================================
+   Block: comments-code-review
+   Title: CommentsCodeReview
+   Description: A GitHub-style code review comment system for React and Next.js with line-level annotations, diff views, and suggestion blocks built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-code-review.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">UserProfile.tsx</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @_codeComments.Length review comments
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-xs">
+                    <LucideIconCn Name="message-square" Size="12" Class="size-3" />
+                    Changes requested
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Code lines *@
+        <div class="bg-zinc-950 font-mono text-xs">
+            @foreach (var lineEntry in _lineEntries)
+            {
+                var lineNum = lineEntry.LineNumber;
+                var lineText = lineEntry.Text;
+                var lineComments = GetCommentsForLine(lineNum);
+                var hasComments = lineComments.Length > 0;
+                var isExpanded = _expandedLines.Contains(lineNum);
+
+                <div>
+                    <div class="@(hasComments ? "flex bg-zinc-900" : "flex")"
+                         @onclick="@(() => { if (hasComments) ToggleLine(lineNum); })">
+                        <span class="inline-flex w-12 shrink-0 select-none items-center justify-end pr-3 text-zinc-500">
+                            @lineNum
+                        </span>
+                        <div class="flex min-w-0 flex-1 items-center gap-2">
+                            <pre class="flex-1 py-1"><code class="text-zinc-100">@(string.IsNullOrEmpty(lineText) ? " " : lineText)</code></pre>
+                            @if (hasComments)
+                            {
+                                <button type="button"
+                                        class="mr-2 flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] font-medium text-white transition-transform hover:scale-110">
+                                    @lineComments.Length
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    @if (hasComments && isExpanded)
+                    {
+                        <div class="overflow-hidden bg-zinc-900">
+                            <div class="space-y-2 py-2">
+                                @foreach (var comment in lineComments)
+                                {
+                                    var initials = GetInitials(comment.Author);
+                                    <div class="border-l-2 border-blue-500 bg-blue-500/5 pl-3 pr-4 py-3">
+                                        <div class="flex items-start gap-2">
+                                            <AvatarCn Class="size-6 shrink-0">
+                                                <AvatarImageCn Src="@comment.Avatar" Alt="@comment.Author" />
+                                                <AvatarFallbackCn Class="text-[10px]">@initials</AvatarFallbackCn>
+                                            </AvatarCn>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="flex items-baseline gap-2">
+                                                    <span class="text-xs font-medium">@comment.Author</span>
+                                                    <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                                                </div>
+                                                <p class="mt-1 text-sm leading-relaxed">@comment.Content</p>
+
+                                                @if (comment.Suggestion is not null)
+                                                {
+                                                    var copiedKey = comment.Id;
+                                                    <div class="mt-2 overflow-hidden rounded-md border bg-card">
+                                                        <div class="flex items-center justify-between border-b bg-muted/50 px-2 py-1">
+                                                            <span class="text-[10px] font-medium text-muted-foreground">
+                                                                Suggested change
+                                                            </span>
+                                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                                      Class="h-5 gap-1 px-1.5 text-[10px]"
+                                                                      OnClick="@(() => CopySuggestion(copiedKey))">
+                                                                @if (_copiedId == comment.Id)
+                                                                {
+                                                                    <LucideIconCn Name="check" Size="10" Class="size-2.5" />
+                                                                    <span>Copied</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <LucideIconCn Name="copy" Size="10" Class="size-2.5" />
+                                                                    <span>Copy</span>
+                                                                }
+                                                            </ButtonCn>
+                                                        </div>
+                                                        <pre class="overflow-x-auto p-2 font-mono text-xs leading-relaxed"><code class="text-emerald-600 dark:text-emerald-400">@comment.Suggestion</code></pre>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Click line numbers to view comments</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span>@_codeComments.Length threads</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record CodeComment(
+        string Id,
+        int LineNumber,
+        string Author,
+        string Avatar,
+        string Content,
+        string Timestamp,
+        string? Suggestion
+    );
+
+    private record LineEntry(int LineNumber, string Text);
+
+    private static readonly LineEntry[] _lineEntries =
+    [
+        new(1,  "export async function fetchUserData(userId: string) {"),
+        new(2,  "  const response = await fetch(`/api/users/${userId}`);"),
+        new(3,  "  const data = await response.json();"),
+        new(4,  "  return data;"),
+        new(5,  "}"),
+        new(6,  ""),
+        new(7,  "export function UserProfile({ userId }: { userId: string }) {"),
+        new(8,  "  const [user, setUser] = useState(null);"),
+        new(9,  "  "),
+        new(10, "  useEffect(() => {"),
+        new(11, "    fetchUserData(userId).then(setUser);"),
+        new(12, "  }, [userId]);"),
+        new(13, ""),
+        new(14, "  if (!user) return <div>Loading...</div>;"),
+        new(15, "  return <div>{user.name}</div>;"),
+        new(16, "}"),
+    ];
+
+    private static readonly CodeComment[] _codeComments =
+    [
+        new(
+            Id: "1",
+            LineNumber: 2,
+            Author: "Alex Chen",
+            Avatar: "",
+            Content: "Missing error handling here. What happens if the fetch fails or returns a 404?",
+            Timestamp: "2h ago",
+            Suggestion: "const response = await fetch(`/api/users/${userId}`);\nif (!response.ok) {\n  throw new Error(`Failed to fetch user: ${response.status}`);\n}\nconst data = await response.json();"
+        ),
+        new(
+            Id: "2",
+            LineNumber: 8,
+            Author: "Sarah Kim",
+            Avatar: "",
+            Content: "This should be typed properly. Using null as initial state can cause type issues.",
+            Timestamp: "1h ago",
+            Suggestion: "const [user, setUser] = useState<User | null>(null);"
+        ),
+        new(
+            Id: "3",
+            LineNumber: 11,
+            Author: "Mike Rodriguez",
+            Avatar: "",
+            Content: "Potential memory leak - missing cleanup if component unmounts during fetch.",
+            Timestamp: "30m ago",
+            Suggestion: null
+        ),
+    ];
+
+    private HashSet<int> _expandedLines = [2, 8, 11];
+    private string? _copiedId;
+
+    private CodeComment[] GetCommentsForLine(int lineNumber) =>
+        _codeComments.Where(c => c.LineNumber == lineNumber).ToArray();
+
+    private static string GetInitials(string author) =>
+        string.Concat(author.Split(' ').Select(n => char.ToUpper(n[0])));
+
+    private void ToggleLine(int lineNumber)
+    {
+        if (_expandedLines.Contains(lineNumber))
+            _expandedLines.Remove(lineNumber);
+        else
+            _expandedLines.Add(lineNumber);
+    }
+
+    private async Task CopySuggestion(string commentId)
+    {
+        _copiedId = commentId;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedId = null;
+    }
+}

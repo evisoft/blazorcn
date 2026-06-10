@@ -1,0 +1,279 @@
+@* ============================================================
+   Block: account-saved-items
+   Title: AccountSavedItems
+   Description: A saved items collection grid block for React and Next.js with collection tabs, search filtering, bulk select, undo-remove toast pattern, and empty states built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-saved-items.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with search *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Saved Items</h2>
+                    <p class="text-xs text-muted-foreground">
+                        @_items.Count articles across @(_collections.Length - 1) collections
+                    </p>
+                </div>
+                <div class="relative w-48">
+                    <LucideSearchCn Size="14" Class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <InputCn Class="h-8 pl-8 text-xs" Placeholder="Search saved items..." @bind-Value="_searchQuery" />
+                </div>
+            </div>
+        </div>
+
+        @* Collection Tabs *@
+        <div class="flex items-center gap-1 overflow-x-auto border-b px-4 py-2">
+            @foreach (var collection in _collections)
+            {
+                var count = GetCollectionCount(collection.Slug);
+                var isActive = _activeCollection == collection.Slug;
+                <button
+                    type="button"
+                    @onclick="@(() => SelectCollection(collection.Slug))"
+                    class="@Cn.Merge("flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors", isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground")"
+                >
+                    @collection.Name
+                    <span class="@Cn.Merge("tabular-nums", isActive ? "text-background/70" : "text-muted-foreground/60")">
+                        @count
+                    </span>
+                </button>
+            }
+        </div>
+
+        @* Bulk Actions *@
+        @if (SelectedCount > 0)
+        {
+            <div class="overflow-hidden border-b">
+                <div class="flex items-center gap-3 px-4 py-2">
+                    <span class="flex items-center gap-1.5">
+                        <CheckboxCn Checked="@IsAllSelected" CheckedChanged="@(_ => ToggleSelectAll())" />
+                        <span class="text-xs font-medium">@SelectedCount selected</span>
+                    </span>
+                    <div class="flex-1"></div>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-7 gap-1 text-xs text-destructive hover:text-destructive" OnClick="@HandleBulkRemove">
+                        <LucideTrash2Cn Size="12" Class="h-3 w-3" />
+                        Remove
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Items List *@
+        <div class="divide-y">
+            @{
+                var filteredItems = FilteredItems.ToList();
+            }
+            @if (filteredItems.Count == 0)
+            {
+                <div class="px-4 py-10 text-center">
+                    <LucideBookmarkCn Size="24" Class="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
+                    <p class="text-sm text-muted-foreground">
+                        @if (!string.IsNullOrWhiteSpace(_searchQuery))
+                        {
+                            @($"No results for \"{_searchQuery}\"")
+                        }
+                        else if (_activeCollection == "all")
+                        {
+                            @("No saved items yet")
+                        }
+                        else
+                        {
+                            @($"No items in {_collections.FirstOrDefault(c => c.Slug == _activeCollection)?.Name ?? "this collection"}")
+                        }
+                    </p>
+                    @if (!string.IsNullOrWhiteSpace(_searchQuery))
+                    {
+                        <button
+                            type="button"
+                            @onclick="@(() => _searchQuery = "")"
+                            class="mt-1 text-xs font-medium text-foreground hover:underline"
+                        >
+                            Clear search
+                        </button>
+                    }
+                </div>
+            }
+            else
+            {
+                @foreach (var item in filteredItems)
+                {
+                    var isSelected = _selectedIds.Contains(item.Id);
+                    <div class="group flex gap-3 px-4 py-3 hover:bg-muted/30">
+                        <div class="flex shrink-0 items-start pt-0.5">
+                            <CheckboxCn Checked="@isSelected" CheckedChanged="@(_ => ToggleSelectItem(item.Id))" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="mb-0.5 flex items-start justify-between gap-2">
+                                <span class="text-sm font-medium leading-snug">@item.Title</span>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="h-6 w-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" OnClick="@(() => HandleRemove(item.Id))">
+                                    <LucideXCn Size="12" Class="h-3 w-3" />
+                                </ButtonCn>
+                            </div>
+                            <p class="mb-1.5 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
+                                @item.Snippet
+                            </p>
+                            <div class="flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">
+                                    @item.Category
+                                </BadgeCn>
+                                <span class="text-[10px] text-muted-foreground">@item.Source</span>
+                                <span class="text-muted-foreground/30">&middot;</span>
+                                <span class="text-[10px] text-muted-foreground">@item.SavedAt</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    @* Undo Toast *@
+    @if (_showUndo && _undoStack.Count > 0)
+    {
+        <div class="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-card px-4 py-2.5 shadow-lg">
+            <span class="text-sm">
+                @(_undoStack.Count == 1 ? "Item removed" : $"{_undoStack.Count} items removed")
+            </span>
+            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-7 gap-1 text-xs font-medium" OnClick="@HandleUndo">
+                <LucideUndo2Cn Size="12" Class="h-3 w-3" />
+                Undo
+            </ButtonCn>
+            <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="h-6 w-6" OnClick="@DismissUndo">
+                <LucideXCn Size="12" Class="h-3 w-3" />
+            </ButtonCn>
+        </div>
+    }
+</section>
+
+@code {
+    private record SavedItem(string Id, string Title, string Snippet, string Source, string Category, string CollectionSlug, string SavedAt, string Url);
+    private record CollectionTab(string Name, string Slug);
+
+    private static readonly CollectionTab[] _collections =
+    [
+        new("All", "all"),
+        new("Engineering", "engineering"),
+        new("Design", "design"),
+        new("Product", "product"),
+        new("Business", "business"),
+    ];
+
+    private static readonly SavedItem[] _initialItems =
+    [
+        new("si-01", "Scaling WebSocket Connections to 10M with Rust",
+            "A deep dive into how we migrated our real-time infrastructure from Node.js to Rust, achieving 10x connection density per server while reducing P99 latency from 45ms to 3ms.",
+            "engineering.blog", "Infrastructure", "engineering", "Apr 2, 2026", "https://example.com/websocket-rust"),
+        new("si-02", "The Case Against Design Systems",
+            "Why premature abstraction in design systems creates more problems than it solves. When to build a component library vs shipping product features first.",
+            "designthinking.io", "Opinion", "design", "Mar 30, 2026", "https://example.com/design-systems"),
+        new("si-03", "Product-Led Growth Metrics That Actually Matter",
+            "Forget vanity metrics. These seven leading indicators predict conversion from free to paid with 85% accuracy based on analysis of 200+ SaaS products.",
+            "openviewpartners.com", "Growth", "product", "Mar 28, 2026", "https://example.com/plg-metrics"),
+        new("si-04", "Zero-Downtime Database Migrations at Scale",
+            "A practical guide to running schema migrations on PostgreSQL databases with 500M+ rows without service interruptions. Includes expand-contract patterns and shadow table strategies.",
+            "pganalyze.com", "Database", "engineering", "Mar 25, 2026", "https://example.com/db-migrations"),
+        new("si-05", "Figma Variables for Multi-Brand Design Tokens",
+            "How we structure Figma variables to support 4 brand themes from a single component library. Includes naming conventions, mode setup, and handoff to engineers.",
+            "figma.com/blog", "Tooling", "design", "Mar 22, 2026", "https://example.com/figma-variables"),
+        new("si-06", "Series B Fundraising in a Down Market",
+            "Tactical advice for SaaS founders raising Series B in 2026. Updated benchmarks for ARR multiples, burn multiple expectations, and what top-tier VCs prioritize now.",
+            "saastr.com", "Fundraising", "business", "Mar 19, 2026", "https://example.com/series-b"),
+        new("si-07", "React Server Components and the Future of Data Fetching",
+            "Understanding the RSC mental model: server-only code, client boundaries, streaming, and when to use each pattern. Practical examples from a production Next.js app.",
+            "vercel.com/blog", "Frontend", "engineering", "Mar 16, 2026", "https://example.com/rsc-future"),
+        new("si-08", "Building Pricing Pages That Convert at 12%+",
+            "Data from 150 A/B tests on SaaS pricing pages. The optimal number of tiers, anchor pricing effects, and why annual toggle placement matters more than the discount percentage.",
+            "profitwell.com", "Conversion", "product", "Mar 12, 2026", "https://example.com/pricing-pages"),
+    ];
+
+    private List<SavedItem> _items = [.._initialItems];
+    private string _activeCollection = "all";
+    private string _searchQuery = "";
+    private HashSet<string> _selectedIds = new();
+    private List<SavedItem> _undoStack = new();
+    private bool _showUndo = false;
+
+    private IEnumerable<SavedItem> FilteredItems
+    {
+        get
+        {
+            var result = _items.AsEnumerable();
+            if (_activeCollection != "all")
+                result = result.Where(i => i.CollectionSlug == _activeCollection);
+            if (!string.IsNullOrWhiteSpace(_searchQuery))
+            {
+                var q = _searchQuery.ToLowerInvariant();
+                result = result.Where(i =>
+                    i.Title.ToLowerInvariant().Contains(q) ||
+                    i.Snippet.ToLowerInvariant().Contains(q) ||
+                    i.Source.ToLowerInvariant().Contains(q) ||
+                    i.Category.ToLowerInvariant().Contains(q));
+            }
+            return result;
+        }
+    }
+
+    private int GetCollectionCount(string slug) =>
+        slug == "all" ? _items.Count : _items.Count(i => i.CollectionSlug == slug);
+
+    private bool IsAllSelected =>
+        FilteredItems.Any() && FilteredItems.All(i => _selectedIds.Contains(i.Id));
+
+    private int SelectedCount =>
+        FilteredItems.Count(i => _selectedIds.Contains(i.Id));
+
+    private void SelectCollection(string slug)
+    {
+        _activeCollection = slug;
+        _selectedIds.Clear();
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (IsAllSelected)
+            _selectedIds.Clear();
+        else
+            _selectedIds = FilteredItems.Select(i => i.Id).ToHashSet();
+    }
+
+    private void ToggleSelectItem(string id)
+    {
+        if (_selectedIds.Contains(id))
+            _selectedIds.Remove(id);
+        else
+            _selectedIds.Add(id);
+    }
+
+    private void HandleRemove(string id)
+    {
+        var item = _items.FirstOrDefault(i => i.Id == id);
+        if (item is null) return;
+        _undoStack = [item];
+        _items.RemoveAll(i => i.Id == id);
+        _selectedIds.Remove(id);
+        _showUndo = true;
+    }
+
+    private void HandleBulkRemove()
+    {
+        _undoStack = _items.Where(i => _selectedIds.Contains(i.Id)).ToList();
+        _items.RemoveAll(i => _selectedIds.Contains(i.Id));
+        _selectedIds.Clear();
+        _showUndo = true;
+    }
+
+    private void HandleUndo()
+    {
+        _items = [.._undoStack, .._items];
+        _undoStack = new();
+        _showUndo = false;
+    }
+
+    private void DismissUndo()
+    {
+        _undoStack = new();
+        _showUndo = false;
+    }
+}

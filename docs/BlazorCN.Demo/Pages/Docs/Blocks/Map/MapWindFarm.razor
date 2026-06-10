@@ -1,0 +1,301 @@
+@* ============================================================
+   Block: map-wind-farm
+   Title: MapWindFarm
+   Description: React wind farm layout planner map block for Next.js with turbine markers, wind direction arrows, power output metrics, and turbine detail tooltips using mapcn and shadcn/ui
+   Source: original/blocks/map/map-wind-farm.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="wind" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Wind Farm Monitor</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var st in _statuses)
+                {
+                    var status = st;
+                    var cfg = GetStatusConfig(status);
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="@($"size-1.5 rounded-full {cfg.Dot}")"></span>
+                        @_turbines.Count(t => t.Status == status)
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Summary metrics *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-baseline gap-1">
+                <span class="font-semibold text-2xl tabular-nums">@_totalPower.ToString("F1")</span>
+                <span class="text-muted-foreground text-xs">MW</span>
+            </div>
+            <span class="text-muted-foreground text-xs">@("/")</span>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_totalCapacity.ToString("F0") MW capacity
+            </span>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                @_farmEfficiency% efficiency
+            </BadgeCn>
+            <div class="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="wind" Size="12" Class="size-3" />
+                    <span class="tabular-nums">@_avgWindSpeed.ToString("F1")</span> m/s
+                </span>
+                <span>·</span>
+                <span>
+                    @_operatingCount/@_turbines.Length online
+                </span>
+            </div>
+        </div>
+
+        @* Map — Map/MapMarker/MapRoute components are not available in BlazorCN; rendered as a styled placeholder with proportionally-positioned turbine markers *@
+        <div class="relative h-[380px] border-b">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Turbine markers *@
+                @foreach (var tb in _turbines)
+                {
+                    var turbine = tb;
+                    var efficiency = turbine.CapacityMW > 0 ? (int)Math.Round(turbine.PowerMW / turbine.CapacityMW * 100) : 0;
+                    var pos = GetMarkerPosition(turbine.Longitude, turbine.Latitude);
+                    var cfg = GetStatusConfig(turbine.Status);
+                    var isSelected = _selected == turbine.Id;
+                    var opacityClass = turbine.Status == "maintenance" ? "opacity-70" : turbine.Status == "offline" ? "opacity-40" : "";
+                    <button
+                        type="button"
+                        class="@Cn.Merge("absolute flex size-8 items-center justify-center rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 transition-transform", cfg.Dot, opacityClass, isSelected ? "scale-125 ring-2 ring-foreground/20" : "")"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")"
+                        @onclick="@(() => SelectTurbine(turbine.Id))"
+                        title="@($"{turbine.Name} — {cfg.Label} · {efficiency}% eff")"
+                    >
+                        <span class="font-bold text-white text-[10px]">
+                            @(turbine.PowerMW > 0 ? turbine.PowerMW.ToString("F1") : "--")
+                        </span>
+                    </button>
+                }
+            </div>
+            <div class="absolute bottom-2 right-2 z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded">
+                Map view — Yorkshire Wind Farm
+            </div>
+        </div>
+
+        @* Selected turbine detail *@
+        @if (_selectedTurbine != null)
+        {
+            var sel = _selectedTurbine;
+            var selCfg = GetStatusConfig(sel.Status);
+            var selEfficiency = sel.CapacityMW > 0 ? (int)Math.Round(sel.PowerMW / sel.CapacityMW * 100) : 0;
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-sm">@sel.Name</span>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                @selCfg.Label
+                            </BadgeCn>
+                        </div>
+                        <div class="mt-0.5 flex items-center gap-3 text-muted-foreground text-xs">
+                            <span class="flex items-center gap-1">
+                                <LucideIconCn Name="wind" Size="12" Class="size-3" />
+                                @sel.WindSpeed m/s
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <LucideIconCn Name="gauge" Size="12" Class="size-3" />
+                                @sel.RotorRPM RPM
+                            </span>
+                            <span>@sel.WindDirection° bearing</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="flex items-baseline gap-1">
+                            <span class="font-semibold text-lg tabular-nums">
+                                @sel.PowerMW.ToString("F1")
+                            </span>
+                            <span class="text-muted-foreground text-xs">MW</span>
+                        </div>
+                        <span class="@Cn.Merge("text-xs tabular-nums font-medium", EfficiencyColor(selEfficiency))">
+                            @selEfficiency% efficiency
+                        </span>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Turbine list *@
+        <div>
+            @for (var i = 0; i < _turbines.Length; i++)
+            {
+                var turbine = _turbines[i];
+                var isLast = i == _turbines.Length - 1;
+                var isExpanded = _expanded == turbine.Id;
+                var efficiency = turbine.CapacityMW > 0 ? (int)Math.Round(turbine.PowerMW / turbine.CapacityMW * 100) : 0;
+                var cfg = GetStatusConfig(turbine.Status);
+                var isSelected = _selected == turbine.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/30" : "")"
+                        @onclick="@(() => ToggleExpand(turbine.Id))"
+                    >
+                        <span class="@($"size-2 shrink-0 rounded-full {cfg.Dot}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@turbine.Name</span>
+                            <p class="mt-0.5 text-muted-foreground text-xs">
+                                @cfg.Label@(turbine.PowerMW > 0 ? $" · {turbine.WindSpeed} m/s wind" : "")
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium tabular-nums">
+                                @(turbine.PowerMW > 0 ? $"{turbine.PowerMW.ToString("F1")} MW" : "--")
+                            </span>
+                            <span class="@Cn.Merge("text-xs tabular-nums", EfficiencyColor(efficiency))">
+                                @efficiency%
+                            </span>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        var barClass = efficiency >= 70 ? "bg-emerald-500/70" : efficiency >= 40 ? "bg-amber-500/70" : "bg-red-500/70";
+                        <div class="px-4 pb-3 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground">Power</span>
+                                        <span class="tabular-nums">
+                                            @turbine.PowerMW.ToString("F1") / @turbine.CapacityMW.ToString("F1") MW
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground">Efficiency</span>
+                                        <span class="@Cn.Merge("font-medium tabular-nums", EfficiencyColor(efficiency))">
+                                            @efficiency%
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground">Wind</span>
+                                        <span class="tabular-nums">@turbine.WindSpeed m/s</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground">Direction</span>
+                                        <span class="tabular-nums">@turbine.WindDirection°</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground">Rotor RPM</span>
+                                        <span class="tabular-nums">@turbine.RotorRPM</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-muted-foreground">Status</span>
+                                        <span class="@Cn.Merge("font-medium", cfg.Text)">
+                                            @cfg.Label
+                                        </span>
+                                    </div>
+                                </div>
+                                @* Efficiency bar *@
+                                <div class="mt-3">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Output ratio</span>
+                                        <span class="tabular-nums">@efficiency%</span>
+                                    </div>
+                                    <div class="mt-1 h-1.5 rounded-full bg-muted">
+                                        <div
+                                            class="@($"h-full rounded-full {barClass}")"
+                                            style="@($"width:{efficiency}%")"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StatusConfig(string Label, string Dot, string Text);
+    private record Turbine(
+        string Id,
+        string Name,
+        string Status,
+        double PowerMW,
+        double CapacityMW,
+        double WindSpeed,
+        int WindDirection,
+        double RotorRPM,
+        double Longitude,
+        double Latitude
+    );
+
+    private static readonly Turbine[] _turbines =
+    [
+        new("t1", "WTG-01", "operating",  4.2, 5.0, 12.4, 225, 14.2, -1.745, 53.820),
+        new("t2", "WTG-02", "operating",  4.8, 5.0, 13.1, 230, 15.0, -1.738, 53.825),
+        new("t3", "WTG-03", "reduced",    2.1, 5.0,  8.7, 220,  9.8, -1.731, 53.818),
+        new("t4", "WTG-04", "operating",  4.5, 5.0, 12.8, 228, 14.6, -1.752, 53.815),
+        new("t5", "WTG-05", "maintenance",0.0, 5.0, 12.0, 225,  0.0, -1.724, 53.823),
+        new("t6", "WTG-06", "operating",  3.9, 5.0, 11.5, 232, 13.4, -1.717, 53.816),
+        new("t7", "WTG-07", "operating",  4.6, 5.0, 12.9, 227, 14.8, -1.759, 53.828),
+        new("t8", "WTG-08", "offline",    0.0, 5.0, 12.2, 226,  0.0, -1.710, 53.830),
+    ];
+
+    private static readonly string[] _statuses = ["operating", "reduced", "maintenance", "offline"];
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "operating"   => new("Operating",   "bg-emerald-500", "text-emerald-600 dark:text-emerald-400"),
+        "reduced"     => new("Reduced",     "bg-amber-500",   "text-amber-600 dark:text-amber-400"),
+        "maintenance" => new("Maintenance", "bg-blue-500",    "text-blue-600 dark:text-blue-400"),
+        "offline"     => new("Offline",     "bg-red-500",     "text-red-600 dark:text-red-400"),
+        _             => new(status,        "bg-slate-400",   "text-slate-600"),
+    };
+
+    private static string EfficiencyColor(int efficiency)
+    {
+        if (efficiency >= 70) return "text-emerald-600 dark:text-emerald-400";
+        if (efficiency >= 40) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    // Map lon/lat to % positions within the Yorkshire viewport.
+    // Viewport: lon [-1.77, -1.70], lat [53.81, 53.84]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -1.77, lonMax = -1.70;
+        const double latMin = 53.810, latMax = 53.840;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private double _totalPower    => _turbines.Sum(t => t.PowerMW);
+    private double _totalCapacity => _turbines.Sum(t => t.CapacityMW);
+    private int    _farmEfficiency => _totalCapacity > 0 ? (int)Math.Round(_totalPower / _totalCapacity * 100) : 0;
+    private int    _operatingCount => _turbines.Count(t => t.Status == "operating");
+    private double _avgWindSpeed   => _turbines.Sum(t => t.WindSpeed) / _turbines.Length;
+
+    private string? _selected = null;
+    private string? _expanded = null;
+
+    private Turbine? _selectedTurbine => _selected != null ? Array.Find(_turbines, t => t.Id == _selected) : null;
+
+    private void SelectTurbine(string id)
+    {
+        _selected = id;
+        _expanded = null;
+    }
+
+    private void ToggleExpand(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+        _selected = id;
+    }
+}

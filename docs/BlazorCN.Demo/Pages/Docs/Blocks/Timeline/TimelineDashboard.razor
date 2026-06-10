@@ -1,0 +1,219 @@
+@* ============================================================
+   Block: timeline-dashboard
+   Title: TimelineDashboard
+   Description: React timeline dashboard with stats, filters, and events built with Next.js, shadcn/ui, and Tailwind CSS.
+   Source: original/blocks/timeline/timeline-dashboard.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="layout-dashboard" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Timeline dashboard</span>
+            </div>
+            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                Mar 10 – Mar 24, 2026
+            </BadgeCn>
+        </div>
+
+        @* Stats row *@
+        <div class="grid grid-cols-4 border-b">
+            <div class="border-r px-4 py-3">
+                <span class="block text-muted-foreground text-xs">Total events</span>
+                <span class="mt-0.5 block font-semibold text-2xl tabular-nums">
+                    @_events.Length
+                </span>
+            </div>
+            <div class="border-r px-4 py-3">
+                <span class="block text-muted-foreground text-xs">Time span</span>
+                <span class="mt-0.5 block font-semibold text-2xl tabular-nums">
+                    @_timeSpanDays<span class="font-normal text-muted-foreground text-sm"> days</span>
+                </span>
+            </div>
+            <div class="border-r px-4 py-3">
+                <span class="block text-muted-foreground text-xs">Avg per day</span>
+                <span class="mt-0.5 block font-semibold text-2xl tabular-nums">@AvgPerDay</span>
+            </div>
+            <div class="px-4 py-3">
+                <span class="block text-muted-foreground text-xs">Incidents</span>
+                <div class="mt-0.5 flex items-baseline gap-1">
+                    <span class="font-semibold text-2xl text-red-600 tabular-nums dark:text-red-400">
+                        @(_events.Count(e => e.Category == EventCategory.Incident))
+                    </span>
+                    <span class="font-normal text-muted-foreground text-sm">/ @_events.Length</span>
+                </div>
+            </div>
+        </div>
+
+        @* Category breakdown *@
+        <div class="flex items-center gap-3 border-b px-4 py-2.5">
+            <LucideIconCn Name="hash" Size="12" Class="size-3 text-muted-foreground" />
+            @foreach (var cat in _categoryCounts)
+            {
+                var catItem = cat;
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@($"size-1.5 rounded-full {catItem.Dot}")"></span>
+                    @catItem.Label
+                    <span class="font-mono tabular-nums">@catItem.Count</span>
+                </span>
+            }
+        </div>
+
+        @* Filters + Sort *@
+        <div class="flex items-center justify-between border-b px-4 py-2.5">
+            <div class="flex items-center gap-1.5">
+                <LucideIconCn Name="filter" Size="12" Class="size-3 text-muted-foreground" />
+                <ButtonCn Variant="@(_activeFilter == null ? ButtonVariant.Default : ButtonVariant.Outline)" Size="ButtonSize.Sm" Class="h-6 text-xs" @onclick="@(() => _activeFilter = null)">
+                    All
+                </ButtonCn>
+                @foreach (var cfg in _categoryConfigs)
+                {
+                    var cfgItem = cfg;
+                    <ButtonCn Variant="@(_activeFilter == cfgItem.Category ? ButtonVariant.Default : ButtonVariant.Outline)" Size="ButtonSize.Sm" Class="h-6 text-xs" @onclick="@(() => _activeFilter = cfgItem.Category)">
+                        @cfgItem.Label
+                    </ButtonCn>
+                }
+            </div>
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 text-xs" @onclick="ToggleSort">
+                @if (_sortDir == SortDirection.Newest)
+                {
+                    <LucideIconCn Name="arrow-down" Size="12" Class="size-3" />
+                }
+                else
+                {
+                    <LucideIconCn Name="arrow-up" Size="12" Class="size-3" />
+                }
+                @(_sortDir == SortDirection.Newest ? "Newest first" : "Oldest first")
+            </ButtonCn>
+        </div>
+
+        @* Timeline list *@
+        <div>
+            @if (!Sorted.Any())
+            {
+                <div class="py-10 text-center">
+                    <span class="text-muted-foreground text-sm">No events match this filter</span>
+                </div>
+            }
+            else
+            {
+                var sortedList = Sorted.ToArray();
+                @for (int i = 0; i < sortedList.Length; i++)
+                {
+                    var ev = sortedList[i];
+                    var isLast = i == sortedList.Length - 1;
+                    var cfg = _categoryConfigMap[ev.Category];
+                    <div class="@(isLast ? "" : "border-b")">
+                        <div class="flex items-start gap-3 px-4 py-3">
+                            @* Timeline dot *@
+                            <div class="flex flex-col items-center pt-1">
+                                <span class="@($"size-2 shrink-0 rounded-full {cfg.Dot}")"></span>
+                            </div>
+
+                            @* Content *@
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium text-sm">@ev.Title</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                        @cfg.Label
+                                    </BadgeCn>
+                                </div>
+                                <div class="mt-0.5 flex items-center gap-2">
+                                    <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                        <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                                        @ev.Date
+                                    </span>
+                                    @if (ev.Impact != null)
+                                    {
+                                        <span class="text-muted-foreground text-xs">·</span>
+                                        var impactClass = (ev.Category == EventCategory.Incident || ev.Category == EventCategory.Security)
+                                            ? "text-xs text-red-600 dark:text-red-400"
+                                            : "text-xs text-muted-foreground";
+                                        <span class="@impactClass">@ev.Impact</span>
+                                    }
+                                </div>
+                                <p class="mt-1.5 text-muted-foreground text-sm leading-relaxed">
+                                    @ev.Description
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t bg-muted/20 px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                Showing @Sorted.Count() of @_events.Length events
+            </span>
+            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                @AvgPerDay events/day average
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum EventCategory { Deploy, Incident, Feature, Maintenance, Security }
+    private enum SortDirection { Newest, Oldest }
+
+    private record TimelineEvent(
+        string Id,
+        string Date,
+        int SortKey,
+        string Title,
+        EventCategory Category,
+        string Description,
+        string? Impact = null
+    );
+
+    private record CategoryConfig(EventCategory Category, string Dot, string Label);
+
+    private static readonly TimelineEvent[] _events =
+    [
+        new("ev1",  "Mar 24, 2026", 20260324, "Production deploy v3.12.0",          EventCategory.Deploy,      "Shipped new billing module, updated Stripe SDK, and patched 3 CVEs in dependencies",                                              "2,400 users affected"),
+        new("ev2",  "Mar 22, 2026", 20260322, "Database failover triggered",         EventCategory.Incident,    "Primary PostgreSQL node became unresponsive. Auto-failover to replica completed in 14 seconds",                                   "38s downtime"),
+        new("ev3",  "Mar 21, 2026", 20260321, "SSO integration for enterprise tier", EventCategory.Feature,     "Launched SAML 2.0 and OIDC single sign-on support for enterprise customers",                                                     "12 enterprise accounts"),
+        new("ev4",  "Mar 20, 2026", 20260320, "Scheduled maintenance window",        EventCategory.Maintenance, "Migrated object storage from S3 to R2 for cost reduction. Zero-downtime cutover using dual-write",                               "40% cost reduction"),
+        new("ev5",  "Mar 18, 2026", 20260318, "Security patch for auth bypass",      EventCategory.Security,    "Patched a JWT validation bug that could allow token reuse after password change. No evidence of exploitation",                    "Critical severity"),
+        new("ev6",  "Mar 17, 2026", 20260317, "Production deploy v3.11.2",           EventCategory.Deploy,      "Hotfix for CSV export timeout on large datasets. Switched to streaming response with chunked encoding"),
+        new("ev7",  "Mar 15, 2026", 20260315, "Real-time notifications launched",    EventCategory.Feature,     "WebSocket-based notification system with in-app bell, email digest, and Slack integration",                                      "All users"),
+        new("ev8",  "Mar 14, 2026", 20260314, "CDN cache purge incident",            EventCategory.Incident,    "Stale assets served for 22 minutes after deploy due to misconfigured cache-busting headers",                                     "22min stale content"),
+        new("ev9",  "Mar 12, 2026", 20260312, "Dependency audit and update",         EventCategory.Maintenance, "Updated 47 npm packages including 6 with known vulnerabilities. All tests pass on updated deps"),
+        new("ev10", "Mar 10, 2026", 20260310, "Production deploy v3.11.0",           EventCategory.Deploy,      "Major release with dashboard redesign, new chart library, and improved table performance",                                       "All users"),
+    ];
+
+    private static readonly CategoryConfig[] _categoryConfigs =
+    [
+        new(EventCategory.Deploy,      "bg-blue-500",    "Deploy"),
+        new(EventCategory.Incident,    "bg-red-500",     "Incident"),
+        new(EventCategory.Feature,     "bg-emerald-500", "Feature"),
+        new(EventCategory.Maintenance, "bg-amber-500",   "Maintenance"),
+        new(EventCategory.Security,    "bg-purple-500",  "Security"),
+    ];
+
+    private static readonly Dictionary<EventCategory, CategoryConfig> _categoryConfigMap =
+        _categoryConfigs.ToDictionary(c => c.Category);
+
+    private static readonly (EventCategory Category, string Dot, string Label, int Count)[] _categoryCounts =
+        _categoryConfigs.Select(c => (c.Category, c.Dot, c.Label, _events.Count(e => e.Category == c.Category))).ToArray();
+
+    private const int _timeSpanDays = 15;
+    private string AvgPerDay => ((double)_events.Length / _timeSpanDays).ToString("F1");
+
+    private EventCategory? _activeFilter = null;
+    private SortDirection _sortDir = SortDirection.Newest;
+
+    private IEnumerable<TimelineEvent> Sorted =>
+        (_activeFilter == null ? _events : _events.Where(e => e.Category == _activeFilter))
+            .OrderBy(e => _sortDir == SortDirection.Newest ? -e.SortKey : e.SortKey);
+
+    private void ToggleSort()
+    {
+        _sortDir = _sortDir == SortDirection.Newest ? SortDirection.Oldest : SortDirection.Newest;
+    }
+}

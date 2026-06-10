@@ -1,0 +1,165 @@
+@* ============================================================
+   Block: kanban-release-pipeline
+   Title: KanbanReleasePipeline
+   Description: React release pipeline kanban board for Next.js with deployment slot progress bars, rollback tracking, and stage gates using shadcn/ui Progress and Tailwind CSS
+   Source: original/blocks/kanban/kanban-release-pipeline.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Board header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="git-branch" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Release Pipeline</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_releases.Length/@TotalSlots slots
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <LucideIconCn Name="package" Size="12" Class="size-3" />
+                    @_releases.Length deployments
+                </span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="@Cn.Merge("flex items-center gap-1.5 text-xs", RollbackCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")">
+                    <LucideIconCn Name="rotate-ccw" Size="12" Class="size-3" />
+                    @RollbackCount rollbacks
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4">
+            @foreach (var col in _columns)
+            {
+                var column = col;
+                var colReleases = GetColReleases(column.Id);
+                var count = colReleases.Length;
+                var ratio = (double)count / column.Slots;
+                var percent = Math.Min(ratio * 100, 100);
+                var isLast = column.Id == _columns[_columns.Length - 1].Id;
+                <div class="@Cn.Merge(!isLast ? "border-r" : "")">
+                    @* Column header with progress *@
+                    <div class="border-b px-3 py-3">
+                        <div class="mb-2 flex items-center justify-between">
+                            <span class="font-medium text-sm">@column.Label</span>
+                            <span class="@Cn.Merge("font-mono text-xs tabular-nums", GetProgressTextColor(ratio))">
+                                @count/@column.Slots
+                            </span>
+                        </div>
+                        @* Raw progress bar since ProgressCn does not support indicatorClassName *@
+                        <div class="cn-progress relative flex h-2 w-full items-center overflow-x-hidden rounded-full bg-secondary"
+                             role="progressbar"
+                             aria-valuenow="@percent"
+                             aria-valuemin="0"
+                             aria-valuemax="100">
+                            <div class="@Cn.Merge("h-full transition-all duration-700", GetProgressColor(ratio))"
+                                 style="@($"width:{percent}%")">
+                            </div>
+                        </div>
+                        <div class="mt-1.5 flex items-center justify-between">
+                            <span class="text-muted-foreground text-xs">
+                                @(column.Slots - count > 0 ? $"{column.Slots - count} free" : "Full")
+                            </span>
+                            @if (ratio > 1)
+                            {
+                                <span class="font-medium text-red-600 text-xs dark:text-red-400">
+                                    Over limit!
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    @* Release cards *@
+                    <div class="flex flex-col gap-1 p-2">
+                        @foreach (var rel in colReleases)
+                        {
+                            var release = rel;
+                            <div class="flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors hover:bg-muted/50">
+                                <div class="min-w-0 flex-1">
+                                    <span class="line-clamp-1 text-xs">@release.Name</span>
+                                </div>
+                                <span class="font-mono text-muted-foreground/60 text-[10px]">
+                                    @release.Version
+                                </span>
+                                @if (release.HasRollback)
+                                {
+                                    <LucideIconCn Name="alert-triangle" Size="12" Class="size-3 shrink-0 text-amber-500" />
+                                }
+                                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium">
+                                    @release.Deployer
+                                </span>
+                            </div>
+                        }
+                        @if (colReleases.Length == 0)
+                        {
+                            <div class="rounded-md border border-dashed border-muted-foreground/20 px-2 py-3 text-center text-muted-foreground/40 text-xs">
+                                No deployments
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                4 stages · @_releases.Count(r => r.Stage == "production") in production
+            </span>
+            <span class="font-mono text-muted-foreground/60 text-xs">
+                @(Math.Round((double)_releases.Count(r => r.Stage == "production") / _releases.Length * 100))% shipped
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Release(string Id, string Name, string Version, string Stage, string Deployer, bool HasRollback);
+    private record Column(string Id, string Label, int Slots);
+
+    private static readonly Column[] _columns =
+    [
+        new("dev",        "Dev",        4),
+        new("staging",    "Staging",    3),
+        new("qa",         "QA",         3),
+        new("production", "Production", 2),
+    ];
+
+    private static readonly Release[] _releases =
+    [
+        new("r1",  "Auth service",     "v2.4.1", "dev",        "SC", false),
+        new("r2",  "Payment gateway",  "v1.8.0", "dev",        "MR", false),
+        new("r3",  "Notification API", "v3.1.2", "dev",        "PP", false),
+        new("r4",  "Search indexer",   "v1.2.0", "staging",    "JO", false),
+        new("r5",  "User dashboard",   "v5.0.0", "staging",    "SC", true),
+        new("r6",  "Analytics engine", "v2.1.3", "staging",    "MR", false),
+        new("r7",  "Email service",    "v4.2.1", "qa",         "PP", false),
+        new("r8",  "File storage API", "v1.5.0", "qa",         "JO", true),
+        new("r9",  "Rate limiter",     "v1.0.3", "qa",         "SC", false),
+        new("r10", "CDN config",       "v2.0.0", "production", "MR", false),
+        new("r11", "Core API",         "v8.3.1", "production", "PP", false),
+        new("r12", "Webhook handler",  "v3.0.2", "production", "JO", true),
+    ];
+
+    private int TotalSlots => _columns.Sum(c => c.Slots);
+    private int RollbackCount => _releases.Count(r => r.HasRollback);
+
+    private Release[] GetColReleases(string stage) =>
+        _releases.Where(r => r.Stage == stage).ToArray();
+
+    private static string GetProgressColor(double ratio)
+    {
+        if (ratio > 1) return "bg-red-500";
+        if (ratio >= 0.7) return "bg-amber-500";
+        return "bg-emerald-500";
+    }
+
+    private static string GetProgressTextColor(double ratio)
+    {
+        if (ratio > 1) return "text-red-600 dark:text-red-400";
+        if (ratio >= 0.7) return "text-amber-600 dark:text-amber-400";
+        return "text-emerald-600 dark:text-emerald-400";
+    }
+}

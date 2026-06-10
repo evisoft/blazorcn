@@ -1,0 +1,207 @@
+@* ============================================================
+   Block: todo-list-hiring-pipeline
+   Title: TodoListHiringPipeline
+   Description: A hiring pipeline todo list block for React and Next.js with candidate stages, interview scores, role filters, and stage progression built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-hiring-pipeline.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="user-plus" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Hiring Pipeline</span>
+            </div>
+            <div class="flex items-center gap-2">
+                @foreach (var stg in _stageOrder)
+                {
+                    var cnt = StageCounts.GetValueOrDefault(stg);
+                    if (cnt > 0)
+                    {
+                        <BadgeCn Variant="BadgeVariant.Secondary"
+                                 Class="@Cn.Merge("font-normal text-xs", StageColor(stg))">
+                            @StageDisplayName(stg) @cnt
+                        </BadgeCn>
+                    }
+                }
+            </div>
+        </div>
+
+        @* Role Filter *@
+        <div class="flex items-center gap-1.5 border-b px-4 py-2">
+            <ButtonCn Variant="@(_roleFilter == null ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                      Size="ButtonSize.Sm"
+                      Class="h-6 text-xs"
+                      OnClick="@((MouseEventArgs _) => _roleFilter = null)">
+                All
+            </ButtonCn>
+            @foreach (var role in _roles)
+            {
+                var r = role;
+                <ButtonCn Variant="@(_roleFilter == r ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                          Size="ButtonSize.Sm"
+                          Class="h-6 text-xs"
+                          OnClick="@((MouseEventArgs _) => _roleFilter = (_roleFilter == r ? null : r))">
+                    @r
+                </ButtonCn>
+            }
+        </div>
+
+        @* Candidates *@
+        <div>
+            @for (int i = 0; i < FilteredItems.Count; i++)
+            {
+                var candidate = FilteredItems[i];
+                var isLast = i == FilteredItems.Count - 1;
+                var isExpanded = _expanded == candidate.Id;
+                var currentStageIndex = Array.IndexOf(_stageOrder, candidate.Stage);
+                var nextStage = currentStageIndex < _stageOrder.Length - 1 ? (HiringStage?)_stageOrder[currentStageIndex + 1] : null;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/50">
+                        <CheckboxCn Checked="@candidate.Completed"
+                                    CheckedChanged="@((bool _) => Toggle(candidate.Id))"
+                                    Class="mt-0.5" />
+                        <button type="button"
+                                @onclick="@(() => _expanded = (isExpanded ? null : candidate.Id))"
+                                class="min-w-0 flex-1 text-left">
+                            <div class="flex items-center gap-2">
+                                <span class="@Cn.Merge("font-medium text-sm transition-all duration-200", candidate.Completed ? "text-muted-foreground line-through" : "")">
+                                    @candidate.Name
+                                </span>
+                                <span class="text-muted-foreground text-xs">@candidate.Role</span>
+                            </div>
+                            <div class="mt-1 flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Secondary"
+                                         Class="@Cn.Merge("font-normal text-xs", StageColor(candidate.Stage))">
+                                    @StageDisplayName(candidate.Stage)
+                                </BadgeCn>
+                                <span class="text-muted-foreground text-xs">@candidate.Interviewer</span>
+                                @if (candidate.Score > 0)
+                                {
+                                    <div class="flex items-center gap-0.5">
+                                        @for (int j = 0; j < 5; j++)
+                                        {
+                                            <span class="@Cn.Merge("size-1.5 rounded-full", j < candidate.Score ? "bg-emerald-500" : "bg-muted-foreground/20")"></span>
+                                        }
+                                    </div>
+                                }
+                                @if (candidate.DaysInStage > 0)
+                                {
+                                    <span class="text-muted-foreground text-xs tabular-nums">@(candidate.DaysInStage)d in stage</span>
+                                }
+                            </div>
+                        </button>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </div>
+
+                    @if (isExpanded && nextStage.HasValue)
+                    {
+                        var ns = nextStage.Value;
+                        <div class="flex gap-2 px-4 pb-3 pl-10">
+                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                                      OnClick="@((MouseEventArgs _) => AdvanceStage(candidate.Id))">
+                                Move to @StageDisplayName(ns)
+                            </ButtonCn>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs">
+                @(_items.Count(i => i.Stage != HiringStage.Hired)) candidates in pipeline
+            </span>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @(_items.Count(i => i.Stage == HiringStage.Hired)) hired
+            </span>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private enum HiringStage { Applied, PhoneScreen, Interview, Offer, Hired }
+
+    private record Candidate(string Id, string Name, string Role, HiringStage Stage, string Interviewer, int Score, int DaysInStage, bool Completed);
+
+    private static readonly HiringStage[] _stageOrder =
+    [
+        HiringStage.Applied,
+        HiringStage.PhoneScreen,
+        HiringStage.Interview,
+        HiringStage.Offer,
+        HiringStage.Hired,
+    ];
+
+    private static readonly string[] _roles =
+    [
+        "Senior Frontend",
+        "Backend Engineer",
+        "Product Designer",
+        "DevOps Engineer",
+    ];
+
+    private List<Candidate> _items =
+    [
+        new("h1",  "Jordan Rivera",   "Senior Frontend",  HiringStage.Interview,   "Sarah L.",   4, 3, false),
+        new("h2",  "Casey Kim",       "Backend Engineer", HiringStage.PhoneScreen, "Mark T.",    3, 2, false),
+        new("h3",  "Morgan Chen",     "Senior Frontend",  HiringStage.Offer,       "Sarah L.",   5, 1, false),
+        new("h4",  "Taylor Brooks",   "Product Designer", HiringStage.Applied,     "Unassigned", 0, 5, false),
+        new("h5",  "Alex Nakamura",   "Backend Engineer", HiringStage.Interview,   "David W.",   4, 4, false),
+        new("h6",  "Riley Johnson",   "DevOps Engineer",  HiringStage.Applied,     "Unassigned", 0, 1, false),
+        new("h7",  "Avery Patel",     "Senior Frontend",  HiringStage.Hired,       "Sarah L.",   5, 0, true),
+        new("h8",  "Quinn Anderson",  "Product Designer", HiringStage.PhoneScreen, "Lisa M.",    3, 6, false),
+        new("h9",  "Dakota Lee",      "Backend Engineer", HiringStage.Applied,     "Unassigned", 0, 2, false),
+        new("h10", "Harper Martinez", "DevOps Engineer",  HiringStage.Interview,   "Mark T.",    4, 3, false),
+    ];
+
+    private string? _expanded = null;
+    private string? _roleFilter = null;
+
+    private List<Candidate> FilteredItems =>
+        _roleFilter == null ? _items : _items.Where(i => i.Role == _roleFilter).ToList();
+
+    private Dictionary<HiringStage, int> StageCounts =>
+        _items.GroupBy(i => i.Stage).ToDictionary(g => g.Key, g => g.Count());
+
+    private static string StageDisplayName(HiringStage s) => s switch
+    {
+        HiringStage.Applied     => "Applied",
+        HiringStage.PhoneScreen => "Phone Screen",
+        HiringStage.Interview   => "Interview",
+        HiringStage.Offer       => "Offer",
+        HiringStage.Hired       => "Hired",
+        _                       => s.ToString(),
+    };
+
+    private static string StageColor(HiringStage s) => s switch
+    {
+        HiringStage.Applied     => "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400",
+        HiringStage.PhoneScreen => "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        HiringStage.Interview   => "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        HiringStage.Offer       => "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+        HiringStage.Hired       => "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+        _                       => "",
+    };
+
+    private void Toggle(string id)
+    {
+        var idx = _items.FindIndex(i => i.Id == id);
+        if (idx >= 0)
+            _items[idx] = _items[idx] with { Completed = !_items[idx].Completed };
+    }
+
+    private void AdvanceStage(string id)
+    {
+        var idx = _items.FindIndex(i => i.Id == id);
+        if (idx < 0) return;
+        var item = _items[idx];
+        var currentIndex = Array.IndexOf(_stageOrder, item.Stage);
+        if (currentIndex >= _stageOrder.Length - 1) return;
+        _items[idx] = item with { Stage = _stageOrder[currentIndex + 1], DaysInStage = 0 };
+    }
+}

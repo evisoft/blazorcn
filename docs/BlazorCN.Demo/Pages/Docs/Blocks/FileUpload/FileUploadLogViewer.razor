@@ -1,0 +1,223 @@
+@* ============================================================
+   Block: file-upload-log-viewer
+   Title: FileUploadLogViewer
+   Description: Log file upload block for React and Next.js with severity-colored entries, search and filter by level, line count, and timestamp column using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-log-viewer.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2 min-w-0">
+                <LucideIconCn Name="file-text" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                <span class="truncate font-medium text-sm">
+                    @(_entries != null ? "app-server.log" : "Log Viewer")
+                </span>
+                @if (_entries != null)
+                {
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">@_entries.Length lines</span>
+                }
+            </div>
+            @if (_entries != null)
+            {
+                <div class="flex items-center gap-3 shrink-0">
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-red-500"></span>
+                        @Counts("ERROR")
+                    </span>
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-amber-500"></span>
+                        @Counts("WARN")
+                    </span>
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                        <span class="size-1.5 rounded-full bg-blue-500"></span>
+                        @Counts("INFO")
+                    </span>
+                </div>
+            }
+        </div>
+
+        @if (_entries == null)
+        {
+            @* Upload area *@
+            <div class="p-4">
+                <div
+                    role="button"
+                    tabindex="0"
+                    class="@Cn.Merge("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-12 transition-colors", _isDragging ? "border-foreground/30 bg-muted/50" : "border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/30")"
+                    @onclick="HandleUpload"
+                    @ondragover:preventDefault="true"
+                    @ondragover="HandleDragOver"
+                    @ondragleave:preventDefault="true"
+                    @ondragleave="HandleDragLeave"
+                    @ondrop:preventDefault="true"
+                    @ondrop="HandleDrop">
+                    <LucideIconCn Name="cloud-upload" Size="32" Class="size-8 text-muted-foreground/60" />
+                    <span class="font-medium text-sm">Drop a log file here</span>
+                    <p class="text-muted-foreground text-xs">Supports .log and .txt files</p>
+                    <input type="file" accept=".log,.txt" class="hidden" @onchange="@((ChangeEventArgs _) => HandleUpload())" />
+                </div>
+            </div>
+        }
+        else
+        {
+            @* Search and filter *@
+            <div class="flex items-center gap-2 border-b px-4 py-2">
+                <LucideIconCn Name="search" Size="14" Class="size-3.5 shrink-0 text-muted-foreground" />
+                <input
+                    type="text"
+                    value="@_search"
+                    @oninput="@((ChangeEventArgs e) => _search = e.Value?.ToString() ?? "")"
+                    placeholder="Search log entries..."
+                    class="h-7 flex-1 border-0 bg-transparent px-0 shadow-none focus:outline-none text-xs" />
+                <div class="flex items-center gap-1 shrink-0">
+                    @foreach (var lvl in _levels)
+                    {
+                        var level = lvl;
+                        <ButtonCn
+                            Variant="@(_activeFilter == level ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                            Size="ButtonSize.Sm"
+                            Class="h-6 px-2 text-xs"
+                            OnClick="@(() => ToggleFilter(level))">
+                            @level
+                        </ButtonCn>
+                    }
+                </div>
+            </div>
+
+            @* Log entries *@
+            <div class="h-72 overflow-y-auto">
+                @{
+                    var filtered = Filtered();
+                }
+                @if (filtered.Length == 0)
+                {
+                    <div class="flex items-center justify-center py-8">
+                        <span class="text-muted-foreground text-xs">No matching entries</span>
+                    </div>
+                }
+                else
+                {
+                    @for (int i = 0; i < filtered.Length; i++)
+                    {
+                        var entry = filtered[i];
+                        var isLast = i == filtered.Length - 1;
+                        <div class="@Cn.Merge("flex items-start gap-3 px-4 py-2 transition-colors hover:bg-muted/50", isLast ? "" : "border-b")">
+                            <span class="@Cn.Merge("mt-1.5 size-1.5 shrink-0 rounded-full", SeverityDot(entry.Severity))"></span>
+                            <span class="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">
+                                @entry.Timestamp
+                            </span>
+                            <span class="@Cn.Merge("shrink-0 w-11 font-mono text-xs", SeverityText(entry.Severity))">
+                                @entry.Severity
+                            </span>
+                            <span class="min-w-0 flex-1 text-xs leading-relaxed">@entry.Message</span>
+                        </div>
+                    }
+                }
+            </div>
+
+            @* Footer *@
+            <div class="flex items-center justify-between border-t px-4 py-2">
+                <span class="text-muted-foreground text-xs">
+                    Showing @Filtered().Length of @_entries.Length entries
+                </span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    Log
+                </BadgeCn>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record LogEntry(int Id, string Timestamp, string Severity, string Message);
+
+    private static readonly LogEntry[] _sampleLogs =
+    [
+        new(1,  "08:12:03.441", "INFO",  "Server started on port 3000"),
+        new(2,  "08:12:03.892", "INFO",  "Connected to PostgreSQL database at 10.0.1.5:5432"),
+        new(3,  "08:12:04.115", "INFO",  "Redis cache connection established"),
+        new(4,  "08:12:14.330", "INFO",  "GET /api/health 200 12ms"),
+        new(5,  "08:13:01.205", "WARN",  "Slow query detected: SELECT * FROM users WHERE email LIKE '%@acme.com' (847ms)"),
+        new(6,  "08:13:22.891", "INFO",  "POST /api/auth/login 200 45ms"),
+        new(7,  "08:14:05.112", "ERROR", "Failed to process webhook: Stripe signature verification failed for event evt_1PQ2r3"),
+        new(8,  "08:14:05.114", "ERROR", "Stack trace: StripeSignatureError at verifyWebhook (/app/api/stripe/webhook.ts:42)"),
+        new(9,  "08:14:18.667", "INFO",  "GET /api/users/me 200 8ms"),
+        new(10, "08:14:33.445", "WARN",  "Rate limit approaching for IP 192.168.1.104: 82/100 requests in window"),
+        new(11, "08:15:01.003", "INFO",  "Cron job started: cleanup-expired-sessions"),
+        new(12, "08:15:01.891", "INFO",  "Removed 147 expired sessions from database"),
+        new(13, "08:15:44.220", "WARN",  "Memory usage at 78% (1.56 GB / 2 GB) — approaching threshold"),
+        new(14, "08:16:02.778", "ERROR", "Connection timeout: Redis ETIMEDOUT after 5000ms at 10.0.1.8:6379"),
+        new(15, "08:16:03.001", "INFO",  "Redis reconnection attempt 1/5"),
+        new(16, "08:16:03.445", "INFO",  "Redis reconnected successfully"),
+        new(17, "08:17:12.334", "INFO",  "POST /api/files/upload 201 1203ms — file: report-q4.pdf (2.4 MB)"),
+        new(18, "08:17:55.889", "WARN",  "Deprecated API call: GET /api/v1/users — migrate to /api/v2/users"),
+    ];
+
+    private static readonly string[] _levels = ["ERROR", "WARN", "INFO"];
+
+    private LogEntry[]? _entries = null;
+    private string _search = "";
+    private string? _activeFilter = null;
+    private bool _isDragging = false;
+
+    private void HandleUpload()
+    {
+        _entries = _sampleLogs;
+        _search = "";
+        _activeFilter = null;
+    }
+
+    private void HandleDragOver(DragEventArgs e)
+    {
+        _isDragging = true;
+    }
+
+    private void HandleDragLeave(DragEventArgs e)
+    {
+        _isDragging = false;
+    }
+
+    private void HandleDrop(DragEventArgs e)
+    {
+        _isDragging = false;
+        HandleUpload();
+    }
+
+    private void ToggleFilter(string level)
+    {
+        _activeFilter = _activeFilter == level ? null : level;
+    }
+
+    private LogEntry[] Filtered()
+    {
+        if (_entries == null) return [];
+        return _entries.Where(entry =>
+        {
+            if (_activeFilter != null && entry.Severity != _activeFilter) return false;
+            if (!string.IsNullOrEmpty(_search) && !entry.Message.Contains(_search, StringComparison.OrdinalIgnoreCase)) return false;
+            return true;
+        }).ToArray();
+    }
+
+    private int Counts(string severity) =>
+        _entries?.Count(e => e.Severity == severity) ?? 0;
+
+    private static string SeverityDot(string severity) => severity switch
+    {
+        "INFO"  => "bg-blue-500",
+        "WARN"  => "bg-amber-500",
+        "ERROR" => "bg-red-500",
+        _       => "bg-muted-foreground",
+    };
+
+    private static string SeverityText(string severity) => severity switch
+    {
+        "INFO"  => "text-blue-600 dark:text-blue-400",
+        "WARN"  => "text-amber-600 dark:text-amber-400",
+        "ERROR" => "text-red-600 dark:text-red-400",
+        _       => "text-muted-foreground",
+    };
+}

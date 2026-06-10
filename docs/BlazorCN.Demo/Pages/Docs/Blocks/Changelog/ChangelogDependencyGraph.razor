@@ -1,0 +1,247 @@
+@* ============================================================
+   Block: changelog-dependency-graph
+   Title: ChangelogDependencyGraph
+   Description: A visual dependency tree showing package relationships, version constraints, and update status built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/changelog/changelog-dependency-graph.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="git-branch" Size="16" Class="size-4 text-muted-foreground" />
+                <h2 class="text-sm font-medium">Dependency Graph</h2>
+            </div>
+            <p class="mt-1 text-xs text-muted-foreground">
+                Package relationships and update status
+            </p>
+        </div>
+
+        @* Summary Stats *@
+        <div class="grid grid-cols-3 border-b">
+            <div class="border-r px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="box" Size="12" Class="size-3 text-muted-foreground" />
+                    <p class="text-xs text-muted-foreground">Packages</p>
+                </div>
+                <p class="mt-1 font-semibold tabular-nums text-2xl">@_totalDeps</p>
+            </div>
+            <div class="border-r px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="arrow-up-circle" Size="12" Class="size-3 text-muted-foreground" />
+                    <p class="text-xs text-muted-foreground">Updates</p>
+                </div>
+                <p class="mt-1 font-semibold tabular-nums text-2xl text-emerald-500">@_updatesAvailable</p>
+            </div>
+            <div class="px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                    <LucideIconCn Name="shield" Size="12" Class="size-3 text-muted-foreground" />
+                    <p class="text-xs text-muted-foreground">Vulnerabilities</p>
+                </div>
+                <p class="@Cn.Merge("mt-1 font-semibold tabular-nums text-2xl", _vulnerabilities > 0 ? "text-red-500" : "text-muted-foreground")">@_vulnerabilities</p>
+            </div>
+        </div>
+
+        @* Filter Pills *@
+        <div class="flex gap-2 border-b px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 gap-1.5 px-2 text-xs">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                Production
+            </ButtonCn>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 gap-1.5 px-2 text-xs">
+                <span class="size-1.5 rounded-full bg-muted-foreground"></span>
+                Development
+            </ButtonCn>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 gap-1.5 px-2 text-xs">
+                <span class="size-1.5 rounded-full bg-purple-500"></span>
+                Peer
+            </ButtonCn>
+        </div>
+
+        @* Dependency Tree *@
+        <div>
+            @foreach (var it in _dependencies)
+            {
+                var dep = it;
+                var isExpanded = _expanded.Contains(dep.Id);
+                var hasChildren = dep.Children.Length > 0;
+                var isLast = dep.Id == _dependencies[^1].Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => { if (hasChildren) ToggleDep(dep.Id); })"
+                        class="@Cn.Merge("flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted/50", !hasChildren ? "cursor-default" : "")"
+                        style="padding-left:1rem">
+
+                        @if (hasChildren)
+                        {
+                            <LucideIconCn Name="chevron-right" Size="12" Class="@Cn.Merge("size-3 shrink-0 text-muted-foreground transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                        }
+                        else
+                        {
+                            <span class="size-3 shrink-0"></span>
+                        }
+
+                        <div class="@Cn.Merge("flex size-6 shrink-0 items-center justify-center rounded-md", GetTypeContainerClass(dep.Type))">
+                            <LucideIconCn Name="package" Size="12" Class="@Cn.Merge("size-3", GetTypeIconClass(dep.Type))" />
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="truncate font-mono text-xs">@dep.Name</span>
+                                @if (dep.Vulnerabilities > 0)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1 border-red-500/20 bg-red-500/10 text-red-500 text-xs">
+                                        <LucideIconCn Name="alert-triangle" Size="10" Class="size-2.5" />
+                                        @dep.Vulnerabilities
+                                    </BadgeCn>
+                                }
+                                @if (dep.HasUpdate)
+                                {
+                                    <LucideIconCn Name="arrow-up-circle" Size="12" Class="size-3 text-emerald-500" />
+                                }
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                <code>@dep.CurrentVersion</code>
+                                @if (dep.HasUpdate)
+                                {
+                                    <span>→</span>
+                                    <code class="text-emerald-500">@dep.LatestVersion</code>
+                                }
+                            </div>
+                        </div>
+                    </button>
+
+                    @if (isExpanded && hasChildren)
+                    {
+                        <div>
+                            @foreach (var childIt in dep.Children)
+                            {
+                                var child = childIt;
+                                var childHasChildren = child.Children.Length > 0;
+                                var childIsExpanded = _expanded.Contains(child.Id);
+                                <div>
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => { if (childHasChildren) ToggleDep(child.Id); })"
+                                        class="@Cn.Merge("flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-muted/50", !childHasChildren ? "cursor-default" : "")"
+                                        style="padding-left:2.5rem">
+
+                                        @if (childHasChildren)
+                                        {
+                                            <LucideIconCn Name="chevron-right" Size="12" Class="@Cn.Merge("size-3 shrink-0 text-muted-foreground transition-transform duration-200", childIsExpanded ? "rotate-90" : "")" />
+                                        }
+                                        else
+                                        {
+                                            <span class="size-3 shrink-0"></span>
+                                        }
+
+                                        <div class="@Cn.Merge("flex size-6 shrink-0 items-center justify-center rounded-md", GetTypeContainerClass(child.Type))">
+                                            <LucideIconCn Name="package" Size="12" Class="@Cn.Merge("size-3", GetTypeIconClass(child.Type))" />
+                                        </div>
+
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-2">
+                                                <span class="truncate font-mono text-xs">@child.Name</span>
+                                                @if (child.Vulnerabilities > 0)
+                                                {
+                                                    <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1 border-red-500/20 bg-red-500/10 text-red-500 text-xs">
+                                                        <LucideIconCn Name="alert-triangle" Size="10" Class="size-2.5" />
+                                                        @child.Vulnerabilities
+                                                    </BadgeCn>
+                                                }
+                                                @if (child.HasUpdate)
+                                                {
+                                                    <LucideIconCn Name="arrow-up-circle" Size="12" Class="size-3 text-emerald-500" />
+                                                }
+                                            </div>
+                                            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <code>@child.CurrentVersion</code>
+                                                @if (child.HasUpdate)
+                                                {
+                                                    <span>→</span>
+                                                    <code class="text-emerald-500">@child.LatestVersion</code>
+                                                }
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Actions *@
+        <div class="border-t px-4 py-3">
+            <div class="flex gap-2">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Update All
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    Run Security Audit
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Dependency(
+        string Id,
+        string Name,
+        string CurrentVersion,
+        string LatestVersion,
+        string Type,
+        bool HasUpdate,
+        int Vulnerabilities,
+        Dependency[] Children
+    );
+
+    private readonly HashSet<string> _expanded = [];
+
+    private void ToggleDep(string id)
+    {
+        if (!_expanded.Add(id))
+            _expanded.Remove(id);
+    }
+
+    private static string GetTypeContainerClass(string type) => type switch
+    {
+        "prod" => "bg-blue-500/10",
+        "dev"  => "bg-muted/50",
+        "peer" => "bg-purple-500/10",
+        _      => "",
+    };
+
+    private static string GetTypeIconClass(string type) => type switch
+    {
+        "prod" => "text-blue-500",
+        "dev"  => "text-muted-foreground",
+        "peer" => "text-purple-500",
+        _      => "",
+    };
+
+    private static readonly Dependency[] _dependencies =
+    [
+        new("next", "next", "15.1.0", "15.2.0", "prod", true, 0,
+        [
+            new("react", "react", "19.0.0", "19.0.0", "peer", false, 0, []),
+            new("styled-jsx", "styled-jsx", "5.1.6", "5.1.6", "prod", false, 0, []),
+        ]),
+        new("typescript", "typescript", "5.4.5", "5.6.2", "dev", true, 0, []),
+        new("prisma", "@prisma/client", "5.9.0", "5.10.2", "prod", true, 1,
+        [
+            new("prisma-engines", "@prisma/engines", "5.9.0", "5.10.2", "prod", true, 1, []),
+        ]),
+        new("tailwind", "tailwindcss", "4.0.0-alpha.20", "4.0.0", "dev", true, 0, []),
+    ];
+
+    private int _totalDeps => _dependencies.Length;
+    private int _updatesAvailable => _dependencies.Count(d => d.HasUpdate);
+    private int _vulnerabilities => _dependencies.Sum(d => d.Vulnerabilities);
+}

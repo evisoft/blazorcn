@@ -1,0 +1,235 @@
+@* ============================================================
+   Block: reviews-analytics-summary
+   Title: ReviewsAnalyticsSummary
+   Description: A bento grid analytics dashboard for React and Next.js displaying total reviews, average rating, response rate, sentiment score, rating distribution, and trend indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-analytics-summary.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="space-y-2">
+
+        @* Header row *@
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-sm font-medium">Review Analytics</h2>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Performance overview across all products
+                </p>
+            </div>
+            <div class="flex items-center gap-1 rounded-md bg-muted/50 p-0.5">
+                @foreach (var p in _periods)
+                {
+                    var period = p;
+                    <button type="button"
+                            class="@Cn.Merge("rounded px-2.5 py-1 text-xs transition-colors", _selectedPeriod == period ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground")"
+                            @onclick="@(() => _selectedPeriod = period)">
+                        @period
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Metric cards - bento grid *@
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-4">
+            @foreach (var metric in _metrics)
+            {
+                var isPositive = metric.Trend >= 0;
+                <div class="rounded-lg border bg-card p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-muted-foreground">@metric.Label</span>
+                        <LucideIconCn Name="@metric.IconName" Size="14" Class="size-3.5 text-muted-foreground/50" />
+                    </div>
+                    <div class="mt-2 flex items-end justify-between">
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-2xl font-semibold tabular-nums">@metric.Value</span>
+                            @if (metric.Suffix != null)
+                            {
+                                <span class="text-xs text-muted-foreground">@metric.Suffix</span>
+                            }
+                        </div>
+                        @{
+                            var sparkMax = metric.Sparkline.Max();
+                            var sparkMin = metric.Sparkline.Min();
+                            var sparkRange = sparkMax - sparkMin == 0 ? 1.0 : sparkMax - sparkMin;
+                            const double sparkHeight = 24;
+                            const double sparkWidth = 56;
+                            var sparkStep = sparkWidth / (metric.Sparkline.Length - 1);
+                            var sparkPoints = string.Join(" ", metric.Sparkline.Select((v, i) => $"{i * sparkStep},{sparkHeight - ((v - sparkMin) / sparkRange) * sparkHeight}"));
+                            var sparkColor = isPositive ? "#10b981" : "#ef4444";
+                        }
+                        <svg width="56" height="24" class="shrink-0" aria-hidden="true">
+                            <polyline points="@sparkPoints"
+                                      fill="none"
+                                      stroke="@sparkColor"
+                                      stroke-width="1.5"
+                                      stroke-linecap="round"
+                                      stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <div class="mt-2 flex items-center gap-1">
+                        @if (isPositive)
+                        {
+                            <LucideIconCn Name="arrow-up-right" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="arrow-down-right" Size="12" Class="size-3 text-red-600 dark:text-red-400" />
+                        }
+                        <span class="@Cn.Merge("text-xs tabular-nums", isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")">
+                            @(isPositive ? "+" : "")@(metric.Trend)%
+                        </span>
+                        <span class="text-[10px] text-muted-foreground">vs prev period</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Bottom row: rating breakdown + weekly volume + keywords *@
+        <div class="grid grid-cols-1 gap-2 md:grid-cols-3">
+
+            @* Rating distribution *@
+            <div class="rounded-lg border bg-card p-4">
+                <div class="mb-3 flex items-center justify-between">
+                    <span class="text-xs font-medium text-muted-foreground">Rating Distribution</span>
+                    <span class="text-xs text-muted-foreground tabular-nums">2,847 total</span>
+                </div>
+                <div class="space-y-1.5">
+                    @foreach (var row in _ratingBreakdown)
+                    {
+                        <div class="flex items-center gap-2">
+                            <span class="flex w-6 items-center gap-0.5 text-xs tabular-nums">
+                                @row.Stars
+                                <LucideIconCn Name="star" Size="10" Class="size-2.5 fill-foreground text-foreground" />
+                            </span>
+                            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/50">
+                                <div class="h-full rounded-full bg-foreground/20" style="@($"width:{row.Percentage}%")"></div>
+                            </div>
+                            <span class="w-10 text-right text-[10px] text-muted-foreground tabular-nums">
+                                @(row.Percentage)%
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Weekly volume *@
+            <div class="rounded-lg border bg-card p-4">
+                <div class="mb-3 flex items-center justify-between">
+                    <span class="text-xs font-medium text-muted-foreground">Weekly Volume</span>
+                    <div class="flex items-center gap-1">
+                        <LucideIconCn Name="trending-up" Size="12" Class="size-3 text-emerald-600 dark:text-emerald-400" />
+                        <span class="text-[10px] text-emerald-600 dark:text-emerald-400">+14%</span>
+                    </div>
+                </div>
+                @{
+                    var maxReviews = _weeklyVolume.Max(d => d.Reviews);
+                }
+                <div class="flex items-end gap-1.5" style="height:64px">
+                    @foreach (var wk in _weeklyVolume)
+                    {
+                        var barHeight = (double)wk.Reviews / maxReviews * 100;
+                        <div class="flex-1 cursor-default rounded-sm bg-foreground/15 transition-colors hover:bg-foreground/25"
+                             style="@($"height:{barHeight:F1}%")"
+                             title="@($"{wk.Week} - {wk.Reviews} reviews")">
+                        </div>
+                    }
+                </div>
+                <div class="mt-2 flex justify-between text-[10px] text-muted-foreground">
+                    <span>@_weeklyVolume[0].Week</span>
+                    <span>@_weeklyVolume[_weeklyVolume.Length - 1].Week</span>
+                </div>
+            </div>
+
+            @* Top keywords *@
+            <div class="rounded-lg border bg-card p-4">
+                <span class="mb-3 block text-xs font-medium text-muted-foreground">
+                    Top Keywords
+                </span>
+                <div class="space-y-1.5">
+                    @foreach (var kw in _topKeywords)
+                    {
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("text-[10px] font-normal", _sentimentBg[kw.Sentiment])">
+                                    @kw.Keyword
+                                </BadgeCn>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[10px] tabular-nums text-muted-foreground">
+                                    @kw.Count
+                                </span>
+                                <span class="@Cn.Merge("text-[10px] tabular-nums", _sentimentColor[kw.Sentiment])">
+                                    @(kw.Change > 0 ? "+" : "")@(kw.Change)%
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+@code {
+    private static readonly string[] _periods = ["7d", "30d", "90d"];
+    private string _selectedPeriod = "30d";
+
+    private record MetricCard(string Label, string Value, string? Suffix, double Trend, double[] Sparkline, string IconName);
+    private record RatingRow(int Stars, int Count, double Percentage);
+    private record WeeklyVolume(string Week, int Reviews, double AvgRating);
+    private record KeywordMention(string Keyword, int Count, string Sentiment, int Change);
+
+    private static readonly MetricCard[] _metrics =
+    [
+        new("Total Reviews", "2,847", null, 12.4, [18, 24, 22, 31, 28, 35, 42], "message-square"),
+        new("Avg. Rating", "4.3", "/5", 0.2, [4.1, 4.0, 4.2, 4.1, 4.3, 4.2, 4.3], "star"),
+        new("Response Rate", "89", "%", 3.1, [72, 78, 81, 80, 85, 87, 89], "zap"),
+        new("Sentiment Score", "76", "/100", -2.4, [82, 79, 80, 78, 77, 74, 76], "sparkles"),
+    ];
+
+    private static readonly RatingRow[] _ratingBreakdown =
+    [
+        new(5, 1284, 45.1),
+        new(4, 798, 28.0),
+        new(3, 412, 14.5),
+        new(2, 213, 7.5),
+        new(1, 140, 4.9),
+    ];
+
+    private static readonly WeeklyVolume[] _weeklyVolume =
+    [
+        new("Feb 3",  28, 4.1),
+        new("Feb 10", 35, 4.0),
+        new("Feb 17", 31, 4.2),
+        new("Feb 24", 42, 4.1),
+        new("Mar 3",  38, 4.3),
+        new("Mar 10", 47, 4.2),
+        new("Mar 17", 52, 4.3),
+        new("Mar 24", 44, 4.4),
+    ];
+
+    private static readonly KeywordMention[] _topKeywords =
+    [
+        new("fast shipping",    342, "positive", 18),
+        new("easy to use",      289, "positive",  7),
+        new("customer support", 214, "neutral",   -3),
+        new("build quality",    187, "positive",  12),
+        new("setup issues",      98, "negative", -14),
+        new("documentation",     76, "neutral",    5),
+    ];
+
+    private static readonly Dictionary<string, string> _sentimentColor = new()
+    {
+        ["positive"] = "text-emerald-600 dark:text-emerald-400",
+        ["neutral"]  = "text-muted-foreground",
+        ["negative"] = "text-red-600 dark:text-red-400",
+    };
+
+    private static readonly Dictionary<string, string> _sentimentBg = new()
+    {
+        ["positive"] = "bg-emerald-500/10",
+        ["neutral"]  = "bg-muted/50",
+        ["negative"] = "bg-red-500/10",
+    };
+}

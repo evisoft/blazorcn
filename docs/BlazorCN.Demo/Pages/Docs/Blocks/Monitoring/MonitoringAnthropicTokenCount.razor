@@ -1,0 +1,133 @@
+@* ============================================================
+   Block: monitoring-anthropic-token-count
+   Title: MonitoringAnthropicTokenCount
+   Description: Advanced AI monitoring dashboard featuring Claude model token tracking, prompt-to-completion ratios, and cost attribution with shadcn/ui and Recharts.
+   Source: original/blocks/monitoring/monitoring-anthropic-token-count.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-orange-500/10">
+                    <LucideIconCn Name="brain" Size="16" Class="size-4 text-orange-600" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">Anthropic Tokens</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">
+                        Model: Claude 3.5 Sonnet
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] h-5 font-normal border-emerald-500/20 text-emerald-600">
+                    CACHING ACTIVE
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Stats Grid *@
+        <div class="grid grid-cols-1 md:grid-cols-3 border-b">
+            @foreach (var stat in _stats)
+            {
+                var statObj = stat;
+                var isLast = statObj.Label == "Output Tokens";
+                <div class="@(isLast ? "p-4" : "p-4 md:border-r border-b md:border-b-0")">
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">@statObj.Label</p>
+                    <div class="flex items-baseline gap-1">
+                        @if (statObj.IsCurrency)
+                        {
+                            <span class="text-sm font-medium text-muted-foreground">$</span>
+                        }
+                        <span class="text-2xl font-semibold tabular-nums tracking-tight">@statObj.Value</span>
+                        @if (!statObj.IsCurrency && !string.IsNullOrEmpty(statObj.Unit))
+                        {
+                            <span class="text-xs text-muted-foreground font-medium">@statObj.Unit</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Chart area *@
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Token Distribution (Input vs Output)</span>
+                <div class="flex gap-4">
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-1.5 rounded-full bg-orange-500"></div>
+                        <span class="text-[10px] text-muted-foreground">Input</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-1.5 rounded-full bg-muted-foreground"></div>
+                        <span class="text-[10px] text-muted-foreground">Output</span>
+                    </div>
+                </div>
+            </div>
+
+            @* Area chart rendered as pure SVG *@
+            <div class="h-32 w-full">
+                <svg viewBox="0 0 400 128" preserveAspectRatio="none" class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                    @{
+                        var maxInput = _tokenTrend.Max(t => t.Input);
+                        var count = _tokenTrend.Length;
+                        var chartH = 120.0;
+                        var chartW = 400.0;
+
+                        // Build input area path
+                        var inputPts = _tokenTrend.Select((t, idx) =>
+                            (x: idx * chartW / (count - 1), y: chartH - (t.Input / (double)maxInput * chartH))).ToArray();
+                        var inputLine = string.Join(" L ", inputPts.Select(p => $"{p.x:F1},{p.y:F1}"));
+                        var inputArea = $"M {inputPts[0].x:F1},{inputPts[0].y:F1} L {inputLine} L {inputPts[^1].x:F1},{chartH} L {inputPts[0].x:F1},{chartH} Z";
+                        var inputStroke = $"M {inputPts[0].x:F1},{inputPts[0].y:F1} L {inputLine}";
+
+                        // Build output stroke path (dashed, no fill)
+                        var outputPts = _tokenTrend.Select((t, idx) =>
+                            (x: idx * chartW / (count - 1), y: chartH - (t.Output / (double)maxInput * chartH))).ToArray();
+                        var outputLine = string.Join(" L ", outputPts.Select(p => $"{p.x:F1},{p.y:F1}"));
+                        var outputStroke = $"M {outputPts[0].x:F1},{outputPts[0].y:F1} L {outputLine}";
+                    }
+                    @((MarkupString)$"<path d=\"{inputArea}\" fill=\"#f97316\" fill-opacity=\"0.05\" stroke=\"none\" />")
+                    @((MarkupString)$"<path d=\"{inputStroke}\" fill=\"none\" stroke=\"#f97316\" stroke-width=\"2\" />")
+                    @((MarkupString)$"<path d=\"{outputStroke}\" fill=\"none\" stroke=\"#888\" stroke-width=\"1\" stroke-dasharray=\"3 3\" />")
+                </svg>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between border-t">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <LucideIconCn Name="zap" Size="12" Class="size-3 text-amber-500" />
+                <span class="font-medium">Avg Time to First Token: 450ms</span>
+            </div>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                Console View @("→")
+            </button>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record StatItem(string Label, string Value, bool IsCurrency, string Unit);
+    private record TokenPoint(string Time, int Input, int Output);
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Daily Cost",      "8.42", true,  ""),
+        new("Input Tokens",    "1.2",  false, "M"),
+        new("Output Tokens",   "450",  false, "k"),
+    ];
+
+    private static readonly TokenPoint[] _tokenTrend =
+    [
+        new("00:00", 4500,  1200),
+        new("04:00", 5200,  1500),
+        new("08:00", 12000, 4500),
+        new("12:00", 15000, 6200),
+        new("16:00", 18000, 7500),
+        new("20:00", 14000, 5800),
+    ];
+}

@@ -1,0 +1,336 @@
+@* ============================================================
+   Block: map-hospital-finder
+   Title: MapHospitalFinder
+   Description: React hospital and clinic locator map block for Next.js with specialty badges, ER wait time indicators, insurance filters, and facility detail popups using mapcn and shadcn/ui
+   Source: original/blocks/map/map-hospital-finder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="cross" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Hospital Finder</span>
+            </div>
+            <div class="flex items-center gap-3">
+                @foreach (var typeKey in _typeKeys)
+                {
+                    var tk = typeKey;
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", _typeConfig[tk].Dot)"></span>
+                        @_typeConfig[tk].Label
+                    </span>
+                }
+            </div>
+        </div>
+
+        @* Insurance filters *@
+        <div class="flex flex-wrap items-center gap-1.5 border-b px-4 py-2.5">
+            <span class="mr-1 text-xs text-muted-foreground">Insurance:</span>
+            @foreach (var ins in _allInsurance)
+            {
+                var insVal = ins;
+                <button
+                    type="button"
+                    @onclick="@(() => ToggleInsurance(insVal))"
+                    class="@Cn.Merge("rounded-full border px-2.5 py-0.5 text-xs transition-colors", _insuranceFilter.Contains(insVal) ? "border-foreground/20 bg-foreground/10 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/50")">
+                    @insVal
+                </button>
+            }
+            @if (_insuranceFilter.Count > 0)
+            {
+                <button
+                    type="button"
+                    @onclick="@(() => _insuranceFilter.Clear())"
+                    class="ml-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                    Clear
+                </button>
+            }
+        </div>
+
+        @* Map area — Map/MapMarker/MarkerContent/MarkerPopup are custom registry
+           components with no BlazorCN equivalent; rendered as a styled static map placeholder
+           showing all markers and popup detail for the selected facility. *@
+        <div class="relative h-[380px] border-b bg-muted/30">
+            @* Map background grid lines to suggest a map *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                New York City — Upper East Side / Midtown
+            </div>
+
+            @* Map zoom controls (top-right) *@
+            <div class="absolute right-4 top-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="locate" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* Facility markers plotted by relative position *@
+            @foreach (var facility in FilteredFacilities)
+            {
+                var fac = facility;
+                var pos = GetMarkerPosition(fac);
+                <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => HandleMarkerClick(fac.Id))"
+                        class="group relative flex flex-col items-center">
+                        <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md", _typeConfig[fac.Type].MarkerBg, !fac.Open ? "opacity-50" : "")">
+                            <LucideIconCn Name="cross" Size="14" Class="size-3.5 text-white" />
+                        </div>
+                        @* Tooltip on hover *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[160px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            <div class="flex flex-col gap-0.5">
+                                <span class="font-medium">@fac.Name</span>
+                                <span class="text-muted-foreground">@_typeConfig[fac.Type].Label</span>
+                                @if (fac.WaitMinutes.HasValue)
+                                {
+                                    <span class="@WaitColor(fac.WaitMinutes)">@fac.WaitMinutes min wait</span>
+                                }
+                            </div>
+                        </div>
+                    </button>
+
+                    @* Popup (shown when selected) *@
+                    @if (_selected == fac.Id)
+                    {
+                        <div class="absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-sm font-medium">@fac.Name</span>
+                            </div>
+                            <div class="mt-1 flex items-center gap-1.5 text-xs">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                    @_typeConfig[fac.Type].Label
+                                </BadgeCn>
+                                <span class="flex items-center gap-0.5 text-muted-foreground">
+                                    <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                    @fac.Rating
+                                </span>
+                                <span class="text-muted-foreground">(@fac.ReviewCount.ToString("N0"))</span>
+                            </div>
+                            @if (fac.WaitMinutes.HasValue)
+                            {
+                                <div class="mt-1.5 flex items-center gap-1 text-xs">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3 text-muted-foreground" />
+                                    <span class="@WaitColor(fac.WaitMinutes)">@fac.WaitMinutes min wait</span>
+                                </div>
+                            }
+                            <div class="mt-1.5 flex flex-wrap gap-1">
+                                @foreach (var spec in fac.Specialties.Take(3))
+                                {
+                                    var sp = spec;
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">@sp</BadgeCn>
+                                }
+                                @if (fac.Specialties.Length > 3)
+                                {
+                                    <span class="text-[10px] text-muted-foreground">+@(fac.Specialties.Length - 3)</span>
+                                }
+                            </div>
+                            <div class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <LucideIconCn Name="phone" Size="12" Class="size-3" />
+                                @fac.Phone
+                            </div>
+                            @* Close button *@
+                            <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Facility list *@
+        <div>
+            @{
+                var filteredList = FilteredFacilities;
+            }
+            @foreach (var facilityItem in filteredList)
+            {
+                var fac2 = facilityItem;
+                var isExpanded = _expanded == fac2.Id;
+                var isLast = fac2.Id == filteredList[filteredList.Length - 1].Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpand(fac2.Id))"
+                        class="@Cn.Merge("flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", _selected == fac2.Id ? "bg-muted/30" : "")">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", _typeConfig[fac2.Type].Dot, !fac2.Open ? "opacity-40" : "")"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@fac2.Name</span>
+                                @if (!fac2.Open)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">Closed</BadgeCn>
+                                }
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                @_typeConfig[fac2.Type].Label @(" · ")
+                                <LucideIconCn Name="star" Size="12" Class="mb-0.5 inline size-3 fill-amber-400 text-amber-400" />
+                                @(" ")@fac2.Rating
+                                @if (fac2.WaitMinutes.HasValue)
+                                {
+                                    @(" · ")
+                                    <span class="@WaitColor(fac2.WaitMinutes)">@(fac2.WaitMinutes)m wait</span>
+                                }
+                            </p>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach (var sp2 in fac2.Specialties)
+                                    {
+                                        var specialty = sp2;
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">@specialty</BadgeCn>
+                                    }
+                                </div>
+                                <div class="mt-2 space-y-1 text-xs">
+                                    <div class="flex items-center gap-1.5 text-muted-foreground">
+                                        <LucideIconCn Name="map-pin" Size="12" Class="size-3" />
+                                        @fac2.Address
+                                    </div>
+                                    <div class="flex items-center gap-1.5 text-muted-foreground">
+                                        <LucideIconCn Name="phone" Size="12" Class="size-3" />
+                                        @fac2.Phone
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="text-[10px] text-muted-foreground">Insurance accepted</span>
+                                    <div class="mt-1 flex flex-wrap gap-1">
+                                        @foreach (var insItem in fac2.Insurance)
+                                        {
+                                            var ins2 = insItem;
+                                            <span class="rounded-full bg-muted px-2 py-0.5 text-[10px]">@ins2</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record FacilityTypeConfig(string Label, string Dot, string MarkerBg);
+
+    private record Facility(
+        string Id,
+        string Name,
+        string Type,
+        double Rating,
+        int ReviewCount,
+        string[] Specialties,
+        int? WaitMinutes,
+        string[] Insurance,
+        string Phone,
+        string Address,
+        double Longitude,
+        double Latitude,
+        bool Open
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly string[] _typeKeys = ["hospital", "urgent-care", "clinic"];
+
+    private static readonly Dictionary<string, FacilityTypeConfig> _typeConfig = new()
+    {
+        ["hospital"]    = new("Hospital",     "bg-red-500",   "bg-red-500"),
+        ["urgent-care"] = new("Urgent Care",  "bg-amber-500", "bg-amber-500"),
+        ["clinic"]      = new("Clinic",       "bg-blue-500",  "bg-blue-500"),
+    };
+
+    private static readonly Facility[] _facilities =
+    [
+        new("f1", "Mt. Sinai Medical Center",  "hospital",    4.6, 1284, ["Emergency","Cardiology","Oncology","Neurology"],        24,   ["Blue Cross","Aetna","UnitedHealth","Cigna"],   "(212) 241-6500", "1 Gustave L. Levy Pl", -73.9526, 40.7903, true),
+        new("f2", "NYU Langone Health",        "hospital",    4.7, 2031, ["Emergency","Orthopedics","Neurology","Pediatrics"],      38,   ["Blue Cross","Aetna","UnitedHealth","Humana"],  "(212) 263-7300", "550 First Ave",         -73.9740, 40.7421, true),
+        new("f3", "CityMD Urgent Care",        "urgent-care", 4.2,  567, ["Walk-in","X-Ray","Lab Work"],                           12,   ["Blue Cross","Aetna","Cigna","Oscar"],          "(212) 772-3627", "315 W 57th St",         -73.9812, 40.7658, true),
+        new("f4", "Weill Cornell Medicine",    "clinic",      4.8,  892, ["Internal Medicine","Dermatology","Gastroenterology"],    null, ["Blue Cross","UnitedHealth","Cigna"],           "(212) 746-5454", "525 E 68th St",         -73.9539, 40.7651, true),
+        new("f5", "Bellevue Hospital Center",  "hospital",    4.1,  743, ["Emergency","Trauma","Psychiatry","Burns"],               52,   ["Medicaid","Medicare","Blue Cross","Aetna"],    "(212) 562-4141", "462 First Ave",         -73.9770, 40.7390, true),
+        new("f6", "Midtown Family Practice",   "clinic",      4.4,  321, ["Family Medicine","Preventive Care"],                    null, ["Aetna","UnitedHealth","Oscar"],                "(212) 555-0147", "420 Lexington Ave",     -73.9753, 40.7527, false),
+    ];
+
+    private static readonly string[] _allInsurance =
+        _facilities.SelectMany(f => f.Insurance).Distinct().OrderBy(s => s).ToArray();
+
+    private string? _selected = null;
+    private string? _expanded = null;
+    private readonly HashSet<string> _insuranceFilter = new();
+
+    private Facility[] FilteredFacilities =>
+        _insuranceFilter.Count == 0
+            ? _facilities
+            : _facilities.Where(f => _insuranceFilter.Any(ins => f.Insurance.Contains(ins))).ToArray();
+
+    private void ToggleInsurance(string ins)
+    {
+        if (_insuranceFilter.Contains(ins))
+            _insuranceFilter.Remove(ins);
+        else
+            _insuranceFilter.Add(ins);
+    }
+
+    private void HandleMarkerClick(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private void ToggleExpand(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+        _selected = id;
+    }
+
+    private static string WaitColor(int? minutes)
+    {
+        if (minutes is null) return "";
+        if (minutes <= 15) return "text-emerald-600 dark:text-emerald-400";
+        if (minutes <= 30) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    // Map bounding box: lon [-73.985, -73.950], lat [40.738, 40.795]
+    private static MarkerPos GetMarkerPosition(Facility fac)
+    {
+        var lonMin = -73.985;
+        var lonMax = -73.950;
+        var latMin = 40.738;
+        var latMax = 40.795;
+        var left = (fac.Longitude - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - fac.Latitude)  / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

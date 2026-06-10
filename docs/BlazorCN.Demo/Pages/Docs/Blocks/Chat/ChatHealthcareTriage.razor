@@ -1,0 +1,202 @@
+@* ============================================================
+   Block: chat-healthcare-triage
+   Title: ChatHealthcareTriage
+   Description: A healthcare triage chat block for React and Next.js with symptom collection, urgency assessment, priority badges, and appointment booking built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/chat/chat-healthcare-triage.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="heart-pulse" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">MedAssist Triage</span>
+            </div>
+            <div class="flex items-center gap-1 text-muted-foreground text-xs">
+                <LucideIconCn Name="shield-check" Size="14" Class="size-3.5" />
+                <span>Encrypted</span>
+            </div>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="space-y-3">
+                @foreach (var msg in _messages)
+                {
+                    var message = msg;
+                    if (message.Role == "system")
+                    {
+                        var urgency = GetUrgency();
+                        <div class="flex items-center justify-center py-2">
+                            <div class="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", UrgencyColor(urgency))"></span>
+                                <span class="text-muted-foreground text-xs">@message.Content</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="@Cn.Merge("flex gap-3", message.Role == "user" ? "flex-row-reverse" : "")">
+                            <AvatarCn Class="mt-0.5 size-7 shrink-0">
+                                <AvatarFallbackCn Class="@Cn.Merge("text-[10px]", message.Role == "bot" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-muted text-muted-foreground")">
+                                    @if (message.Role == "bot")
+                                    {
+                                        <LucideIconCn Name="activity" Size="14" Class="size-3.5" />
+                                    }
+                                    else
+                                    {
+                                        @:U
+                                    }
+                                </AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="@Cn.Merge("max-w-[80%] rounded-lg px-3 py-2 text-sm leading-relaxed", message.Role == "user" ? "bg-foreground text-background" : "bg-muted/50")">
+                                @message.Content
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        @* Action area *@
+        @if (_step == "symptoms")
+        {
+            <div class="border-t px-4 py-3">
+                <div class="flex flex-wrap gap-1.5">
+                    @foreach (var sym in _symptomOptions)
+                    {
+                        var symptom = sym;
+                        <button type="button"
+                                class="@Cn.Merge("rounded-md border px-2.5 py-1 text-xs transition-colors", _selectedSymptoms.Contains(symptom) ? "border-foreground bg-foreground text-background" : "bg-muted/30 text-muted-foreground hover:bg-muted/60")"
+                                @onclick="@(() => ToggleSymptom(symptom))">
+                            @symptom
+                        </button>
+                    }
+                </div>
+                <ButtonCn Size="ButtonSize.Sm"
+                          Class="mt-3 h-8 w-full text-xs"
+                          Disabled="@(_selectedSymptoms.Count == 0)"
+                          @onclick="HandleSubmitSymptoms">
+                    Submit symptoms (@_selectedSymptoms.Count selected)
+                </ButtonCn>
+            </div>
+        }
+        else if (_step == "assessment")
+        {
+            <div class="border-t px-4 py-3">
+                <div class="flex gap-2">
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-8 flex-1 gap-1.5 text-xs" @onclick="HandleBooking">
+                        <LucideIconCn Name="calendar" Size="12" Class="size-3" />
+                        Book appointment
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 flex-1 text-xs" @onclick="@(() => _step = "confirmed")">
+                        I'll monitor at home
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+        else if (_step == "confirmed")
+        {
+            <div class="border-t px-4 py-3">
+                <form class="flex items-center gap-2" @onsubmit="HandleSubmit">
+                    <InputCn @bind-Value="_input"
+                             Placeholder="Ask a follow-up question..."
+                             Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                    <ButtonCn type="submit"
+                              Size="ButtonSize.Icon"
+                              Variant="ButtonVariant.Ghost"
+                              Disabled="@string.IsNullOrWhiteSpace(_input)"
+                              Class="size-8 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="send" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </form>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record ChatMessage(string Id, string Role, string Content);
+
+    private static readonly string[] _symptomOptions =
+    [
+        "Headache", "Fever", "Cough", "Fatigue",
+        "Chest pain", "Shortness of breath", "Nausea", "Back pain",
+    ];
+
+    private List<ChatMessage> _messages =
+    [
+        new("m1", "bot",
+            "Welcome to MedAssist. I'll help assess your symptoms and connect you with the right care. This is not a substitute for emergency services — if you are experiencing a medical emergency, call 911."),
+        new("m2", "bot",
+            "Please select the symptoms you are currently experiencing:"),
+    ];
+
+    private List<string> _selectedSymptoms = [];
+    private string _step = "symptoms";
+    private string _input = "";
+
+    private void ToggleSymptom(string symptom)
+    {
+        if (_selectedSymptoms.Contains(symptom))
+            _selectedSymptoms.Remove(symptom);
+        else
+            _selectedSymptoms.Add(symptom);
+    }
+
+    private string GetUrgency()
+    {
+        var urgent = new[] { "Chest pain", "Shortness of breath" };
+        if (_selectedSymptoms.Any(s => urgent.Contains(s))) return "urgent";
+        if (_selectedSymptoms.Count >= 3) return "moderate";
+        return "low";
+    }
+
+    private static string UrgencyColor(string urgency) => urgency switch
+    {
+        "urgent" => "bg-red-500",
+        "moderate" => "bg-amber-500",
+        _ => "bg-emerald-500",
+    };
+
+    private static string UrgencyLabel(string urgency) => urgency switch
+    {
+        "urgent" => "Urgent",
+        "moderate" => "Moderate priority",
+        _ => "Low priority",
+    };
+
+    private void HandleSubmitSymptoms()
+    {
+        if (_selectedSymptoms.Count == 0) return;
+        var urgency = GetUrgency();
+        var count = _messages.Count;
+        _messages.Add(new($"u-{count}", "user", $"Symptoms: {string.Join(", ", _selectedSymptoms)}"));
+        _messages.Add(new($"s-{count}", "system", $"Assessment: {UrgencyLabel(urgency)}"));
+        var botContent = urgency == "urgent"
+            ? "Based on your symptoms, I recommend seeking care promptly. Would you like to book a same-day appointment?"
+            : urgency == "moderate"
+                ? "Your symptoms suggest a non-emergency condition that should be evaluated soon. Would you like to schedule an appointment?"
+                : "Your symptoms appear mild. You may want to monitor and schedule a routine visit if they persist. Would you like to book an appointment?";
+        _messages.Add(new($"b-{count}", "bot", botContent));
+        _step = "assessment";
+    }
+
+    private void HandleBooking()
+    {
+        var count = _messages.Count;
+        _messages.Add(new($"u-book-{count}", "user", "Yes, please book an appointment."));
+        _messages.Add(new($"b-book-{count}", "bot",
+            "Appointment booked for tomorrow at 10:30 AM with Dr. Sarah Chen. You'll receive a confirmation email with pre-visit instructions. Please bring your insurance card and a list of current medications."));
+        _step = "confirmed";
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        var count = _messages.Count;
+        _messages.Add(new($"u-custom-{count}", "user", _input));
+        _input = "";
+    }
+}

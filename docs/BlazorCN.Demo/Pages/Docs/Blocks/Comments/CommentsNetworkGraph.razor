@@ -1,0 +1,188 @@
+@* ============================================================
+   Block: comments-network-graph
+   Title: CommentsNetworkGraph
+   Description: A conversation network visualization for React and Next.js with user nodes, reply connections, interaction strength, and community clusters built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-network-graph.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Conversation Network</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">User interaction graph</p>
+        </div>
+
+        @* Stats row *@
+        <div class="grid grid-cols-3 border-b">
+            <div class="border-r px-4 py-3">
+                <span class="text-xs text-muted-foreground">Users</span>
+                <div class="mt-1 text-lg font-semibold tabular-nums">@_nodes.Length</div>
+            </div>
+            <div class="border-r px-4 py-3">
+                <span class="text-xs text-muted-foreground">Connections</span>
+                <div class="mt-1 text-lg font-semibold tabular-nums">@_edges.Length</div>
+            </div>
+            <div class="px-4 py-3">
+                <span class="text-xs text-muted-foreground">Avg interactions</span>
+                <div class="mt-1 text-lg font-semibold tabular-nums">@_avgInteractions</div>
+            </div>
+        </div>
+
+        @* Network visualization *@
+        <div class="border-b px-4 py-4">
+            <div class="mb-3 flex items-center justify-between">
+                <span class="text-xs font-medium text-muted-foreground">Network visualization</span>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-3 rounded-full border-2 border-blue-500/30 bg-blue-500/10"></div>
+                        <span class="text-[10px] text-muted-foreground">Cluster 1</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-3 rounded-full border-2 border-emerald-500/30 bg-emerald-500/10"></div>
+                        <span class="text-[10px] text-muted-foreground">Cluster 2</span>
+                    </div>
+                </div>
+            </div>
+            <div class="relative h-80 overflow-hidden rounded-lg bg-muted/30">
+                <svg class="h-full w-full" viewBox="0 0 320 320" aria-hidden="true">
+                    @* Render edges *@
+                    <g>
+                        @foreach (var edge in _edges)
+                        {
+                            var fromNode = _nodes.FirstOrDefault(n => n.Id == edge.From);
+                            var toNode = _nodes.FirstOrDefault(n => n.Id == edge.To);
+                            if (fromNode != null && toNode != null)
+                            {
+                                var strokeWidth = GetEdgeWidth(edge.Weight);
+                                <line x1="@fromNode.X" y1="@fromNode.Y"
+                                      x2="@toNode.X" y2="@toNode.Y"
+                                      stroke="currentColor"
+                                      stroke-width="@strokeWidth"
+                                      stroke-opacity="0.3"
+                                      class="text-muted-foreground" />
+                            }
+                        }
+                    </g>
+                    @* Render nodes *@
+                    <g>
+                        @foreach (var node in _nodes)
+                        {
+                            var size = GetNodeSize(node.Comments);
+                            var initials = GetInitials(node.Name);
+                            var clusterClass = GetClusterFill(node.Cluster);
+                            <g>
+                                <circle cx="@node.X" cy="@node.Y" r="@(size / 2)"
+                                        class="@Cn.Merge("cursor-pointer transition-all hover:brightness-110", clusterClass)"
+                                        stroke="currentColor"
+                                        stroke-width="2" />
+                                <text x="@node.X" y="@node.Y"
+                                      text-anchor="middle"
+                                      dominant-baseline="middle"
+                                      class="fill-current text-[10px] font-medium">@initials</text>
+                            </g>
+                        }
+                    </g>
+                </svg>
+            </div>
+        </div>
+
+        @* Top contributors *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-3 block text-xs font-medium text-muted-foreground">
+                Top contributors
+            </span>
+            <div class="space-y-2">
+                @foreach (var node in _nodes.OrderByDescending(n => n.Comments).Take(3))
+                {
+                    var initials = GetInitials(node.Name);
+                    var clusterClass = GetClusterBadgeClass(node.Cluster);
+                    <div class="flex items-center gap-3">
+                        <AvatarCn Class="size-8 shrink-0">
+                            <AvatarImageCn Src="@node.Avatar" Alt="@node.Name" />
+                            <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+                        </AvatarCn>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@node.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("text-xs font-normal", clusterClass)">
+                                    Cluster @node.Cluster
+                                </BadgeCn>
+                            </div>
+                        </div>
+                        <span class="text-sm font-semibold tabular-nums">@node.Comments</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="px-4 py-2.5">
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>2 clusters detected</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+                <span>Updated 30 min ago</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record GraphNode(string Id, string Name, string Avatar, int Comments, int Cluster, int X, int Y);
+    private record GraphEdge(string From, string To, int Weight);
+
+    private static readonly GraphNode[] _nodes =
+    [
+        new("1", "Sarah Chen",   "", 45, 1, 150, 100),
+        new("2", "Alex Morgan",  "", 38, 1, 220, 120),
+        new("3", "James Wilson", "", 32, 2, 100, 180),
+        new("4", "Maya Patel",   "", 28, 1, 180, 160),
+        new("5", "Chris Taylor", "", 24, 2, 140, 220),
+        new("6", "Emma Davis",   "", 19, 2, 200, 200),
+    ];
+
+    private static readonly GraphEdge[] _edges =
+    [
+        new("1", "2", 12),
+        new("1", "4",  8),
+        new("2", "4", 10),
+        new("3", "5", 15),
+        new("3", "6",  9),
+        new("5", "6", 11),
+        new("1", "3",  5),
+        new("4", "6",  6),
+    ];
+
+    private static readonly int _totalInteractions = _edges.Sum(e => e.Weight);
+    private static readonly int _avgInteractions = (int)Math.Round((double)_totalInteractions / _edges.Length);
+
+    private static readonly int _minComments = _nodes.Min(n => n.Comments);
+    private static readonly int _maxComments = _nodes.Max(n => n.Comments);
+    private static readonly int _minWeight   = _edges.Min(e => e.Weight);
+    private static readonly int _maxWeight   = _edges.Max(e => e.Weight);
+
+    private static double GetNodeSize(int comments)
+    {
+        var normalized = (_maxComments == _minComments) ? 0.0 : (double)(comments - _minComments) / (_maxComments - _minComments);
+        return 24 + normalized * 16;
+    }
+
+    private static double GetEdgeWidth(int weight)
+    {
+        var normalized = (_maxWeight == _minWeight) ? 0.0 : (double)(weight - _minWeight) / (_maxWeight - _minWeight);
+        return 1 + normalized * 2;
+    }
+
+    private static string GetInitials(string name)
+        => string.Concat(name.Split(' ').Select(part => part.Length > 0 ? char.ToUpper(part[0]).ToString() : ""));
+
+    private static string GetClusterFill(int cluster) => cluster == 1
+        ? "border-blue-500/30 bg-blue-500/10"
+        : "border-emerald-500/30 bg-emerald-500/10";
+
+    private static string GetClusterBadgeClass(int cluster) => cluster == 1
+        ? "border-blue-500/30 bg-blue-500/10"
+        : "border-emerald-500/30 bg-emerald-500/10";
+}

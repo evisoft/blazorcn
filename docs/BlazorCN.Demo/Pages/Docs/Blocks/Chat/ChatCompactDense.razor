@@ -1,0 +1,174 @@
+@* ============================================================
+   Block: chat-compact-dense
+   Title: ChatCompactDense
+   Description: React terminal-style IRC chat interface for Next.js with monospace font, colored usernames, timestamp prefixes on every line, dark bg-zinc-950 background, and no message bubbles using TypeScript, shadcn/ui, Tailwind CSS, and Framer Motion
+   Source: original/blocks/chat/chat-compact-dense.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 font-mono">
+
+        @* Channel tabs -- header *@
+        <div class="sticky top-0 z-10 flex items-center gap-0 border-zinc-800 border-b bg-zinc-950">
+            @foreach (var channel in _channels)
+            {
+                var ch = channel;
+                <button type="button" @onclick="@(() => _activeChannel = ch.Name)"
+                        class="@Cn.Merge("flex items-center gap-1.5 border-zinc-800 border-r px-3 py-2 text-xs transition-colors", ch.Name == _activeChannel ? "bg-zinc-900 text-emerald-400" : "text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300")">
+                    <LucideIconCn Name="hash" Size="12" Class="size-3" />
+                    <span>@ch.Name.Substring(1)</span>
+                    @if (ch.Unread > 0)
+                    {
+                        <span class="rounded bg-amber-500/20 px-1 text-[10px] text-amber-400">@ch.Unread</span>
+                    }
+                </button>
+            }
+            <div class="flex flex-1 items-center justify-end px-3">
+                <span class="flex items-center gap-1 text-[10px] text-zinc-600">
+                    <LucideIconCn Name="users" Size="12" Class="size-3" />5 online
+                </span>
+            </div>
+        </div>
+
+        @* Topic bar *@
+        <div class="border-zinc-800 border-b px-3 py-1.5">
+            <span class="text-[10px] text-zinc-600">
+                topic: production deployments | canary rollout pipeline | oncall: @@sre-lead
+            </span>
+        </div>
+
+        @* Message buffer *@
+        <div class="flex-1 overflow-y-auto px-3 py-1">
+            @foreach (var message in _messages)
+            {
+                var msg = message;
+                @if (msg.Type == "join" || msg.Type == "part")
+                {
+                    <div class="py-px">
+                        <span class="text-[11px] leading-relaxed">
+                            <span class="text-zinc-700">[@msg.Timestamp]</span>
+                            <span class="italic text-zinc-600">--&gt; @msg.Content</span>
+                        </span>
+                    </div>
+                }
+                else if (msg.Type == "action")
+                {
+                    <div class="py-px">
+                        <span class="text-[11px] leading-relaxed">
+                            <span class="text-zinc-700">[@msg.Timestamp]</span>
+                            <span class="italic text-zinc-500">
+                                *
+                                <span class="@(GetUsernameColor(msg.Username))">@msg.Username</span>
+                                @msg.Content
+                            </span>
+                        </span>
+                    </div>
+                }
+                else if (msg.Type == "notice")
+                {
+                    <div class="py-px">
+                        <span class="text-[11px] leading-relaxed">
+                            <span class="text-zinc-700">[@msg.Timestamp]</span>
+                            <span class="@Cn.Merge("font-semibold", GetUsernameColor(msg.Username))">@msg.Username</span><span class="text-zinc-700">:</span>
+                            <span class="text-amber-300/80">@msg.Content</span>
+                        </span>
+                    </div>
+                }
+                else
+                {
+                    <div class="py-px">
+                        <span class="text-[11px] leading-relaxed">
+                            <span class="text-zinc-700">[@msg.Timestamp]</span>
+                            <span class="@Cn.Merge("font-semibold", GetUsernameColor(msg.Username))">@msg.Username</span><span class="text-zinc-700">:</span>
+                            <span class="text-zinc-300">@msg.Content</span>
+                        </span>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Nicklist separator *@
+        <div class="border-zinc-800 border-t px-3 py-1">
+            <span class="text-[10px] text-zinc-700">
+                [@@sre-lead] [+devops] [+monitor] [k8s-bot] [qa-engineer]
+            </span>
+        </div>
+
+        @* Input *@
+        <div class="sticky bottom-0 border-zinc-800 border-t bg-zinc-950 px-3 py-2">
+            <form @onsubmit="HandleSubmit" class="flex items-center gap-2">
+                <span class="text-[11px] text-emerald-500">@_activeChannel&gt;</span>
+                <input value="@_input" @oninput="@((e) => _input = e.Value?.ToString() ?? "")"
+                       placeholder=""
+                       class="h-6 flex-1 rounded-none border-0 bg-transparent text-[11px] text-zinc-300 shadow-none outline-none placeholder:text-zinc-700" />
+                <button type="submit"
+                        disabled="@(string.IsNullOrWhiteSpace(_input))"
+                        class="flex size-6 shrink-0 items-center justify-center text-zinc-600 transition-colors hover:text-emerald-400 disabled:text-zinc-800">
+                    <LucideIconCn Name="send" Size="12" Class="size-3" />
+                </button>
+            </form>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record Channel(string Name, bool Active, int Unread);
+    private record Message(string Id, string Timestamp, string Username, string Content, string Type);
+
+    private string _input = "";
+    private string _activeChannel = "#deploy";
+
+    private static readonly Channel[] _channels =
+    [
+        new("#deploy",     true,  0),
+        new("#incidents",  false, 3),
+        new("#general",    false, 0),
+        new("#monitoring", false, 12),
+    ];
+
+    private static readonly Message[] _messages =
+    [
+        new("1",  "14:01:02", "",            "devops (devops@@infra.internal) has joined #deploy",     "join"),
+        new("2",  "14:02:15", "devops",      "starting canary deployment for api-gateway v3.8.1",      "message"),
+        new("3",  "14:02:44", "k8s-bot",     "canary pod api-gateway-canary-7d4f9 is Running",         "notice"),
+        new("4",  "14:03:10", "devops",      "routing 5% traffic to canary",                           "message"),
+        new("5",  "14:04:33", "monitor",     "canary p99 latency: 142ms (baseline: 138ms) -- within threshold", "notice"),
+        new("6",  "14:05:01", "devops",      "bumping to 25% traffic",                                 "message"),
+        new("7",  "14:06:18", "monitor",     "canary error rate: 0.02% (baseline: 0.01%) -- within threshold", "notice"),
+        new("8",  "14:07:05", "sre-lead",    "memory usage looks stable?",                             "message"),
+        new("9",  "14:07:22", "monitor",     "canary memory: 256MB / 512MB limit -- stable, no leak detected", "notice"),
+        new("10", "14:08:00", "devops",      "bumping to 50% traffic",                                 "message"),
+        new("11", "14:10:15", "monitor",     "canary p99 latency: 145ms -- within threshold",          "notice"),
+        new("12", "14:10:44", "monitor",     "canary error rate: 0.01% -- nominal",                    "notice"),
+        new("13", "14:11:02", "sre-lead",    "looks clean. approve full rollout",                      "message"),
+        new("14", "14:11:30", "devops",      "promoting canary to 100%",                               "message"),
+        new("15", "14:12:01", "k8s-bot",     "rolling update started: api-gateway 3.8.0 -> 3.8.1",    "notice"),
+        new("16", "14:13:05", "k8s-bot",     "pod api-gateway-6b8c2 terminated (old)",                 "notice"),
+        new("17", "14:13:22", "k8s-bot",     "pod api-gateway-9a1f7 is Running (new)",                 "notice"),
+        new("18", "14:14:00", "k8s-bot",     "rollout complete: 4/4 pods updated",                     "notice"),
+        new("19", "14:14:15", "monitor",     "all endpoints healthy -- 200 OK across regions",          "notice"),
+        new("20", "14:15:01", "devops",      "v3.8.1 deployed successfully. canary pod terminated.",    "message"),
+        new("21", "14:15:30", "sre-lead",    "great rollout. updating the runbook with the new timeout configs", "message"),
+        new("22", "14:16:02", "",            "qa-engineer (qa@@testing.internal) has joined #deploy",   "join"),
+        new("23", "14:16:18", "qa-engineer", "smoke tests passing on production. all 47 test cases green.", "message"),
+        new("24", "14:17:00", "devops",      "closing deployment window. next scheduled: thursday 14:00 UTC", "message"),
+        new("25", "14:17:30", "sre-lead",    "waves the deploy wand",                                   "action"),
+    ];
+
+    private static string GetUsernameColor(string username) => username switch
+    {
+        "devops"       => "text-emerald-400",
+        "k8s-bot"      => "text-sky-400",
+        "monitor"      => "text-amber-400",
+        "sre-lead"     => "text-violet-400",
+        "qa-engineer"  => "text-cyan-400",
+        _              => "text-zinc-400",
+    };
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

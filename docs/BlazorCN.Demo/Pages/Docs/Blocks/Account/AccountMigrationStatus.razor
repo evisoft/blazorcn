@@ -1,0 +1,264 @@
+@* ============================================================
+   Block: account-migration-status
+   Title: AccountMigrationStatus
+   Description: A data migration pipeline dashboard for React and Next.js with overall progress bar, per-resource status rows, retry actions, ETA countdown, and summary stats built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-migration-status.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideIconCn Name="database" Size="20" Class="h-5 w-5 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Migration Status</h2>
+                        <p class="text-xs text-muted-foreground">
+                            @_meta.SourceSystem → @_meta.TargetSystem
+                        </p>
+                    </div>
+                </div>
+                @if (_failedCount > 0)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 gap-1 px-2 text-[10px] bg-red-500/10 text-red-700 dark:text-red-400">
+                        <LucideIconCn Name="alert-triangle" Size="10" Class="h-2.5 w-2.5" />
+                        @_failedCount failed
+                    </BadgeCn>
+                }
+                else
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-5 gap-1 px-2 text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400">
+                        <LucideIconCn Name="loader-2" Size="10" Class="h-2.5 w-2.5 animate-spin" />
+                        Migrating
+                    </BadgeCn>
+                }
+            </div>
+        </div>
+
+        @* Overall Progress *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-end justify-between">
+                <div>
+                    <span class="text-2xl font-semibold tabular-nums">@_overallPercent%</span>
+                    <span class="ml-1.5 text-xs text-muted-foreground">complete</span>
+                </div>
+                <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                    <LucideIconCn Name="clock" Size="12" Class="h-3 w-3" />
+                    @_meta.EstimatedCompletion
+                </div>
+            </div>
+            <ProgressCn Class="mt-2.5 h-2" Value="@((double)_overallPercent)" />
+            <div class="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
+                <span>
+                    @_migratedRecords.ToString("N0") of @_totalRecords.ToString("N0") records
+                </span>
+                <span>Started @_meta.StartedAt</span>
+            </div>
+        </div>
+
+        @* Resource Rows *@
+        <div class="divide-y">
+            @foreach (var resource in _resources)
+            {
+                var config = GetStatusConfig(resource.Status);
+                var resourcePercent = resource.TotalRecords > 0
+                    ? (int)Math.Round((double)resource.MigratedRecords / resource.TotalRecords * 100)
+                    : 0;
+                var isRetrying = _retryingIds.Contains(resource.Id);
+
+                <div class="@Cn.Merge("px-4 py-3", resource.Status == "in-progress" ? "bg-blue-500/5" : "", resource.Status == "failed" ? "bg-red-500/5" : "")">
+                    <div class="flex items-start gap-3">
+                        <LucideIconCn Name="@config.IconName" Size="16" Class="@Cn.Merge("mt-0.5 h-4 w-4 shrink-0", config.Color, config.Animate ? "animate-spin" : "")" />
+                        <div class="min-w-0 flex-1">
+                            @* Resource header *@
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="@Cn.Merge("text-sm font-medium", resource.Status == "pending" ? "text-muted-foreground" : "")">
+                                        @resource.Name
+                                    </span>
+                                    <span class="font-mono text-[10px] text-muted-foreground/50 truncate hidden sm:inline">
+                                        @resource.Table
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    @if (resource.Status == "failed")
+                                    {
+                                        var capturedId = resource.Id;
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                                                  Class="h-6 gap-1 px-2 text-[10px]"
+                                                  OnClick="@(async _ => await HandleRetry(capturedId))"
+                                                  Disabled="@isRetrying">
+                                            @if (isRetrying)
+                                            {
+                                                <LucideIconCn Name="loader-2" Size="10" Class="h-2.5 w-2.5 animate-spin" />
+                                            }
+                                            else
+                                            {
+                                                <LucideIconCn Name="refresh-cw" Size="10" Class="h-2.5 w-2.5" />
+                                            }
+                                            @(isRetrying ? "Retrying" : "Retry")
+                                        </ButtonCn>
+                                    }
+                                    <BadgeCn Variant="BadgeVariant.Secondary"
+                                             Class="@Cn.Merge("h-4 px-1.5 text-[10px]", config.BadgeBg, config.BadgeText)">
+                                        @config.Label
+                                    </BadgeCn>
+                                </div>
+                            </div>
+
+                            @* Progress bar for non-pending resources *@
+                            @if (resource.Status != "pending")
+                            {
+                                <div class="mt-2">
+                                    <ProgressCn Class="h-1" Value="@((double)resourcePercent)" />
+                                    <div class="mt-1 flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
+                                        <span>
+                                            @resource.MigratedRecords.ToString("N0") / @resource.TotalRecords.ToString("N0") records
+                                        </span>
+                                        <div class="flex items-center gap-2">
+                                            @if (resource.Duration != null)
+                                            {
+                                                <span>@resource.Duration</span>
+                                            }
+                                            @if (resource.Eta != null)
+                                            {
+                                                <span class="flex items-center gap-0.5">
+                                                    <LucideIconCn Name="clock" Size="10" Class="h-2.5 w-2.5" />
+                                                    @resource.Eta
+                                                </span>
+                                            }
+                                            <span>@resourcePercent%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            @* Pending row: just record count *@
+                            @if (resource.Status == "pending")
+                            {
+                                <p class="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                                    @resource.TotalRecords.ToString("N0") records queued
+                                </p>
+                            }
+
+                            @* Error message for failed resources *@
+                            @if (resource.ErrorMessage != null && !isRetrying)
+                            {
+                                <div class="mt-2 rounded-md bg-red-500/10 px-2.5 py-2">
+                                    <p class="text-[10px] text-red-700 dark:text-red-400">
+                                        @resource.ErrorMessage
+                                    </p>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Summary Stats Footer *@
+        <div class="border-t bg-muted/30 px-4 py-3">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="database" Size="12" Class="h-3 w-3" />
+                    <span class="tabular-nums">@_totalRecords.ToString("N0")</span> total records
+                </span>
+                <span class="text-muted-foreground/30">|</span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="check" Size="12" Class="h-3 w-3 text-emerald-500" />
+                    <span class="tabular-nums">@_migratedRecords.ToString("N0")</span> completed
+                </span>
+                <span class="text-muted-foreground/30">|</span>
+                <span class="tabular-nums">@_remainingRecords.ToString("N0") remaining</span>
+                <span class="text-muted-foreground/30">|</span>
+                <span>
+                    @_completedCount/@_resources.Count resources done
+                </span>
+                <div class="ml-auto">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm"
+                              Class="h-6 text-[10px] text-destructive hover:text-destructive">
+                        Cancel Migration
+                    </ButtonCn>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private class MigrationResource
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Table { get; set; } = "";
+        public int TotalRecords { get; set; }
+        public int MigratedRecords { get; set; }
+        public string Status { get; set; } = "pending";
+        public string? Duration { get; set; }
+        public string? Eta { get; set; }
+        public string? ErrorMessage { get; set; }
+    }
+
+    private record MigrationMeta(
+        string SourceSystem,
+        string TargetSystem,
+        string StartedAt,
+        string EstimatedCompletion);
+
+    private record StatusConfig(
+        string IconName,
+        string Color,
+        string Label,
+        string BadgeBg,
+        string BadgeText,
+        bool Animate = false);
+
+    private static readonly MigrationMeta _meta = new(
+        "Legacy PostgreSQL (v12.4)",
+        "PlanetScale (us-east-1)",
+        "Apr 5, 2026 at 2:14 PM",
+        "~47 min remaining");
+
+    private readonly List<MigrationResource> _resources =
+    [
+        new() { Id = "res-users", Name = "User Accounts", Table = "public.users", TotalRecords = 48291, MigratedRecords = 48291, Status = "completed", Duration = "3m 12s" },
+        new() { Id = "res-orders", Name = "Orders", Table = "public.orders", TotalRecords = 284710, MigratedRecords = 284710, Status = "completed", Duration = "18m 45s" },
+        new() { Id = "res-products", Name = "Product Catalog", Table = "public.products", TotalRecords = 12847, MigratedRecords = 12847, Status = "completed", Duration = "1m 08s" },
+        new() { Id = "res-transactions", Name = "Transactions", Table = "billing.transactions", TotalRecords = 891204, MigratedRecords = 547832, Status = "in-progress", Eta = "~22 min" },
+        new() { Id = "res-audit", Name = "Audit Logs", Table = "system.audit_logs", TotalRecords = 2148900, MigratedRecords = 0, Status = "pending" },
+        new() { Id = "res-media", Name = "Media Assets", Table = "storage.media", TotalRecords = 34201, MigratedRecords = 8412, Status = "failed", ErrorMessage = "Connection timeout after 3 retries on batch 247. Last successful record: media_id=8412." },
+        new() { Id = "res-permissions", Name = "Permissions & Roles", Table = "auth.permissions", TotalRecords = 4820, MigratedRecords = 0, Status = "pending" },
+    ];
+
+    private readonly HashSet<string> _retryingIds = [];
+
+    private int _totalRecords => _resources.Sum(r => r.TotalRecords);
+    private int _migratedRecords => _resources.Sum(r => r.MigratedRecords);
+    private int _overallPercent => _totalRecords > 0 ? (int)Math.Round((double)_migratedRecords / _totalRecords * 100) : 0;
+    private int _completedCount => _resources.Count(r => r.Status == "completed");
+    private int _failedCount => _resources.Count(r => r.Status == "failed");
+    private int _remainingRecords => _totalRecords - _migratedRecords;
+
+    private async Task HandleRetry(string id)
+    {
+        _retryingIds.Add(id);
+        StateHasChanged();
+        await Task.Delay(1500);
+        var resource = _resources.FirstOrDefault(r => r.Id == id);
+        if (resource != null)
+        {
+            resource.Status = "in-progress";
+            resource.ErrorMessage = null;
+        }
+        _retryingIds.Remove(id);
+    }
+
+    private static StatusConfig GetStatusConfig(string status) => status switch
+    {
+        "completed"   => new("check-circle-2", "text-emerald-500", "Completed",   "bg-emerald-500/10", "text-emerald-700 dark:text-emerald-400"),
+        "in-progress" => new("loader-2",       "text-blue-500",    "In Progress", "bg-blue-500/10",    "text-blue-700 dark:text-blue-400",    Animate: true),
+        "failed"      => new("x-circle",       "text-red-500",     "Failed",      "bg-red-500/10",     "text-red-700 dark:text-red-400"),
+        _             => new("circle",          "text-muted-foreground/40", "Pending", "bg-muted",      "text-muted-foreground"),
+    };
+}

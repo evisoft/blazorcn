@@ -1,0 +1,259 @@
+@* ============================================================
+   Block: map-mining-operations
+   Title: MapMiningOperations
+   Description: React mining operations overview map block for Next.js with mine markers, extraction routes, resource type badges, production output metrics, and facility detail panels using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-mining-operations.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="mountain" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Mining Operations</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="pickaxe" Size="12" Class="size-3" />
+                    @_activeMines.Length active
+                </span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground">
+                    @_totalEmployees.ToString("N0") employees
+                </span>
+            </div>
+        </div>
+
+        @* Resource legend *@
+        <div class="flex items-center gap-3 border-b px-4 py-2">
+            @foreach (var entry in _resourceCounts)
+            {
+                var rc = _resourceConfig[entry.Resource];
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", rc.Dot)"></span>
+                    @rc.Label
+                    <span class="tabular-nums">@("(")@entry.Count@(")")</span>
+                </span>
+            }
+        </div>
+
+        @* Map placeholder *@
+        <div class="relative h-[420px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Transport routes (rendered as SVG lines) *@
+                <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+                    @foreach (var route in _transportRoutes)
+                    {
+                        var pts = route.Coordinates.Select(c => GetMarkerPosition(c[0], c[1])).ToArray();
+                        var d = "M " + string.Join(" L ", pts.Select(p => $"{p.X.ToString("F1")}% {p.Y.ToString("F1")}%"));
+                        @((MarkupString)$"<path d=\"{d}\" stroke=\"#6b7280\" stroke-width=\"2\" stroke-opacity=\"0.4\" stroke-dasharray=\"6 4\" fill=\"none\" />")
+                    }
+                </svg>
+
+                @* Mine markers *@
+                @foreach (var mn in _mines)
+                {
+                    var mine = mn;
+                    var rc = _resourceConfig[mine.Resource];
+                    var sc = _statusConfig[mine.Status];
+                    var isSelected = _selected == mine.Id;
+                    var pos = GetMarkerPosition(mine.Longitude, mine.Latitude);
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%")"
+                    >
+                        <button
+                            type="button"
+                            @onclick="@(() => ToggleSelected(mine.Id))"
+                            title="@mine.Name"
+                            class="flex items-center justify-center"
+                        >
+                            <div class="relative">
+                                <div
+                                    class="@Cn.Merge("flex items-center justify-center rounded-full border-2 border-background shadow-md transition-all", isSelected ? "size-9" : "size-7")"
+                                    style="@($"background-color:{rc.Color}")"
+                                >
+                                    <LucideIconCn Name="pickaxe" Size="@(isSelected ? 16 : 12)" Class="@Cn.Merge("text-white", isSelected ? "size-4" : "size-3")" />
+                                </div>
+                                <span class="@Cn.Merge("absolute -top-0.5 -right-0.5 size-2 rounded-full border border-background", sc.Dot)"></span>
+                            </div>
+                        </button>
+
+                        @* Tooltip popup *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 z-10 mt-1.5 w-48 -translate-x-1/2 rounded-md border bg-popover px-3 py-2 shadow-lg text-popover-foreground">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium text-sm">@mine.Name</span>
+                                    <span class="text-xs text-muted-foreground">@rc.Label</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="pointer-events-none select-none absolute bottom-2 left-2 z-10 rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                Map view — Western United States
+            </div>
+        </div>
+
+        @* Mine list *@
+        <div>
+            @foreach (var (mn, index) in _mines.Select((m, i) => (m, i)))
+            {
+                var mine = mn;
+                var rc = _resourceConfig[mine.Resource];
+                var sc = _statusConfig[mine.Status];
+                var isExpanded = _selected == mine.Id;
+                var isLast = index == _mines.Length - 1;
+                <div class="@(isLast && !isExpanded ? "" : "border-t")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSelected(mine.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                    >
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", rc.Dot)"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@mine.Name</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                @rc.Label · @mine.Production
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                                @sc.Label
+                            </BadgeCn>
+                            <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                <LucideIconCn Name="weight" Size="12" Class="size-3" />
+                                @mine.OreGrade
+                            </span>
+                        </div>
+                        <LucideIconCn
+                            Name="chevron-right"
+                            Size="16"
+                            Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")"
+                        />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="grid grid-cols-3 gap-3 px-4 pb-4 pl-9">
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Production</span>
+                                <p class="mt-1 text-lg font-semibold tabular-nums">@mine.Production</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">Grade: @mine.OreGrade</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Reserves</span>
+                                <p class="mt-1 text-lg font-semibold tabular-nums">@mine.Reserves</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">Depth: @mine.Depth</p>
+                            </div>
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <span class="text-xs font-medium text-muted-foreground">Workforce</span>
+                                <p class="mt-1 text-lg font-semibold tabular-nums">@mine.Employees.ToString("N0")</p>
+                                <p class="mt-0.5 text-xs text-muted-foreground">employees on site</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Mine(
+        string Id,
+        string Name,
+        string Resource,
+        string Status,
+        double Longitude,
+        double Latitude,
+        string Production,
+        string Reserves,
+        string OreGrade,
+        int Employees,
+        string Depth
+    );
+
+    private record TransportRoute(
+        string Id,
+        string From,
+        string To,
+        double[][] Coordinates,
+        string Tonnage,
+        string Method
+    );
+
+    private record ResourceConfig(string Label, string Color, string Dot);
+    private record StatusConfig(string Label, string Dot);
+    private record ResourceCount(string Resource, int Count);
+
+    private static readonly Mine[] _mines =
+    [
+        new("m1", "Carlin Gold Complex",    "gold",    "active",      -116.1889, 40.7168, "842K oz/yr",  "12.4M oz",  "4.2 g/t",    1840, "480m"),
+        new("m2", "Morenci Copper Mine",    "copper",  "active",      -109.3475, 33.0881, "385K t/yr",   "28.6M t",   "0.32%",      3200, "Surface"),
+        new("m3", "Mesabi Iron Range",      "iron",    "active",       -92.5338, 47.4813, "18.2M t/yr",  "2.5B t",    "25.8%",      2400, "Surface"),
+        new("m4", "Silver Peak Lithium",    "lithium", "active",      -117.6344, 37.7516, "5,200 t/yr",  "340K t",    "220 ppm",     420, "Brine"),
+        new("m5", "Powder River Basin",     "coal",    "active",      -105.5212, 44.2468, "92M t/yr",    "9.2B t",    "8,400 BTU",  5100, "Surface"),
+        new("m6", "Thacker Pass Lithium",   "lithium", "development", -117.3456, 41.1298, "0 t/yr",      "3.1M t",    "2,950 ppm",   180, "Surface"),
+        new("m7", "Resolution Copper",      "copper",  "suspended",   -111.1012, 33.2987, "0 t/yr",      "1.8B t",    "1.52%",        45, "2,100m"),
+    ];
+
+    private static readonly TransportRoute[] _transportRoutes =
+    [
+        new("r1", "m1", "processing", [[-116.1889, 40.7168], [-117.0, 40.2], [-117.5, 39.5]], "24K t/day",   "Haul truck"),
+        new("r2", "m2", "smelter",    [[-109.3475, 33.0881], [-110.5, 33.5], [-111.9, 33.4]], "1,200 t/day", "Rail"),
+        new("r3", "m3", "port",       [[-92.5338,  47.4813], [-91.5, 47.0],  [-90.0, 46.8]],  "52K t/day",   "Rail"),
+        new("r4", "m5", "power-plant",[[-105.5212, 44.2468], [-104.0, 43.5], [-103.0, 43.0]], "280K t/day",  "Rail"),
+    ];
+
+    private static readonly Dictionary<string, ResourceConfig> _resourceConfig = new()
+    {
+        ["gold"]    = new("Gold",    "#eab308", "bg-yellow-500"),
+        ["copper"]  = new("Copper",  "#f97316", "bg-orange-500"),
+        ["iron"]    = new("Iron",    "#6b7280", "bg-zinc-500"),
+        ["lithium"] = new("Lithium", "#06b6d4", "bg-cyan-500"),
+        ["coal"]    = new("Coal",    "#78716c", "bg-stone-500"),
+    };
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["active"]      = new("Active",      "bg-emerald-500"),
+        ["development"] = new("Development", "bg-blue-500"),
+        ["suspended"]   = new("Suspended",   "bg-zinc-400"),
+    };
+
+    private string? _selected = null;
+
+    private Mine[] _activeMines => Array.FindAll(_mines, m => m.Status == "active");
+
+    private int _totalEmployees => _mines.Sum(m => m.Employees);
+
+    private ResourceCount[] _resourceCounts => _mines
+        .GroupBy(m => m.Resource)
+        .Select(g => new ResourceCount(g.Key, g.Count()))
+        .ToArray();
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    // Map lon/lat to CSS % within the placeholder.
+    // Viewport: lon [-120, -88], lat [30, 50]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -120.0, lonMax = -88.0;
+        const double latMin = 30.0,   latMax = 50.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 93);
+        y = Math.Clamp(y, 5, 93);
+        return (x, y);
+    }
+}

@@ -1,0 +1,228 @@
+@* ============================================================
+   Block: file-upload-permission-manager
+   Title: FileUploadPermissionManager
+   Description: Uploaded files permission management block for React and Next.js with per-file visibility badges, permission dropdowns, user sharing, and access link toggles using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-permission-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">Permissions</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">
+                @_files.Count files &middot; Manage access and sharing
+            </p>
+        </div>
+
+        @* File list *@
+        <div>
+            @foreach (var fileEntry in _files)
+            {
+                var file = fileEntry;
+                var isExpanded = _expanded == file.Id;
+                var isLast = file.Id == _files[_files.Count - 1].Id;
+                var permConfig = GetPermConfig(file.Permission);
+
+                <div class="@(isLast && !isExpanded ? "" : "border-b")">
+                    @* File row *@
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpand(file.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        @if (file.Type == "image")
+                        {
+                            <LucideIconCn Name="image" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                        }
+                        else if (file.Type == "pdf" || file.Type == "document")
+                        {
+                            <LucideIconCn Name="file-text" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                        }
+                        else
+                        {
+                            <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                        }
+                        <div class="min-w-0 flex-1">
+                            <span class="truncate font-medium text-sm">@file.Name</span>
+                            <div class="mt-0.5 flex items-center gap-2">
+                                <span class="text-muted-foreground text-xs">@file.Size</span>
+                                @if (file.SharedWith.Length > 0)
+                                {
+                                    <span class="text-muted-foreground text-xs">&middot;</span>
+                                    <span class="text-muted-foreground text-xs">
+                                        @file.SharedWith.Length @(file.SharedWith.Length == 1 ? "user" : "users")
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", permConfig.Dot)"></span>
+                            <span class="text-muted-foreground text-xs">@permConfig.Label</span>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @* Expanded details *@
+                    @if (isExpanded)
+                    {
+                        <div class="border-t bg-muted/20 px-4 py-3 pl-11">
+                            @* Permission selector *@
+                            <div class="mb-3">
+                                <span class="text-muted-foreground text-xs font-medium">Access level</span>
+                                <div class="mt-1.5 flex items-center gap-1.5">
+                                    @foreach (var permOpt in _permissionOptions)
+                                    {
+                                        var perm = permOpt;
+                                        var cfg = GetPermConfig(perm);
+                                        var isActive = file.Permission == perm;
+                                        <ButtonCn
+                                            Variant="@(isActive ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                                            Size="ButtonSize.Sm"
+                                            Class="h-7 gap-1.5 text-xs"
+                                            OnClick="@((Microsoft.AspNetCore.Components.Web.MouseEventArgs e) => UpdatePermission(file.Id, perm))">
+                                            @if (perm == "public")
+                                            {
+                                                <LucideIconCn Name="globe" Size="12" Class="size-3" />
+                                            }
+                                            else if (perm == "private")
+                                            {
+                                                <LucideIconCn Name="lock" Size="12" Class="size-3" />
+                                            }
+                                            else
+                                            {
+                                                <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                            }
+                                            @cfg.Label
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Shared users *@
+                            @if (file.SharedWith.Length > 0)
+                            {
+                                <div class="mb-3">
+                                    <span class="text-muted-foreground text-xs font-medium">Shared with</span>
+                                    <div class="mt-1.5 space-y-1">
+                                        @foreach (var sharedUser in file.SharedWith)
+                                        {
+                                            var su = sharedUser;
+                                            <div class="flex items-center gap-2">
+                                                <div class="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+                                                    @su.Name[0]
+                                                </div>
+                                                <span class="text-sm">@su.Name</span>
+                                                <span class="text-muted-foreground text-xs">@su.Email</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            @* Share link *@
+                            <div class="flex items-center gap-2">
+                                <LucideIconCn Name="link" Size="14" Class="size-3.5 text-muted-foreground" />
+                                <span class="text-muted-foreground text-xs">Share link</span>
+                                <ButtonCn
+                                    Variant="@(file.LinkEnabled ? ButtonVariant.Secondary : ButtonVariant.Ghost)"
+                                    Size="ButtonSize.Sm"
+                                    Class="h-6 px-2 text-xs"
+                                    OnClick="@((Microsoft.AspNetCore.Components.Web.MouseEventArgs e) => ToggleLink(file.Id))">
+                                    @(file.LinkEnabled ? "Enabled" : "Disabled")
+                                </ButtonCn>
+                                @if (file.LinkEnabled)
+                                {
+                                    var fileId = file.Id;
+                                    <ButtonCn
+                                        Variant="ButtonVariant.Ghost"
+                                        Size="ButtonSize.Sm"
+                                        Class="h-6 gap-1 px-2 text-xs"
+                                        OnClick="@((Microsoft.AspNetCore.Components.Web.MouseEventArgs e) => CopyLink(fileId))">
+                                        @if (_copied == file.Id)
+                                        {
+                                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                            @("Copied")
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                            @("Copy link")
+                                        }
+                                    </ButtonCn>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SharedUser(string Name, string Email);
+
+    private record ManagedFile(
+        string Id,
+        string Name,
+        string Size,
+        string Type,
+        string Permission,
+        SharedUser[] SharedWith,
+        bool LinkEnabled);
+
+    private record PermConfig(string Dot, string Label);
+
+    private static readonly string[] _permissionOptions = ["public", "team", "private"];
+
+    private List<ManagedFile> _files =
+    [
+        new("1", "Q1-financial-report.pdf", "2.4 MB", "pdf", "team",
+            [new("James Wilson", "james@acme.com"), new("Priya Patel", "priya@acme.com")],
+            true),
+        new("2", "brand-guidelines-v3.pdf", "8.1 MB", "pdf", "public",
+            [],
+            true),
+        new("3", "employee-contracts.zip", "14.6 MB", "archive", "private",
+            [new("Sarah Chen", "sarah@acme.com")],
+            false),
+        new("4", "product-mockups.png", "3.2 MB", "image", "team",
+            [new("Maria Garcia", "maria@acme.com"), new("James Wilson", "james@acme.com"), new("Alex Kim", "alex@acme.com")],
+            false),
+        new("5", "meeting-notes-march.docx", "156 KB", "document", "team",
+            [],
+            false),
+    ];
+
+    private string? _expanded = "1";
+    private string? _copied = null;
+
+    private static PermConfig GetPermConfig(string permission) => permission switch
+    {
+        "public"  => new PermConfig("bg-emerald-500", "Public"),
+        "private" => new PermConfig("bg-red-500", "Private"),
+        _         => new PermConfig("bg-blue-500", "Team"),
+    };
+
+    private void ToggleExpand(string id)
+    {
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private void UpdatePermission(string id, string permission)
+    {
+        _files = _files.Select(f => f.Id == id ? f with { Permission = permission } : f).ToList();
+    }
+
+    private void ToggleLink(string id)
+    {
+        _files = _files.Select(f => f.Id == id ? f with { LinkEnabled = !f.LinkEnabled } : f).ToList();
+    }
+
+    private void CopyLink(string id)
+    {
+        _copied = id;
+        // In a real app: await JS.InvokeVoidAsync("navigator.clipboard.writeText", $"https://files.acme.com/share/{id}");
+        // Timer reset omitted for SSR compatibility
+    }
+}

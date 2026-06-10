@@ -1,0 +1,197 @@
+@* ============================================================
+   Block: comments-dependency-tracking
+   Title: CommentsDependencyTracking
+   Description: A comment dependency tracker for React and Next.js with blocking relationships, visual dependency chains, and resolution status built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-dependency-tracking.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Dependency Tracker</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                @(_items.Count(c => c.Resolved))/@(_items.Length) resolved
+            </p>
+        </div>
+
+        @* Comment list *@
+        <div>
+            @for (int i = 0; i < _items.Length; i++)
+            {
+                var comment = _items[i];
+                var isLast = i == _items.Length - 1;
+                var isExpanded = _expanded == comment.Id;
+                var blocked = IsBlocked(comment);
+                var commentId = comment.Id;
+                <div class="@(isLast ? "" : "border-b")">
+                    <div class="px-4 py-3">
+                        <div class="flex items-start gap-3">
+                            <button type="button"
+                                    @onclick="@(() => ToggleResolve(commentId))"
+                                    disabled="@(blocked ? "disabled" : null)"
+                                    class="@Cn.Merge("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-all",
+                                        comment.Resolved
+                                            ? "border-emerald-500 bg-emerald-500"
+                                            : blocked
+                                                ? "border-muted-foreground/30 bg-muted"
+                                                : "border-muted-foreground/60 hover:border-emerald-500")">
+                                @if (comment.Resolved)
+                                {
+                                    <LucideIconCn Name="circle-check" Size="12" Class="size-3 text-white" />
+                                }
+                                @if (blocked && !comment.Resolved)
+                                {
+                                    <LucideIconCn Name="lock" Size="10" Class="size-2.5 text-muted-foreground" />
+                                }
+                            </button>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@comment.Author</span>
+                                    <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                                </div>
+                                <p class="@Cn.Merge("mt-0.5 text-sm leading-relaxed",
+                                    comment.Resolved
+                                        ? "text-muted-foreground line-through"
+                                        : "text-foreground")">
+                                    @comment.Content
+                                </p>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    @if (comment.BlockedBy.Length > 0)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-[10px] font-normal">
+                                            <LucideIconCn Name="lock" Size="10" Class="size-2.5" />
+                                            Blocked by @comment.BlockedBy.Length
+                                        </BadgeCn>
+                                    }
+                                    @if (comment.Blocks.Length > 0)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-[10px] font-normal">
+                                            <LucideIconCn Name="git-branch" Size="10" Class="size-2.5" />
+                                            Blocks @comment.Blocks.Length
+                                        </BadgeCn>
+                                    }
+                                    @if (comment.BlockedBy.Length > 0 || comment.Blocks.Length > 0)
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                                  Size="ButtonSize.Sm"
+                                                  Class="h-6 gap-1 px-2 text-xs"
+                                                  OnClick="@(() => SetExpanded(isExpanded ? null : commentId))">
+                                            <LucideIconCn Name="chevron-right" Size="12" Class="@Cn.Merge("size-3 transition-transform", isExpanded ? "rotate-90" : "")" />
+                                            @(isExpanded ? "Hide" : "Show") dependencies
+                                        </ButtonCn>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        @* Expanded dependencies *@
+                        @if (isExpanded)
+                        {
+                            <div class="mt-3 overflow-hidden pl-7">
+                                <div class="space-y-2 rounded-md bg-muted/30 p-3">
+                                    @if (comment.BlockedBy.Length > 0)
+                                    {
+                                        <div>
+                                            <span class="text-xs font-medium text-muted-foreground">
+                                                Blocked by:
+                                            </span>
+                                            <div class="mt-1.5 space-y-1">
+                                                @foreach (var depId in comment.BlockedBy)
+                                                {
+                                                    var dep = GetComment(depId);
+                                                    if (dep != null)
+                                                    {
+                                                        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                                                            @if (dep.Resolved)
+                                                            {
+                                                                <LucideIconCn Name="circle-check" Size="12" Class="size-3 text-emerald-500" />
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                                                            }
+                                                            <span class="@(dep.Resolved ? "line-through" : "")">
+                                                                #@dep.Id - @dep.Content.Substring(0, Math.Min(50, dep.Content.Length))...
+                                                            </span>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                    @if (comment.Blocks.Length > 0)
+                                    {
+                                        <div>
+                                            <span class="text-xs font-medium text-muted-foreground">
+                                                Blocks:
+                                            </span>
+                                            <div class="mt-1.5 space-y-1">
+                                                @foreach (var depId in comment.Blocks)
+                                                {
+                                                    var dep = GetComment(depId);
+                                                    if (dep != null)
+                                                    {
+                                                        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                                                            <span class="size-1.5 rounded-full bg-blue-500"></span>
+                                                            <span>
+                                                                #@dep.Id - @dep.Content.Substring(0, Math.Min(50, dep.Content.Length))...
+                                                            </span>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
+            <span>@(_items.Count(c => IsBlocked(c))) blocked</span>
+            <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+            <span>
+                @(_items.Count(c => c.BlockedBy.Length > 0 || c.Blocks.Length > 0)) with
+                dependencies
+            </span>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string? _expanded = null;
+
+    private record Comment(string Id, string Author, string Content, string Timestamp, bool Resolved, string[] BlockedBy, string[] Blocks);
+
+    private Comment[] _items =
+    [
+        new("1", "Sarah Chen",   "Update API endpoint to use new auth flow before deploying",  "2 hours ago", true,  [],     ["2", "3"]),
+        new("2", "James Wilson", "Add error handling for failed auth attempts",                 "1 hour ago",  false, ["1"],  ["4"]),
+        new("3", "Maya Patel",   "Update documentation with new authentication steps",          "1 hour ago",  false, ["1"],  []),
+        new("4", "Alex Morgan",  "Write integration tests for auth flow",                       "30 min ago",  false, ["2"],  []),
+        new("5", "Chris Taylor", "Verify mobile app compatibility with new auth",               "15 min ago",  false, [],     []),
+    ];
+
+    private void ToggleResolve(string id)
+    {
+        _items = _items.Select(c => c.Id == id ? c with { Resolved = !c.Resolved } : c).ToArray();
+    }
+
+    private Comment? GetComment(string id) => _items.FirstOrDefault(c => c.Id == id);
+
+    private bool IsBlocked(Comment comment) =>
+        comment.BlockedBy.Any(id =>
+        {
+            var blocker = GetComment(id);
+            return blocker != null && !blocker.Resolved;
+        });
+
+    private void SetExpanded(string? id) => _expanded = id;
+}

@@ -1,0 +1,292 @@
+@* ============================================================
+   Block: account-verification
+   Title: AccountVerification
+   Description: A verification steps card block for React and Next.js with multi-step identity verification, document upload status, resend actions, and verification level badges built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-verification.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with verification level *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <LucideIconCn Name="shield" Size="16" Class="h-4 w-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Account Verification</h2>
+                        <p class="text-xs text-muted-foreground">
+                            @_completedCount of @_totalSteps steps completed
+                        </p>
+                    </div>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"gap-1 text-xs {_config.Color}")">
+                    <LucideIconCn Name="badge-check" Size="12" Class="h-3 w-3" />
+                    @_config.Label
+                </BadgeCn>
+            </div>
+
+            @* Progress dots *@
+            <div class="mt-3 flex items-center gap-1.5">
+                @foreach (var step in _steps)
+                {
+                    var dotColor = step.Status == "completed"
+                        ? "bg-emerald-500"
+                        : step.Status == "in_review"
+                            ? "bg-blue-500"
+                            : step.Status == "action_required"
+                                ? "bg-amber-500"
+                                : "bg-muted";
+                    <div class="@($"h-1.5 flex-1 rounded-full {dotColor}")"></div>
+                }
+            </div>
+        </div>
+
+        @* In-review notice *@
+        @if (_steps.Any(s => s.Status == "in_review"))
+        {
+            <div class="border-b px-4 py-2.5">
+                <div class="flex items-center gap-2 rounded-md bg-blue-500/10 px-3 py-2">
+                    <LucideIconCn Name="loader-2" Size="12" Class="h-3 w-3 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+                    <p class="text-[10px] text-blue-600 dark:text-blue-400">
+                        Your identity document is under review. This typically takes 1-2 business days.
+                    </p>
+                </div>
+            </div>
+        }
+
+        @* Verification Steps Timeline *@
+        <div class="px-4 py-3">
+            <div class="relative">
+                @* Vertical line *@
+                <div class="absolute left-[13px] top-4 bottom-4 w-px bg-border"></div>
+
+                <div class="space-y-0">
+                    @foreach (var (step, idx) in _steps.Select((s, i) => (s, i)))
+                    {
+                        var isLast = idx == _steps.Count - 1;
+                        <div class="@($"relative flex gap-3 {(!isLast ? "pb-5" : "")}")">
+                            @* Status icon *@
+                            <div class="relative z-10">
+                                @if (step.Status == "completed")
+                                {
+                                    <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
+                                        <LucideIconCn Name="check" Size="14" Class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                }
+                                else if (step.Status == "in_review")
+                                {
+                                    <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/15">
+                                        <LucideIconCn Name="clock" Size="14" Class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                }
+                                else if (step.Status == "action_required")
+                                {
+                                    <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/15">
+                                        <LucideIconCn Name="alert-circle" Size="14" Class="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+                                        <span class="text-xs font-medium text-muted-foreground">
+                                            @(step.Status == "not_started" ? "?" : "...")
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Content *@
+                            <div class="flex-1 min-w-0 pt-0.5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="text-sm font-medium truncate">@step.Title</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@($"h-4 shrink-0 px-1.5 text-[10px] {GetStatusBadgeClass(step.Status)}")">
+                                            @GetStatusLabel(step.Status)
+                                        </BadgeCn>
+                                    </div>
+
+                                    @* Actions *@
+                                    <div class="flex items-center gap-1.5 shrink-0">
+                                        @if (step.SecondaryActionLabel != null && step.Status == "completed")
+                                        {
+                                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 px-2 text-[10px] text-muted-foreground" type="button" @onclick="@(() => HandleResend(step.Id))" Disabled="@(_resending == step.Id)">
+                                                @if (_resending == step.Id)
+                                                {
+                                                    <span class="flex items-center gap-1">
+                                                        <LucideIconCn Name="refresh-cw" Size="10" Class="h-2.5 w-2.5 animate-spin" />
+                                                        Sending...
+                                                    </span>
+                                                }
+                                                else if (_copiedId == step.Id)
+                                                {
+                                                    <span class="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                                        <LucideIconCn Name="check" Size="10" Class="h-2.5 w-2.5" />
+                                                        Sent
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span>@step.SecondaryActionLabel</span>
+                                                }
+                                            </ButtonCn>
+                                        }
+                                        @if (step.ActionLabel != null && step.Status != "completed")
+                                        {
+                                            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-[10px]" type="button">
+                                                @if (step.Status == "not_started")
+                                                {
+                                                    <LucideIconCn Name="arrow-right" Size="10" Class="h-2.5 w-2.5" />
+                                                }
+                                                else
+                                                {
+                                                    <LucideIconCn Name="upload" Size="10" Class="h-2.5 w-2.5" />
+                                                }
+                                                @step.ActionLabel
+                                            </ButtonCn>
+                                        }
+                                    </div>
+                                </div>
+
+                                <p class="mt-0.5 text-xs text-muted-foreground">@step.Description</p>
+
+                                @if (step.Detail != null)
+                                {
+                                    <div class="mt-1.5 rounded-md bg-muted/50 px-2.5 py-1.5">
+                                        <p class="text-[10px] text-muted-foreground">@step.Detail</p>
+                                    </div>
+                                }
+
+                                @if (step.CompletedAt != null)
+                                {
+                                    <p class="mt-1 text-[10px] text-muted-foreground">
+                                        Completed @step.CompletedAt
+                                    </p>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Benefits section *@
+        <div class="border-t px-4 py-3">
+            <span class="text-xs font-medium text-muted-foreground">VERIFICATION BENEFITS</span>
+            <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                @foreach (var benefit in _verificationBenefits)
+                {
+                    var isUnlocked =
+                        (benefit.RequiredLevel == "basic" && (_level == "basic" || _level == "verified" || _level == "business")) ||
+                        (benefit.RequiredLevel == "verified" && (_level == "verified" || _level == "business")) ||
+                        (benefit.RequiredLevel == "business" && _level == "business");
+                    <div class="flex items-center gap-2">
+                        @if (isUnlocked)
+                        {
+                            <LucideIconCn Name="check" Size="12" Class="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        }
+                        else
+                        {
+                            <div class="h-3 w-3 shrink-0 rounded-full border border-muted-foreground/30"></div>
+                        }
+                        <span class="@($"text-[10px] {(isUnlocked ? "text-foreground" : "text-muted-foreground")}")">
+                            @benefit.Label
+                        </span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto h-3.5 px-1 text-[8px]">
+                            @benefit.RequiredLevel
+                        </BadgeCn>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record VerificationStep(
+        string Id,
+        string Title,
+        string Description,
+        string Status,
+        string? CompletedAt,
+        string? Detail,
+        string? ActionLabel,
+        string? SecondaryActionLabel
+    );
+
+    private record VerificationBenefit(string Label, string RequiredLevel);
+
+    private record LevelConfig(string Label, string Color);
+
+    private static readonly VerificationBenefit[] _verificationBenefits =
+    [
+        new("Send up to $1,000/month", "basic"),
+        new("Withdraw to bank account", "basic"),
+        new("Send up to $50,000/month", "verified"),
+        new("Accept payments from customers", "verified"),
+        new("Unlimited transaction volume", "business"),
+        new("Multi-user access & audit logs", "business"),
+    ];
+
+    private static readonly Dictionary<string, LevelConfig> _levelConfig = new()
+    {
+        ["unverified"] = new("Unverified", "text-muted-foreground"),
+        ["basic"] = new("Basic", "text-blue-600 dark:text-blue-400"),
+        ["verified"] = new("Verified", "text-emerald-600 dark:text-emerald-400"),
+        ["business"] = new("Business", "text-violet-600 dark:text-violet-400"),
+    };
+
+    private readonly List<VerificationStep> _steps =
+    [
+        new("email", "Email Verified", "Confirmed dov.sarkisian@acme.co", "completed", "Feb 15, 2026", null, null, "Resend"),
+        new("phone", "Phone Verification", "Verify your phone number for account recovery", "completed", "Feb 16, 2026", "+1 (555) ***-**89", null, "Change Number"),
+        new("identity", "Identity Document", "Upload a government-issued photo ID (passport or driver's license)", "in_review", null, "Passport uploaded on Mar 2, 2026. Review typically takes 1-2 business days.", "Re-upload", null),
+        new("business", "Business Verification", "Verify your business entity for higher limits and team features", "not_started", null, "Requires EIN or business registration document, proof of address, and authorized representative confirmation.", "Start Verification", null),
+    ];
+
+    private string? _resending;
+    private string? _copiedId;
+
+    private int _completedCount => _steps.Count(s => s.Status == "completed");
+    private int _totalSteps => _steps.Count;
+    private string _level => GetVerificationLevel(_steps);
+    private LevelConfig _config => _levelConfig[_level];
+
+    private static string GetVerificationLevel(List<VerificationStep> steps)
+    {
+        var map = steps.ToDictionary(s => s.Id, s => s.Status);
+        if (map.TryGetValue("business", out var b) && b == "completed") return "business";
+        if (map.TryGetValue("identity", out var id) && id == "completed") return "verified";
+        if (map.TryGetValue("email", out var e) && e == "completed" &&
+            map.TryGetValue("phone", out var p) && p == "completed") return "basic";
+        return "unverified";
+    }
+
+    private async Task HandleResend(string stepId)
+    {
+        _resending = stepId;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _resending = null;
+        _copiedId = stepId;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _copiedId = null;
+    }
+
+    private static string GetStatusBadgeClass(string status) => status switch
+    {
+        "completed" => "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        "in_review" => "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+        "action_required" => "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+        _ => "",
+    };
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "completed" => "Completed",
+        "in_review" => "In Review",
+        "action_required" => "Action Required",
+        "not_started" => "Not Started",
+        _ => "Pending",
+    };
+}

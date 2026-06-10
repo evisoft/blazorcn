@@ -1,0 +1,219 @@
+@* ============================================================
+   Block: changelog-alert-rules
+   Title: ChangelogAlertRules
+   Description: Alert rule changelog tracking threshold changes and notification channels. Built with React, Next.js, shadcn/ui, and Tailwind CSS for production monitoring dashboards.
+   Source: original/blocks/changelog/changelog-alert-rules.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="bell" Size="16" Class="size-4 text-muted-foreground" />
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-medium">Alert Rule Changes</h2>
+                    <p class="text-xs text-muted-foreground">
+                        Configuration updates and threshold adjustments
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs">
+                    @_filteredChanges.Length rules
+                </BadgeCn>
+            </div>
+        </div>
+
+        <div class="border-b p-4">
+            <div class="relative">
+                <LucideIconCn Name="search" Size="16" Class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Type="text" Placeholder="Search alerts, types, or channels..." @bind-Value="_searchQuery" @bind-Value:event="oninput" Class="pl-9 text-xs" />
+            </div>
+        </div>
+
+        <div>
+            @foreach (var ch in _filteredChanges)
+            {
+                var isExpanded = _expandedId == ch.Id;
+                var chevronClass = Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "");
+                var iconName = GetSeverityIconName(ch.Severity);
+                var iconColor = GetSeverityColor(ch.Severity);
+                var iconBg = GetSeverityBg(ch.Severity);
+                var containerClass = Cn.Merge("flex size-7 shrink-0 items-center justify-center rounded-md", iconBg);
+                var iconClass = Cn.Merge("size-3.5", iconColor);
+                var item = ch;
+                <div class="border-b last:border-0">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleExpanded(item.Id))"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <div class="@containerClass">
+                            <LucideIconCn Name="@iconName" Size="14" Class="@iconClass" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@item.AlertName</span>
+                                @if (!item.Enabled)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs text-muted-foreground">Disabled</BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span class="capitalize">@item.AlertType.Replace("_", " ")</span>
+                                <span>•</span>
+                                <span>@item.Timestamp</span>
+                                <span>•</span>
+                                <span>@item.Author</span>
+                            </div>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@chevronClass" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t bg-muted/30 px-4 py-3">
+                            <div class="space-y-3">
+                                <div>
+                                    <span class="text-xs font-medium text-muted-foreground">Changes</span>
+                                    <div class="mt-2 space-y-2">
+                                        @foreach (var fieldChange in item.Changes)
+                                        {
+                                            <div class="rounded-md bg-background p-2.5">
+                                                <div class="text-xs font-medium">@fieldChange.Field</div>
+                                                <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                                    <span class="line-through">@fieldChange.OldValue</span>
+                                                    <span>→</span>
+                                                    <span class="text-foreground">@fieldChange.NewValue</span>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                @if (item.Channels.Length > 0)
+                                {
+                                    <div>
+                                        <span class="text-xs font-medium text-muted-foreground">
+                                            Notification Channels
+                                        </span>
+                                        <div class="mt-2 flex flex-wrap gap-1.5">
+                                            @foreach (var channel in item.Channels)
+                                            {
+                                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-xs">@channel</BadgeCn>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record AlertFieldChange(string Field, string OldValue, string NewValue);
+
+    private record AlertChange(
+        string Id,
+        string AlertName,
+        string AlertType,
+        string Severity,
+        AlertFieldChange[] Changes,
+        string[] Channels,
+        string Timestamp,
+        string Author,
+        bool Enabled
+    );
+
+    private string? _expandedId;
+    private string _searchQuery = "";
+
+    private AlertChange[] _filteredChanges => _alertChanges
+        .Where(c =>
+        {
+            var q = _searchQuery.ToLower();
+            return c.AlertName.ToLower().Contains(q) ||
+                   c.AlertType.ToLower().Contains(q) ||
+                   c.Channels.Any(ch => ch.ToLower().Contains(q));
+        })
+        .ToArray();
+
+    private void ToggleExpanded(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+
+    private static string GetSeverityIconName(string severity) => severity switch
+    {
+        "critical" => "triangle-alert",
+        "warning"  => "alert-circle",
+        "info"     => "info",
+        _          => "info",
+    };
+
+    private static string GetSeverityColor(string severity) => severity switch
+    {
+        "critical" => "text-red-500",
+        "warning"  => "text-amber-500",
+        "info"     => "text-blue-500",
+        _          => "text-muted-foreground",
+    };
+
+    private static string GetSeverityBg(string severity) => severity switch
+    {
+        "critical" => "bg-red-500/10",
+        "warning"  => "bg-amber-500/10",
+        "info"     => "bg-blue-500/10",
+        _          => "bg-muted",
+    };
+
+    private static readonly AlertChange[] _alertChanges =
+    [
+        new("1", "API Response Time P95", "latency", "critical",
+            [
+                new("Threshold", "500ms", "300ms"),
+                new("Duration", "5 minutes", "3 minutes"),
+            ],
+            ["#incidents", "PagerDuty"],
+            "2026-03-28 14:23", "Sarah Chen", true),
+        new("2", "Database Connection Pool", "error_rate", "warning",
+            [
+                new("Threshold", "80%", "70%"),
+                new("Notification", "#ops", "#ops, #database"),
+            ],
+            ["#ops", "#database"],
+            "2026-03-27 09:15", "Marcus Rivera", true),
+        new("3", "CPU Utilization", "cpu", "warning",
+            [
+                new("Threshold", "85%", "75%"),
+            ],
+            ["#infrastructure"],
+            "2026-03-26 16:44", "Elena Volkov", true),
+        new("4", "Memory Leak Detection", "memory", "critical",
+            [
+                new("Status", "Disabled", "Enabled"),
+                new("Threshold", "N/A", "90%"),
+                new("Duration", "N/A", "10 minutes"),
+            ],
+            ["#incidents", "#backend"],
+            "2026-03-25 11:30", "James Park", true),
+        new("5", "Disk Space Critical", "disk", "critical",
+            [
+                new("Notification", "Email only", "Email, Slack, PagerDuty"),
+            ],
+            ["#infrastructure", "PagerDuty"],
+            "2026-03-24 08:12", "Priya Sharma", true),
+        new("6", "Request Rate Anomaly", "error_rate", "info",
+            [
+                new("Status", "Enabled", "Disabled"),
+                new("Reason", "N/A", "Too many false positives during load tests"),
+            ],
+            [],
+            "2026-03-23 13:58", "Alex Thompson", false),
+    ];
+}

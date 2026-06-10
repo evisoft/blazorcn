@@ -1,0 +1,179 @@
+@* ============================================================
+   Block: stepper-circle-indicators
+   Title: StepperCircleIndicators
+   Description: A circular ring indicator stepper with per-step completion arcs, step numbers, and detail content built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-circle-indicators.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <span class="font-medium text-sm">Sprint Progress</span>
+            <div class="flex items-center gap-2">
+                <span class="text-muted-foreground text-xs tabular-nums">
+                    @_overallProgress% overall
+                </span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@_steps[_activeStep].Label</BadgeCn>
+            </div>
+        </div>
+
+        @* Circle indicators *@
+        <div class="border-b px-4 py-6">
+            <div class="flex items-start justify-around">
+                @foreach (var entry in _steps.Select((s, i) => new { Step = s, Index = i }))
+                {
+                    var idx = entry.Index;
+                    var step = entry.Step;
+                    var isCompleted = idx < _activeStep;
+                    var isActive = idx == _activeStep;
+
+                    var offset = _circumference - (step.Progress / 100.0) * _circumference;
+                    var fillColor = isCompleted
+                        ? "stroke-emerald-500 dark:stroke-emerald-400"
+                        : isActive
+                            ? "stroke-blue-500 dark:stroke-blue-400"
+                            : "stroke-muted-foreground/15";
+
+                    var btnClass = Cn.Merge(
+                        "rounded-full transition-transform duration-200",
+                        idx <= _activeStep ? "cursor-pointer hover:scale-105" : "cursor-default",
+                        isActive ? "ring-4 ring-blue-500/10 dark:ring-blue-400/10" : "");
+
+                    <div class="flex flex-col items-center gap-2.5">
+                        <button
+                            type="button"
+                            @onclick="@(() => HandleCircleClick(idx))"
+                            disabled="@(idx > _activeStep)"
+                            class="@btnClass">
+                            @* CircleProgress inlined *@
+                            <div class="relative flex items-center justify-center" style="@($"width:{_svgSize}px;height:{_svgSize}px")">
+                                <svg width="@_svgSize" height="@_svgSize" class="-rotate-90">
+                                    <title>@($"Step {idx + 1}: {step.Progress}% complete")</title>
+                                    @* Background track *@
+                                    <circle
+                                        cx="@(_svgSize / 2)"
+                                        cy="@(_svgSize / 2)"
+                                        r="@_radius"
+                                        fill="none"
+                                        stroke-width="@_strokeWidth"
+                                        class="stroke-muted-foreground/15" />
+                                    @* Progress arc *@
+                                    @if (step.Progress > 0)
+                                    {
+                                        <circle
+                                            cx="@(_svgSize / 2)"
+                                            cy="@(_svgSize / 2)"
+                                            r="@_radius"
+                                            fill="none"
+                                            stroke-width="@_strokeWidth"
+                                            stroke-linecap="round"
+                                            stroke-dasharray="@_circumference"
+                                            stroke-dashoffset="@offset"
+                                            class="@($"{fillColor} transition-all duration-700 ease-out")" />
+                                    }
+                                </svg>
+                                @* Center content *@
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    @if (isCompleted)
+                                    {
+                                        <LucideIconCn Name="check" Size="20" Class="size-5 text-emerald-500 dark:text-emerald-400" />
+                                    }
+                                    else if (isActive)
+                                    {
+                                        <span class="font-semibold text-blue-600 text-xs tabular-nums dark:text-blue-400">@(step.Progress)%</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="font-medium text-muted-foreground text-xs tabular-nums">@(idx + 1)</span>
+                                    }
+                                </div>
+                            </div>
+                        </button>
+                        <div class="flex flex-col items-center text-center">
+                            <span class="@Cn.Merge("font-medium text-xs", isActive ? "text-foreground" : isCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                                @step.Label
+                            </span>
+                            <span class="text-muted-foreground text-[10px]">@step.Description</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Step detail *@
+        <div class="border-b px-4 py-4">
+            <div class="mb-3 flex items-center gap-2">
+                <span class="font-medium text-sm">@_steps[_activeStep].Label</span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="font-medium text-muted-foreground text-xs tabular-nums">@_steps[_activeStep].Progress% complete</span>
+            </div>
+            <p class="text-muted-foreground text-sm leading-relaxed">@_steps[_activeStep].Detail</p>
+        </div>
+
+        @* Navigation *@
+        <div class="flex items-center justify-between px-4 py-3">
+            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-8 gap-1.5 text-xs" OnClick="HandleBack" Disabled="@(_activeStep == 0)">
+                <LucideIconCn Name="chevron-left" Size="14" Class="size-3.5" />
+                Back
+            </ButtonCn>
+            <ButtonCn Size="ButtonSize.Sm" Class="h-8 gap-1.5 text-xs" OnClick="HandleNext" Disabled="@(_activeStep == _steps.Length - 1)">
+                @(_activeStep == _steps.Length - 1 ? "Complete" : "Continue")
+                @if (_activeStep < _steps.Length - 1)
+                {
+                    <LucideIconCn Name="chevron-right" Size="14" Class="size-3.5" />
+                }
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StepItem(string Label, string Description, int Progress, string Detail);
+
+    private const int _svgSize = 64;
+    private const int _strokeWidth = 4;
+    private const double _radius = (_svgSize - _strokeWidth) / 2.0;
+    // circumference = 2 * π * 30 = 188.495...
+    private const double _circumference = 2 * 3.14159265358979323846 * _radius;
+
+    private int _activeStep = 1;
+
+    private static readonly StepItem[] _steps =
+    [
+        new("Design", "UI/UX specifications", 100,
+            "Finalized wireframes, component library selection, responsive breakpoints defined, and design tokens exported to code variables."),
+        new("Develop", "Implementation phase", 65,
+            "Core components built and integrated. API endpoints connected. Authentication flow complete. Remaining: dashboard charts and settings page."),
+        new("Test", "Quality assurance", 0,
+            "Unit tests, integration tests, and end-to-end tests queued. Performance benchmarks and accessibility audits to be run after development."),
+        new("Release", "Production deployment", 0,
+            "Staging deployment, smoke tests, gradual rollout to 10% then 50% then 100% of traffic. Monitoring dashboards and rollback plan ready."),
+    ];
+
+    private int _overallProgress => (int)Math.Round(_steps.Sum(s => s.Progress) / (double)_steps.Length);
+
+    private void HandleNext()
+    {
+        if (_activeStep < _steps.Length - 1)
+        {
+            _activeStep++;
+        }
+    }
+
+    private void HandleBack()
+    {
+        if (_activeStep > 0)
+        {
+            _activeStep--;
+        }
+    }
+
+    private void HandleCircleClick(int index)
+    {
+        if (index <= _activeStep)
+        {
+            _activeStep = index;
+        }
+    }
+}

@@ -1,0 +1,201 @@
+@* ============================================================
+   Block: stepper-floating-overlay
+   Title: StepperFloatingOverlay
+   Description: A stepper with a floating toolbar overlay containing step dots and current step label, full-width content panels, and smooth navigation built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/stepper/stepper-floating-overlay.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="relative flex h-[540px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Floating toolbar *@
+        <div class="flex justify-center px-4 pt-4 pb-2">
+            <div class="flex items-center gap-3 rounded-full border bg-card px-4 py-2 shadow-sm">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="size-6 rounded-full" Disabled="@IsFirst" OnClick="@(() => _activeStep--)">
+                    <LucideIconCn Name="chevron-left" Size="12" Class="size-3" />
+                </ButtonCn>
+
+                <div class="flex items-center gap-2">
+                    @foreach (var entry in _steps.Select((s, i) => new { Step = s, Index = i }))
+                    {
+                        var stepEntry = entry;
+                        var isActive = stepEntry.Index == _activeStep;
+                        var isCompleted = _completed.Contains(stepEntry.Index) && !isActive;
+                        <button
+                            type="button"
+                            @onclick="@(() => _activeStep = stepEntry.Index)"
+                            class="@Cn.Merge("flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium transition-all", isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground/70")">
+                            @if (isCompleted)
+                            {
+                                <span class="flex size-4 items-center justify-center rounded-full bg-emerald-500/10">
+                                    <LucideIconCn Name="check" Size="10" Class="size-2.5 text-emerald-500" />
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="@Cn.Merge("size-1.5 rounded-full", isActive ? "bg-blue-500" : "bg-muted-foreground/30")"></span>
+                            }
+                            <span class="hidden sm:inline">@stepEntry.Step.Label</span>
+                        </button>
+                    }
+                </div>
+
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.IconXs" Class="size-6 rounded-full" Disabled="@IsLast" OnClick="@(() => _activeStep++)">
+                    <LucideIconCn Name="chevron-right" Size="12" Class="size-3" />
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Content area *@
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+            <div class="mx-auto max-w-md">
+                <div class="mb-4 flex items-center gap-2">
+                    <LucideIconCn Name="@CurrStep.IconName" Size="14" Class="size-3.5" />
+                    <div>
+                        <div class="font-medium text-sm">@CurrContent.Title</div>
+                        <p class="text-muted-foreground text-xs">@CurrContent.Description</p>
+                    </div>
+                </div>
+
+                <div class="rounded-md border">
+                    @foreach (var entry in CurrContent.Items.Select((item, idx) => new { Item = item, Index = idx }))
+                    {
+                        var itm = entry.Item;
+                        var idx = entry.Index;
+                        <div class="@Cn.Merge("flex items-center justify-between px-3 py-2.5", idx < CurrContent.Items.Length - 1 ? "border-b" : "")">
+                            <span class="text-muted-foreground text-xs">@itm.Label</span>
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm">@itm.Value</span>
+                                @if (itm.Status != null)
+                                {
+                                    <span class="@Cn.Merge("size-1.5 rounded-full", GetStatusDot(itm.Status))"></span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @if (CurrContent.Note != null)
+                {
+                    <div class="mt-3 rounded-md bg-muted/50 px-3 py-2">
+                        <p class="text-muted-foreground text-xs">@CurrContent.Note</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-3">
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs tabular-nums">
+                    @(_activeStep + 1)/@(_steps.Length)
+                </BadgeCn>
+                <span class="text-muted-foreground text-xs">@CurrStep.Label</span>
+            </div>
+            @if (!IsLast)
+            {
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs" OnClick="MarkCompleteAndNext">
+                    Continue
+                </ButtonCn>
+            }
+            else
+            {
+                <ButtonCn Size="ButtonSize.Sm" Class="h-7 text-xs" OnClick="MarkComplete">
+                    Activate
+                </ButtonCn>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record StepDef(string Id, string Label, string IconName);
+    private record ContentItem(string Label, string Value, string? Status = null);
+    private record StepContentDef(string Title, string Description, ContentItem[] Items, string? Note = null);
+
+    private int _activeStep = 0;
+    private HashSet<int> _completed = new HashSet<int>();
+
+    private StepDef CurrStep => _steps[_activeStep];
+    private StepContentDef CurrContent => _stepContent[CurrStep.Id];
+    private bool IsFirst => _activeStep == 0;
+    private bool IsLast => _activeStep == _steps.Length - 1;
+
+    private static readonly StepDef[] _steps =
+    [
+        new("connect", "Connect", "plug"),
+        new("configure", "Configure", "wrench"),
+        new("test", "Test", "flask-conical"),
+        new("activate", "Activate", "zap"),
+    ];
+
+    private static readonly Dictionary<string, StepContentDef> _stepContent = new()
+    {
+        ["connect"] = new(
+            "Connect your service",
+            "Authenticate and establish a connection to the external service.",
+            [
+                new("Provider", "Stripe API"),
+                new("API version", "2024-12-18.acacia"),
+                new("Authentication", "Bearer token", "success"),
+                new("Endpoint", "api.stripe.com"),
+                new("Connection", "Verified", "success"),
+            ],
+            "Your API key is encrypted and stored securely."
+        ),
+        ["configure"] = new(
+            "Configure integration",
+            "Set up how the integration should behave and what data to sync.",
+            [
+                new("Sync direction", "Bidirectional"),
+                new("Webhook events", "payment_intent, charge, refund"),
+                new("Currency", "USD"),
+                new("Retry policy", "Exponential backoff (3 retries)"),
+                new("Logging", "Errors and warnings", "pending"),
+            ]
+        ),
+        ["test"] = new(
+            "Test connection",
+            "Verify the integration works correctly with a test transaction.",
+            [
+                new("Test mode", "Enabled (sandbox)"),
+                new("Ping latency", "42ms", "success"),
+                new("Auth check", "Passed", "success"),
+                new("Webhook delivery", "Received in 120ms", "success"),
+                new("Payload validation", "Schema matches", "success"),
+            ],
+            "All 5 checks passed. Ready to activate."
+        ),
+        ["activate"] = new(
+            "Activate integration",
+            "Go live and start processing real transactions.",
+            [
+                new("Mode", "Production"),
+                new("Rate limit", "1,000 req/min"),
+                new("Failover", "Auto-retry enabled"),
+                new("Monitoring", "PagerDuty alerts"),
+                new("Status", "Ready to activate", "pending"),
+            ]
+        ),
+    };
+
+    private static string GetStatusDot(string? status) => status switch
+    {
+        "success" => "bg-emerald-500",
+        "pending" => "bg-amber-500",
+        _ => "bg-muted-foreground/30",
+    };
+
+    private void MarkCompleteAndNext()
+    {
+        _completed.Add(_activeStep);
+        if (!IsLast)
+        {
+            _activeStep++;
+        }
+    }
+
+    private void MarkComplete()
+    {
+        _completed.Add(_activeStep);
+    }
+}

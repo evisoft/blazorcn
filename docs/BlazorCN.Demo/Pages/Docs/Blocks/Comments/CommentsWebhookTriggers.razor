@@ -1,0 +1,215 @@
+@* ============================================================
+   Block: comments-webhook-triggers
+   Title: CommentsWebhookTriggers
+   Description: A custom webhook trigger system for React and Next.js with event configuration, payload customization, retry policies, and delivery logs built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-webhook-triggers.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Webhook Triggers</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                @_activeCount active webhooks · @_successCount/@_deliveries.Length delivered
+            </p>
+        </div>
+
+        @* Webhooks list *@
+        <div class="border-b px-4 py-3">
+            <div class="space-y-3">
+                @foreach (var wh in _webhooks)
+                {
+                    var webhook = wh;
+                    <div>
+                        <div class="flex items-start gap-3">
+                            <span class="@($"mt-1 size-2 shrink-0 rounded-full {(webhook.Enabled ? "bg-emerald-500" : "bg-muted-foreground/40")}")" />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@webhook.Name</span>
+                                    <BadgeCn Variant="BadgeVariant.Outline"
+                                             Class="@Cn.Merge("text-xs font-normal", webhook.Enabled ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-muted-foreground/20 bg-muted/50 text-muted-foreground")">
+                                        @(webhook.Enabled ? "Enabled" : "Disabled")
+                                    </BadgeCn>
+                                </div>
+                                <p class="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                                    @webhook.Url
+                                </p>
+                                <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>@webhook.Events.Length events</span>
+                                    <span class="size-1 rounded-full bg-muted-foreground/40" />
+                                    <span>@webhook.SuccessRate% success</span>
+                                    <span class="size-1 rounded-full bg-muted-foreground/40" />
+                                    <span>@webhook.LastTriggered</span>
+                                </div>
+                            </div>
+                            <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 shrink-0 gap-1 px-2 text-xs">
+                                <LucideIconCn Name="send" Size="12" Class="size-3" />
+                                Test
+                            </ButtonCn>
+                        </div>
+                    </div>
+                }
+            </div>
+            <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="mt-3 h-8 w-full text-xs">
+                Add webhook
+            </ButtonCn>
+        </div>
+
+        @* Delivery log filter *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block text-xs font-medium text-muted-foreground">Delivery log</span>
+            <div class="flex items-center gap-2">
+                <button type="button"
+                        @onclick="@(() => SetFilter("all"))"
+                        class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                    All
+                </button>
+                <button type="button"
+                        @onclick="@(() => SetFilter("success"))"
+                        class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == "success" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                    Success
+                </button>
+                <button type="button"
+                        @onclick="@(() => SetFilter("failed"))"
+                        class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == "failed" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")">
+                    Failed
+                </button>
+            </div>
+        </div>
+
+        @* Deliveries list *@
+        <div>
+            @{
+                var filtered = _filteredDeliveries;
+            }
+            @for (int i = 0; i < filtered.Length; i++)
+            {
+                var delivery = filtered[i];
+                var isLast = i == filtered.Length - 1;
+                var isExpanded = _expanded == delivery.Id;
+                var statusDot = GetStatusColor(delivery.Status);
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            @onclick="@(() => ToggleExpanded(delivery.Id))"
+                            class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@($"mt-1 size-2 shrink-0 rounded-full {statusDot}")" />
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@delivery.WebhookName</span>
+                                <span class="text-xs text-muted-foreground">·</span>
+                                <span class="font-mono text-xs text-muted-foreground">@delivery.Event</span>
+                            </div>
+                            <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>@delivery.Timestamp</span>
+                                @if (delivery.StatusCode.HasValue)
+                                {
+                                    <span class="size-1 rounded-full bg-muted-foreground/40" />
+                                    <span>@delivery.StatusCode</span>
+                                }
+                                @if (delivery.ResponseTime.HasValue)
+                                {
+                                    <span class="size-1 rounded-full bg-muted-foreground/40" />
+                                    <span>@(delivery.ResponseTime)ms</span>
+                                }
+                                @if (delivery.Attempts > 1)
+                                {
+                                    <span class="size-1 rounded-full bg-muted-foreground/40" />
+                                    <span>@delivery.Attempts attempts</span>
+                                }
+                                @if (delivery.Status == "success")
+                                {
+                                    <LucideIconCn Name="check" Size="16" Class="ml-auto size-4 text-emerald-500" />
+                                }
+                                @if (delivery.Status == "failed")
+                                {
+                                    <LucideIconCn Name="x" Size="16" Class="ml-auto size-4 text-red-500" />
+                                }
+                            </div>
+                        </div>
+                    </button>
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-3 pl-9">
+                            <div class="rounded-md bg-muted/50 p-3">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-xs font-medium text-muted-foreground">
+                                        Request payload
+                                    </span>
+                                    <LucideIconCn Name="code" Size="12" Class="size-3 text-muted-foreground/60" />
+                                </div>
+                                <div class="rounded bg-zinc-950 p-2 font-mono text-xs text-zinc-100">
+                                    @("{")@($"\"event\":\"{delivery.Event}\",\"timestamp\":\"2026-04-04T10:30:00Z\"")@("}")
+                                </div>
+                                @if (delivery.Status == "failed")
+                                {
+                                    <div class="mt-2 flex gap-2">
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 px-2 text-xs">
+                                            <LucideIconCn Name="refresh-cw" Size="12" Class="size-3" />
+                                            Retry
+                                        </ButtonCn>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-2.5">
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>@_deliveries.Length deliveries</span>
+                <span class="size-1 rounded-full bg-muted-foreground/40" />
+                <span>Last 24 hours</span>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private string? _expanded = null;
+    private string _filter = "all";
+
+    private record Webhook(string Id, string Name, string Url, string[] Events, bool Enabled, string LastTriggered, double SuccessRate);
+    private record Delivery(string Id, string WebhookName, string Event, string Status, int? StatusCode, string Timestamp, int Attempts, int? ResponseTime);
+
+    private static readonly Webhook[] _webhooks =
+    [
+        new("1", "Zapier Integration",  "https://hooks.zapier.com/hooks/catch/123456/abcdef",  ["comment.created", "comment.replied"],  true,  "5 min ago",   98.5),
+        new("2", "Customer CRM",        "https://api.crm.acme.com/webhooks/comments",          ["comment.created", "comment.edited"],   true,  "1 hour ago",  100),
+        new("3", "Analytics Pipeline",  "https://analytics.acme.com/ingest/comments",          ["comment.created", "comment.deleted"],  false, "2 days ago",  89.3),
+    ];
+
+    private static readonly Delivery[] _deliveries =
+    [
+        new("1", "Zapier Integration", "comment.created",  "success", 200, "2 min ago",    1, 142),
+        new("2", "Customer CRM",       "comment.replied",  "success", 201, "15 min ago",   1, 89),
+        new("3", "Zapier Integration", "comment.created",  "failed",  500, "1 hour ago",   5, null),
+        new("4", "Analytics Pipeline", "comment.deleted",  "pending", null, "2 hours ago", 0, null),
+    ];
+
+    private int _activeCount => _webhooks.Count(w => w.Enabled);
+    private int _successCount => _deliveries.Count(d => d.Status == "success");
+
+    private Delivery[] _filteredDeliveries =>
+        _filter == "all"
+            ? _deliveries
+            : _deliveries.Where(d => d.Status == _filter).ToArray();
+
+    private void SetFilter(string filter) => _filter = filter;
+
+    private void ToggleExpanded(string id) =>
+        _expanded = _expanded == id ? null : id;
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "success" => "bg-emerald-500",
+        "failed"  => "bg-red-500",
+        "pending" => "bg-amber-500",
+        _         => "bg-muted-foreground/40",
+    };
+}

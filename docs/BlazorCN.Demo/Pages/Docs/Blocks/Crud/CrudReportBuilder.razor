@@ -1,0 +1,164 @@
+@* ============================================================
+   Block: crud-report-builder
+   Title: CrudReportBuilder
+   Description: Report template builder with data source configuration, scheduling, format selection, and delivery settings
+   Source: original/blocks/crud/crud-report-builder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="file-text" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">Reports</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_reports.Count reports · @(_reports.Count(r => r.Status == "active")) active
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    New Report
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Search + Filter Bar *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search reports..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var s in _filterOptions)
+                {
+                    var slug = s;
+                    <button type="button"
+                            @onclick="@(() => _filter = slug)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == slug ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @(slug.Substring(0, 1).ToUpper() + slug.Substring(1))
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Report List *@
+        <div>
+            @foreach (var report in Filtered)
+            {
+                var rpt = report;
+                var dotColor = _statusColors.TryGetValue(rpt.Status, out var c) ? c : "bg-muted-foreground/40";
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@($"mt-1.5 size-1.5 shrink-0 rounded-full {dotColor}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@rpt.Name</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">@rpt.Format</BadgeCn>
+                            </div>
+                            <p class="mt-0.5 text-xs text-muted-foreground line-clamp-1">@rpt.Description</p>
+                            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span>@rpt.DataSource</span>
+                                <span>·</span>
+                                <span>@rpt.Schedule</span>
+                                <span>·</span>
+                                <span class="tabular-nums">@rpt.Recipients recipients</span>
+                                <span>·</span>
+                                <span class="tabular-nums">@rpt.Runs runs</span>
+                                @if (rpt.LastRun != "Never")
+                                {
+                                    <span>·</span>
+                                    <span>Last: @rpt.LastRun</span>
+                                }
+                            </div>
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Run Now</DropdownMenuItemCn>
+                                <DropdownMenuItemCn OnClick="@(() => HandleToggle(rpt.Id))">
+                                    @(rpt.Status == "active" ? "Pause" : "Activate")
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Duplicate</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View History</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(rpt.Id))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+            @if (!Filtered.Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No reports found
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class ReportItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string DataSource { get; set; } = "";
+        public string Format { get; set; } = "";
+        public string Schedule { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string LastRun { get; set; } = "";
+        public int Recipients { get; set; }
+        public int Runs { get; set; }
+    }
+
+    private string _search = "";
+    private string _filter = "all";
+
+    private static readonly string[] _filterOptions = ["all", "active", "draft", "paused", "archived"];
+
+    private static readonly Dictionary<string, string> _statusColors = new()
+    {
+        ["active"]   = "bg-emerald-500",
+        ["draft"]    = "bg-amber-500",
+        ["paused"]   = "bg-blue-500",
+        ["archived"] = "bg-muted-foreground/40",
+    };
+
+    private readonly List<ReportItem> _reports =
+    [
+        new() { Id = 1, Name = "Weekly Revenue Summary",       Description = "Revenue breakdown by product, region, and channel with week-over-week trends",              DataSource = "Stripe + Database",   Format = "PDF",           Schedule = "Every Monday 9am", Status = "active",  LastRun = "Mar 24, 2026", Recipients = 8,  Runs = 52  },
+        new() { Id = 2, Name = "Monthly User Metrics",         Description = "MAU, DAU, retention, churn, and engagement metrics with cohort analysis",                   DataSource = "Analytics DB",        Format = "Google Sheets", Schedule = "1st of month",     Status = "active",  LastRun = "Mar 1, 2026",  Recipients = 12, Runs = 18  },
+        new() { Id = 3, Name = "Daily Error Report",           Description = "Application errors grouped by service, severity, and frequency",                           DataSource = "Datadog",             Format = "CSV",           Schedule = "Daily 7am",        Status = "active",  LastRun = "Mar 24, 2026", Recipients = 5,  Runs = 240 },
+        new() { Id = 4, Name = "Quarterly Board Deck",         Description = "Executive summary with KPIs, financials, product updates, and roadmap",                    DataSource = "Multiple",            Format = "PDF",           Schedule = "Quarterly",        Status = "active",  LastRun = "Jan 5, 2026",  Recipients = 6,  Runs = 8   },
+        new() { Id = 5, Name = "Customer Satisfaction Report", Description = "NPS scores, support tickets analysis, and feature request trends",                         DataSource = "Intercom + Database", Format = "Excel",         Schedule = "Bi-weekly",        Status = "draft",   LastRun = "Never",        Recipients = 0,  Runs = 0   },
+        new() { Id = 6, Name = "Infrastructure Cost Analysis", Description = "Cloud spending by service, cost optimization recommendations, and trend forecasting",       DataSource = "AWS Cost Explorer",   Format = "PDF",           Schedule = "Monthly",          Status = "paused",  LastRun = "Feb 1, 2026",  Recipients = 4,  Runs = 12  },
+    ];
+
+    private IEnumerable<ReportItem> Filtered => _reports
+        .Where(r => _filter == "all" || r.Status == _filter)
+        .Where(r => r.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                 || r.DataSource.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private void HandleDelete(int id) => _reports.RemoveAll(r => r.Id == id);
+
+    private void HandleToggle(int id)
+    {
+        var rpt = _reports.FirstOrDefault(r => r.Id == id);
+        if (rpt is not null)
+            rpt.Status = rpt.Status == "active" ? "paused" : "active";
+    }
+}

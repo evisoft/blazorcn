@@ -1,0 +1,150 @@
+@* ============================================================
+   Block: command-menu-variables
+   Title: CommandMenuVariables
+   Description: Variable inspector command menu with type indicators, value preview, and scope grouping for React debugging tools
+   Source: original/blocks/command-menu/command-menu-variables.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex items-center justify-center overflow-hidden rounded-lg border bg-card px-6 py-16">
+        <ButtonCn @onclick="() => _open = true" Variant="ButtonVariant.Outline" Class="gap-2">
+            <LucideCodeCn Size="16" Class="size-4 text-muted-foreground" />
+            <span class="text-sm">Variables</span>
+            <KbdCn>⌘V</KbdCn>
+        </ButtonCn>
+    </div>
+
+    <DialogCn @bind-Open="_open">
+        <DialogContentCn class="gap-0 overflow-hidden p-0 sm:max-w-md" ShowCloseButton="false">
+            <DialogHeaderCn class="sr-only">
+                <DialogTitleCn>Variable Inspector</DialogTitleCn>
+                <DialogDescriptionCn>Inspect variables by type, value, and scope.</DialogDescriptionCn>
+            </DialogHeaderCn>
+            <CommandCn>
+                <CommandInputCn Placeholder="Search variables..." />
+                <CommandListCn>
+                    <CommandEmptyCn>No variables found.</CommandEmptyCn>
+
+                    @for (int idx = 0; idx < _scopes.Length; idx++)
+                    {
+                        var grp = _scopes[idx];
+                        var i = idx;
+                        <div>
+                            @if (i > 0)
+                            {
+                                <CommandSeparatorCn />
+                            }
+                            <CommandGroupCn Heading="@grp">
+                                @foreach (var vari in _variables.Where(v => v.Scope == grp))
+                                {
+                                    var variable = vari;
+                                    <CommandItemCn Class="gap-3" OnSelect="@(() => HandleCopy(variable))">
+                                        @GetTypeIcon(variable.Type)
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-2">
+                                                <span class="font-mono text-sm font-medium">@variable.Name</span>
+                                                <span class="@($"text-xs {GetTypeColor(variable.Type)}")">@variable.Type</span>
+                                            </div>
+                                            <p class="truncate font-mono text-xs text-muted-foreground">@variable.Value</p>
+                                        </div>
+                                        @if (_copiedId == variable.Id)
+                                        {
+                                            <LucideCheckCn Size="14" Class="size-3.5 shrink-0 text-emerald-500" />
+                                        }
+                                        else
+                                        {
+                                            <LucideClipboardCn Size="14" Class="size-3.5 shrink-0 text-muted-foreground/60" />
+                                        }
+                                    </CommandItemCn>
+                                }
+                            </CommandGroupCn>
+                        </div>
+                    }
+
+                    <CommandSeparatorCn />
+
+                    <CommandGroupCn Heading="Actions">
+                        <CommandItemCn Class="gap-3">
+                            <LucideEyeCn Size="16" Class="size-4 text-muted-foreground" />
+                            <span class="text-sm">Add to watch list</span>
+                            <KbdCn class="ml-auto">⌘W</KbdCn>
+                        </CommandItemCn>
+                    </CommandGroupCn>
+                </CommandListCn>
+
+                <div class="border-t px-3 py-2">
+                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                        <LucideCodeCn Size="12" Class="size-3" />
+                        <span>@_variables.Length variables</span>
+                        <span>&middot;</span>
+                        <span>Click to copy value</span>
+                    </div>
+                </div>
+            </CommandCn>
+        </DialogContentCn>
+    </DialogCn>
+</section>
+
+@code {
+    private bool _open;
+    private string? _copiedId;
+    private System.Threading.Timer? _resetTimer;
+
+    private record Variable(string Id, string Name, string Type, string Value, string Scope);
+
+    private static readonly Variable[] _variables =
+    [
+        new("user",     "currentUser",     "object",   "{ id: 1024, name: \"Alice\" }",    "Global"),
+        new("token",    "authToken",        "string",   "\"eyJhbGci...kpXVCJ9\"",           "Global"),
+        new("is-auth",  "isAuthenticated",  "boolean",  "true",                              "Global"),
+        new("count",    "itemCount",        "number",   "42",                                "Component"),
+        new("items",    "cartItems",        "array",    "[{ id: 1 }, { id: 2 }, { id: 3 }]","Component"),
+        new("loading",  "isLoading",        "boolean",  "false",                             "Component"),
+        new("query",    "searchQuery",      "string",   "\"\"",                              "Component"),
+        new("handler",  "onSubmit",         "function", "(data) => void",                    "Props"),
+        new("class",    "className",        "string",   "\"flex items-center gap-2\"",       "Props"),
+        new("disabled", "disabled",         "boolean",  "false",                             "Props"),
+        new("theme",    "theme",            "string",   "\"dark\"",                          "Context"),
+        new("locale",   "locale",           "string",   "\"en-US\"",                         "Context"),
+    ];
+
+    private static readonly string[] _scopes = _variables.Select(v => v.Scope).Distinct().ToArray();
+
+    private void HandleCopy(Variable variable)
+    {
+        _copiedId = variable.Id;
+        _resetTimer?.Dispose();
+        _resetTimer = new System.Threading.Timer(_ =>
+        {
+            _copiedId = null;
+            InvokeAsync(StateHasChanged);
+        }, null, 1500, System.Threading.Timeout.Infinite);
+    }
+
+    public void Dispose()
+    {
+        _resetTimer?.Dispose();
+    }
+
+    private static string GetTypeColor(string type) => type switch
+    {
+        "string"   => "text-emerald-600",
+        "number"   => "text-blue-600",
+        "boolean"  => "text-amber-600",
+        "object"   => "text-purple-600",
+        "array"    => "text-cyan-600",
+        "function" => "text-rose-600",
+        _          => "text-muted-foreground",
+    };
+
+    private RenderFragment GetTypeIcon(string type) => type switch
+    {
+        "string"   => @<LucideIconCn Name="text" Size="16" Class="size-4 shrink-0 text-emerald-600" />,
+        "number"   => @<LucideHashCn Size="16" Class="size-4 shrink-0 text-blue-600" />,
+        "boolean"  => @<LucideToggleLeftCn Size="16" Class="size-4 shrink-0 text-amber-600" />,
+        "object"   => @<LucideBracesCn Size="16" Class="size-4 shrink-0 text-purple-600" />,
+        "array"    => @<LucideBracketsCn Size="16" Class="size-4 shrink-0 text-cyan-600" />,
+        "function" => @<LucideCodeCn Size="16" Class="size-4 shrink-0 text-rose-600" />,
+        _          => @<LucideCodeCn Size="16" Class="size-4 shrink-0 text-muted-foreground" />,
+    };
+}

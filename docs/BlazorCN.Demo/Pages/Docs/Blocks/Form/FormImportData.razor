@@ -1,0 +1,244 @@
+@* ============================================================
+   Block: form-import-data
+   Title: FormImportData
+   Description: A form with paste and import functionality that parses JSON data to automatically populate form fields for faster data entry
+   Source: original/blocks/form/form-import-data.tsx
+   ============================================================ *@
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">User Information</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">
+                Paste JSON data to auto-fill the form
+            </p>
+        </div>
+
+        @* Import section *@
+        <div class="border-b bg-muted/30 px-4 py-3">
+            <div class="space-y-3">
+                <div>
+                    <label for="import-data" class="text-xs font-medium text-muted-foreground">
+                        Paste JSON Data
+                    </label>
+                    <TextareaCn id="import-data"
+                                @bind-Value="_importText"
+                                Placeholder="@("{\"name\": \"...\", \"email\": \"...\", \"role\": \"...\", \"department\": \"...\"}")"
+                                rows="3"
+                                Class="mt-1.5 resize-none font-mono text-xs" />
+                    <p class="mt-1.5 text-xs text-muted-foreground">
+                        Sample:
+                        <button type="button"
+                                @onclick="UseSampleData"
+                                class="text-blue-600 hover:underline">
+                            use example data
+                        </button>
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <ButtonCn type="button"
+                              @onclick="HandleImport"
+                              Disabled="@(string.IsNullOrWhiteSpace(_importText))"
+                              Size="ButtonSize.Sm"
+                              Variant="ButtonVariant.Outline"
+                              Class="gap-1.5">
+                        <LucideIconCn Name="upload" Size="14" Class="size-3.5" />
+                        Import Data
+                    </ButtonCn>
+
+                    @if (_importStatus == "success")
+                    {
+                        <div class="flex items-center gap-1.5 text-emerald-600">
+                            <LucideIconCn Name="check-circle" Size="16" Class="size-4" />
+                            <span class="text-xs">@_importMessage</span>
+                        </div>
+                    }
+
+                    @if (_importStatus == "error")
+                    {
+                        <div class="flex items-center gap-1.5 text-red-600">
+                            <LucideIconCn Name="alert-circle" Size="16" Class="size-4" />
+                            <span class="text-xs">@_importMessage</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Form *@
+        <form class="p-4">
+            <div class="space-y-4">
+                <FieldCn data-invalid="@(_submitted && !string.IsNullOrEmpty(_nameError) ? "true" : null)">
+                    <LabelCn For="field-name">Full Name</LabelCn>
+                    <InputCn id="field-name"
+                             Placeholder="Enter full name"
+                             @bind-Value="_name"
+                             aria-invalid="@(_submitted && !string.IsNullOrEmpty(_nameError) ? "true" : "false")" />
+                    @if (_submitted && !string.IsNullOrEmpty(_nameError))
+                    {
+                        <FieldErrorCn Errors="@(new[] { _nameError })" />
+                    }
+                </FieldCn>
+
+                <FieldCn data-invalid="@(_submitted && !string.IsNullOrEmpty(_emailError) ? "true" : null)">
+                    <LabelCn For="field-email">Email Address</LabelCn>
+                    <InputCn id="field-email"
+                             type="email"
+                             Placeholder="@("you@example.com")"
+                             @bind-Value="_email"
+                             aria-invalid="@(_submitted && !string.IsNullOrEmpty(_emailError) ? "true" : "false")" />
+                    @if (_submitted && !string.IsNullOrEmpty(_emailError))
+                    {
+                        <FieldErrorCn Errors="@(new[] { _emailError })" />
+                    }
+                </FieldCn>
+
+                <FieldCn data-invalid="@(_submitted && !string.IsNullOrEmpty(_roleError) ? "true" : null)">
+                    <LabelCn For="field-role">Role</LabelCn>
+                    <InputCn id="field-role"
+                             Placeholder="Enter job role"
+                             @bind-Value="_role"
+                             aria-invalid="@(_submitted && !string.IsNullOrEmpty(_roleError) ? "true" : "false")" />
+                    @if (_submitted && !string.IsNullOrEmpty(_roleError))
+                    {
+                        <FieldErrorCn Errors="@(new[] { _roleError })" />
+                    }
+                </FieldCn>
+
+                <FieldCn data-invalid="@(_submitted && !string.IsNullOrEmpty(_departmentError) ? "true" : null)">
+                    <LabelCn For="field-department">Department</LabelCn>
+                    <InputCn id="field-department"
+                             Placeholder="Enter department"
+                             @bind-Value="_department"
+                             aria-invalid="@(_submitted && !string.IsNullOrEmpty(_departmentError) ? "true" : "false")" />
+                    <FieldDescriptionCn>The team or department this person belongs to</FieldDescriptionCn>
+                    @if (_submitted && !string.IsNullOrEmpty(_departmentError))
+                    {
+                        <FieldErrorCn Errors="@(new[] { _departmentError })" />
+                    }
+                </FieldCn>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-2">
+                <ButtonCn type="button" Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" @onclick="ClearForm">
+                    Clear
+                </ButtonCn>
+                <ButtonCn type="submit" Size="ButtonSize.Sm" @onclick="Submit">
+                    Submit
+                </ButtonCn>
+            </div>
+        </form>
+    </div>
+</section>
+
+@code {
+    private string _importText = "";
+    private string _importStatus = "idle"; // "idle" | "success" | "error"
+    private string _importMessage = "";
+
+    private string _name = "";
+    private string _email = "";
+    private string _role = "";
+    private string _department = "";
+
+    private bool _submitted = false;
+    private string _nameError = "";
+    private string _emailError = "";
+    private string _roleError = "";
+    private string _departmentError = "";
+
+    private static readonly Dictionary<string, string> _sampleData = new()
+    {
+        ["name"] = "Alex Johnson",
+        ["email"] = "alex.johnson@example.com",
+        ["role"] = "Senior Developer",
+        ["department"] = "Engineering"
+    };
+
+    private void UseSampleData()
+    {
+        _importText = "{\"name\":\"Alex Johnson\",\"email\":\"alex.johnson@example.com\",\"role\":\"Senior Developer\",\"department\":\"Engineering\"}";
+    }
+
+    private void HandleImport()
+    {
+        try
+        {
+            var parsed = System.Text.Json.JsonDocument.Parse(_importText).RootElement;
+            int count = 0;
+
+            if (parsed.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var v = nameProp.GetString();
+                if (!string.IsNullOrEmpty(v)) { _name = v; count++; }
+            }
+            if (parsed.TryGetProperty("email", out var emailProp) && emailProp.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var v = emailProp.GetString();
+                if (!string.IsNullOrEmpty(v)) { _email = v; count++; }
+            }
+            if (parsed.TryGetProperty("role", out var roleProp) && roleProp.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var v = roleProp.GetString();
+                if (!string.IsNullOrEmpty(v)) { _role = v; count++; }
+            }
+            if (parsed.TryGetProperty("department", out var deptProp) && deptProp.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var v = deptProp.GetString();
+                if (!string.IsNullOrEmpty(v)) { _department = v; count++; }
+            }
+
+            if (count == 0)
+            {
+                _importStatus = "error";
+                _importMessage = "No valid fields found in import data";
+                return;
+            }
+
+            _importStatus = "success";
+            _importMessage = $"Imported {count} {(count == 1 ? "field" : "fields")}";
+            _importText = "";
+            _submitted = false;
+            _nameError = "";
+            _emailError = "";
+            _roleError = "";
+            _departmentError = "";
+        }
+        catch
+        {
+            _importStatus = "error";
+            _importMessage = "Invalid JSON format. Please check your data.";
+        }
+    }
+
+    private void Validate()
+    {
+        _nameError = string.IsNullOrEmpty(_name) ? "Name is required" : "";
+        _emailError = string.IsNullOrEmpty(_email) ? "Email is required"
+                    : (!_email.Contains('@') ? "Invalid email address" : "");
+        _roleError = string.IsNullOrEmpty(_role) ? "Role is required" : "";
+        _departmentError = string.IsNullOrEmpty(_department) ? "Department is required" : "";
+    }
+
+    private void Submit()
+    {
+        _submitted = true;
+        Validate();
+    }
+
+    private void ClearForm()
+    {
+        _name = "";
+        _email = "";
+        _role = "";
+        _department = "";
+        _nameError = "";
+        _emailError = "";
+        _roleError = "";
+        _departmentError = "";
+        _submitted = false;
+        _importStatus = "idle";
+        _importMessage = "";
+    }
+}

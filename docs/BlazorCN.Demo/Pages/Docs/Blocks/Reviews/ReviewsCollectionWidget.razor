@@ -1,0 +1,308 @@
+@* ============================================================
+   Block: reviews-collection-widget
+   Title: ReviewsCollectionWidget
+   Description: An embeddable review collection widget for React and Next.js with multi-step star rating, category criteria, photo upload zone, and animated form progression built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-collection-widget.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header with progress *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-sm font-medium">Write a review</span>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @if (_step == "rating") { <text>Rate your experience</text> }
+                        @if (_step == "details") { <text>Add details to your review</text> }
+                        @if (_step == "success") { <text>Review submitted</text> }
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                    @if (_step == "rating") { <text>Step 1 of 2</text> }
+                    @if (_step == "details") { <text>Step 2 of 2</text> }
+                    @if (_step == "success") { <text>Complete</text> }
+                </BadgeCn>
+            </div>
+            <ProgressCn Value="@_progressPercent" Class="mt-2.5 h-1" />
+        </div>
+
+        @* Step: rating *@
+        @if (_step == "rating")
+        {
+            @* Overall rating *@
+            <div class="border-b px-4 py-4">
+                <span class="text-xs font-medium text-muted-foreground">Overall rating</span>
+                <div class="mt-2.5 flex items-center gap-1.5">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        var val = i;
+                        var filled = val <= _overallDisplay;
+                        <button type="button"
+                                class="rounded-md p-1 transition-colors hover:bg-muted/50"
+                                @onmouseenter="@(() => _overallHovered = val)"
+                                @onmouseleave="@(() => _overallHovered = 0)"
+                                @onclick="@(() => _overallRating = val)">
+                            <LucideIconCn Name="star" Size="32" Class="@Cn.Merge("size-8 transition-colors duration-150", filled ? "fill-amber-500 text-amber-500" : "text-muted-foreground/20")" />
+                        </button>
+                    }
+                    @if (_overallDisplay > 0)
+                    {
+                        <span class="ml-2 text-sm font-medium">
+                            @if (_overallDisplay == 1) { <text>Poor</text> }
+                            @if (_overallDisplay == 2) { <text>Fair</text> }
+                            @if (_overallDisplay == 3) { <text>Good</text> }
+                            @if (_overallDisplay == 4) { <text>Great</text> }
+                            @if (_overallDisplay == 5) { <text>Excellent</text> }
+                        </span>
+                    }
+                </div>
+            </div>
+
+            @* Category criteria — shown once overall rating selected *@
+            @if (_overallRating > 0)
+            {
+                <div class="overflow-hidden border-b px-4 py-3">
+                    <span class="text-xs font-medium text-muted-foreground">Rate specific areas</span>
+                    <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        @foreach (var criterion in _ratingCriteria)
+                        {
+                            var crit = criterion;
+                            var critRating = _criteriaRatings.ContainsKey(crit.Label) ? _criteriaRatings[crit.Label] : 0;
+                            var critHover = _criteriaHovered.ContainsKey(crit.Label) ? _criteriaHovered[crit.Label] : 0;
+                            var critDisplay = critHover > 0 ? critHover : critRating;
+                            <div class="rounded-md bg-muted/30 px-3 py-2.5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <span class="text-xs font-medium">@crit.Label</span>
+                                        <p class="text-[10px] text-muted-foreground">@crit.Description</p>
+                                    </div>
+                                </div>
+                                <div class="mt-1.5 flex items-center gap-0.5">
+                                    @for (int j = 1; j <= 5; j++)
+                                    {
+                                        var starVal = j;
+                                        var starFilled = starVal <= critDisplay;
+                                        <button type="button"
+                                                class="rounded p-0.5 transition-colors hover:bg-muted"
+                                                @onmouseenter="@(() => HandleCriteriaHover(crit.Label, starVal))"
+                                                @onmouseleave="@(() => HandleCriteriaLeave(crit.Label))"
+                                                @onclick="@(() => HandleCriteriaRate(crit.Label, starVal))">
+                                            <LucideIconCn Name="star" Size="16" Class="@Cn.Merge("size-4 transition-colors", starFilled ? "fill-amber-500 text-amber-500" : "text-muted-foreground/25")" />
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @* Next step action *@
+            <div class="flex items-center justify-between px-4 py-3">
+                <span class="text-xs text-muted-foreground">
+                    @_criteriaComplete/@_ratingCriteria.Length criteria rated
+                </span>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                          Disabled="@(!_canProceedToDetails)"
+                          OnClick="@(() => _step = "details")">
+                    Continue
+                </ButtonCn>
+            </div>
+        }
+
+        @* Step: details *@
+        @if (_step == "details")
+        {
+            @* Review headline *@
+            <div class="border-b px-4 py-3">
+                <span class="text-xs font-medium text-muted-foreground">Review headline</span>
+                <input type="text"
+                       value="@_headline"
+                       @oninput="@((ChangeEventArgs e) => _headline = ((string?)e.Value ?? "").Length > 100 ? ((string?)e.Value ?? "").Substring(0, 100) : ((string?)e.Value ?? ""))"
+                       placeholder="Summarize your experience in a few words"
+                       class="mt-1.5 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50" />
+            </div>
+
+            @* Comment body *@
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-muted-foreground">Your review</span>
+                    <span class="text-[10px] tabular-nums text-muted-foreground/50">
+                        @_comment.Length/@MaxComment
+                    </span>
+                </div>
+                <TextareaCn Class="mt-1.5 min-h-[100px] resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                            Placeholder="@_currentPlaceholder"
+                            Value="@_comment"
+                            ValueChanged="@((string v) => SetComment(v))" />
+                @if (_comment.Length == 0)
+                {
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                        @foreach (var suggestion in _placeholderSuggestions)
+                        {
+                            var sug = suggestion;
+                            <button type="button"
+                                    class="rounded-md bg-muted/50 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted"
+                                    @onclick="@(() => _comment = sug)">
+                                <LucideIconCn Name="sparkles" Size="10" Class="mr-1 inline size-2.5" />
+                                @sug
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* Photo upload zone *@
+            <div class="border-b px-4 py-3">
+                <span class="text-xs font-medium text-muted-foreground">Photos (optional)</span>
+                <div class="mt-2 flex items-center gap-2">
+                    @for (int k = 0; k < _photoCount; k++)
+                    {
+                        <div class="group relative flex size-14 items-center justify-center rounded-md bg-muted/50">
+                            <LucideIconCn Name="image" Size="20" Class="size-5 text-muted-foreground/40" />
+                            <button type="button"
+                                    @onclick="HandleRemovePhoto"
+                                    class="absolute -right-1 -top-1 hidden size-4 items-center justify-center rounded-full bg-foreground group-hover:flex">
+                                <LucideIconCn Name="x" Size="10" Class="size-2.5 text-background" />
+                            </button>
+                        </div>
+                    }
+                    @if (_photoCount < MaxPhotos)
+                    {
+                        <button type="button"
+                                @onclick="HandleAddPhoto"
+                                class="flex size-14 items-center justify-center rounded-md border border-dashed border-muted-foreground/20 transition-colors hover:border-muted-foreground/40 hover:bg-muted/30">
+                            <LucideIconCn Name="camera" Size="16" Class="size-4 text-muted-foreground/40" />
+                        </button>
+                    }
+                </div>
+                <p class="mt-1.5 text-[10px] text-muted-foreground/60">
+                    @_photoCount/@MaxPhotos photos added
+                </p>
+            </div>
+
+            @* Actions *@
+            <div class="flex items-center justify-between px-4 py-3">
+                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs text-muted-foreground"
+                          OnClick="@(() => _step = "rating")">
+                    Back
+                </ButtonCn>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                          OnClick="HandleSubmit">
+                    Submit review
+                </ButtonCn>
+            </div>
+        }
+
+        @* Step: success *@
+        @if (_step == "success")
+        {
+            <div class="flex flex-col items-center gap-3 px-4 py-10">
+                <div class="flex size-12 items-center justify-center rounded-full bg-emerald-500/10">
+                    <LucideIconCn Name="check" Size="24" Class="size-6 text-emerald-500" />
+                </div>
+                <div class="text-center">
+                    <span class="text-sm font-medium">Review submitted successfully</span>
+                    <p class="mt-1 text-xs text-muted-foreground">
+                        Your review will appear after moderation. Thank you for helping the community.
+                    </p>
+                </div>
+                <div class="flex items-center gap-0.5">
+                    @for (int m = 0; m < 5; m++)
+                    {
+                        var idx = m;
+                        <LucideIconCn Name="star" Size="16" Class="@Cn.Merge("size-4", idx < _overallRating ? "fill-amber-500 text-amber-500" : "text-muted-foreground/20")" />
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private const int MaxPhotos = 5;
+    private const int MaxComment = 1000;
+
+    private record RatingCriterion(string Label, string Description);
+
+    private static readonly RatingCriterion[] _ratingCriteria =
+    [
+        new("Quality", "Build and material quality"),
+        new("Value", "Worth the price paid"),
+        new("Ease of Use", "Setup and daily usage"),
+        new("Design", "Aesthetics and form factor"),
+    ];
+
+    private static readonly string[] _placeholderSuggestions =
+    [
+        "What did you like most about this product?",
+        "How does it compare to similar products?",
+        "Would you recommend this to a friend?",
+        "Any tips for other buyers?",
+    ];
+
+    private string _step = "rating";
+    private int _overallRating = 0;
+    private int _overallHovered = 0;
+    private Dictionary<string, int> _criteriaRatings = new();
+    private Dictionary<string, int> _criteriaHovered = new();
+    private string _comment = "";
+    private int _photoCount = 0;
+    private string _headline = "";
+
+    private int _overallDisplay => _overallHovered > 0 ? _overallHovered : _overallRating;
+
+    private int _criteriaComplete => _ratingCriteria.Count(c => _criteriaRatings.ContainsKey(c.Label) && _criteriaRatings[c.Label] > 0);
+
+    private bool _canProceedToDetails => _overallRating > 0 && _criteriaComplete == _ratingCriteria.Length;
+
+    private string _currentPlaceholder => _overallRating >= 1 && _overallRating <= _placeholderSuggestions.Length
+        ? _placeholderSuggestions[_overallRating - 1]
+        : _placeholderSuggestions[0];
+
+    private int _progressPercent
+    {
+        get
+        {
+            if (_step == "success") return 100;
+            if (_step == "details") return 50 + (_comment.Length > 0 ? 25 : 0) + (_photoCount > 0 ? 25 : 0);
+            return _overallRating > 0 ? 10 + _criteriaComplete * 10 : 0;
+        }
+    }
+
+    private void HandleCriteriaRate(string label, int value)
+    {
+        _criteriaRatings[label] = value;
+    }
+
+    private void HandleCriteriaHover(string label, int value)
+    {
+        _criteriaHovered[label] = value;
+    }
+
+    private void HandleCriteriaLeave(string label)
+    {
+        _criteriaHovered[label] = 0;
+    }
+
+    private void SetComment(string value)
+    {
+        _comment = value.Length > MaxComment ? value.Substring(0, MaxComment) : value;
+    }
+
+    private void HandleSubmit()
+    {
+        _step = "success";
+    }
+
+    private void HandleAddPhoto()
+    {
+        if (_photoCount < MaxPhotos) _photoCount++;
+    }
+
+    private void HandleRemovePhoto()
+    {
+        if (_photoCount > 0) _photoCount--;
+    }
+}

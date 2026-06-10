@@ -1,0 +1,121 @@
+@* ============================================================
+   Block: stats-donut-with-center-total
+   Title: StatsDonutWithCenterTotal
+   Description: A segment breakdown donut stats card for React and Next.js with an absolute-positioned NumberFlow center total, ChartContainer-wrapped Recharts PieChart, per-segment var(--chart-N) tokens, and a pill legend below built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-donut-with-center-total.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Marketing spend by channel</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">Last 30 days</p>
+            </div>
+            <span class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Q2 2026
+            </span>
+        </div>
+
+        <div class="relative px-4 py-4">
+            <div class="mx-auto aspect-square max-h-[220px] w-full max-w-[220px]">
+                <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="h-full w-full">
+                    @foreach (var arc in _arcs)
+                    {
+                        <path d="@arc.D" fill="@arc.Fill" stroke="hsl(var(--background))" stroke-width="2" />
+                    }
+                </svg>
+            </div>
+            <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Total spend
+                </p>
+                <div class="mt-0.5 min-w-[120px] text-center">
+                    <span class="text-3xl font-semibold tabular-nums">$31,870</span>
+                </div>
+            </div>
+        </div>
+
+        <dl class="divide-y border-t">
+            @foreach (var seg in _segments)
+            {
+                var pct = (seg.Value / (double)_totalValue) * 100.0;
+                <div class="flex items-center gap-3 px-4 py-2.5">
+                    <span aria-hidden="true"
+                          class="size-2 shrink-0 rounded-full"
+                          style="@($"background-color: var(--chart-{seg.ChartIndex})")"></span>
+                    <dt class="flex-1 text-sm font-medium">@seg.Label</dt>
+                    <dd class="w-14 text-right text-xs font-medium tabular-nums text-muted-foreground">
+                        @(pct.ToString("F1"))%
+                    </dd>
+                    <dd class="w-20 text-right text-sm font-semibold tabular-nums">
+                        $@seg.Value.ToString("N0")
+                    </dd>
+                </div>
+            }
+        </dl>
+    </div>
+</section>
+
+@code {
+    private record Segment(string Id, string Label, int Value, int ChartIndex);
+
+    private static readonly Segment[] _segments =
+    [
+        new("paid",    "Paid search", 14_820, 1),
+        new("organic", "Organic",      9_240, 2),
+        new("social",  "Social",       5_130, 3),
+        new("email",   "Email",        2_680, 4),
+    ];
+
+    private static readonly int _totalValue = 14_820 + 9_240 + 5_130 + 2_680; // 31870
+
+    // Precomputed SVG donut arc paths (cx=100, cy=100, inner=62, outer=92, paddingAngle=2deg)
+    private record ArcPath(string D, string Fill);
+
+    private static readonly ArcPath[] _arcs = BuildArcs();
+
+    private static ArcPath[] BuildArcs()
+    {
+        const double cx = 100, cy = 100;
+        const double innerR = 62, outerR = 92;
+        const double paddingDeg = 2.0;
+        const double total = 31870.0;
+
+        // chart CSS variable fills in same order as segments
+        string[] fills = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
+        int[] values = [14820, 9240, 5130, 2680];
+
+        var result = new ArcPath[values.Length];
+        double startDeg = -90.0; // start at top
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            double sweepDeg = (values[i] / total) * 360.0 - paddingDeg;
+            double endDeg = startDeg + sweepDeg;
+
+            double s = startDeg * Math.PI / 180.0;
+            double e = endDeg * Math.PI / 180.0;
+
+            double ox1 = cx + outerR * Math.Cos(s);
+            double oy1 = cy + outerR * Math.Sin(s);
+            double ox2 = cx + outerR * Math.Cos(e);
+            double oy2 = cy + outerR * Math.Sin(e);
+            double ix1 = cx + innerR * Math.Cos(e);
+            double iy1 = cy + innerR * Math.Sin(e);
+            double ix2 = cx + innerR * Math.Cos(s);
+            double iy2 = cy + innerR * Math.Sin(s);
+
+            int largeArc = sweepDeg > 180 ? 1 : 0;
+
+            string d = $"M {F(ox1)} {F(oy1)} A {outerR} {outerR} 0 {largeArc} 1 {F(ox2)} {F(oy2)} L {F(ix1)} {F(iy1)} A {innerR} {innerR} 0 {largeArc} 0 {F(ix2)} {F(iy2)} Z";
+
+            result[i] = new ArcPath(d, fills[i]);
+            startDeg = endDeg + paddingDeg;
+        }
+
+        return result;
+    }
+
+    private static string F(double v) => v.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+}

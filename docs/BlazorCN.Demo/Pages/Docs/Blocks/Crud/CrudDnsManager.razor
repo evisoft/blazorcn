@@ -1,0 +1,191 @@
+@* ============================================================
+   Block: crud-dns-manager
+   Title: CrudDnsManager
+   Description: DNS record management with record type filtering, TTL configuration, and inline editing for domain administration
+   Source: original/blocks/crud/crud-dns-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="globe" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">DNS Records</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            example.com · @_records.Count records
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs"
+                          @onclick="@(() => _showAdd = !_showAdd)">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    Add Record
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Add Record Form *@
+        @if (_showAdd)
+        {
+            <div class="border-b bg-muted/30 px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <SelectCn Value="@_newType" ValueChanged="@((string v) => _newType = v)" Class="h-8 w-24 text-xs">
+                        <SelectTriggerCn Class="h-8 w-24 text-xs">
+                            <SelectValueCn />
+                        </SelectTriggerCn>
+                        <SelectContentCn>
+                            @foreach (var t in _recordTypes)
+                            {
+                                var type = t;
+                                <SelectItemCn Value="@type">@type</SelectItemCn>
+                            }
+                        </SelectContentCn>
+                    </SelectCn>
+                    <InputCn Placeholder="@("Name (e.g. @, www)")" Class="h-8 w-28 font-mono text-xs" @bind-Value="_newName" />
+                    <InputCn Placeholder="Value" Class="h-8 flex-1 font-mono text-xs" @bind-Value="_newValue" />
+                    <InputCn Placeholder="TTL" Class="h-8 w-20 text-xs" @bind-Value="_newTtl" />
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-8 text-xs" @onclick="HandleAdd">Add</ButtonCn>
+                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Ghost" Class="h-8 text-xs"
+                              @onclick="@(() => _showAdd = false)">Cancel</ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Filter Bar *@
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="flex gap-1">
+                @foreach (var t in _filterOptions)
+                {
+                    var ft = t;
+                    <button type="button" @onclick="@(() => _filter = ft)"
+                            class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == ft ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @(ft == "all" ? "All" : ft)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Records List *@
+        <div>
+            @foreach (var record in GetFiltered())
+            {
+                var rec = record;
+                var badgeColor = _typeColors.TryGetValue(rec.Type, out var col) ? col : "bg-muted text-muted-foreground";
+                <div class="flex items-center gap-3 border-b px-4 py-2.5 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("w-14 justify-center text-[10px] px-1.5 py-0", badgeColor)">
+                        @rec.Type
+                    </BadgeCn>
+                    <span class="w-20 shrink-0 font-mono text-xs font-medium">@rec.Name</span>
+                    <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">@rec.Value</span>
+                    @if (rec.Priority.HasValue)
+                    {
+                        <span class="text-xs text-muted-foreground">Pri: @rec.Priority.Value</span>
+                    }
+                    <span class="text-xs text-muted-foreground tabular-nums">@FormatTtl(rec.Ttl)</span>
+                    <DropdownMenuCn>
+                        <DropdownMenuTriggerCn>
+                            <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                            </ButtonCn>
+                        </DropdownMenuTriggerCn>
+                        <DropdownMenuContentCn Align="FloatingAlign.End">
+                            <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                            <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(rec.Id))">
+                                <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                Delete
+                            </DropdownMenuItemCn>
+                        </DropdownMenuContentCn>
+                    </DropdownMenuCn>
+                </div>
+            }
+            @if (!GetFiltered().Any())
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No records found
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private class DnsRecord
+    {
+        public int Id { get; set; }
+        public string Type { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Value { get; set; } = "";
+        public int Ttl { get; set; }
+        public int? Priority { get; set; }
+    }
+
+    private static readonly string[] _recordTypes = ["A", "AAAA", "CNAME", "MX", "TXT", "NS"];
+    private static readonly string[] _filterOptions = ["all", "A", "AAAA", "CNAME", "MX", "TXT"];
+
+    private static readonly Dictionary<string, string> _typeColors = new()
+    {
+        ["A"]     = "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        ["AAAA"]  = "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+        ["CNAME"] = "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+        ["MX"]    = "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        ["TXT"]   = "bg-pink-500/10 text-pink-700 dark:text-pink-400",
+        ["NS"]    = "bg-muted text-muted-foreground",
+    };
+
+    private readonly List<DnsRecord> _records =
+    [
+        new() { Id = 1,  Type = "A",     Name = "@",     Value = "76.76.21.21",                            Ttl = 300   },
+        new() { Id = 2,  Type = "A",     Name = "www",   Value = "76.76.21.21",                            Ttl = 300   },
+        new() { Id = 3,  Type = "CNAME", Name = "api",   Value = "api-gateway.example.com",                Ttl = 3600  },
+        new() { Id = 4,  Type = "CNAME", Name = "docs",  Value = "docs.example.pages.dev",                 Ttl = 3600  },
+        new() { Id = 5,  Type = "MX",    Name = "@",     Value = "mx1.example.com",                        Ttl = 3600, Priority = 10 },
+        new() { Id = 6,  Type = "MX",    Name = "@",     Value = "mx2.example.com",                        Ttl = 3600, Priority = 20 },
+        new() { Id = 7,  Type = "TXT",   Name = "@",     Value = "v=spf1 include:_spf.google.com ~all",    Ttl = 3600  },
+        new() { Id = 8,  Type = "TXT",   Name = "_dmarc",Value = "v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com",  Ttl = 3600  },
+        new() { Id = 9,  Type = "AAAA",  Name = "@",     Value = "2606:4700:3030::6815:1",                 Ttl = 300   },
+        new() { Id = 10, Type = "NS",    Name = "@",     Value = "ns1.example-dns.com",                    Ttl = 86400 },
+    ];
+
+    private string _filter  = "all";
+    private bool   _showAdd = false;
+    private string _newType  = "A";
+    private string _newName  = "";
+    private string _newValue = "";
+    private string _newTtl   = "3600";
+
+    private static string FormatTtl(int ttl)
+    {
+        if (ttl >= 86400) return $"{ttl / 86400}d";
+        if (ttl >= 3600)  return $"{ttl / 3600}h";
+        return $"{ttl}s";
+    }
+
+    private void HandleAdd()
+    {
+        if (string.IsNullOrWhiteSpace(_newName) || string.IsNullOrWhiteSpace(_newValue)) return;
+        var id = _records.Count > 0 ? _records.Max(r => r.Id) + 1 : 1;
+        _records.Add(new DnsRecord
+        {
+            Id    = id,
+            Type  = _newType,
+            Name  = _newName,
+            Value = _newValue,
+            Ttl   = int.TryParse(_newTtl, out var ttl) ? ttl : 3600,
+        });
+        _newType  = "A";
+        _newName  = "";
+        _newValue = "";
+        _newTtl   = "3600";
+        _showAdd  = false;
+    }
+
+    private void HandleDelete(int id) => _records.RemoveAll(r => r.Id == id);
+
+    private List<DnsRecord> GetFiltered() =>
+        _filter == "all" ? _records : _records.Where(r => r.Type == _filter).ToList();
+}

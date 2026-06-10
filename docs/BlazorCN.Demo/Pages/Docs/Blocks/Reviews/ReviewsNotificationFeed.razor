@@ -1,0 +1,211 @@
+@* ============================================================
+   Block: reviews-notification-feed
+   Title: ReviewsNotificationFeed
+   Description: A React review notification feed for Next.js with timeline-style event layout, icon-per-event-type indicators, grouped timestamps, mark-as-read interactions, and animated entry transitions built with shadcn/ui Button, Badge, Avatar components, motion/react staggered animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-notification-feed.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="bell" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Review Notifications</span>
+                @if (UnreadCount > 0)
+                {
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">
+                        @UnreadCount new
+                    </BadgeCn>
+                }
+            </div>
+            @if (UnreadCount > 0)
+            {
+                <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs text-muted-foreground" @onclick="MarkAllAsRead">
+                    <LucideIconCn Name="check-check" Size="12" Class="size-3" />
+                    Mark all read
+                </ButtonCn>
+            }
+        </div>
+
+        @* Timeline feed grouped by time *@
+        <div>
+            @foreach (var grp in TimeGroups)
+            {
+                <div>
+                    @* Group header *@
+                    <div class="sticky top-0 z-10 border-b bg-muted/30 px-4 py-1.5">
+                        <span class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            @grp.Label
+                        </span>
+                    </div>
+
+                    @* Events in group *@
+                    @foreach (var (notification, index) in grp.Notifications.Select((n, i) => (n, i)))
+                    {
+                        var notif = notification;
+                        var cfg = GetConfig(notif.Type);
+                        <div class="@Cn.Merge("relative border-b last:border-b-0", !notif.Read ? "bg-muted/20" : "")">
+                            <div class="flex items-start gap-3 px-4 py-3">
+                                @* Timeline icon *@
+                                <div class="relative flex flex-col items-center">
+                                    <div class="@($"flex size-8 shrink-0 items-center justify-center rounded-full {cfg.BgColor}")">
+                                        <LucideIconCn Name="@cfg.IconName" Size="14" Class="@($"size-3.5 {cfg.IconColor}")" />
+                                    </div>
+                                    @* Unread indicator *@
+                                    @if (!notif.Read)
+                                    {
+                                        <span class="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-blue-500 ring-2 ring-card"></span>
+                                    }
+                                </div>
+
+                                @* Content *@
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm leading-snug">
+                                        <span class="font-medium">@notif.Actor.Name</span>
+                                        @(" ")
+                                        <span class="text-muted-foreground">@notif.Message</span>
+                                    </p>
+
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                            @cfg.Label
+                                        </BadgeCn>
+                                        <span class="text-xs text-muted-foreground">
+                                            @notif.Product
+                                        </span>
+                                        <span class="text-xs text-muted-foreground">·</span>
+                                        <span class="text-xs text-muted-foreground">
+                                            @notif.Timestamp
+                                        </span>
+
+                                        @* Rating stars for new reviews *@
+                                        @if (notif.Rating.HasValue)
+                                        {
+                                            <span class="flex items-center gap-0.5">
+                                                @for (int s = 0; s < notif.Rating.Value; s++)
+                                                {
+                                                    <LucideIconCn Name="star" Size="10" Class="size-2.5 fill-amber-500 text-amber-500" />
+                                                }
+                                            </span>
+                                        }
+
+                                        @* Vote count badge *@
+                                        @if (notif.VoteCount.HasValue)
+                                        {
+                                            <span class="flex items-center gap-0.5 text-xs text-muted-foreground">
+                                                <LucideIconCn Name="thumbs-up" Size="10" Class="size-2.5" />
+                                                @notif.VoteCount.Value
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+
+                                @* Action *@
+                                <div class="flex shrink-0 items-center">
+                                    @if (!notif.Read)
+                                    {
+                                        var notifId = notif.Id;
+                                        <ButtonCn type="button" Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-6 gap-1 px-2 text-[10px] text-muted-foreground" @onclick="@(() => MarkAsRead(notifId))">
+                                            <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                            Read
+                                        </ButtonCn>
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="check" Size="12" Class="size-3 text-muted-foreground/30" />
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-xs text-muted-foreground">
+                @_notifications.Count notifications
+                @if (UnreadCount > 0)
+                {
+                    <span class="ml-1 text-blue-600 dark:text-blue-400">(@UnreadCount unread)</span>
+                }
+            </span>
+            <span class="text-xs text-muted-foreground">Grouped by time</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Actor(string Name, string Initials);
+
+    private class NotificationEvent
+    {
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public Actor Actor { get; set; } = new("", "");
+        public string Message { get; set; } = "";
+        public string Product { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+        public bool Read { get; set; }
+        public int? Rating { get; set; }
+        public int? VoteCount { get; set; }
+    }
+
+    private record TimeGroup(string Label, List<NotificationEvent> Notifications);
+
+    private record EventConfig(string IconName, string Label, string IconColor, string BgColor);
+
+    private static EventConfig GetConfig(string type) => type switch
+    {
+        "new_review"     => new("star",          "New review",   "text-amber-600 dark:text-amber-400",   "bg-amber-500/10"),
+        "reply_received" => new("message-square", "Reply",        "text-blue-600 dark:text-blue-400",     "bg-blue-500/10"),
+        "review_approved"=> new("shield-check",   "Approved",     "text-emerald-600 dark:text-emerald-400","bg-emerald-500/10"),
+        "helpful_vote"   => new("thumbs-up",      "Helpful vote", "text-foreground",                      "bg-muted"),
+        "mention"        => new("at-sign",        "Mention",      "text-blue-600 dark:text-blue-400",     "bg-blue-500/10"),
+        _                => new("bell",           "Notification", "text-foreground",                      "bg-muted"),
+    };
+
+    private int UnreadCount => _notifications.Count(n => !n.Read);
+
+    private List<TimeGroup> TimeGroups
+    {
+        get
+        {
+            var groups = new Dictionary<string, List<NotificationEvent>>();
+            foreach (var n in _notifications)
+            {
+                var isRecent = n.Timestamp.Contains("min") || n.Timestamp.Contains("hr");
+                var key = isRecent ? "Today" : n.Timestamp;
+                if (!groups.ContainsKey(key)) groups[key] = new List<NotificationEvent>();
+                groups[key].Add(n);
+            }
+            return groups.Select(kv => new TimeGroup(kv.Key, kv.Value)).ToList();
+        }
+    }
+
+    private void MarkAsRead(string id)
+    {
+        var n = _notifications.FirstOrDefault(x => x.Id == id);
+        if (n != null) n.Read = true;
+    }
+
+    private void MarkAllAsRead()
+    {
+        foreach (var n in _notifications) n.Read = true;
+    }
+
+    private readonly List<NotificationEvent> _notifications =
+    [
+        new() { Id = "notif-1", Type = "new_review",      Actor = new("Sarah Chen",       "SC"), Message = "left a 5-star review on Dashboard Pro",                    Product = "Dashboard Pro",     Timestamp = "3 min ago",  Read = false, Rating = 5 },
+        new() { Id = "notif-2", Type = "reply_received",  Actor = new("Marcus Johnson",   "MJ"), Message = "replied to your response on his review",                   Product = "Component Library", Timestamp = "12 min ago", Read = false },
+        new() { Id = "notif-3", Type = "mention",         Actor = new("Priya Patel",      "PP"), Message = "mentioned you in a review discussion thread",              Product = "Analytics Suite",   Timestamp = "28 min ago", Read = false },
+        new() { Id = "notif-4", Type = "review_approved", Actor = new("System",           "SY"), Message = "Your review on Form Builder was approved and published",    Product = "Form Builder",      Timestamp = "1 hr ago",   Read = false },
+        new() { Id = "notif-5", Type = "helpful_vote",    Actor = new("David Kim",        "DK"), Message = "and 4 others found your review helpful",                   Product = "Chart Components",  Timestamp = "2 hr ago",   Read = true,  VoteCount = 5 },
+        new() { Id = "notif-6", Type = "new_review",      Actor = new("Elena Rodriguez",  "ER"), Message = "left a 4-star review on Auth Module",                      Product = "Auth Module",       Timestamp = "3 hr ago",   Read = true,  Rating = 4 },
+        new() { Id = "notif-7", Type = "reply_received",  Actor = new("Alex Turner",      "AT"), Message = "replied to a review thread you are following",             Product = "Dashboard Pro",     Timestamp = "Yesterday",  Read = true },
+        new() { Id = "notif-8", Type = "helpful_vote",    Actor = new("Mika Tanaka",      "MT"), Message = "found your review of Pricing Blocks helpful",              Product = "Pricing Blocks",    Timestamp = "Yesterday",  Read = true,  VoteCount = 1 },
+        new() { Id = "notif-9", Type = "review_approved", Actor = new("System",           "SY"), Message = "Your review on Sidebar Kit was approved after moderation", Product = "Sidebar Kit",       Timestamp = "Yesterday",  Read = true },
+    ];
+}

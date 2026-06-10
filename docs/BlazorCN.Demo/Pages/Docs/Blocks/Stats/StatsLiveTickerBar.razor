@@ -1,0 +1,146 @@
+@* ============================================================
+   Block: stats-live-ticker-bar
+   Title: StatsLiveTickerBar
+   Description: A single-row live metrics ticker bar for React and Next.js with a pulsing live indicator, flex-divided compact metric cells, semantic status dots, and NumberFlow animated values built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-live-ticker-bar.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="flex items-stretch overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center gap-2 border-r bg-muted/40 px-4">
+            <span aria-label="Live data stream" class="relative flex size-2" role="img">
+                <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500/60 opacity-75"></span>
+                <span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+            </span>
+            <span class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                Live
+            </span>
+        </div>
+
+        <div class="flex flex-1 items-center divide-x overflow-x-auto">
+            @foreach (var metric in _metrics)
+            {
+                var dotClass = StatusDotClass(metric.Status);
+                var label = StatusLabel(metric.Status);
+                <div class="flex min-w-[128px] flex-1 items-center gap-2.5 px-4 py-3">
+                    <span aria-label="@label"
+                          class="@(Cn.Merge("size-1.5 shrink-0 rounded-full", dotClass))"
+                          role="img"></span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground truncate">
+                            @metric.Label
+                        </p>
+                        <div class="mt-0.5 flex items-baseline gap-0.5">
+                            <span class="text-sm font-semibold tabular-nums">@FormatValue(metric)</span>
+                            @if (metric.Unit != null)
+                            {
+                                <span class="text-xs font-medium text-muted-foreground">@metric.Unit</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum MetricStatus { Healthy, Warning, Critical }
+    private enum MetricFormat { Number, Percent, Compact }
+
+    private record TickerMetric(
+        string Id,
+        string Label,
+        double Value,
+        string? Unit,
+        MetricFormat? Format,
+        MetricStatus Status
+    );
+
+    private TickerMetric[] _metrics =
+    [
+        new("online",  "Online",   2847,   null, MetricFormat.Compact,  MetricStatus.Healthy),
+        new("rpm",     "Req/min",  14220,  null, MetricFormat.Compact,  MetricStatus.Healthy),
+        new("p95",     "p95",      142,    "ms", null,                  MetricStatus.Warning),
+        new("errors",  "Errors",   0.12,   null, MetricFormat.Percent,  MetricStatus.Healthy),
+        new("queue",   "Queue",    38,     null, null,                  MetricStatus.Warning),
+        new("cache",   "Cache hit",0.968,  null, MetricFormat.Percent,  MetricStatus.Healthy),
+    ];
+
+    private static readonly double[][] _drift =
+    [
+        [-14, 210, -3,  0.01,  -4,  0.003],
+        [ 28,-180,  7, -0.02,   2, -0.001],
+        [ -8, 340, -5,  0.03,   5,  0.002],
+        [ 12,-260,  2, -0.01,  -2, -0.002],
+    ];
+
+    private int _tick = 0;
+    private System.Threading.Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        _timer = new System.Threading.Timer(_ => Tick(), null, 2500, 2500);
+    }
+
+    private void Tick()
+    {
+        var row = _drift[_tick % _drift.Length];
+        _tick++;
+        _metrics = _metrics.Select((m, i) =>
+        {
+            var delta = i < row.Length ? row[i] : 0;
+            var nextValue = Math.Max(
+                0,
+                m.Format == MetricFormat.Percent ? Math.Min(1, m.Value + delta) : m.Value + delta
+            );
+            var dev = Math.Abs(delta) / Math.Max(1, Math.Abs(m.Value));
+            var nextStatus = NextStatus(m.Status, dev);
+            return m with { Value = nextValue, Status = nextStatus };
+        }).ToArray();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private static MetricStatus NextStatus(MetricStatus current, double deviation)
+    {
+        if (deviation > 1.5) return MetricStatus.Critical;
+        if (deviation > 0.7) return MetricStatus.Warning;
+        return current == MetricStatus.Critical ? MetricStatus.Warning : MetricStatus.Healthy;
+    }
+
+    private static string FormatValue(TickerMetric metric)
+    {
+        if (metric.Format == MetricFormat.Percent)
+            return (metric.Value).ToString("P2");
+        if (metric.Format == MetricFormat.Compact)
+        {
+            if (metric.Value >= 1000)
+                return (metric.Value / 1000.0).ToString("0.#") + "K";
+            return metric.Value.ToString("0.#");
+        }
+        return metric.Value.ToString("N0");
+    }
+
+    private static string StatusDotClass(MetricStatus status) => status switch
+    {
+        MetricStatus.Healthy  => "bg-emerald-500",
+        MetricStatus.Warning  => "bg-amber-500",
+        MetricStatus.Critical => "bg-red-500",
+        _                     => "bg-emerald-500",
+    };
+
+    private static string StatusLabel(MetricStatus status) => status switch
+    {
+        MetricStatus.Healthy  => "Healthy",
+        MetricStatus.Warning  => "Warning",
+        MetricStatus.Critical => "Critical",
+        _                     => "Healthy",
+    };
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

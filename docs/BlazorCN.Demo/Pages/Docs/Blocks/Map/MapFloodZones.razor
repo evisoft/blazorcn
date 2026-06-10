@@ -1,0 +1,301 @@
+@* ============================================================
+   Block: map-flood-zones
+   Title: MapFloodZones
+   Description: Interactive flood zone risk map with colored risk level zones, historical flood markers, infrastructure at-risk indicators, and zone detail cards built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-flood-zones.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="waves" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Flood zone risk</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LucideIconCn Name="home" Size="12" Class="size-3" />
+                    @_totalProperties.ToString("N0") properties at risk
+                </span>
+                <span class="text-xs text-muted-foreground">@(_zones.Length) zones</span>
+            </div>
+        </div>
+
+        @* Map + sidebar *@
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">Zones by risk level</span>
+                </div>
+                <div class="divide-y">
+                    @foreach (var zone in _zones)
+                    {
+                        var z = zone;
+                        var isSelected = _selectedZone == z.Id;
+                        var isExpanded = _expandedZone == z.Id;
+                        <div>
+                            <button
+                                type="button"
+                                class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "")"
+                                @onclick="@(() => ToggleZone(z.Id))">
+                                <span class="@Cn.Merge("size-2 shrink-0 rounded-full", RiskDot(z.Risk))"></span>
+                                <div class="min-w-0 flex-1">
+                                    <span class="text-sm font-medium">@z.Name</span>
+                                    <div class="mt-0.5 flex items-center gap-1.5">
+                                        <span class="text-[10px] text-muted-foreground">@z.Designation</span>
+                                        <span class="text-[10px] text-muted-foreground">·</span>
+                                        <span class="text-[10px] text-muted-foreground">@z.Elevation</span>
+                                    </div>
+                                </div>
+                                <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                            </button>
+                            @if (isExpanded)
+                            {
+                                <div class="bg-muted/30 px-3 py-2.5 pl-8">
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Risk</span>
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                                @RiskLabel(z.Risk)
+                                            </BadgeCn>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Properties</span>
+                                            <span class="tabular-nums font-medium">@z.PropertiesAtRisk.ToString("N0")</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Probability</span>
+                                            <span class="font-medium">@z.AnnualProbability</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Map placeholder *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-blue-50 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                    @* Zone boundary circles (rendered as semi-transparent rings) *@
+                    @foreach (var zone in _zones)
+                    {
+                        var pos = GetMarkerPosition(zone.Center[0], zone.Center[1]);
+                        var radiusPx = (int)(zone.RadiusKm * 18);
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
+                            style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%;width:{radiusPx * 2}px;height:{radiusPx * 2}px;border-color:{RiskColor(zone.Risk)};background-color:{RiskColor(zone.Risk)}22;")">
+                        </div>
+                    }
+
+                    @* Historical flood markers *@
+                    @foreach (var ev in _floodEvents)
+                    {
+                        var fe = ev;
+                        var pos = GetMarkerPosition(ev.Longitude, ev.Latitude);
+                        var isPopup = _popupEvent?.Id == ev.Id;
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%;z-index:20;")">
+                            <button
+                                type="button"
+                                class="flex size-6 items-center justify-center rounded-full border-2 border-white bg-red-500 shadow-md"
+                                title="@($"{fe.Name} ({fe.Date})")"
+                                @onclick="@(() => TogglePopup(fe))">
+                                <LucideIconCn Name="droplets" Size="12" Class="size-3 text-white" />
+                            </button>
+                            @if (isPopup)
+                            {
+                                <div class="absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 w-52 rounded-lg border bg-card p-3 shadow-lg">
+                                    <div class="mb-0.5 flex items-center justify-between">
+                                        <p class="text-sm font-medium">@ev.Name</p>
+                                        <button
+                                            type="button"
+                                            class="rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                                            @onclick:stopPropagation
+                                            @onclick="@(() => _popupEvent = null)">
+                                            <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                        </button>
+                                    </div>
+                                    <p class="mt-0.5 text-xs text-muted-foreground">@ev.Date</p>
+                                    <div class="mt-2 space-y-1.5">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Peak level</span>
+                                            <span class="tabular-nums font-medium">@ev.PeakLevel</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-muted-foreground">Estimated damage</span>
+                                            <span class="tabular-nums font-medium">@ev.Damage</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* Infrastructure markers *@
+                    @foreach (var inf in _infrastructure)
+                    {
+                        var pos = GetMarkerPosition(inf.Longitude, inf.Latitude);
+                        var bgClass = inf.Risk == "high" ? "bg-red-500/80" : inf.Risk == "moderate" ? "bg-amber-500/80" : "bg-blue-500/80";
+                        <div
+                            class="absolute -translate-x-1/2 -translate-y-1/2"
+                            style="@($"left:{pos.X.ToString("F1")}%;top:{pos.Y.ToString("F1")}%;z-index:10;")">
+                            <div
+                                class="@Cn.Merge("flex size-5 items-center justify-center rounded-full border border-white shadow-sm", bgClass)"
+                                title="@($"{inf.Name} ({inf.Type})")">
+                                <LucideIconCn Name="home" Size="10" Class="size-2.5 text-white" />
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 select-none rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                    Map view — Houston, TX area
+                </div>
+            </div>
+        </div>
+
+        @* Footer legend *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-red-500"></span>
+                High (@(_zones.Count(z => z.Risk == "high")))
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                Moderate (@(_zones.Count(z => z.Risk == "moderate")))
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-blue-500"></span>
+                Low (@(_zones.Count(z => z.Risk == "low")))
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                Minimal (@(_zones.Count(z => z.Risk == "minimal")))
+            </span>
+            <span class="ml-auto text-xs text-muted-foreground">
+                @(_floodEvents.Length) historical events
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record FloodZone(
+        string Id,
+        string Name,
+        string Designation,
+        string Risk,
+        double[] Center,
+        double RadiusKm,
+        string Elevation,
+        int PropertiesAtRisk,
+        string AnnualProbability
+    );
+
+    private record FloodEvent(
+        string Id,
+        string Name,
+        string Date,
+        string PeakLevel,
+        string Damage,
+        double Longitude,
+        double Latitude
+    );
+
+    private record Infrastructure(
+        string Id,
+        string Name,
+        string Type,
+        string Risk,
+        double Longitude,
+        double Latitude
+    );
+
+    private static readonly FloodZone[] _zones =
+    [
+        new("fz1", "River Bend Floodplain",   "Zone AE",         "high",     [-95.365, 29.76],  1.8, "12 ft BFE", 1240, "1% annual"),
+        new("fz2", "Bayou Basin",             "Zone AE",         "high",     [-95.34,  29.745], 1.2, "15 ft BFE",  890, "1% annual"),
+        new("fz3", "Westside Creek Corridor", "Zone X (shaded)", "moderate", [-95.395, 29.755], 1.5, "18 ft BFE",  620, "0.2% annual"),
+        new("fz4", "Oak Meadow District",     "Zone X",          "low",      [-95.38,  29.775], 2.0, "24 ft BFE",  340, "<0.2% annual"),
+        new("fz5", "Highland Terrace",        "Zone X",          "minimal",  [-95.355, 29.785], 1.6, "32 ft BFE",   85, "<0.1% annual"),
+    ];
+
+    private static readonly FloodEvent[] _floodEvents =
+    [
+        new("e1", "Hurricane Harvey",  "Aug 2017", "38.6 ft", "$125B", -95.36,  29.755),
+        new("e2", "Tax Day Flood",     "Apr 2016", "26.2 ft", "$2.7B", -95.375, 29.765),
+        new("e3", "Memorial Day Flood","May 2015", "24.8 ft", "$3B",   -95.345, 29.75),
+    ];
+
+    private static readonly Infrastructure[] _infrastructure =
+    [
+        new("i1", "Memorial Hospital",   "Hospital",  "high",     -95.358, 29.758),
+        new("i2", "Westside Elementary", "School",    "moderate", -95.39,  29.752),
+        new("i3", "Water Treatment Plant","Utility",  "high",     -95.348, 29.742),
+        new("i4", "Fire Station #12",    "Emergency", "low",      -95.372, 29.778),
+    ];
+
+    private string? _selectedZone = "fz1";
+    private string? _expandedZone = null;
+    private FloodEvent? _popupEvent = null;
+
+    private int _totalProperties => _zones.Sum(z => z.PropertiesAtRisk);
+
+    private void ToggleZone(string id)
+    {
+        _selectedZone = id;
+        _expandedZone = _expandedZone == id ? null : id;
+    }
+
+    private void TogglePopup(FloodEvent ev)
+    {
+        _popupEvent = _popupEvent?.Id == ev.Id ? null : ev;
+    }
+
+    private static string RiskDot(string risk) => risk switch
+    {
+        "high"     => "bg-red-500",
+        "moderate" => "bg-amber-500",
+        "low"      => "bg-blue-500",
+        "minimal"  => "bg-emerald-500",
+        _          => "bg-muted",
+    };
+
+    private static string RiskColor(string risk) => risk switch
+    {
+        "high"     => "#ef4444",
+        "moderate" => "#f59e0b",
+        "low"      => "#3b82f6",
+        "minimal"  => "#22c55e",
+        _          => "#94a3b8",
+    };
+
+    private static string RiskLabel(string risk) => risk switch
+    {
+        "high"     => "High",
+        "moderate" => "Moderate",
+        "low"      => "Low",
+        "minimal"  => "Minimal",
+        _          => risk,
+    };
+
+    // Map longitude/latitude to CSS percentage positions within the placeholder div.
+    // Viewport: lon [-95.42, -95.32], lat [29.73, 29.80]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -95.42, lonMax = -95.32;
+        const double latMin = 29.73,  latMax = 29.80;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 3, 97);
+        y = Math.Clamp(y, 3, 97);
+        return (x, y);
+    }
+}

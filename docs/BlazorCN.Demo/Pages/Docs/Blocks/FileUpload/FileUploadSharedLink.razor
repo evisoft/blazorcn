@@ -1,0 +1,215 @@
+@* ============================================================
+   Block: file-upload-shared-link
+   Title: FileUploadSharedLink
+   Description: Upload file and generate shareable link block for React and Next.js with copyable URL, expiry selector, password protection, and download count using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-shared-link.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">Share file</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">
+                Upload a file and generate a shareable download link
+            </p>
+        </div>
+
+        @* Upload area or file details *@
+        @if (!_showFile)
+        {
+            <div class="border-b px-4 py-4">
+                <div
+                    role="button"
+                    tabindex="0"
+                    @onclick="HandleDropzoneClick"
+                    @onkeydown="@((Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e) => { if (e.Key == "Enter" || e.Key == " ") HandleDropzoneClick(); })"
+                    class="@Cn.Merge("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-10 transition-colors", _isDragging ? "border-foreground/30 bg-muted/50" : "border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/30")">
+                    <LucideIconCn Name="upload-cloud" Size="32" Class="size-8 text-muted-foreground/60" />
+                    <div class="text-center">
+                        <span class="font-medium text-sm">Drop a file here</span>
+                        <p class="mt-0.5 text-muted-foreground text-xs">or click to browse</p>
+                    </div>
+                    <input type="file" class="hidden" />
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center gap-3">
+                    <LucideIconCn Name="file" Size="16" Class="size-4 shrink-0 text-muted-foreground" />
+                    <div class="min-w-0 flex-1">
+                        <span class="block truncate font-medium text-sm">@_current.Name</span>
+                        <span class="text-muted-foreground text-xs">@_current.Size</span>
+                    </div>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs" @onclick="ReplaceFile">
+                        Replace
+                    </ButtonCn>
+                </div>
+            </div>
+        }
+
+        @* Link settings — only when a file is shown *@
+        @if (_showFile)
+        {
+            @* Expiry selector *@
+            <div class="flex items-center justify-between border-b px-4 py-3">
+                <span class="font-medium text-muted-foreground text-xs">Link expires after</span>
+                <div class="flex items-center gap-1">
+                    @foreach (var opt in _expiryOptions)
+                    {
+                        var option = opt;
+                        <button
+                            type="button"
+                            @onclick="@(() => _expiry = option.Value)"
+                            class="@Cn.Merge("rounded-md px-2 py-1 text-xs transition-colors", _expiry == option.Value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                            @option.Label
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Password protection *@
+            <div class="flex items-center justify-between border-b px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="lock" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-muted-foreground text-xs">Password protection</span>
+                </div>
+                <SwitchCn @bind-Checked="_passwordEnabled" />
+            </div>
+
+            @if (_passwordEnabled)
+            {
+                <div class="border-b px-4 py-3">
+                    <InputCn Type="password" Placeholder="@("Enter a password for this link")" Class="h-8 text-sm" />
+                </div>
+            }
+
+            @* Generate link *@
+            @if (!_linkGenerated)
+            {
+                <div class="px-4 py-3">
+                    <ButtonCn Size="ButtonSize.Sm" Class="h-8 w-full gap-2 text-xs" @onclick="GenerateLink">
+                        <LucideIconCn Name="link" Size="14" Class="size-3.5" />
+                        Generate Link
+                    </ButtonCn>
+                </div>
+            }
+            else
+            {
+                @* Share URL *@
+                <div class="border-b px-4 py-3">
+                    <span class="mb-1.5 block font-medium text-muted-foreground text-xs">Share link</span>
+                    <div class="flex items-center gap-2">
+                        <div class="min-w-0 flex-1 rounded-md bg-muted/50 px-3 py-2">
+                            <span class="block truncate font-mono text-xs">@_shareUrl</span>
+                        </div>
+                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-8 shrink-0 gap-1.5 text-xs" @onclick="CopyLink">
+                            @if (_copied)
+                            {
+                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                <span>Copied</span>
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="copy" Size="12" Class="size-3" />
+                                <span>Copy</span>
+                            }
+                        </ButtonCn>
+                    </div>
+                </div>
+
+                @* Download count *@
+                <div class="flex items-center gap-2 px-4 py-3">
+                    <LucideIconCn Name="download" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="text-muted-foreground text-xs">
+                        <span class="font-medium tabular-nums text-foreground">@_downloadCount</span>
+                        @(" downloads")
+                    </span>
+                    <span class="text-muted-foreground text-xs">·</span>
+                    <span class="text-muted-foreground text-xs">
+                        Expires in @GetExpiryLabel(_expiry).ToLower()
+                    </span>
+                    @if (_passwordEnabled)
+                    {
+                        <span class="text-muted-foreground text-xs">·</span>
+                        <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                            <LucideIconCn Name="lock" Size="12" Class="size-3" />
+                            Protected
+                        </span>
+                    }
+                </div>
+            }
+        }
+
+        @* Empty state *@
+        @if (!_showFile)
+        {
+            <div class="px-4 py-6 text-center">
+                <span class="text-muted-foreground text-xs">Upload a file to generate a share link</span>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private record UploadedFileInfo(string Name, string Size, string Type);
+
+    private record ExpiryOption(string Value, string Label);
+
+    private static readonly ExpiryOption[] _expiryOptions =
+    [
+        new("1d", "1 day"),
+        new("7d", "7 days"),
+        new("30d", "30 days"),
+        new("never", "Never"),
+    ];
+
+    private static readonly UploadedFileInfo _sampleFile =
+        new("Q4-2025-financial-report.pdf", "2.4 MB", "application/pdf");
+
+    private UploadedFileInfo? _file = null;
+    private bool _linkGenerated = false;
+    private bool _copied = false;
+    private string _expiry = "7d";
+    private bool _passwordEnabled = false;
+    private bool _isDragging = false;
+
+    private readonly string _shareUrl = "https://share.acme.com/f/a8k2x9m4";
+    private readonly int _downloadCount = 12;
+
+    private UploadedFileInfo _current => _file ?? _sampleFile;
+    private bool _showFile => _file is not null;
+
+    private string GetExpiryLabel(string value)
+    {
+        var opt = Array.Find(_expiryOptions, o => o.Value == value);
+        return opt?.Label ?? value;
+    }
+
+    private void HandleDropzoneClick()
+    {
+        // Simulate file selection — set a demo file
+        _file = new UploadedFileInfo("quarterly-report-q1.pdf", "1.4 MB", "application/pdf");
+        _linkGenerated = false;
+        _copied = false;
+    }
+
+    private void ReplaceFile()
+    {
+        _file = null;
+        _linkGenerated = false;
+    }
+
+    private void GenerateLink()
+    {
+        _linkGenerated = true;
+        _copied = false;
+    }
+
+    private void CopyLink()
+    {
+        _copied = true;
+    }
+}

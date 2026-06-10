@@ -1,0 +1,245 @@
+@* ============================================================
+   Block: map-election-results
+   Title: MapElectionResults
+   Description: React election results map block for Next.js with district markers, vote share badges, party color indicators, turnout data, and district detail panels using mapcn map components, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-election-results.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="vote" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Election Results</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_totalReporting/@_totalPrecincts precincts
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    <span class="font-medium tabular-nums">@_demWins</span>
+                    <span class="text-muted-foreground">DEM</span>
+                </span>
+                <span class="flex items-center gap-1.5 text-xs">
+                    <span class="size-1.5 rounded-full bg-red-500"></span>
+                    <span class="font-medium tabular-nums">@_repWins</span>
+                    <span class="text-muted-foreground">REP</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Map placeholder (Map/MapMarker/MapControls/MarkerContent/MarkerTooltip are not available in BlazorCN; rendered as a styled placeholder with district markers) *@
+            <div class="relative h-[500px] flex-1">
+                <div class="absolute inset-0 overflow-hidden">
+                    @* Simulated map background *@
+                    <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+                    @* District markers positioned roughly within the NYC viewport *@
+                    @foreach (var d in _districts)
+                    {
+                        var isSelected = _selectedId == d.Id;
+                        var cfg = GetPartyConfig(d.Winner);
+                        var pos = GetMarkerPosition(d.Longitude, d.Latitude);
+                        var district = d;
+                        var marginLabel = d.Margin > 0 ? $"+{(int)Math.Round(d.Margin)}" : $"{(int)Math.Round(d.Margin)}";
+                        <button
+                            type="button"
+                            class="@Cn.Merge("absolute flex items-center justify-center rounded-full border-2 border-background shadow-lg transition-all -translate-x-1/2 -translate-y-1/2", isSelected ? "size-10" : "size-7")"
+                            style="@($"background-color:{cfg.Color};left:{pos.X}%;top:{pos.Y}%")"
+                            @onclick="@(() => ToggleDistrict(district.Id))"
+                            title="@($"{d.Name} — {cfg.Label} +{d.Margin:F1}")"
+                        >
+                            <span class="@Cn.Merge("font-semibold text-white tabular-nums", isSelected ? "text-xs" : "text-[10px]")">
+                                @marginLabel
+                            </span>
+                        </button>
+                    }
+                </div>
+                <div class="relative z-10 pointer-events-none select-none text-xs text-muted-foreground bg-background/70 px-2 py-1 rounded absolute bottom-2 left-2">
+                    Map view — New York City
+                </div>
+            </div>
+
+            @* Detail Panel *@
+            <div class="w-64 shrink-0 border-l">
+                @if (_selected != null)
+                {
+                    var sel = _selected;
+                    var selCfg = GetPartyConfig(sel.Winner);
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            <LucideIconCn Name="flag" Size="16" Class="size-4 text-muted-foreground" />
+                            <span class="font-medium text-sm">@sel.Name</span>
+                        </div>
+                        <div class="mt-2 flex items-center gap-3">
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 gap-1 px-1.5 font-normal text-[10px]">
+                                <span class="@($"size-1.5 rounded-full {selCfg.Dot}")"></span>
+                                @selCfg.Label lead
+                            </BadgeCn>
+                            <span class="text-muted-foreground text-xs">
+                                @sel.PrecinctsReporting/@sel.PrecinctsTotal precincts
+                            </span>
+                        </div>
+                    </div>
+
+                    @* Turnout *@
+                    <div class="border-b px-4 py-3">
+                        <div class="flex items-center justify-between">
+                            <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                                <LucideIconCn Name="users" Size="12" Class="size-3" />
+                                Turnout
+                            </span>
+                            <span class="font-semibold text-sm tabular-nums">@sel.Turnout%</span>
+                        </div>
+                        <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                                class="h-full rounded-full bg-foreground/60"
+                                style="@($"width:{sel.Turnout}%")"
+                            ></div>
+                        </div>
+                        <span class="mt-1 block text-muted-foreground text-xs">
+                            @sel.RegisteredVoters.ToString("N0") registered
+                        </span>
+                    </div>
+
+                    @* Candidates *@
+                    <div class="max-h-[320px] overflow-y-auto">
+                        @foreach (var (c, i) in sel.Candidates.Select((x, idx) => (x, idx)))
+                        {
+                            var candCfg = GetPartyConfig(c.Party);
+                            var isLast = i == sel.Candidates.Length - 1;
+                            <div class="@(isLast ? "" : "border-b")">
+                                <div class="px-4 py-2.5">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="@($"size-1.5 rounded-full {candCfg.Dot}")"></span>
+                                            <span class="font-medium text-sm">@c.Name</span>
+                                        </div>
+                                        <span class="font-semibold text-sm tabular-nums">
+                                            @c.Percentage%
+                                        </span>
+                                    </div>
+                                    <div class="mt-1.5 flex items-center gap-2">
+                                        <div class="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                                            <div
+                                                class="h-full rounded-full"
+                                                style="@($"width:{c.Percentage}%;background-color:{candCfg.Color}")"
+                                            ></div>
+                                        </div>
+                                    </div>
+                                    <span class="mt-1 block text-muted-foreground text-xs tabular-nums">
+                                        @c.Votes.ToString("N0") votes
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="flex h-full items-center justify-center p-4">
+                        <span class="text-center text-muted-foreground text-xs">
+                            Select a district to view results
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Candidate(string Name, string Party, int Votes, double Percentage);
+
+    private record District(
+        string Id,
+        string Name,
+        double Longitude,
+        double Latitude,
+        int PrecinctsReporting,
+        int PrecinctsTotal,
+        int Turnout,
+        int RegisteredVoters,
+        string Winner,
+        double Margin,
+        Candidate[] Candidates
+    );
+
+    private record PartyConfig(string Label, string Dot, string Color);
+
+    private static readonly District[] _districts =
+    [
+        new("d1", "Manhattan Central", -73.9712, 40.7831, 142, 142, 72, 245800, "democratic", 28.4,
+        [
+            new("Elena Vasquez", "democratic", 112340, 62.1),
+            new("Robert Chen",   "republican",  60920, 33.7),
+            new("Maya Osei",     "independent",  7580,  4.2),
+        ]),
+        new("d2", "Brooklyn Heights", -73.9942, 40.6958, 98, 112, 64, 189400, "democratic", 18.6,
+        [
+            new("Elena Vasquez", "democratic", 71200, 58.3),
+            new("Robert Chen",   "republican", 48480, 39.7),
+            new("Maya Osei",     "independent", 2440,  2.0),
+        ]),
+        new("d3", "Queens West", -73.9235, 40.7502, 76, 76, 58, 172600, "republican", 3.2,
+        [
+            new("Elena Vasquez", "democratic", 48120, 47.4),
+            new("Robert Chen",   "republican", 51360, 50.6),
+            new("Maya Osei",     "independent", 2030,  2.0),
+        ]),
+        new("d4", "Upper East Side", -73.9565, 40.7736, 64, 64, 78, 134200, "democratic", 22.0,
+        [
+            new("Elena Vasquez", "democratic", 63480, 60.0),
+            new("Robert Chen",   "republican", 40200, 38.0),
+            new("Maya Osei",     "independent", 2116,  2.0),
+        ]),
+        new("d5", "Staten Island North", -74.0776, 40.6432, 52, 88, 61, 156300, "republican", 14.8,
+        [
+            new("Elena Vasquez", "democratic", 39200, 41.1),
+            new("Robert Chen",   "republican", 53320, 55.9),
+            new("Maya Osei",     "independent", 2860,  3.0),
+        ]),
+        new("d6", "Bronx South", -73.9186, 40.8176, 110, 110, 52, 198700, "democratic", 42.6,
+        [
+            new("Elena Vasquez", "democratic", 72400, 70.3),
+            new("Robert Chen",   "republican", 28520, 27.7),
+            new("Maya Osei",     "independent", 2060,  2.0),
+        ]),
+    ];
+
+    private static PartyConfig GetPartyConfig(string party) => party switch
+    {
+        "democratic"  => new("DEM", "bg-blue-500",  "#3b82f6"),
+        "republican"  => new("REP", "bg-red-500",   "#ef4444"),
+        "independent" => new("IND", "bg-amber-500", "#eab308"),
+        _             => new("?",   "bg-muted-foreground", "#6b7280"),
+    };
+
+    // Map lon/lat to CSS % positions within the placeholder div.
+    // NYC viewport: lon [-74.10, -73.88], lat [40.62, 40.84]
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -74.10, lonMax = -73.88;
+        const double latMin = 40.62,  latMax = 40.84;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 5, 95);
+        y = Math.Clamp(y, 5, 95);
+        return (x, y);
+    }
+
+    private int _totalReporting => Array.ConvertAll(_districts, d => d.PrecinctsReporting).Sum();
+    private int _totalPrecincts => Array.ConvertAll(_districts, d => d.PrecinctsTotal).Sum();
+    private int _demWins        => Array.FindAll(_districts, d => d.Winner == "democratic").Length;
+    private int _repWins        => Array.FindAll(_districts, d => d.Winner == "republican").Length;
+
+    private string? _selectedId = "d1";
+    private District? _selected  => Array.Find(_districts, d => d.Id == _selectedId);
+
+    private void ToggleDistrict(string id)
+    {
+        _selectedId = _selectedId == id ? null : id;
+    }
+}

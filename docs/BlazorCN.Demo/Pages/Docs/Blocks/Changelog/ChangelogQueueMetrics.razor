@@ -1,0 +1,204 @@
+@* ============================================================
+   Block: changelog-queue-metrics
+   Title: ChangelogQueueMetrics
+   Description: A changelog showing message queue metrics per release including throughput, lag, and dead letter queue stats, built with React, Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/changelog/changelog-queue-metrics.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <h2 class="text-sm font-medium">Queue Metrics Changelog</h2>
+            <p class="mt-1 text-xs text-muted-foreground">
+                Message queue performance metrics per release
+            </p>
+        </div>
+
+        @* Summary stats *@
+        <div class="border-b px-4 py-3">
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <p class="text-xs text-muted-foreground">Total Queues</p>
+                    <p class="mt-1 font-semibold tabular-nums text-2xl">@_queueMetrics.Length</p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Healthy</p>
+                    <p class="mt-1 font-semibold tabular-nums text-2xl text-emerald-500">
+                        @_queueMetrics.Count(q => q.Status == "healthy")
+                    </p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Issues</p>
+                    <p class="mt-1 font-semibold tabular-nums text-2xl text-red-500">
+                        @_queueMetrics.Count(q => q.Status != "healthy")
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @* Queue rows *@
+        <div>
+            @foreach (var q in _queueMetrics)
+            {
+                var queue = q;
+                var isExpanded = _expandedQueue == queue.Name;
+                var isLast = queue.Name == _queueMetrics[^1].Name;
+                <div class="@(isLast ? "" : "border-b")">
+                    <button type="button"
+                            class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                            @onclick="@(() => SetExpanded(queue.Name))">
+                        <div class="flex items-center gap-2">
+                            @if (queue.Status == "healthy")
+                            {
+                                <LucideIconCn Name="check-circle-2" Size="16" Class="size-4 text-emerald-500" />
+                            }
+                            else if (queue.Status == "degraded")
+                            {
+                                <LucideIconCn Name="alert-triangle" Size="16" Class="size-4 text-amber-500" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="x-circle" Size="16" Class="size-4 text-red-500" />
+                            }
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-sm font-medium">@queue.Name</span>
+                                @if (queue.Status == "healthy")
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="border-0 bg-emerald-500/10 text-emerald-500">healthy</BadgeCn>
+                                }
+                                else if (queue.Status == "degraded")
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="border-0 bg-amber-500/10 text-amber-500">degraded</BadgeCn>
+                                }
+                                else
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="border-0 bg-red-500/10 text-red-500">critical</BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span class="font-mono">@queue.Version</span>
+                                <span class="text-muted-foreground/40">•</span>
+                                <span>@queue.Timestamp</span>
+                            </div>
+                            <div class="mt-1.5 flex items-center gap-3 text-xs">
+                                <div class="flex items-center gap-1">
+                                    <LucideIconCn Name="trending-up" Size="12" Class="size-3 text-emerald-500" />
+                                    <span class="font-mono">@FormatNumber(queue.Metrics.Throughput)/min</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <LucideIconCn Name="inbox" Size="12" Class="size-3 text-amber-500" />
+                                    <span class="font-mono">lag: @FormatNumber(queue.Metrics.ConsumerLag)</span>
+                                </div>
+                                @if (queue.Metrics.DeadLetterQueue > 0)
+                                {
+                                    <div class="flex items-center gap-1">
+                                        <LucideIconCn Name="x-circle" Size="12" Class="size-3 text-red-500" />
+                                        <span class="font-mono">DLQ: @queue.Metrics.DeadLetterQueue</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t bg-muted/30 px-4 py-3">
+                            <div class="mb-3 grid grid-cols-2 gap-3 rounded-md bg-card p-3">
+                                <div>
+                                    <p class="text-xs text-muted-foreground">Avg Processing Time</p>
+                                    <p class="mt-1 font-mono text-sm font-medium">@(queue.Metrics.AvgProcessingTime)ms</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-muted-foreground">Consumer Lag</p>
+                                    <p class="mt-1 font-mono text-sm font-medium">@queue.Metrics.ConsumerLag messages</p>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2">
+                                @foreach (var c in queue.Changes)
+                                {
+                                    var change = c;
+                                    <div class="rounded-md bg-card p-3">
+                                        <div class="mb-1 flex items-center gap-2">
+                                            <span class="text-xs font-medium">@change.Metric</span>
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="border-0 bg-muted/50 font-mono text-xs">@change.Change</BadgeCn>
+                                        </div>
+                                        <p class="text-sm text-muted-foreground">@change.Impact</p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="border-t px-4 py-3">
+            <div class="flex items-center justify-between">
+                <p class="text-xs text-muted-foreground">Last updated: 1 minute ago</p>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                    View Dashboard
+                </ButtonCn>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record QueueMetricValues(int Throughput, int ConsumerLag, int DeadLetterQueue, int AvgProcessingTime);
+    private record QueueChange(string Metric, string Change, string Impact);
+    private record QueueEntry(string Name, string Version, string Timestamp, QueueMetricValues Metrics, string Status, QueueChange[] Changes);
+
+    private static readonly QueueEntry[] _queueMetrics =
+    [
+        new("order-processing-queue", "v2.3.0", "2026-03-30 10:15",
+            new(12500, 245, 3, 89),
+            "healthy",
+            [
+                new("Throughput", "+15% (10870 → 12500 msg/min)", "Increased consumer instances from 4 to 6, improved partition distribution"),
+                new("Processing Time", "-12ms (101ms → 89ms)", "Database query optimization reduced per-message latency"),
+            ]),
+        new("notification-queue", "v1.8.1", "2026-03-29 14:30",
+            new(8200, 1850, 12, 156),
+            "degraded",
+            [
+                new("Consumer Lag", "+420% (356 → 1850 messages)", "Email service provider rate limiting causing processing delays"),
+                new("Dead Letter Queue", "+9 messages", "Invalid email addresses from recent bulk import, requires manual review"),
+            ]),
+        new("payment-events-queue", "v3.1.2", "2026-03-28 09:00",
+            new(4580, 42, 0, 234),
+            "healthy",
+            [
+                new("Throughput", "Stable (4580 msg/min)", "No changes, baseline performance maintained"),
+            ]),
+        new("analytics-ingestion-queue", "v4.0.1", "2026-03-27 16:45",
+            new(28400, 8920, 156, 412),
+            "critical",
+            [
+                new("Consumer Lag", "+6500 messages (2420 → 8920)", "CRITICAL: New schema validation added in v4.0.0 causing processing bottleneck"),
+                new("Dead Letter Queue", "+145 messages", "Schema validation failures, rollback to v3.9.8 recommended"),
+                new("Processing Time", "+189ms (223ms → 412ms)", "JSON schema validation overhead significantly increased per-message latency"),
+            ]),
+    ];
+
+    private string? _expandedQueue;
+
+    private void SetExpanded(string name)
+    {
+        _expandedQueue = _expandedQueue == name ? null : name;
+    }
+
+    private static string FormatNumber(int num)
+    {
+        if (num >= 1000)
+            return $"{(num / 1000.0):F1}k";
+        return num.ToString();
+    }
+}

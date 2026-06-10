@@ -1,0 +1,130 @@
+@* ============================================================
+   Block: monitoring-cache-hit-rate
+   Title: MonitoringCacheHitRate
+   Description: Real-time cache performance monitoring block featuring hit vs. miss area charts, eviction tracking, and latency impact analysis for Redis and CDN with Recharts and shadcn/ui.
+   Source: original/blocks/monitoring/monitoring-cache-hit-rate.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3 bg-muted/20">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
+                    <LucideIconCn Name="zap" Size="16" Class="size-4" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">Cache Efficiency</h3>
+                    <p class="mt-1 text-muted-foreground text-xs font-medium">Redis Cluster · production-v2</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Optimal</span>
+                <div class="size-1.5 rounded-full bg-emerald-500"></div>
+            </div>
+        </div>
+
+        <div class="p-4 border-b">
+            <div class="mb-6 flex items-end justify-between">
+                <div>
+                    <div class="flex items-baseline gap-1.5">
+                        <span class="text-3xl font-bold tabular-nums tracking-tight">@_hitRate.ToString("F1")</span>
+                        <span class="text-sm font-medium text-muted-foreground">%</span>
+                    </div>
+                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mt-1">
+                        Hit Rate (Last 24h)
+                    </p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">
+                        Total Requests
+                    </p>
+                    <span class="text-xl font-semibold tabular-nums">@_totalRequests</span>
+                </div>
+            </div>
+
+            <div class="h-[160px] w-full">
+                @{
+                    var data = _cacheData;
+                    var count = data.Length;
+                    var chartW = 400;
+                    var chartH = 160;
+                    var allHits = data.Select(d => d.Hits).ToArray();
+                    var allMisses = data.Select(d => d.Misses).ToArray();
+                    var maxVal = allHits.Max() + allMisses.Max() + 100;
+                    double StepX(int i) => count <= 1 ? 0 : (double)chartW / (count - 1) * i;
+                    double HitY(int i) => chartH - (double)data[i].Hits / maxVal * chartH;
+                    double MissY(int i) => chartH - (double)data[i].Misses / maxVal * chartH;
+                    var hitPoints = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{HitY(i):F1}"));
+                    var hitFillPoints = $"0,{chartH} " + hitPoints + $" {chartW},{chartH}";
+                    var missPoints = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{MissY(i):F1}"));
+                }
+                <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="hitGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="#10b981" stop-opacity="0.2" />
+                            <stop offset="95%" stop-color="#10b981" stop-opacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <polygon points="@hitFillPoints" fill="url(#hitGradient)" />
+                    <polyline points="@hitPoints" fill="none" stroke="#10b981" stroke-width="2" />
+                    <polyline points="@missPoints" fill="none" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 4" />
+                </svg>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-3 divide-x">
+            @foreach (var stat in _stats)
+            {
+                var s = stat;
+                <div class="p-3">
+                    <p class="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        @s.Label
+                    </p>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-sm font-bold text-foreground">@s.Value</span>
+                        @if (s.Status == "warning")
+                        {
+                            <div class="size-1 rounded-full bg-amber-500"></div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="px-4 py-2.5 bg-muted/30 border-t flex items-center justify-between">
+            <div class="flex items-center gap-2 text-muted-foreground">
+                <LucideIconCn Name="info" Size="12" Class="size-3" />
+                <span class="text-[10px] font-medium">Latency Savings: ~840ms / request</span>
+            </div>
+            <button type="button" class="text-[10px] font-bold text-foreground hover:underline">
+                Keyspace Analysis →
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record CachePoint(string Time, int Hits, int Misses);
+    private record StatItem(string Label, string Value, string Status);
+
+    private static readonly double _hitRate = 92.4;
+    private static readonly string _totalRequests = "12.4M";
+
+    private static readonly CachePoint[] _cacheData =
+    [
+        new("08:00", 820, 120),
+        new("09:00", 1450, 180),
+        new("10:00", 2840, 450),
+        new("11:00", 3120, 380),
+        new("12:00", 2450, 210),
+        new("13:00", 1980, 140),
+        new("14:00", 2100, 160),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("Evictions", "0", "good"),
+        new("Memory", "1.2 GB", "good"),
+        new("Origin Latency", "245ms", "warning"),
+    ];
+}

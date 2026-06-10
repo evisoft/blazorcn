@@ -1,0 +1,151 @@
+@* ============================================================
+   Block: stats-step-line-chart-card
+   Title: StatsStepLineChartCard
+   Description: A step line chart stats card for React and Next.js with a ChartContainer-wrapped Recharts LineChart using type=stepAfter, discrete tier markers, a NumberFlow-animated current-tier value, and a quantized trend indicator built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-step-line-chart-card.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">Rate limit tier history</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Last 90 days · Quantized upgrades
+                </p>
+            </div>
+            <div class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <LucideIconCn Name="layers" Size="12" Class="size-3" />
+                @_currentTier.TierLabel
+            </div>
+        </div>
+
+        <div class="flex items-start justify-between gap-4 px-4 py-4">
+            <div>
+                <p class="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                    Current quota
+                </p>
+                <div class="mt-1 min-w-[140px]">
+                    <span class="text-3xl font-semibold tabular-nums">@FormatCompact(_currentTier.Tier) req/d</span>
+                </div>
+                <div class="mt-1 flex items-center gap-1">
+                    <LucideIconCn Name="trending-up" Size="14" Class="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span class="text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                        +@((_tierJump / 1000).ToString("F0"))k step · last upgrade Apr 12
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-4 pb-4">
+            <div class="h-[200px] w-full">
+                @{
+                    var chartWidth = 560;
+                    var chartHeight = 200;
+                    var marginLeft = 40;
+                    var marginRight = 4;
+                    var marginTop = 8;
+                    var marginBottom = 24;
+                    var plotWidth = chartWidth - marginLeft - marginRight;
+                    var plotHeight = chartHeight - marginTop - marginBottom;
+
+                    var minTier = 0;
+                    var maxTier = 1_000_000;
+
+                    double ScaleX(int index) => marginLeft + (double)index / (_chartData.Length - 1) * plotWidth;
+                    double ScaleY(int tier) => marginTop + plotHeight - (double)(tier - minTier) / (maxTier - minTier) * plotHeight;
+
+                    // Build step-after path
+                    var pathParts = new System.Text.StringBuilder();
+                    for (int i = 0; i < _chartData.Length; i++)
+                    {
+                        double x = ScaleX(i);
+                        double y = ScaleY(_chartData[i].Tier);
+                        if (i == 0)
+                        {
+                            pathParts.Append($"M {x:F1} {y:F1}");
+                        }
+                        else
+                        {
+                            double prevY = ScaleY(_chartData[i - 1].Tier);
+                            double curX = ScaleX(i);
+                            // stepAfter: horizontal first from prev point to current x, then vertical
+                            pathParts.Append($" L {curX:F1} {prevY:F1} L {curX:F1} {y:F1}");
+                        }
+                    }
+                    var stepPath = pathParts.ToString();
+
+                    // Y-axis tick values
+                    int[] yTicks = [0, 50_000, 200_000, 500_000, 1_000_000];
+                }
+                <svg viewBox="0 0 @chartWidth @chartHeight" class="h-full w-full" aria-hidden="true">
+                    @* Grid lines (horizontal) *@
+                    @foreach (var tick in yTicks)
+                    {
+                        var gy = ScaleY(tick);
+                        <line x1="@marginLeft" y1="@gy.ToString("F1")" x2="@(chartWidth - marginRight)" y2="@gy.ToString("F1")" stroke="currentColor" stroke-opacity="0.1" stroke-dasharray="3 3" />
+                    }
+
+                    @* Y axis labels *@
+                    @foreach (var tick in yTicks)
+                    {
+                        var ty = ScaleY(tick);
+                        var label = tick >= 1_000_000 ? $"{tick / 1_000_000}M" : $"{tick / 1000}k";
+                        @((MarkupString)$"<text x=\"{(marginLeft - 4):F1}\" y=\"{ty:F1}\" text-anchor=\"end\" dominant-baseline=\"middle\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.5\">{label}</text>")
+                    }
+
+                    @* X axis labels *@
+                    @for (int i = 0; i < _chartData.Length; i++)
+                    {
+                        if (i % 2 == 0)
+                        {
+                            var lx = ScaleX(i);
+                            var ly = chartHeight - 4;
+                            @((MarkupString)$"<text x=\"{lx:F1}\" y=\"{ly:F1}\" text-anchor=\"middle\" font-size=\"10\" fill=\"currentColor\" opacity=\"0.5\">{_chartData[i].Date}</text>")
+                        }
+                    }
+
+                    @* Step line *@
+                    <path d="@stepPath" fill="none" stroke="oklch(0.646 0.222 41.116)" stroke-width="2" />
+
+                    @* Dots at each data point *@
+                    @for (int i = 0; i < _chartData.Length; i++)
+                    {
+                        var cx = ScaleX(i);
+                        var cy = ScaleY(_chartData[i].Tier);
+                        @((MarkupString)$"<circle cx=\"{cx:F1}\" cy=\"{cy:F1}\" r=\"3\" fill=\"oklch(0.646 0.222 41.116)\" stroke=\"oklch(0.646 0.222 41.116)\" />")
+                    }
+                </svg>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TierPoint(string Date, int Tier, string TierLabel);
+
+    private static readonly TierPoint[] _chartData =
+    [
+        new("Jan 01", 10_000, "Starter"),
+        new("Jan 15", 10_000, "Starter"),
+        new("Feb 01", 50_000, "Growth"),
+        new("Feb 15", 50_000, "Growth"),
+        new("Mar 01", 50_000, "Growth"),
+        new("Mar 15", 200_000, "Scale"),
+        new("Mar 29", 200_000, "Scale"),
+        new("Apr 12", 1_000_000, "Enterprise"),
+    ];
+
+    private static readonly TierPoint _currentTier = _chartData[_chartData.Length - 1];
+    private static readonly TierPoint _previousTier = _chartData[_chartData.Length - 2];
+    private static readonly int _tierJump = _currentTier.Tier - _previousTier.Tier;
+
+    private static string FormatCompact(int value)
+    {
+        if (value >= 1_000_000)
+            return $"{value / 1_000_000.0:F1}M";
+        if (value >= 1_000)
+            return $"{value / 1000.0:F0}k";
+        return value.ToString();
+    }
+}

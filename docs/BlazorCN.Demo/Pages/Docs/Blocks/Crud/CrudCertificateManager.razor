@@ -1,0 +1,126 @@
+@* ============================================================
+   Block: crud-certificate-manager
+   Title: CrudCertificateManager
+   Description: SSL/TLS certificate management with expiration tracking, renewal actions, and domain association
+   Source: original/blocks/crud/crud-certificate-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="shield-check" Size="16" Class="size-4 text-muted-foreground" />
+                    <div>
+                        <h2 class="text-sm font-medium">SSL Certificates</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            @_certs.Count(c => c.Status == "valid") valid · @_certs.Count(c => c.Status == "expiring" || c.Status == "expired") need attention
+                        </p>
+                    </div>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    Add Certificate
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div>
+            @foreach (var cert in _certs)
+            {
+                var dotColor = cert.Status switch { "valid" => "bg-emerald-500", "expiring" => "bg-amber-500", "expired" => "bg-red-500", "pending" => "bg-blue-500", _ => "bg-muted" };
+                var expiresClass = cert.Status == "expired" ? "text-red-500" : cert.Status == "expiring" ? "text-amber-500" : "";
+                var capturedCert = cert;
+                <div class="border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50">
+                    <div class="flex items-start gap-3">
+                        <span class="@($"mt-1.5 size-1.5 shrink-0 rounded-full {dotColor}")"></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-sm font-medium">@cert.Domain</span>
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">@cert.Type</BadgeCn>
+                                @if (cert.AutoRenew)
+                                {
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">Auto-renew</BadgeCn>
+                                }
+                            </div>
+                            <div class="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                <span>Issuer: @cert.Issuer</span>
+                                <span>·</span>
+                                <span>Issued: @cert.IssuedDate</span>
+                                <span>·</span>
+                                <span class="@expiresClass">@cert.ExpiresIn</span>
+                            </div>
+                            @if (cert.Sans.Length > 1)
+                            {
+                                <div class="mt-1.5 flex flex-wrap gap-1">
+                                    @foreach (var san in cert.Sans)
+                                    {
+                                        <span class="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">@san</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                @if (capturedCert.Status == "expiring" || capturedCert.Status == "expired")
+                                {
+                                    <DropdownMenuItemCn>
+                                        <LucideIconCn Name="refresh-cw" Size="16" Class="mr-2 size-4" />
+                                        Renew
+                                    </DropdownMenuItemCn>
+                                }
+                                <DropdownMenuItemCn OnClick="@(() => ToggleAutoRenew(capturedCert.Id))">
+                                    @(capturedCert.AutoRenew ? "Disable Auto-Renew" : "Enable Auto-Renew")
+                                </DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View Details</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Download</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(capturedCert.Id))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class Certificate
+    {
+        public int Id { get; set; }
+        public string Domain { get; set; } = "";
+        public string Issuer { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string ExpiresIn { get; set; } = "";
+        public string IssuedDate { get; set; } = "";
+        public bool AutoRenew { get; set; }
+        public string[] Sans { get; set; } = [];
+    }
+
+    private List<Certificate> _certs =
+    [
+        new() { Id = 1, Domain = "app.example.com", Issuer = "Let's Encrypt", Type = "DV", Status = "valid", ExpiresIn = "82 days", IssuedDate = "Dec 15, 2025", AutoRenew = true, Sans = ["app.example.com", "www.app.example.com"] },
+        new() { Id = 2, Domain = "api.example.com", Issuer = "DigiCert", Type = "OV", Status = "valid", ExpiresIn = "245 days", IssuedDate = "Jul 1, 2025", AutoRenew = false, Sans = ["api.example.com"] },
+        new() { Id = 3, Domain = "dashboard.example.com", Issuer = "Let's Encrypt", Type = "DV", Status = "expiring", ExpiresIn = "12 days", IssuedDate = "Mar 30, 2025", AutoRenew = true, Sans = ["dashboard.example.com"] },
+        new() { Id = 4, Domain = "store.example.com", Issuer = "Sectigo", Type = "EV", Status = "valid", ExpiresIn = "190 days", IssuedDate = "Sep 10, 2025", AutoRenew = false, Sans = ["store.example.com", "shop.example.com"] },
+        new() { Id = 5, Domain = "legacy.example.com", Issuer = "GoDaddy", Type = "DV", Status = "expired", ExpiresIn = "Expired 5 days ago", IssuedDate = "Mar 19, 2025", AutoRenew = false, Sans = ["legacy.example.com"] },
+        new() { Id = 6, Domain = "staging.example.com", Issuer = "Let's Encrypt", Type = "DV", Status = "pending", ExpiresIn = "Pending issuance", IssuedDate = "—", AutoRenew = true, Sans = ["staging.example.com"] },
+    ];
+
+    private void HandleDelete(int id) => _certs.RemoveAll(c => c.Id == id);
+
+    private void ToggleAutoRenew(int id)
+    {
+        var cert = _certs.FirstOrDefault(c => c.Id == id);
+        if (cert is not null) cert.AutoRenew = !cert.AutoRenew;
+    }
+}

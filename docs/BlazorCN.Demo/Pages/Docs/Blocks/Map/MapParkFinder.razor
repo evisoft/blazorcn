@@ -1,0 +1,287 @@
+@* ============================================================
+   Block: map-park-finder
+   Title: MapParkFinder
+   Description: Interactive public park and green space discovery map with park markers, activity type badges, size info, amenity icons, and park detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-park-finder.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="trees" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Parks &amp; Green Spaces</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length parks</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _activityFilter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _activityFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                @foreach (var activity in _allActivities)
+                {
+                    var act = activity;
+                    var isActive = _activityFilter == act;
+                    <button
+                        type="button"
+                        @onclick="@(() => _activityFilter = _activityFilter == act ? null : act)"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", _activityColors[act])"></span>
+                        @act
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">
+                        NYC &middot; @_totalAcreage.ToString("N0") acres total
+                    </span>
+                </div>
+                <div class="max-h-[440px] divide-y overflow-y-auto">
+                    @foreach (var park in _filtered)
+                    {
+                        var p = park;
+                        var isSelected = _selectedPark == p.Id;
+                        <button
+                            type="button"
+                            @onclick="@(() => SelectPark(p))"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", isSelected ? "bg-muted/50" : "")">
+                            <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-sm", _activityColors[p.PrimaryActivity])">
+                                <LucideIconCn Name="trees" Size="12" Class="size-3 text-white" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@p.Name</span>
+                                <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span class="tabular-nums">@p.Acreage acres</span>
+                                    <span>&middot;</span>
+                                    <span>@p.Amenities.Length amenities</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-0.5">
+                                <span class="text-xs font-medium tabular-nums">@p.Rating</span>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1 text-[9px] font-normal">
+                                    @(_sizeLabelFirst[p.Size])
+                                </BadgeCn>
+                            </div>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map *@
+            <div class="relative h-[500px] flex-1">
+                <div class="relative h-full w-full overflow-hidden bg-emerald-50 dark:bg-emerald-950">
+                    @* Simplified green-space background *@
+                    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,_#bbf7d0_0%,_#86efac_40%,_#4ade80_100%)] opacity-30"></div>
+                    <div class="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+                        <span class="rounded bg-background/80 px-2 py-1 text-[10px]">Map view — New York City parks</span>
+                    </div>
+
+                    @* Park markers *@
+                    @foreach (var park in _filtered)
+                    {
+                        var p = park;
+                        var isSelected = _selectedPark == p.Id;
+                        @* Longitude range: -74.0112 to -73.8055 (~0.2057 deg wide)
+                           Latitude range:  40.6602 to 40.8677 (~0.2075 deg tall)
+                           left=0% = lon -74.0112, right=100% = lon -73.8055
+                           top=0%  = lat 40.8677,  bottom=100% = lat 40.6602 *@
+                        var leftPct = (p.Lng - (-74.0112)) / 0.2057 * 100.0;
+                        var topPct  = (40.8677 - p.Lat) / 0.2075 * 100.0;
+                        <div class="absolute" style="@($"left:{leftPct:F1}%; top:{topPct:F1}%; transform:translate(-50%,-50%)")">
+                            <button
+                                type="button"
+                                @onclick="@(() => HandleMarkerClick(p))"
+                                class="@Cn.Merge("flex size-6 items-center justify-center rounded-full border-2 border-white shadow-md hover:scale-110 transition-transform", _activityColors[p.PrimaryActivity])">
+                                <LucideIconCn Name="trees" Size="12" Class="size-3 text-white" />
+                            </button>
+                            @* Marker tooltip *@
+                            <div class="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-sm">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="font-medium">@p.Name</span>
+                                    <span>@p.Acreage acres</span>
+                                </div>
+                            </div>
+                            @* Popup *@
+                            @if (_popupPark != null && _popupPark.Id == p.Id)
+                            {
+                                var pp = _popupPark;
+                                <div class="absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 rounded border bg-popover p-3 shadow-md" style="width:224px">
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => _popupPark = null)"
+                                        class="absolute right-1.5 top-1.5 text-muted-foreground hover:text-foreground">
+                                        <LucideIconCn Name="x" Size="12" Class="size-3" />
+                                    </button>
+                                    <div class="w-56">
+                                        <div class="mb-2 flex items-start justify-between">
+                                            <div>
+                                                <p class="text-sm font-medium">@pp.Name</p>
+                                                <p class="text-xs text-muted-foreground">@pp.Address</p>
+                                            </div>
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                                @_sizeLabels[pp.Size]
+                                            </BadgeCn>
+                                        </div>
+                                        <div class="mb-2 space-y-1.5">
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span class="text-muted-foreground">Size</span>
+                                                <span class="font-medium tabular-nums">@pp.Acreage.ToString("N0") acres</span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span class="text-muted-foreground">Hours</span>
+                                                <span class="font-medium">@pp.Hours</span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span class="text-muted-foreground">Rating</span>
+                                                <span class="font-medium tabular-nums">@pp.Rating/5</span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-xs">
+                                                <span class="text-muted-foreground">Monthly visitors</span>
+                                                <span class="font-medium tabular-nums">@pp.MonthlyVisitors</span>
+                                            </div>
+                                        </div>
+                                        <div class="mb-2">
+                                            <p class="mb-1 text-xs font-medium text-muted-foreground">Activities</p>
+                                            <div class="flex flex-wrap gap-1">
+                                                @foreach (var act in pp.Activities)
+                                                {
+                                                    var actItem = act;
+                                                    <span class="flex items-center gap-1 text-[10px]">
+                                                        <span class="@Cn.Merge("size-1.5 rounded-full", _activityColors[actItem])"></span>
+                                                        @actItem
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="border-t pt-2">
+                                            <p class="mb-1 text-xs font-medium text-muted-foreground">Amenities</p>
+                                            <div class="flex flex-wrap gap-1">
+                                                @foreach (var amenity in pp.Amenities.Take(5))
+                                                {
+                                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">@amenity</BadgeCn>
+                                                }
+                                                @if (pp.Amenities.Length > 5)
+                                                {
+                                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">+@(pp.Amenities.Length - 5) more</BadgeCn>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* Map controls placeholder *@
+                    <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                        <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-sm hover:bg-muted">+</button>
+                        <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-sm hover:bg-muted">-</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var activity in _allActivities)
+            {
+                var act = activity;
+                var count = _parks.Count(pk => pk.PrimaryActivity == act);
+                if (count == 0) { continue; }
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", _activityColors[act])"></span>
+                    @act (@count)
+                </span>
+            }
+            <span class="ml-auto text-xs text-muted-foreground">
+                @_parks.Length parks &middot; @_totalAcreage.ToString("N0") acres
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Park(
+        string   Id,
+        string   Name,
+        string   Address,
+        int      Acreage,
+        string   Size,
+        string   PrimaryActivity,
+        string[] Activities,
+        string[] Amenities,
+        string   Hours,
+        double   Rating,
+        string   MonthlyVisitors,
+        double   Lng,
+        double   Lat
+    );
+
+    private static readonly Dictionary<string, string> _activityColors = new()
+    {
+        ["Hiking"]     = "bg-emerald-500",
+        ["Sports"]     = "bg-blue-500",
+        ["Cycling"]    = "bg-amber-500",
+        ["Playground"] = "bg-rose-500",
+        ["Wildlife"]   = "bg-violet-500",
+        ["Water"]      = "bg-sky-500",
+    };
+
+    private static readonly Dictionary<string, string> _sizeLabels = new()
+    {
+        ["small"]  = "Pocket Park",
+        ["medium"] = "Community Park",
+        ["large"]  = "Regional Park",
+    };
+
+    private static readonly Dictionary<string, string> _sizeLabelFirst = new()
+    {
+        ["small"]  = "Pocket",
+        ["medium"] = "Community",
+        ["large"]  = "Regional",
+    };
+
+    private static readonly string[] _allActivities = ["Hiking", "Sports", "Cycling", "Playground", "Wildlife", "Water"];
+
+    private static readonly Park[] _parks =
+    [
+        new("pk1", "Central Park",               "Manhattan, New York",          843,  "large",  "Hiking",    ["Hiking", "Cycling", "Sports", "Wildlife"],          ["Restrooms", "Playgrounds", "Boathouse", "Zoo", "Tennis Courts", "Running Track"], "6:00 AM - 1:00 AM",    4.8, "3.5M",  -73.9654, 40.7829),
+        new("pk2", "Prospect Park",              "Brooklyn, New York",           526,  "large",  "Cycling",   ["Cycling", "Hiking", "Sports", "Playground"],        ["Restrooms", "Playgrounds", "Lake", "Bandshell", "Dog Beach", "Ice Rink"],         "5:00 AM - 1:00 AM",    4.7, "1.2M",  -73.9690, 40.6602),
+        new("pk3", "Washington Square Park",     "Greenwich Village, Manhattan", 10,   "small",  "Playground",["Playground", "Sports"],                             ["Restrooms", "Playground", "Dog Run", "Chess Tables", "Fountain"],                 "6:00 AM - Midnight",   4.5, "800K",  -73.9973, 40.7308),
+        new("pk4", "Flushing Meadows Corona Park","Queens, New York",            897,  "large",  "Sports",    ["Sports", "Cycling", "Wildlife", "Playground"],      ["Restrooms", "Soccer Fields", "Tennis Center", "Botanical Garden", "Zoo", "Aquatic Center"], "Open 24 hours", 4.4, "950K",  -73.8407, 40.7400),
+        new("pk5", "The High Line",              "West Side, Manhattan",         7,    "small",  "Hiking",    ["Hiking", "Wildlife"],                               ["Art Installations", "Food Vendors", "Seating Areas", "Viewing Platforms"],        "7:00 AM - 10:00 PM",   4.6, "650K",  -74.0049, 40.7480),
+        new("pk6", "Pelham Bay Park",            "Bronx, New York",              2772, "large",  "Wildlife",  ["Wildlife", "Hiking", "Water", "Sports"],            ["Beach", "Nature Center", "Horse Stables", "Golf Course", "Restrooms", "Picnic Areas"], "6:00 AM - 10:00 PM", 4.3, "420K",  -73.8055, 40.8677),
+        new("pk7", "Hudson River Park",          "West Side, Manhattan",         550,  "large",  "Cycling",   ["Cycling", "Water", "Sports", "Playground"],         ["Kayak Launch", "Skate Park", "Sports Fields", "Playgrounds", "Dog Runs", "Piers"], "6:00 AM - 1:00 AM",   4.5, "1.8M",  -74.0112, 40.7330),
+        new("pk8", "Astoria Park",               "Astoria, Queens",              60,   "medium", "Water",     ["Water", "Sports", "Playground"],                    ["Olympic Pool", "Tennis Courts", "Running Track", "Playground", "Restrooms"],      "6:00 AM - 9:00 PM",    4.4, "280K",  -73.9234, 40.7781),
+    ];
+
+    private string?  _selectedPark   = null;
+    private Park?    _popupPark      = null;
+    private string?  _activityFilter = null;
+
+    private Park[] _filtered => _activityFilter == null
+        ? _parks
+        : _parks.Where(p => p.Activities.Contains(_activityFilter)).ToArray();
+
+    private int _totalAcreage => _parks.Sum(p => p.Acreage);
+
+    private void SelectPark(Park park)
+    {
+        _selectedPark = park.Id;
+        _popupPark    = park;
+    }
+
+    private void HandleMarkerClick(Park park)
+    {
+        _popupPark    = _popupPark?.Id == park.Id ? null : park;
+        _selectedPark = park.Id;
+    }
+}

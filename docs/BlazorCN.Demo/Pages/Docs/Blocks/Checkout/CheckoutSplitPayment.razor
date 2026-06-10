@@ -1,0 +1,192 @@
+@* ============================================================
+   Block: checkout-split-payment
+   Title: CheckoutSplitPayment
+   Description: A split payment checkout block for React and Next.js with multiple payment method slots, per-method amount inputs, remaining balance indicator, and cart total validation built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/checkout/checkout-split-payment.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="credit-card" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Split Payment</span>
+            </div>
+            <p class="mt-1 text-muted-foreground text-xs">
+                Divide your payment across multiple methods.
+            </p>
+        </div>
+
+        @* Cart summary *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">Order summary</span>
+            <div class="mt-2 space-y-1.5">
+                @foreach (var ci in _cartItems)
+                {
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm">
+                            @ci.Name
+                            @if (ci.Qty > 1)
+                            {
+                                <span class="text-muted-foreground text-xs"> x@ci.Qty</span>
+                            }
+                        </span>
+                        <span class="font-medium text-sm tabular-nums">
+                            $@((ci.Price * ci.Qty).ToString("F2"))
+                        </span>
+                    </div>
+                }
+            </div>
+            <div class="mt-2 flex items-center justify-between border-t pt-2">
+                <span class="font-medium text-sm">Total</span>
+                <span class="font-semibold text-sm tabular-nums">$@_cartTotal.ToString("F2")</span>
+            </div>
+        </div>
+
+        @* Payment slots *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">Payment methods</span>
+            <div class="mt-2 space-y-3">
+                @foreach (var sl in _slots)
+                {
+                    var slot = sl;
+                    <div class="flex items-start gap-2">
+                        <div class="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center">
+                            <SelectCn Value="@slot.Method" ValueChanged="@((string v) => UpdateMethod(slot.Id, v))" TValue="string">
+                                <SelectTriggerCn Class="h-8 flex-1 text-xs" aria-label="Payment method">
+                                    <SelectValueCn />
+                                </SelectTriggerCn>
+                                <SelectContentCn>
+                                    @foreach (var opt in _methodOptions)
+                                    {
+                                        <SelectItemCn Value="@opt.Value" Class="text-xs">@opt.Label</SelectItemCn>
+                                    }
+                                </SelectContentCn>
+                            </SelectCn>
+                            <div class="relative w-full sm:w-32">
+                                <span class="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground text-xs">
+                                    $
+                                </span>
+                                <InputCn Type="text"
+                                         Value="@slot.Amount"
+                                         ValueChanged="@((string v) => UpdateAmount(slot.Id, v))"
+                                         Class="h-8 pl-6 text-right font-mono text-xs tabular-nums"
+                                         Placeholder="0.00" />
+                            </div>
+                        </div>
+                        <ButtonCn Variant="ButtonVariant.Ghost"
+                                  Size="ButtonSize.Sm"
+                                  Class="h-8 w-8 shrink-0 px-0 text-muted-foreground"
+                                  OnClick="@(() => RemoveSlot(slot.Id))"
+                                  Disabled="@(_slots.Count <= 1)">
+                            <LucideIconCn Name="trash" Size="14" Class="size-3.5" />
+                        </ButtonCn>
+                    </div>
+                }
+            </div>
+            @if (_slots.Count < 4)
+            {
+                <ButtonCn Variant="ButtonVariant.Outline"
+                          Size="ButtonSize.Sm"
+                          Class="mt-3 h-7 gap-1.5 text-xs"
+                          OnClick="AddSlot">
+                    <LucideIconCn Name="plus" Size="12" Class="size-3" />
+                    Add Payment Method
+                </ButtonCn>
+            }
+        </div>
+
+        @* Remaining balance *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-muted-foreground text-xs">Allocated</span>
+                <span class="font-mono text-xs tabular-nums">$@_totalAllocated.ToString("F2")</span>
+            </div>
+            <div class="mt-1 flex items-center justify-between">
+                <span class="font-medium text-sm">Remaining balance</span>
+                <span class="@Cn.Merge("font-semibold text-sm tabular-nums", Math.Abs(_remaining) < 0.01 ? "text-emerald-600 dark:text-emerald-400" : (_remaining < 0 ? "text-red-600 dark:text-red-400" : "text-foreground"))">
+                    $@_remaining.ToString("F2")
+                </span>
+            </div>
+            @if (_remaining < -0.01)
+            {
+                <p class="mt-1 text-red-600 text-xs dark:text-red-400">
+                    Allocated amount exceeds the cart total.
+                </p>
+            }
+            @if (_remaining > 0.01)
+            {
+                <p class="mt-1 text-muted-foreground text-xs">
+                    Assign the remaining $@_remaining.ToString("F2") to complete your order.
+                </p>
+            }
+        </div>
+
+        @* Pay button *@
+        <div class="px-4 py-3">
+            <ButtonCn Size="ButtonSize.Sm" Class="h-8 w-full text-xs" Disabled="@(Math.Abs(_remaining) > 0.01)">
+                Pay $@_cartTotal.ToString("F2")
+            </ButtonCn>
+            <p class="mt-2 text-center text-muted-foreground text-xs">
+                Each method will be charged its allocated amount.
+            </p>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record PaymentSlot(string Id, string Method, string Amount);
+
+    private record CartItem(string Name, int Qty, double Price);
+    private record MethodOption(string Value, string Label);
+
+    private const double _cartTotal = 284.97;
+
+    private static readonly CartItem[] _cartItems =
+    [
+        new("Wireless Headphones", 1, 149.99),
+        new("USB-C Charging Cable", 2, 24.99),
+        new("Laptop Stand",         1, 85.0),
+    ];
+
+    private static readonly MethodOption[] _methodOptions =
+    [
+        new("credit-card",    "Credit Card"),
+        new("debit-card",     "Debit Card"),
+        new("gift-card",      "Gift Card"),
+        new("paypal",         "PayPal"),
+        new("bank-transfer",  "Bank Transfer"),
+    ];
+
+    private List<PaymentSlot> _slots =
+    [
+        new("slot-1", "credit-card", "200.00"),
+        new("slot-2", "gift-card",   "84.97"),
+    ];
+
+    private double _totalAllocated => _slots.Sum(s => double.TryParse(s.Amount, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0.0);
+    private double _remaining => _cartTotal - _totalAllocated;
+
+    private void AddSlot()
+    {
+        var newId = $"slot-{_slots.Count + 1}";
+        _slots = [.. _slots, new(newId, "credit-card", "")];
+    }
+
+    private void RemoveSlot(string id)
+    {
+        if (_slots.Count > 1)
+            _slots = _slots.Where(s => s.Id != id).ToList();
+    }
+
+    private void UpdateMethod(string id, string value)
+    {
+        _slots = _slots.Select(s => s.Id == id ? new PaymentSlot(s.Id, value, s.Amount) : s).ToList();
+    }
+
+    private void UpdateAmount(string id, string value)
+    {
+        _slots = _slots.Select(s => s.Id == id ? new PaymentSlot(s.Id, s.Method, value) : s).ToList();
+    }
+}

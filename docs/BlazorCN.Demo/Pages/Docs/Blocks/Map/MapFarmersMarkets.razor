@@ -1,0 +1,273 @@
+@* ============================================================
+   Block: map-farmers-markets
+   Title: MapFarmersMarkets
+   Description: Interactive farmers market discovery map with market markers, day-of-week badges, vendor counts, seasonal indicators, and market detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-farmers-markets.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shopping-basket" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Farmers Markets</span>
+                <span class="text-xs text-muted-foreground">@_filtered.Length markets</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <button
+                    type="button"
+                    @onclick="@(() => _dayFilter = null)"
+                    class="@Cn.Merge("rounded-full px-2 py-0.5 text-xs transition-colors", _dayFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                @foreach (var dayVal in _allDays)
+                {
+                    var d = dayVal;
+                    <button
+                        type="button"
+                        @onclick="@(() => _dayFilter = (_dayFilter == d ? null : d))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors", _dayFilter == d ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        @d
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="flex">
+            @* Sidebar *@
+            <div class="w-64 shrink-0 border-r">
+                <div class="border-b px-3 py-2">
+                    <span class="text-xs font-medium text-muted-foreground">
+                        New York City · @_totalVendors vendors
+                    </span>
+                </div>
+                <div class="max-h-[440px] divide-y overflow-y-auto">
+                    @foreach (var marketVal in _filtered)
+                    {
+                        var market = marketVal;
+                        <button
+                            type="button"
+                            @onclick="@(() => { _selectedMarket = market.Id; _popupMarket = market; })"
+                            class="@Cn.Merge("flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50", _selectedMarket == market.Id ? "bg-muted/50" : "")">
+                            <div class="flex size-7 items-center justify-center rounded-full border-2 border-white bg-emerald-500 shadow-sm">
+                                <LucideIconCn Name="leaf" Size="12" Class="size-3 text-white" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="text-sm font-medium">@market.Name</span>
+                                <div class="mt-0.5 flex items-center gap-1.5">
+                                    <div class="flex gap-0.5">
+                                        @foreach (var dayLabel in market.OperatingDays)
+                                        {
+                                            <span class="@Cn.Merge("flex size-4 items-center justify-center rounded text-[7px] font-bold text-white", DayColor(dayLabel))">
+                                                @dayLabel[0]
+                                            </span>
+                                        }
+                                    </div>
+                                    <span class="text-[10px] text-muted-foreground">
+                                        @market.VendorCount vendors
+                                    </span>
+                                </div>
+                            </div>
+                            <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("h-5 shrink-0 px-1.5 text-[10px] font-normal", market.Season == "year-round" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")">
+                                @(market.Season == "year-round" ? "Year-round" : "Seasonal")
+                            </BadgeCn>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Map placeholder *@
+            <div class="relative h-[500px] flex-1 overflow-hidden bg-muted/20">
+                @* Subtle grid background to suggest a map *@
+                <div class="absolute inset-0" style="background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px); background-size: 40px 40px;"></div>
+
+                @* Map label *@
+                <div class="absolute bottom-3 left-3 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                    New York City
+                </div>
+
+                @* Markers *@
+                @foreach (var marketVal in _filtered)
+                {
+                    var market = marketVal;
+                    var leftPct = MapLonToPercent(market.Lng) * 100;
+                    var topPct = MapLatToPercent(market.Lat) * 100;
+                    <div class="absolute" style="@($"left:{leftPct:F2}%; top:{topPct:F2}%; transform:translate(-50%,-50%)")">
+                        @* Marker button *@
+                        <button
+                            type="button"
+                            @onclick="@(() => _popupMarket = (_popupMarket?.Id == market.Id ? null : market))"
+                            class="flex size-6 items-center justify-center rounded-full border-2 border-white bg-emerald-500 shadow-md">
+                            <LucideIconCn Name="leaf" Size="12" Class="size-3 text-white" />
+                        </button>
+
+                        @* Marker tooltip *@
+                        <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded border bg-popover px-2 py-1 text-xs shadow-md">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@market.Name</span>
+                                <span>@market.VendorCount vendors</span>
+                            </div>
+                        </div>
+
+                        @* Popup *@
+                        @if (_popupMarket?.Id == market.Id)
+                        {
+                            <div class="absolute left-1/2 top-full z-10 mt-7 w-56 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@market.Name</p>
+                                        <p class="text-xs text-muted-foreground">@market.Address</p>
+                                    </div>
+                                </div>
+                                <div class="mb-2 space-y-1.5">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Hours</span>
+                                        <span class="font-medium">@market.Hours</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Days</span>
+                                        <div class="flex gap-0.5">
+                                            @foreach (var dayLabel in market.OperatingDays)
+                                            {
+                                                <span class="@Cn.Merge("flex size-4 items-center justify-center rounded text-[7px] font-bold text-white", DayColor(dayLabel))">
+                                                    @dayLabel[0]
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Vendors</span>
+                                        <span class="font-medium tabular-nums">@market.VendorCount</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Season</span>
+                                        <span class="font-medium">@market.SeasonDetail</span>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-muted-foreground">Accepts EBT</span>
+                                        <span class="font-medium">@(market.AcceptsEBT ? "Yes" : "No")</span>
+                                    </div>
+                                </div>
+                                <div class="border-t pt-2">
+                                    <p class="mb-1 text-xs font-medium text-muted-foreground">Specialties</p>
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach (var spec in market.Specialties)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] font-normal">@spec</BadgeCn>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Controls placeholder *@
+                <div class="absolute bottom-3 right-3 flex flex-col gap-1">
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">+</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm text-xs font-bold">−</button>
+                    <button type="button" class="flex size-7 items-center justify-center rounded border bg-background shadow-sm">
+                        <LucideIconCn Name="locate" Size="14" Class="size-3.5 text-muted-foreground" />
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                @_yearRoundCount year-round
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                @_seasonalCount seasonal
+            </span>
+            <span class="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LucideIconCn Name="store" Size="12" Class="size-3" />
+                @_totalVendors total vendors across NYC
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Market(
+        string Id,
+        string Name,
+        string Address,
+        string[] OperatingDays,
+        string Hours,
+        string Season,
+        string SeasonDetail,
+        int VendorCount,
+        string[] Specialties,
+        bool AcceptsEBT,
+        double Lng,
+        double Lat
+    );
+
+    private static readonly string[] _allDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    private static readonly Market[] _markets =
+    [
+        new("m1", "Union Square Greenmarket", "E 17th St & Broadway, Manhattan",
+            ["Mon", "Wed", "Fri", "Sat"], "8:00 AM - 6:00 PM", "year-round", "All year",
+            140, ["Organic Produce", "Artisan Cheese", "Fresh Bread"], true, -73.9903, 40.7359),
+        new("m2", "Grand Army Plaza Greenmarket", "Prospect Park W & Flatbush Ave, Brooklyn",
+            ["Sat"], "8:00 AM - 4:00 PM", "year-round", "All year",
+            45, ["Heritage Meats", "Local Honey", "Seasonal Fruit"], true, -73.9693, 40.6727),
+        new("m3", "Smorgasburg Williamsburg", "90 Kent Ave, Brooklyn",
+            ["Sat"], "11:00 AM - 6:00 PM", "seasonal", "Apr - Oct",
+            100, ["Prepared Foods", "Craft Beverages", "Baked Goods"], false, -73.9615, 40.7216),
+        new("m4", "Chelsea Market Garden", "75 9th Ave, Manhattan",
+            ["Tue", "Thu", "Sat"], "9:00 AM - 5:00 PM", "seasonal", "May - Nov",
+            32, ["Microgreens", "Cut Flowers", "Farm Eggs"], true, -74.0048, 40.7425),
+        new("m5", "Astoria Greenmarket", "14th St btw 31st Ave & Broadway, Queens",
+            ["Wed"], "8:00 AM - 3:00 PM", "year-round", "All year",
+            18, ["Root Vegetables", "Pickles", "Apple Cider"], true, -73.915, 40.768),
+        new("m6", "Fort Greene Park Market", "Washington Park, Brooklyn",
+            ["Sat"], "8:00 AM - 4:00 PM", "year-round", "All year",
+            30, ["Organic Greens", "Goat Cheese", "Jams & Preserves"], true, -73.9762, 40.6892),
+        new("m7", "Inwood Farmers Market", "Isham St & Seaman Ave, Manhattan",
+            ["Sat"], "8:00 AM - 3:00 PM", "seasonal", "Jun - Nov",
+            12, ["Stone Fruit", "Fresh Herbs", "Heirloom Tomatoes"], true, -73.921, 40.8681),
+        new("m8", "Bronx Night Market", "Fordham Plaza, Bronx",
+            ["Sat"], "4:00 PM - 10:00 PM", "seasonal", "May - Oct",
+            50, ["Global Street Food", "Live Music", "Local Art"], false, -73.8979, 40.8618),
+    ];
+
+    // Bounding box for the visible map area (NYC, with padding)
+    private const double _lonMin = -74.08;
+    private const double _lonMax = -73.82;
+    private const double _latMin = 40.62;
+    private const double _latMax = 40.92;
+
+    private string? _selectedMarket;
+    private Market? _popupMarket;
+    private string? _dayFilter;
+
+    private Market[] _filtered => _dayFilter != null
+        ? _markets.Where(m => m.OperatingDays.Contains(_dayFilter)).ToArray()
+        : _markets;
+
+    private int _totalVendors => _markets.Sum(m => m.VendorCount);
+    private int _yearRoundCount => _markets.Count(m => m.Season == "year-round");
+    private int _seasonalCount => _markets.Count(m => m.Season == "seasonal");
+
+    private static string DayColor(string day) => day switch
+    {
+        "Mon" => "bg-red-500",
+        "Tue" => "bg-orange-500",
+        "Wed" => "bg-amber-500",
+        "Thu" => "bg-emerald-500",
+        "Fri" => "bg-blue-500",
+        "Sat" => "bg-indigo-500",
+        "Sun" => "bg-violet-500",
+        _ => "bg-muted-foreground",
+    };
+
+    private double MapLonToPercent(double lon) => (lon - _lonMin) / (_lonMax - _lonMin);
+    private double MapLatToPercent(double lat) => 1.0 - (lat - _latMin) / (_latMax - _latMin);
+}

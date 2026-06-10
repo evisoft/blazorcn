@@ -1,0 +1,200 @@
+@* ============================================================
+   Block: music-metronome
+   Title: MusicMetronome
+   Description: A metronome block for React and Next.js with NumberFlow BPM counter, tap tempo, time signature selector, visual beat indicator dots, accent toggle, and start/stop control built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/music/music-metronome.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="timer" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Metronome</span>
+            </div>
+            <span class="font-mono text-muted-foreground text-xs">@_timeSignature</span>
+        </div>
+
+        @* BPM display + controls *@
+        <div class="border-b px-4 py-6">
+            <div class="flex items-center justify-center gap-6">
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="size-9 p-0"
+                          OnClick="@(() => _tempo = Math.Max(20, _tempo - 1))"
+                          AriaLabel="Decrease tempo">
+                    <LucideIconCn Name="minus" Size="16" Class="size-4" />
+                </ButtonCn>
+                <div class="text-center">
+                    <span class="font-semibold text-4xl tabular-nums">@_tempo</span>
+                    <p class="mt-1 text-muted-foreground text-xs">BPM</p>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="size-9 p-0"
+                          OnClick="@(() => _tempo = Math.Min(300, _tempo + 1))"
+                          AriaLabel="Increase tempo">
+                    <LucideIconCn Name="plus" Size="16" Class="size-4" />
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Beat indicator dots *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-center justify-center gap-3">
+                @for (int bi = 0; bi < BeatCount; bi++)
+                {
+                    var beatIdx = bi;
+                    var isActive = _currentBeat == beatIdx;
+                    var isAccented = beatIdx == 0 && _accentFirst;
+                    <div class="@Cn.Merge("rounded-full transition-all duration-100",
+                                    isActive ? "bg-foreground" : "bg-muted-foreground/20",
+                                    isActive && isAccented ? "size-4" : isActive ? "size-3.5" : "size-2.5")">
+                    </div>
+                }
+            </div>
+            @if (_accentFirst)
+            {
+                <p class="mt-2 text-center text-muted-foreground text-xs">Beat 1 accented</p>
+            }
+        </div>
+
+        @* Time signature selector *@
+        <div class="border-b px-4 py-3">
+            <span class="mb-2 block font-medium text-muted-foreground text-xs">
+                Time Signature
+            </span>
+            <div class="flex items-center gap-1 rounded-md bg-muted/50 p-0.5">
+                @foreach (var ts in _timeSignatures)
+                {
+                    var sig = ts;
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                              Class="@Cn.Merge("h-7 flex-1 font-mono text-xs", _timeSignature == sig ? "bg-background shadow-sm" : "text-muted-foreground")"
+                              OnClick="@(() => SetTimeSignature(sig))">
+                        @sig
+                    </ButtonCn>
+                }
+            </div>
+        </div>
+
+        @* Accent + Tap tempo *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="flex items-center gap-2">
+                        <SwitchCn Checked="@_accentFirst"
+                                  CheckedChanged="@((bool v) => { _accentFirst = v; })"
+                                  aria-label="Accent first beat" />
+                        <span class="text-sm">Accent first beat</span>
+                    </span>
+                </div>
+                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs"
+                          OnClick="HandleTapTempo">
+                    Tap Tempo
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Start/Stop *@
+        <div class="px-4 py-3">
+            <ButtonCn Size="ButtonSize.Sm"
+                      Class="h-8 w-full text-xs"
+                      Variant="@(_isPlaying ? ButtonVariant.Outline : ButtonVariant.Default)"
+                      OnClick="TogglePlay">
+                @(_isPlaying ? "Stop" : "Start")
+            </ButtonCn>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private static readonly string[] _timeSignatures = ["4/4", "3/4", "6/8"];
+
+    private int _tempo = 120;
+    private bool _isPlaying = false;
+    private string _timeSignature = "4/4";
+    private bool _accentFirst = true;
+    private int _currentBeat = -1;
+
+    private readonly List<long> _tapTimes = new();
+    private System.Timers.Timer? _timer;
+
+    private int BeatCount => _timeSignature switch
+    {
+        "4/4" => 4,
+        "3/4" => 3,
+        "6/8" => 6,
+        _     => 4,
+    };
+
+    private void TogglePlay()
+    {
+        _isPlaying = !_isPlaying;
+        if (_isPlaying)
+            StartMetronome();
+        else
+            StopMetronome();
+    }
+
+    private void StartMetronome()
+    {
+        _timer?.Dispose();
+        _currentBeat = 0;
+        var ms = 60000.0 / _tempo;
+        _timer = new System.Timers.Timer(ms);
+        _timer.Elapsed += OnTick;
+        _timer.AutoReset = true;
+        _timer.Start();
+    }
+
+    private void StopMetronome()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        _currentBeat = -1;
+    }
+
+    private void OnTick(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        var beats = BeatCount;
+        _currentBeat = (_currentBeat + 1) % beats;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SetTimeSignature(string sig)
+    {
+        _timeSignature = sig;
+        if (_isPlaying)
+            StartMetronome();
+    }
+
+    private void HandleTapTempo()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        _tapTimes.Add(now);
+
+        if (_tapTimes.Count > 5)
+            _tapTimes.RemoveAt(0);
+
+        if (_tapTimes.Count >= 2)
+        {
+            var intervals = new List<long>();
+            for (int i = 1; i < _tapTimes.Count; i++)
+                intervals.Add(_tapTimes[i] - _tapTimes[i - 1]);
+
+            var avgInterval = intervals.Average();
+            var bpm = (int)Math.Round(60000.0 / avgInterval);
+            _tempo = Math.Min(300, Math.Max(20, bpm));
+
+            if (_isPlaying)
+                StartMetronome();
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+}

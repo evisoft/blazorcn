@@ -1,0 +1,315 @@
+@* ============================================================
+   Block: account-rewards
+   Title: AccountRewards
+   Description: A rewards dashboard block for React and Next.js with points balance, tier progress, rewards catalog cards, claimed history, and earning activities built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-rewards.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Points Balance Header *@
+        <div class="border-b px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-muted-foreground">Available Points</p>
+                    <p class="text-2xl font-semibold tabular-nums">@PointsBalance.ToString("N0")</p>
+                </div>
+                <div class="text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                        <span class="@Cn.Merge("text-sm font-medium", TierColor(_currentTier.Name))">
+                            @_currentTier.Name
+                        </span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">
+                            @_currentTier.Multiplier points
+                        </BadgeCn>
+                    </div>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @LifetimePoints.ToString("N0") lifetime pts
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @* Tier Progress *@
+        @if (_nextTier != null)
+        {
+            <div class="border-b px-4 py-3">
+                <div class="mb-1.5 flex items-center justify-between">
+                    <span class="text-xs text-muted-foreground">
+                        @_pointsToNext.ToString("N0") pts to <span class="@Cn.Merge("font-medium", TierColor(_nextTier.Name))">@_nextTier.Name</span>
+                    </span>
+                    <span class="text-xs tabular-nums text-muted-foreground">@_tierProgress%</span>
+                </div>
+                <ProgressCn Value="@_tierProgress" Class="h-1.5" />
+                <div class="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
+                    <span>@_currentTier.Name</span>
+                    <span>@_nextTier.Name — @_nextTier.Multiplier earning</span>
+                </div>
+            </div>
+        }
+
+        @* Tabs: Catalog / Claimed / Earn *@
+        <TabsCn DefaultValue="catalog">
+            <div class="border-b px-4 pt-2">
+                <TabsListCn Class="w-full justify-start">
+                    <TabsTriggerCn Value="catalog">Rewards</TabsTriggerCn>
+                    <TabsTriggerCn Value="claimed">
+                        Claimed
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-1.5 h-4 px-1.5 py-0 text-[10px]">
+                            @_claimedRewards.Count(c => !c.IsUsed)
+                        </BadgeCn>
+                    </TabsTriggerCn>
+                    <TabsTriggerCn Value="earn">How to Earn</TabsTriggerCn>
+                </TabsListCn>
+            </div>
+
+            @* Rewards Catalog *@
+            <TabsContentCn Value="catalog" Class="p-4">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    @foreach (var reward in _rewards)
+                    {
+                        var canAfford = PointsBalance >= reward.PointsCost;
+                        var wasClaimed = _justClaimed == reward.Id;
+                        <div class="@Cn.Merge("rounded-md border p-3", !canAfford ? "opacity-50" : "")">
+                            <div class="mb-2 flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <LucideIconCn Name="@CategoryIconName(reward.Category)" Size="14" Class="h-3.5 w-3.5 text-muted-foreground" />
+                                    <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px]">
+                                        @reward.Category
+                                    </BadgeCn>
+                                </div>
+                                @if (reward.IsLimited && reward.Stock.HasValue)
+                                {
+                                    <span class="text-[10px] text-muted-foreground">@reward.Stock left</span>
+                                }
+                            </div>
+                            <p class="text-sm font-medium">@reward.Name</p>
+                            <p class="mb-3 text-xs text-muted-foreground">@reward.Description</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-medium tabular-nums">
+                                    @reward.PointsCost.ToString("N0") pts
+                                </span>
+                                @if (canAfford)
+                                {
+                                    <ButtonCn Size="ButtonSize.Sm" OnClick="@(() => HandleClaim(reward))" Class="h-7 gap-1 text-xs">
+                                        @if (wasClaimed)
+                                        {
+                                            <LucideIconCn Name="check" Size="12" Class="h-3 w-3" />
+                                            <span>Claimed</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Claim</span>
+                                        }
+                                    </ButtonCn>
+                                }
+                                else
+                                {
+                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Disabled="true" Class="h-7 gap-1 text-xs">
+                                        <span>Not enough</span>
+                                    </ButtonCn>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </TabsContentCn>
+
+            @* Claimed History *@
+            <TabsContentCn Value="claimed">
+                <div class="divide-y">
+                    @foreach (var claimed in _claimedRewards)
+                    {
+                        <div class="flex items-center gap-3 px-4 py-3">
+                            <div class="@Cn.Merge("flex h-8 w-8 shrink-0 items-center justify-center rounded-md", claimed.IsUsed ? "bg-muted text-muted-foreground" : "bg-emerald-500/10 text-emerald-600")">
+                                @if (claimed.IsUsed)
+                                {
+                                    <LucideIconCn Name="check" Size="16" Class="h-4 w-4" />
+                                }
+                                else
+                                {
+                                    <LucideIconCn Name="gift" Size="16" Class="h-4 w-4" />
+                                }
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@claimed.RewardName</span>
+                                    @if (claimed.IsUsed)
+                                    {
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px]">Used</BadgeCn>
+                                    }
+                                </div>
+                                <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>Claimed @claimed.ClaimedAt</span>
+                                    <span class="text-muted-foreground/40">|</span>
+                                    <span>Expires @claimed.ExpiresAt</span>
+                                </div>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <p class="font-mono text-xs text-muted-foreground">@claimed.Code</p>
+                                <p class="text-xs tabular-nums text-muted-foreground">-@claimed.PointsSpent pts</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </TabsContentCn>
+
+            @* Earning Activities *@
+            <TabsContentCn Value="earn">
+                <div class="divide-y">
+                    @foreach (var activity in _earningActivities)
+                    {
+                        <div class="flex items-center gap-3 px-4 py-3">
+                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                                <LucideIconCn Name="zap" Size="16" Class="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-medium">@activity.Action</p>
+                                <p class="text-xs text-muted-foreground">@activity.Description</p>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <p class="text-sm font-medium tabular-nums text-emerald-600">+@activity.PointsValue</p>
+                                <p class="text-[10px] text-muted-foreground">@activity.Frequency</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </TabsContentCn>
+        </TabsCn>
+    </div>
+
+    @* Confirm Claim Dialog *@
+    <DialogCn @bind-Open="_claimDialogOpen">
+        <DialogContentCn Class="w-full max-w-[420px]">
+            <DialogHeaderCn>
+                <DialogTitleCn>Claim Reward</DialogTitleCn>
+                <DialogDescriptionCn>Confirm your points redemption</DialogDescriptionCn>
+            </DialogHeaderCn>
+            @if (_selectedReward != null)
+            {
+                <div class="py-2">
+                    <div class="mb-4 rounded-md bg-muted/50 p-3">
+                        <p class="text-sm font-medium">@_selectedReward.Name</p>
+                        <p class="text-xs text-muted-foreground">@_selectedReward.Description</p>
+                    </div>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Current balance</span>
+                            <span class="font-medium tabular-nums">@PointsBalance.ToString("N0") pts</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Cost</span>
+                            <span class="font-medium tabular-nums text-red-500">-@_selectedReward.PointsCost.ToString("N0") pts</span>
+                        </div>
+                        <div class="flex justify-between border-t pt-2">
+                            <span class="font-medium">Remaining</span>
+                            <span class="font-semibold tabular-nums">@((PointsBalance - _selectedReward.PointsCost).ToString("N0")) pts</span>
+                        </div>
+                    </div>
+                </div>
+            }
+            <DialogFooterCn>
+                <ButtonCn Variant="ButtonVariant.Outline" OnClick="@(() => _claimDialogOpen = false)">Cancel</ButtonCn>
+                <ButtonCn OnClick="ConfirmClaim">Confirm Claim</ButtonCn>
+            </DialogFooterCn>
+        </DialogContentCn>
+    </DialogCn>
+</section>
+
+@code {
+    private record RewardTier(string Name, int Threshold, string Multiplier);
+    private record RewardItem(string Id, string Name, string Description, int PointsCost, string Category, bool IsLimited, int? Stock);
+    private record ClaimedReward(string Id, string RewardName, int PointsSpent, string ClaimedAt, string ExpiresAt, string Code, bool IsUsed);
+    private record EarningActivity(string Id, string Action, string Description, string PointsValue, string Frequency);
+
+    private const int PointsBalance = 3280;
+    private const int LifetimePoints = 6840;
+
+    private static readonly RewardTier[] _tiers =
+    [
+        new("Bronze", 0, "1x"),
+        new("Silver", 2000, "1.25x"),
+        new("Gold", 5000, "1.5x"),
+        new("Platinum", 10000, "2x"),
+    ];
+
+    private static readonly RewardTier _currentTier;
+    private static readonly RewardTier? _nextTier;
+    private static readonly int _tierProgress;
+    private static readonly int _pointsToNext;
+
+    static AccountRewards()
+    {
+        var currentTierIndex = 0;
+        for (var i = 0; i < _tiers.Length; i++)
+        {
+            if (LifetimePoints >= _tiers[i].Threshold) currentTierIndex = i;
+        }
+        _currentTier = _tiers[currentTierIndex];
+        _nextTier = currentTierIndex < _tiers.Length - 1 ? _tiers[currentTierIndex + 1] : null;
+        _tierProgress = _nextTier != null
+            ? (int)Math.Round((double)(LifetimePoints - _currentTier.Threshold) / (_nextTier.Threshold - _currentTier.Threshold) * 100)
+            : 100;
+        _pointsToNext = _nextTier != null ? _nextTier.Threshold - LifetimePoints : 0;
+    }
+
+    private static readonly RewardItem[] _rewards =
+    [
+        new("rw-01", "$10 Store Credit", "Applied at checkout automatically", 800, "discount", false, null),
+        new("rw-02", "$25 Store Credit", "Applied at checkout automatically", 1800, "discount", false, null),
+        new("rw-03", "Free Express Shipping", "One-time use, valid 90 days", 400, "shipping", false, null),
+        new("rw-04", "Exclusive Tote Bag", "Limited edition merch, ships free", 2500, "product", true, 23),
+        new("rw-05", "Virtual Workshop Pass", "Access to monthly expert session", 1200, "experience", true, 50),
+        new("rw-06", "Early Access Pass", "Preview new products 48h before launch", 600, "experience", false, null),
+    ];
+
+    private static readonly ClaimedReward[] _claimedRewards =
+    [
+        new("cl-01", "Free Express Shipping", 400, "Mar 1, 2026", "May 30, 2026", "SHIP-A7K2", false),
+        new("cl-02", "$10 Store Credit", 800, "Feb 14, 2026", "Apr 14, 2026", "CREDIT-9X4M", true),
+        new("cl-03", "Early Access Pass", 600, "Jan 22, 2026", "Apr 22, 2026", "EARLY-F3R8", true),
+    ];
+
+    private static readonly EarningActivity[] _earningActivities =
+    [
+        new("ea-01", "Make a purchase", "Earn on every dollar spent", "1 pt / $1", "Per order"),
+        new("ea-02", "Write a product review", "Share your experience", "50 pts", "Per review"),
+        new("ea-03", "Refer a friend", "When they make their first purchase", "200 pts", "Per referral"),
+        new("ea-04", "Complete your profile", "Add photo, bio, and preferences", "100 pts", "One-time"),
+        new("ea-05", "Birthday bonus", "Points credited on your birthday", "150 pts", "Annually"),
+    ];
+
+    private bool _claimDialogOpen;
+    private RewardItem? _selectedReward;
+    private string? _justClaimed;
+
+    private void HandleClaim(RewardItem reward)
+    {
+        _selectedReward = reward;
+        _claimDialogOpen = true;
+    }
+
+    private void ConfirmClaim()
+    {
+        if (_selectedReward != null)
+            _justClaimed = _selectedReward.Id;
+        _claimDialogOpen = false;
+    }
+
+    private static string CategoryIconName(string category) => category switch
+    {
+        "discount" => "tag",
+        "shipping" => "truck",
+        "product" => "gift",
+        "experience" => "star",
+        _ => "tag",
+    };
+
+    private static string TierColor(string tierName) => tierName switch
+    {
+        "Silver" => "text-muted-foreground",
+        "Gold" => "text-amber-500",
+        "Platinum" => "text-foreground",
+        _ => "text-muted-foreground",
+    };
+}

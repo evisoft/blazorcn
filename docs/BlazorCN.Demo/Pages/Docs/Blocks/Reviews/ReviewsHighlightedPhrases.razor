@@ -1,0 +1,294 @@
+@* ============================================================
+   Block: reviews-highlighted-phrases
+   Title: ReviewsHighlightedPhrases
+   Description: An AI-powered phrase extraction review block for React and Next.js with inline highlighted text spans, sentiment-colored phrase badges, filterable phrase cloud, review cards with annotated text, and phrase frequency counts built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/reviews/reviews-highlighted-phrases.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="sparkles" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">AI-Extracted Key Phrases</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_phrases.Length phrases
+                </BadgeCn>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">
+                @_totalMentions total mentions across @_reviews.Length reviews
+            </span>
+        </div>
+
+        @* Sentiment summary strip *@
+        <div class="flex items-center gap-3 border-b px-4 py-2.5">
+            <button
+                type="button"
+                @onclick="@(() => _activeSentiment = null)"
+                class="@Cn.Merge("flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors", _activeSentiment == null ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground")">
+                <LucideIconCn Name="filter" Size="12" Class="size-3" />
+                All
+            </button>
+            @foreach (var s in _sentimentKeys)
+            {
+                var sent = s;
+                var cfg = _sentimentConfig[sent];
+                <button
+                    type="button"
+                    @onclick="@(() => _activeSentiment = _activeSentiment == sent ? null : sent)"
+                    class="@Cn.Merge("flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors", _activeSentiment == sent ? Cn.Merge(cfg.Bg, "font-medium") : "text-muted-foreground hover:text-foreground")">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Dot)"></span>
+                    @cfg.Label
+                    <span class="tabular-nums text-muted-foreground">@_sentimentCounts[sent]</span>
+                </button>
+            }
+        </div>
+
+        @* Two-column layout: Phrases | Reviews *@
+        <div class="flex flex-col md:flex-row">
+
+            @* Left: Phrase cloud *@
+            <div class="w-full border-b md:w-60 md:border-r md:border-b-0">
+                <div class="px-3 py-2.5">
+                    <span class="font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+                        Phrases by frequency
+                    </span>
+                </div>
+                <ScrollAreaCn Class="h-auto md:h-[420px]">
+                    <div class="flex flex-wrap gap-1.5 px-3 pb-3 md:flex-col md:flex-nowrap md:gap-0.5">
+                        @foreach (var phrase in FilteredPhrases())
+                        {
+                            var ph = phrase;
+                            var isActive = _activePhrase == ph.Text;
+                            var phCfg = _sentimentConfig[ph.Sentiment];
+                            <button
+                                type="button"
+                                @onclick="@(() => _activePhrase = isActive ? null : ph.Text)"
+                                class="@Cn.Merge("flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors md:w-full", isActive ? phCfg.Bg : "hover:bg-muted/50")">
+                                <span class="@Cn.Merge("size-1.5 shrink-0 rounded-full", phCfg.Dot)"></span>
+                                <span class="@Cn.Merge("flex-1 text-xs", isActive ? "font-medium" : "text-muted-foreground")">
+                                    @ph.Text
+                                </span>
+                                <span class="shrink-0 font-medium text-[10px] tabular-nums text-muted-foreground">
+                                    @ph.Count
+                                </span>
+                            </button>
+                        }
+                    </div>
+                </ScrollAreaCn>
+            </div>
+
+            @* Right: Annotated reviews *@
+            <div class="flex-1">
+                <div class="flex items-center justify-between px-4 py-2.5">
+                    <span class="font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+                        Reviews with highlights
+                    </span>
+                    @if (_activePhrase != null)
+                    {
+                        <button
+                            type="button"
+                            @onclick="@(() => _activePhrase = null)"
+                            class="text-muted-foreground text-xs transition-colors hover:text-foreground">
+                            Clear filter
+                        </button>
+                    }
+                </div>
+                <ScrollAreaCn Class="h-auto md:h-[420px]">
+                    <div class="space-y-0">
+                        @{
+                            var filteredRevs = FilteredReviews();
+                            for (int ri = 0; ri < filteredRevs.Length; ri++)
+                            {
+                                var review = filteredRevs[ri];
+                                var isFirst = ri == 0;
+                                <div class="@Cn.Merge("border-t px-4 py-3.5", isFirst ? "border-t-0" : "")">
+                                    @* Author header *@
+                                    <div class="flex items-center gap-2.5">
+                                        <AvatarCn Class="size-6">
+                                            <AvatarFallbackCn Class="text-[9px]">@review.Initials</AvatarFallbackCn>
+                                        </AvatarCn>
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="font-medium text-xs">@review.Author</span>
+                                                <div class="flex items-center gap-0.5">
+                                                    @for (int si = 0; si < 5; si++)
+                                                    {
+                                                        var starIndex = si;
+                                                        <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", starIndex < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/20")" />
+                                                    }
+                                                </div>
+                                            </div>
+                                            <span class="text-[10px] text-muted-foreground">@review.Role</span>
+                                        </div>
+                                        <span class="text-muted-foreground text-[10px]">@review.Date</span>
+                                    </div>
+
+                                    @* Annotated text *@
+                                    <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                        @{
+                                            var activeHighlights = _activePhrase != null
+                                                ? review.Highlights.Where(h => h.PhraseText == _activePhrase).ToArray()
+                                                : review.Highlights;
+                                        }
+                                        @RenderAnnotatedText(review.Text, activeHighlights)
+                                    </p>
+
+                                    @* Phrase tags below *@
+                                    <div class="mt-2 flex flex-wrap items-center gap-1">
+                                        @foreach (var hl in review.Highlights)
+                                        {
+                                            var hlCfg = _sentimentConfig[hl.Sentiment];
+                                            <span class="@Cn.Merge("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]", hlCfg.Bg, hlCfg.Text)">
+                                                <span class="@Cn.Merge("size-1 rounded-full", hlCfg.Dot)"></span>
+                                                @hl.PhraseText
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </ScrollAreaCn>
+            </div>
+        </div>
+
+        @* Footer summary *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <div class="flex items-center gap-3">
+                @foreach (var s in _sentimentKeys)
+                {
+                    var sent = s;
+                    var cfg = _sentimentConfig[sent];
+                    <div class="flex items-center gap-1.5">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Dot)"></span>
+                        <span class="text-muted-foreground text-[10px]">@cfg.Label</span>
+                        <span class="font-medium text-[10px] tabular-nums">
+                            @(Math.Round((double)_sentimentCounts[sent] / _totalMentions * 100))%
+                        </span>
+                    </div>
+                }
+            </div>
+            <span class="text-muted-foreground text-[10px]">Extracted via NLP analysis</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SentimentCfg(string Label, string Bg, string Text, string Dot);
+
+    private record Phrase(string Text, string Sentiment, int Count);
+
+    private record TextHighlight(int Start, int End, string PhraseText, string Sentiment);
+
+    private record AnnotatedReview(string Id, string Author, string Initials, string Role, int Rating, string Date, string Text, TextHighlight[] Highlights);
+
+    private static readonly string[] _sentimentKeys = ["positive", "neutral", "critical"];
+
+    private static readonly Dictionary<string, SentimentCfg> _sentimentConfig = new()
+    {
+        ["positive"] = new("Positive", "bg-emerald-500/10", "text-emerald-700 dark:text-emerald-400", "bg-emerald-500"),
+        ["neutral"]  = new("Neutral",  "bg-blue-500/10",    "text-blue-700 dark:text-blue-400",       "bg-blue-500"),
+        ["critical"] = new("Needs work","bg-amber-500/10",  "text-amber-700 dark:text-amber-400",     "bg-amber-500"),
+    };
+
+    private static readonly Phrase[] _phrases =
+    [
+        new("easy to integrate",        "positive", 94),
+        new("great documentation",      "positive", 78),
+        new("fast performance",         "positive", 71),
+        new("clean API design",         "positive", 63),
+        new("responsive support",       "positive", 55),
+        new("steep learning curve",     "critical", 42),
+        new("reliable uptime",          "positive", 39),
+        new("limited export options",   "critical", 31),
+        new("good value",               "neutral",  28),
+        new("needs more templates",     "critical", 24),
+        new("intuitive interface",      "positive", 22),
+        new("solid TypeScript support", "positive", 19),
+    ];
+
+    private static readonly AnnotatedReview[] _reviews =
+    [
+        new("ar-1", "James Mitchell", "JM", "Senior Engineer at Vercel", 5, "Mar 15, 2026",
+            "The platform is incredibly easy to integrate and the clean API design makes everything intuitive. Our team had it running in production within an afternoon. The great documentation covered every webhook configuration edge case we encountered during our migration.",
+            [
+                new(26,  43,  "easy to integrate",   "positive"),
+                new(52,  68,  "clean API design",    "positive"),
+                new(148, 167, "great documentation", "positive"),
+            ]),
+        new("ar-2", "Anna Kowalski", "AK", "Platform Lead at Stripe", 4, "Mar 10, 2026",
+            "Impressed by the fast performance even with our dataset of two million records. The solid TypeScript support made our developer experience seamless. Only criticism is the steep learning curve for the advanced query builder — took our junior devs about a week to feel comfortable.",
+            [
+                new(18,  34,  "fast performance",         "positive"),
+                new(80,  103, "solid TypeScript support", "positive"),
+                new(161, 181, "steep learning curve",     "critical"),
+            ]),
+        new("ar-3", "Carlos Mendoza", "CM", "CTO at Runway", 5, "Mar 3, 2026",
+            "Switched from a competitor after experiencing their responsive support firsthand during our trial period. The reliable uptime has been critical for our production workloads. The fast performance on our analytics dashboard handles peak traffic of fifty thousand concurrent users without degradation.",
+            [
+                new(54,  72,  "responsive support", "positive"),
+                new(112, 127, "reliable uptime",    "positive"),
+                new(170, 186, "fast performance",   "positive"),
+            ]),
+        new("ar-4", "Lisa Nguyen", "LN", "Engineering Manager at Linear", 4, "Feb 25, 2026",
+            "The intuitive interface resonates with our design-focused engineering culture. Easy to integrate into our existing CI pipeline with the GitHub Actions plugin. One area for improvement: limited export options for our compliance reporting requirements — we had to build a custom exporter.",
+            [
+                new(4,   23,  "intuitive interface",    "positive"),
+                new(72,  89,  "easy to integrate",      "positive"),
+                new(175, 199, "limited export options", "critical"),
+            ]),
+    ];
+
+    private static readonly int _totalMentions = _phrases.Sum(p => p.Count);
+
+    private static readonly Dictionary<string, int> _sentimentCounts = new()
+    {
+        ["positive"] = _phrases.Where(p => p.Sentiment == "positive").Sum(p => p.Count),
+        ["neutral"]  = _phrases.Where(p => p.Sentiment == "neutral").Sum(p => p.Count),
+        ["critical"] = _phrases.Where(p => p.Sentiment == "critical").Sum(p => p.Count),
+    };
+
+    private string? _activePhrase;
+    private string? _activeSentiment;
+
+    private Phrase[] FilteredPhrases() =>
+        _activeSentiment == null
+            ? _phrases
+            : _phrases.Where(p => p.Sentiment == _activeSentiment).ToArray();
+
+    private AnnotatedReview[] FilteredReviews() =>
+        _activePhrase == null
+            ? _reviews
+            : _reviews.Where(r => r.Highlights.Any(h => h.PhraseText == _activePhrase)).ToArray();
+
+    private MarkupString RenderAnnotatedText(string text, IEnumerable<TextHighlight> highlights)
+    {
+        var sorted = highlights.OrderBy(h => h.Start).ToArray();
+        if (sorted.Length == 0)
+            return (MarkupString)System.Net.WebUtility.HtmlEncode(text);
+
+        var sb = new System.Text.StringBuilder();
+        int cursor = 0;
+
+        foreach (var h in sorted)
+        {
+            if (h.Start > cursor)
+                sb.Append(System.Net.WebUtility.HtmlEncode(text.Substring(cursor, h.Start - cursor)));
+
+            var cfg = _sentimentConfig[h.Sentiment];
+            var title = System.Net.WebUtility.HtmlEncode(h.PhraseText + " - " + cfg.Label + " sentiment");
+            sb.Append($"<mark class=\"rounded px-0.5 py-px {cfg.Bg} {cfg.Text}\" title=\"{title}\">");
+            sb.Append(System.Net.WebUtility.HtmlEncode(text.Substring(h.Start, h.End - h.Start)));
+            sb.Append("</mark>");
+            cursor = h.End;
+        }
+
+        if (cursor < text.Length)
+            sb.Append(System.Net.WebUtility.HtmlEncode(text.Substring(cursor)));
+
+        return (MarkupString)sb.ToString();
+    }
+}

@@ -1,0 +1,198 @@
+@* ============================================================
+   Block: comments-ai-grammar-check
+   Title: CommentsAiGrammarCheck
+   Description: React comment block for Next.js with real-time AI grammar correction, spelling fixes, and writing suggestions built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-ai-grammar-check.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Add comment</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">AI grammar checking enabled</p>
+                </div>
+                @if (_errors.Count > 0)
+                {
+                    <div class="flex items-center gap-2">
+                        <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span class="size-1.5 rounded-full bg-red-500"></span>
+                            @_counts.Error
+                        </span>
+                        <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span class="size-1.5 rounded-full bg-amber-500"></span>
+                            @_counts.Warning
+                        </span>
+                        <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span class="size-1.5 rounded-full bg-blue-500"></span>
+                            @_counts.Suggestion
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Textarea + post button *@
+        <div class="border-b p-4">
+            <TextareaCn @bind-Value="_comment" Placeholder="Write your comment..." Class="min-h-[120px]" />
+            <div class="mt-2 flex items-center justify-between">
+                <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <LucideIconCn Name="sparkles" Size="12" Class="size-3" />
+                    <span>Checking grammar as you type</span>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Class="h-8 text-xs">
+                    Post comment
+                </ButtonCn>
+            </div>
+        </div>
+
+        @* Issues list *@
+        @if (_errors.Count > 0)
+        {
+            <div>
+                <div class="border-b px-4 py-2.5">
+                    <div class="flex items-center gap-2">
+                        <LucideIconCn Name="alert-circle" Size="14" Class="size-3.5 text-muted-foreground" />
+                        <span class="text-xs font-medium text-muted-foreground">
+                            @_errors.Count @(_errors.Count == 1 ? "issue" : "issues") found
+                        </span>
+                    </div>
+                </div>
+
+                <div>
+                    @for (var i = 0; i < _errors.Count; i++)
+                    {
+                        var err = _errors[i];
+                        var isLast = i == _errors.Count - 1;
+                        var sliceText = _comment.Length > err.End ? _comment.Substring(err.Start, err.End - err.Start) : err.Suggestion;
+                        var severityDot = SeverityDot(err.Severity);
+                        var severityColor = SeverityColor(err.Severity);
+                        <div class="@(isLast ? "p-4" : "border-b p-4")">
+                            <div class="flex items-start gap-3">
+                                <span class="@($"mt-0.5 size-2 shrink-0 rounded-full {severityDot}")"></span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium">@err.Message</span>
+                                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                            @err.Type
+                                        </BadgeCn>
+                                    </div>
+                                    <p class="mt-1 text-xs text-muted-foreground">
+                                        Replace "@("{")"@sliceText@("}")" with "@("{")"@err.Suggestion@("}")"
+                                    </p>
+                                    <div class="mt-2.5 rounded-md bg-muted/50 p-2.5">
+                                        <div class="mb-1.5 flex items-center justify-between">
+                                            <span class="text-xs font-medium text-muted-foreground">
+                                                Suggested correction
+                                            </span>
+                                        </div>
+                                        <p class="@($"text-sm font-medium {severityColor}")">
+                                            @err.Suggestion
+                                        </p>
+                                    </div>
+                                    <div class="mt-2.5 flex gap-2">
+                                        @{
+                                            var errId = err.Id;
+                                        }
+                                        <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 gap-1 text-xs" OnClick="@(() => ApplySuggestion(errId))">
+                                            @if (_applied == err.Id)
+                                            {
+                                                <LucideIconCn Name="check" Size="12" Class="size-3" />
+                                                <span>Applied</span>
+                                            }
+                                            else
+                                            {
+                                                <span>Apply fix</span>
+                                            }
+                                        </ButtonCn>
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-xs" OnClick="@(() => IgnoreError(errId))">
+                                            Ignore
+                                        </ButtonCn>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* All clear state *@
+        @if (_errors.Count == 0)
+        {
+            <div class="px-4 py-6 text-center">
+                <div class="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <LucideIconCn Name="check" Size="14" Class="size-3.5 text-emerald-500" />
+                    <span>No grammar issues detected</span>
+                </div>
+            </div>
+        }
+
+    </div>
+</section>
+
+@code {
+    private record GrammarError(
+        string Id,
+        string Severity,
+        string Type,
+        string Message,
+        string Suggestion,
+        int Start,
+        int End
+    );
+
+    private record ErrorCounts(int Error, int Warning, int Suggestion);
+
+    private static readonly GrammarError[] _mockErrors =
+    [
+        new("1", "error",      "spelling",  "Possible spelling mistake",      "implementation", 25,  40),
+        new("2", "warning",    "grammar",   "Subject-verb agreement",         "component needs", 67,  81),
+        new("3", "suggestion", "style",     "Consider more concise phrasing", "requires",       110, 124),
+    ];
+
+    private string _comment = "This is a great implemetation but the component need to have better documentation that would be helpful for developers.";
+    private List<GrammarError> _errors = [.. _mockErrors];
+    private string? _applied = null;
+
+    private ErrorCounts _counts => new(
+        _errors.Count(e => e.Severity == "error"),
+        _errors.Count(e => e.Severity == "warning"),
+        _errors.Count(e => e.Severity == "suggestion")
+    );
+
+    private static string SeverityDot(string severity) => severity switch
+    {
+        "error"      => "bg-red-500",
+        "warning"    => "bg-amber-500",
+        "suggestion" => "bg-blue-500",
+        _            => "bg-muted-foreground",
+    };
+
+    private static string SeverityColor(string severity) => severity switch
+    {
+        "error"      => "text-red-600 dark:text-red-400",
+        "warning"    => "text-amber-600 dark:text-amber-400",
+        "suggestion" => "text-blue-600 dark:text-blue-400",
+        _            => "text-foreground",
+    };
+
+    private void ApplySuggestion(string id)
+    {
+        var err = _errors.FirstOrDefault(e => e.Id == id);
+        if (err is null) return;
+        if (_comment.Length >= err.End)
+            _comment = _comment[..err.Start] + err.Suggestion + _comment[err.End..];
+        _errors = _errors.Where(e => e.Id != id).ToList();
+        _applied = id;
+        // Note: timeout reset not available in Blazor without a timer; applied badge stays until next action
+    }
+
+    private void IgnoreError(string id)
+    {
+        _errors = _errors.Where(e => e.Id != id).ToList();
+    }
+}

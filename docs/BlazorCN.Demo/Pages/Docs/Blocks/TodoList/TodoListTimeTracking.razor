@@ -1,0 +1,161 @@
+@* ============================================================
+   Block: todo-list-time-tracking
+   Title: TodoListTimeTracking
+   Description: A todo list block with per-task time logging for React and Next.js featuring play/pause timers, pulsing active indicators, daily totals, and logged duration display built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/todo-list/todo-list-time-tracking.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="clock" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Time Tracking</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-muted-foreground text-xs">Daily total</span>
+                <span class="font-semibold text-sm tabular-nums">@FormatTime(_totalSeconds)</span>
+            </div>
+        </div>
+
+        @* Task list *@
+        <div>
+            @for (int idx = 0; idx < _todos.Count; idx++)
+            {
+                var todo = _todos[idx];
+                var isActive = _activeTimerId == todo.Id;
+                var isLast = idx == _todos.Count - 1;
+                var todoId = todo.Id;
+                <div class="@(isLast ? "" : "border-b") transition-colors hover:bg-muted/50">
+                    <div class="flex w-full items-center gap-3 px-4 py-3">
+                        <span class="shrink-0">
+                            <CheckboxCn Checked="@todo.Completed"
+                                        CheckedChanged="@((bool _) => ToggleTodo(todoId))" />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <span class="@Cn.Merge("text-sm transition-all duration-200", todo.Completed ? "text-muted-foreground line-through" : "text-foreground")">
+                                @todo.Text
+                            </span>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-2">
+                            @if (isActive)
+                            {
+                                <span class="relative flex size-2">
+                                    <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span class="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
+                                </span>
+                            }
+                            <span class="@Cn.Merge("min-w-[52px] text-right font-mono text-xs tabular-nums", isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")">
+                                @FormatTime(todo.LoggedSeconds)
+                            </span>
+                            @if (!todo.Completed)
+                            {
+                                <ButtonCn Variant="ButtonVariant.Ghost"
+                                          Size="ButtonSize.Sm"
+                                          Class="h-7 gap-1 px-2 text-xs"
+                                          @onclick="@(() => ToggleTimer(todoId))">
+                                    @if (isActive)
+                                    {
+                                        <LucideIconCn Name="pause" Size="12" Class="size-3" />
+                                        @("Pause")
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="play" Size="12" Class="size-3" />
+                                        @("Start")
+                                    }
+                                </ButtonCn>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center gap-2 border-t px-4 py-3">
+            <span class="text-muted-foreground text-xs tabular-nums">@_todos.Count tasks</span>
+            <span class="size-1 rounded-full bg-muted-foreground/40"></span>
+            <span class="text-muted-foreground text-xs">
+                @(_activeTimerId is not null ? "Timer running" : "No active timer")
+            </span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record TodoItem(string Id, string Text, bool Completed, int LoggedSeconds);
+
+    private List<TodoItem> _todos =
+    [
+        new("1", "Design component library architecture", false, 8100),
+        new("2", "Implement authentication middleware", false, 5400),
+        new("3", "Write unit tests for billing module", true, 3600),
+        new("4", "Review and merge feature branch", false, 1800),
+        new("5", "Update deployment documentation", false, 0),
+        new("6", "Debug WebSocket reconnection issue", false, 2700),
+    ];
+
+    private string? _activeTimerId = null;
+    private System.Threading.Timer? _timer = null;
+
+    private int _totalSeconds => _todos.Sum(t => t.LoggedSeconds);
+
+    private static string FormatTime(int seconds)
+    {
+        var h = seconds / 3600;
+        var m = (seconds % 3600) / 60;
+        if (h > 0) return $"{h}h {m}m";
+        if (m > 0) return $"{m}m";
+        return "0m";
+    }
+
+    private void ToggleTodo(string id)
+    {
+        if (_activeTimerId == id)
+        {
+            StopTimer();
+        }
+        var idx = _todos.FindIndex(t => t.Id == id);
+        if (idx >= 0)
+            _todos[idx] = _todos[idx] with { Completed = !_todos[idx].Completed };
+    }
+
+    private void ToggleTimer(string id)
+    {
+        if (_activeTimerId == id)
+        {
+            StopTimer();
+        }
+        else
+        {
+            StopTimer();
+            _activeTimerId = id;
+            _timer = new System.Threading.Timer(_ =>
+            {
+                var activeId = _activeTimerId;
+                if (activeId is null) return;
+                var idx = _todos.FindIndex(t => t.Id == activeId);
+                if (idx >= 0)
+                    _todos[idx] = _todos[idx] with { LoggedSeconds = _todos[idx].LoggedSeconds + 1 };
+                InvokeAsync(StateHasChanged);
+            }, null, 1000, 1000);
+        }
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        _activeTimerId = null;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+}

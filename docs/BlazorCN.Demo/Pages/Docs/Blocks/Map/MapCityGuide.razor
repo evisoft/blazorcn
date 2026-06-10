@@ -1,0 +1,287 @@
+@* ============================================================
+   Block: map-city-guide
+   Title: MapCityGuide
+   Description: React city walking tour guide map block for Next.js with numbered attraction markers, route path, audio guide indicators, and attraction detail popups using shadcn/ui and Tailwind CSS
+   Source: original/blocks/map/map-city-guide.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="footprints" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Central Park Walking Tour</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                    @_attractions.Length stops
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                    @_totalDuration
+                </span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="footprints" Size="12" Class="size-3" />
+                    @_totalDistance
+                </span>
+                <span class="flex items-center gap-1">
+                    <LucideIconCn Name="headphones" Size="12" Class="size-3" />
+                    @_audioCount audio
+                </span>
+            </div>
+        </div>
+
+        @* Stop list bar *@
+        <div class="flex items-center gap-1.5 overflow-x-auto border-b px-4 py-2">
+            @foreach (var a in _attractions)
+            {
+                var attraction = a;
+                <ButtonCn
+                    Variant="@((_selected == attraction.Id) ? ButtonVariant.Default : ButtonVariant.Outline)"
+                    Size="ButtonSize.Sm"
+                    Class="h-6 shrink-0 gap-1 px-2 text-xs"
+                    OnClick="@(() => ToggleSelected(attraction.Id))">
+                    <span class="font-semibold tabular-nums">@attraction.Number</span>
+                    <span class="hidden sm:inline">@attraction.Name</span>
+                </ButtonCn>
+            }
+        </div>
+
+        @* Map — Map/MapMarker/MapRoute etc. are Next.js registry components with no BlazorCN
+           equivalent; rendered as a styled static map placeholder with absolute-positioned
+           numbered markers and a simulated route path. *@
+        <div class="relative h-[500px] bg-muted/30">
+            @* Map background grid lines *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Route path suggestion (SVG line connecting markers) *@
+            <svg class="absolute inset-0 h-full w-full" style="pointer-events:none">
+                @{
+                    var pts = _attractions.Select(a => GetMarkerPosition(a)).ToArray();
+                }
+                @for (int ri = 0; ri < pts.Length - 1; ri++)
+                {
+                    var x1 = pts[ri].Left;
+                    var y1 = pts[ri].Top;
+                    var x2 = pts[ri + 1].Left;
+                    var y2 = pts[ri + 1].Top;
+                    @((MarkupString)$"<line x1=\"{x1:F1}%\" y1=\"{y1:F1}%\" x2=\"{x2:F1}%\" y2=\"{y2:F1}%\" stroke=\"#3b82f6\" stroke-width=\"2\" stroke-opacity=\"0.6\" stroke-dasharray=\"5 3\" />")
+                }
+            </svg>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                Central Park, New York City
+            </div>
+
+            @* Map zoom controls *@
+            <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="compass" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* Attraction markers *@
+            @foreach (var a in _attractions)
+            {
+                var attraction = a;
+                var isActive = _selected == attraction.Id;
+                var pos = GetMarkerPosition(attraction);
+                <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSelected(attraction.Id))"
+                        class="group relative flex flex-col items-center">
+                        @* Numbered marker *@
+                        <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 text-xs font-semibold tabular-nums shadow-sm transition-all", isActive ? "border-blue-500 bg-blue-500 text-white ring-2 ring-blue-500/30" : "border-border bg-card text-foreground")">
+                            @attraction.Number
+                        </div>
+                        @* Audio indicator badge *@
+                        @if (attraction.HasAudio)
+                        {
+                            <span class="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-blue-500 shadow-sm">
+                                <LucideIconCn Name="headphones" Size="8" Class="size-2 text-white" />
+                            </span>
+                        }
+                        @* Hover tooltip *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            @attraction.Number. @attraction.Name
+                        </div>
+                    </button>
+
+                    @* Popup (shown when selected) *@
+                    @if (isActive)
+                    {
+                        <div class="absolute bottom-full left-1/2 mb-2 w-60 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg" style="z-index:10">
+                            <div class="mb-1 flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="flex size-5 items-center justify-center rounded-full bg-blue-500 text-[10px] font-semibold text-white">
+                                        @attraction.Number
+                                    </span>
+                                    <span class="text-sm font-medium">@attraction.Name</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="gap-1 text-[10px] font-normal">
+                                    <LucideIconCn Name="@GetCategoryIcon(attraction.Category)" Size="10" Class="size-2.5" />
+                                    @attraction.Category
+                                </BadgeCn>
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                    @attraction.Duration
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                    @attraction.Rating
+                                </span>
+                                @if (attraction.HasAudio)
+                                {
+                                    <span class="flex items-center gap-1">
+                                        <LucideIconCn Name="headphones" Size="12" Class="size-3" />
+                                        Audio
+                                    </span>
+                                }
+                            </div>
+
+                            <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+                                @attraction.Description
+                            </p>
+
+                            <div class="mt-2 rounded-md bg-muted/50 p-2">
+                                <span class="text-[10px] font-medium text-muted-foreground">Tip</span>
+                                <p class="mt-0.5 text-xs leading-relaxed">@attraction.Tip</p>
+                            </div>
+
+                            <div class="mt-2.5 flex items-center justify-between">
+                                @if (attraction.HasAudio)
+                                {
+                                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 gap-1 text-xs">
+                                        <LucideIconCn Name="headphones" Size="12" Class="size-3" />
+                                        Play Audio
+                                    </ButtonCn>
+                                }
+                                else
+                                {
+                                    <span></span>
+                                }
+                                <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-6 text-xs">
+                                    Directions
+                                </ButtonCn>
+                            </div>
+
+                            @* Close button *@
+                            <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Attraction(
+        string Id,
+        int Number,
+        string Name,
+        string Category,
+        double Lng,
+        double Lat,
+        string Duration,
+        string Description,
+        string Tip,
+        bool HasAudio,
+        double Rating,
+        bool Photo
+    );
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly Attraction[] _attractions =
+    [
+        new("t1", 1, "Central Park Entrance", "Park", -73.974, 40.764, "15 min",
+            "Begin your tour at the southeast corner of Central Park. Take in the view of the Pond and Gapstow Bridge before heading north.",
+            "Visit early morning for fewer crowds and better photography light.",
+            true, 4.8, true),
+        new("t2", 2, "Bethesda Fountain", "Landmark", -73.971, 40.774, "20 min",
+            "The Angel of the Waters fountain is one of the most iconic landmarks in Central Park. The terrace offers stunning views of the lake.",
+            "Street performers are common here on weekends. Bring small bills to tip.",
+            true, 4.9, true),
+        new("t3", 3, "The Met Steps", "Museum", -73.963, 40.779, "45 min",
+            "The Metropolitan Museum of Art is one of the largest art museums in the world. Even if you skip the interior, the steps and facade are worth a visit.",
+            "Admission is pay-what-you-wish for NY residents. Check for free Friday evening hours.",
+            true, 4.9, true),
+        new("t4", 4, "Belvedere Castle", "Viewpoint", -73.969, 40.779, "15 min",
+            "This Victorian folly offers panoramic views of the Great Lawn and Turtle Pond. The castle also houses a weather station and nature exhibits.",
+            "Climb to the top terrace for the best photos. Free admission.",
+            false, 4.6, true),
+        new("t5", 5, "Strawberry Fields", "Memorial", -73.975, 40.776, "10 min",
+            "The Imagine mosaic memorial to John Lennon is located near the Dakota building where he lived. A peaceful spot for reflection.",
+            "Fans often leave flowers and candles. Most atmospheric at sunset.",
+            true, 4.7, true),
+        new("t6", 6, "Bow Bridge", "Landmark", -73.972, 40.775, "10 min",
+            "This elegant cast-iron bridge spans the Lake and offers one of the most photographed views in Central Park. A romantic spot any time of year.",
+            "Best photographed from the western shore of the Lake in the afternoon.",
+            false, 4.8, true),
+    ];
+
+    private const string _totalDuration = "1 hr 55 min";
+    private const string _totalDistance = "2.4 mi";
+
+    private int _audioCount => _attractions.Count(a => a.HasAudio);
+
+    private string? _selected = null;
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    // Map bounding box: lon [-73.976, -73.962], lat [40.762, 40.781]
+    private static MarkerPos GetMarkerPosition(Attraction a)
+    {
+        const double lonMin = -73.976;
+        const double lonMax = -73.962;
+        const double latMin = 40.762;
+        const double latMax = 40.781;
+        var left = (a.Lng - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top = (latMax - a.Lat) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+
+    private static string GetCategoryIcon(string category) => category switch
+    {
+        "Park" => "footprints",
+        "Museum" => "camera",
+        "Viewpoint" => "star",
+        "Memorial" => "star",
+        _ => "map-pin",
+    };
+}

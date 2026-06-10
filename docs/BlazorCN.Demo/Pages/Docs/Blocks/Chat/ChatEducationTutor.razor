@@ -1,0 +1,257 @@
+@* ============================================================
+   Block: chat-education-tutor
+   Title: ChatEducationTutor
+   Description: React education tutoring chat block for Next.js with tutor profile, quiz question cards, multiple choice options, progress indicator, and hint system using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-education-tutor.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+
+        @* Tutor header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8 shrink-0">
+                <AvatarFallbackCn Class="bg-muted text-xs">@_tutor.Initials</AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                    <span class="font-medium text-sm">@_tutor.Name</span>
+                    <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">@_tutor.Subject</BadgeCn>
+                </div>
+                <span class="text-muted-foreground text-xs">Tutor</span>
+            </div>
+        </div>
+
+        @* Progress indicator *@
+        <div class="flex items-center gap-3 border-b px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">Session progress</span>
+            <ProgressCn Value="@_progressPercent" Class="h-1.5 flex-1" />
+            <span class="font-medium text-xs tabular-nums">@_answeredQuestions/@_totalQuestions</span>
+        </div>
+
+        @* Messages *@
+        <div class="flex-1 overflow-y-auto px-4 py-4">
+            <div class="flex flex-col gap-4">
+                @foreach (var msg in _messages)
+                {
+                    var selected = _selectedAnswers.TryGetValue(msg.Id, out var sel) ? (int?)sel : null;
+                    var hasAnswered = selected.HasValue;
+                    var isCorrect = hasAnswered && msg.Quiz != null && selected.Value == msg.Quiz.CorrectIndex;
+                    var hintRevealed = _revealedHints.Contains(msg.Id);
+                    var msgId = msg.Id;
+
+                    <div class="@Cn.Merge("flex", msg.Role == "student" ? "justify-end" : "justify-start")">
+                        <div class="@Cn.Merge("max-w-[85%]", msg.Role == "student" ? "rounded-2xl rounded-br-sm bg-primary px-3.5 py-2.5 text-primary-foreground" : "rounded-2xl rounded-bl-sm bg-muted/50 px-3.5 py-2.5")">
+
+                            @* Feedback icon for student answers *@
+                            @if (msg.Feedback != null)
+                            {
+                                <div class="mb-1.5 flex items-center gap-1.5">
+                                    @if (msg.Feedback == "correct")
+                                    {
+                                        <LucideIconCn Name="check-circle-2" Size="14" Class="size-3.5 text-emerald-400" />
+                                        <span class="font-medium text-emerald-400 text-xs">Correct</span>
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="x-circle" Size="14" Class="size-3.5 text-red-400" />
+                                        <span class="font-medium text-red-400 text-xs">Incorrect</span>
+                                    }
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(msg.Content))
+                            {
+                                <p class="text-sm leading-relaxed">@msg.Content</p>
+                            }
+
+                            @* Quiz card *@
+                            @if (msg.Quiz != null)
+                            {
+                                var quiz = msg.Quiz;
+                                <div class="mt-2 rounded-md border bg-card p-3">
+                                    <p class="mb-3 font-medium text-sm">@quiz.Question</p>
+                                    <div class="space-y-1.5">
+                                        @foreach (var option in quiz.Options)
+                                        {
+                                            var opt = option;
+                                            var idx = quiz.Options.IndexOf(opt);
+                                            string optionStyle;
+                                            if (hasAnswered)
+                                            {
+                                                if (idx == quiz.CorrectIndex)
+                                                    optionStyle = "border-emerald-500/30 bg-emerald-500/10";
+                                                else if (idx == selected.Value && idx != quiz.CorrectIndex)
+                                                    optionStyle = "border-red-500/30 bg-red-500/10";
+                                                else
+                                                    optionStyle = "border bg-transparent opacity-50";
+                                            }
+                                            else
+                                            {
+                                                optionStyle = "border bg-transparent hover:bg-muted/50";
+                                            }
+                                            <button type="button"
+                                                    disabled="@(hasAnswered ? "disabled" : null)"
+                                                    class="@Cn.Merge("flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors", optionStyle)"
+                                                    @onclick="@(() => SelectAnswer(msgId, idx))">
+                                                <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground text-xs">@opt.Label</span>
+                                                <span>@opt.Text</span>
+                                            </button>
+                                        }
+                                    </div>
+
+                                    @* Explanation after answer *@
+                                    @if (hasAnswered && !string.IsNullOrEmpty(quiz.Explanation))
+                                    {
+                                        <div class="mt-3 rounded-md bg-muted/50 p-2.5">
+                                            <p class="text-muted-foreground text-xs leading-relaxed">
+                                                @if (isCorrect)
+                                                {
+                                                    @quiz.Explanation
+                                                }
+                                                else
+                                                {
+                                                    @($"The correct answer is {quiz.Options[quiz.CorrectIndex].Label}. {quiz.Explanation}")
+                                                }
+                                            </p>
+                                        </div>
+                                    }
+
+                                    @* Hint button *@
+                                    @if (!hasAnswered && !hintRevealed)
+                                    {
+                                        <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                  Class="mt-2 h-7 gap-1.5 text-xs text-muted-foreground"
+                                                  @onclick="@(() => RevealHint(msgId))">
+                                            <LucideIconCn Name="lightbulb" Size="12" Class="size-3" />
+                                            Need a hint?
+                                        </ButtonCn>
+                                    }
+
+                                    @* Revealed hint *@
+                                    @if (!hasAnswered && hintRevealed && !string.IsNullOrEmpty(quiz.Hint))
+                                    {
+                                        <div class="mt-3 rounded-md bg-amber-500/10 p-2.5">
+                                            <div class="mb-1 flex items-center gap-1">
+                                                <LucideIconCn Name="lightbulb" Size="12" Class="size-3 text-amber-600 dark:text-amber-400" />
+                                                <span class="font-medium text-amber-600 text-xs dark:text-amber-400">Hint</span>
+                                            </div>
+                                            <p class="text-muted-foreground text-xs leading-relaxed">@quiz.Hint</p>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            <span class="@Cn.Merge("mt-1 block text-right text-xs", msg.Role == "student" ? "text-primary-foreground/60" : "text-muted-foreground")">
+                                @msg.Timestamp
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Input *@
+        <div class="border-t px-4 py-3">
+            <form class="relative" @onsubmit="HandleSubmit">
+                <TextareaCn @bind-Value="_input"
+                            Placeholder="Type your answer..."
+                            Rows="1"
+                            Class="max-h-32 min-h-0 resize-none border-0 bg-transparent pr-12 text-sm shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0" />
+                <ButtonCn type="submit"
+                          Size="ButtonSize.Icon"
+                          Variant="ButtonVariant.Ghost"
+                          Disabled="@string.IsNullOrWhiteSpace(_input)"
+                          Class="absolute top-1/2 right-1 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record TutorInfo(string Name, string Subject, string Initials);
+
+    private record QuizOption(string Label, string Text);
+
+    private record Quiz(string Question, List<QuizOption> Options, int CorrectIndex, string Explanation, string Hint);
+
+    private record Message(string Id, string Role, string Content, string Timestamp, Quiz? Quiz = null, string? Feedback = null);
+
+    private static readonly TutorInfo _tutor = new("Alex Rivera", "Calculus", "AR");
+
+    private const int _totalQuestions = 8;
+    private const int _answeredQuestions = 5;
+    private int _progressPercent => (int)Math.Round((double)_answeredQuestions / _totalQuestions * 100);
+
+    private string _input = "";
+    private Dictionary<string, int> _selectedAnswers = new();
+    private HashSet<string> _revealedHints = new();
+
+    private static readonly List<Message> _messages =
+    [
+        new("1", "tutor",
+            "Welcome back! Today we're continuing with integration techniques. You're making great progress. Let's pick up where we left off with integration by parts.",
+            "3:00 PM"),
+        new("2", "student",
+            "Sounds good. I reviewed the notes from last session. I think I understand the formula but I'm not sure how to pick u and dv.",
+            "3:01 PM"),
+        new("3", "tutor",
+            "Great question. The LIATE rule helps you choose u: Logarithmic, Inverse trig, Algebraic, Trigonometric, Exponential. Pick u from whichever comes first in that list. Let's test your understanding.",
+            "3:02 PM"),
+        new("4", "tutor", "", "3:02 PM",
+            new Quiz(
+                "For the integral of x * e^x dx, which should you choose as u?",
+                [
+                    new("A", "u = e^x"),
+                    new("B", "u = x"),
+                    new("C", "u = x * e^x"),
+                    new("D", "u = 1"),
+                ],
+                1,
+                "Correct! Using LIATE, x is algebraic and e^x is exponential. Algebraic comes first, so u = x and dv = e^x dx.",
+                "Think about the LIATE rule. Which function type does x belong to, and which does e^x belong to?"
+            )),
+        new("5", "student",
+            "I think it's B, u = x, because algebraic comes before exponential in LIATE.",
+            "3:04 PM", Feedback: "correct"),
+        new("6", "tutor",
+            "Exactly right! When u = x, then du = dx, and dv = e^x dx gives v = e^x. Applying the formula: integral of x*e^x dx = x*e^x - integral of e^x dx = x*e^x - e^x + C.",
+            "3:04 PM"),
+        new("7", "tutor",
+            "Let's try a slightly harder one. This requires applying the technique twice.",
+            "3:05 PM"),
+        new("8", "tutor", "", "3:05 PM",
+            new Quiz(
+                "What is the integral of x^2 * sin(x) dx? Which substitution starts correctly?",
+                [
+                    new("A", "u = sin(x), dv = x^2 dx"),
+                    new("B", "u = x^2, dv = sin(x) dx"),
+                    new("C", "u = x, dv = x*sin(x) dx"),
+                    new("D", "u = x^2*sin(x), dv = dx"),
+                ],
+                1,
+                "Correct! u = x^2 (algebraic) and dv = sin(x) dx. After the first pass you get -x^2*cos(x) + integral of 2x*cos(x) dx, which requires integration by parts again.",
+                "Apply LIATE again. x^2 is algebraic and sin(x) is trigonometric. Which comes first?"
+            )),
+    ];
+
+    private void HandleSubmit()
+    {
+        if (!string.IsNullOrWhiteSpace(_input))
+            _input = "";
+    }
+
+    private void SelectAnswer(string messageId, int optionIndex)
+    {
+        if (_selectedAnswers.ContainsKey(messageId)) return;
+        _selectedAnswers[messageId] = optionIndex;
+    }
+
+    private void RevealHint(string messageId)
+    {
+        _revealedHints.Add(messageId);
+    }
+}

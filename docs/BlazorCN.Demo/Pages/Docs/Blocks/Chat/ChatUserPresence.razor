@@ -1,0 +1,239 @@
+@* ============================================================
+   Block: chat-user-presence
+   Title: ChatUserPresence
+   Description: React chat interface with a rich team roster sidebar for Next.js showing avatar status rings, timezone clocks, calendar hints, detailed status messages, and last-seen times using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-user-presence.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="flex h-[700px] overflow-hidden rounded-lg border bg-card">
+        @* Chat area *@
+        <div class="flex min-w-0 flex-1 flex-col">
+            @* Header *@
+            <div class="flex items-center gap-3 border-b px-4 py-3">
+                <span class="font-medium text-sm">Team Chat</span>
+                <span class="text-muted-foreground text-xs">@_users.Length members</span>
+            </div>
+
+            @* Messages — flat layout with grouping *@
+            <div class="flex flex-1 flex-col overflow-y-auto">
+                @for (int i = 0; i < _messages.Length; i++)
+                {
+                    var msg = _messages[i];
+                    var user = _usersById.TryGetValue(msg.SenderId, out var u) ? u : null;
+                    var config = GetPresenceConfig(user?.Status ?? "offline");
+                    var prevMsg = i > 0 ? _messages[i - 1] : null;
+                    var showHeader = prevMsg == null || prevMsg.SenderId != msg.SenderId;
+                    <div class="@Cn.Merge("group flex gap-2 px-4 transition-colors hover:bg-accent", showHeader ? "pt-2.5 pb-0.5" : "py-0.5")">
+                        @* Avatar column *@
+                        <div class="w-10 shrink-0">
+                            @if (showHeader)
+                            {
+                                <div class="relative">
+                                    <AvatarCn Class="size-8">
+                                        <AvatarFallbackCn Class="text-[10px]">@(user?.Initials)</AvatarFallbackCn>
+                                    </AvatarCn>
+                                    <span class="@Cn.Merge("absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card", config.DotColor)" />
+                                </div>
+                            }
+                        </div>
+                        @* Body *@
+                        <div class="min-w-0 flex-1">
+                            @if (showHeader)
+                            {
+                                <div class="flex items-baseline gap-2">
+                                    <span class="font-medium text-sm">@(user?.Name)</span>
+                                    <span class="text-muted-foreground text-xs">@msg.Timestamp</span>
+                                </div>
+                            }
+                            <p class="text-sm leading-relaxed">@msg.Content</p>
+                            @* Hover time for non-header messages *@
+                            @if (!showHeader)
+                            {
+                                <span class="hidden text-muted-foreground text-[10px] group-hover:inline">
+                                    @msg.Timestamp
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Toolbar *@
+            <div class="border-t px-4 py-3">
+                <form class="flex items-center gap-2" @onsubmit="HandleSubmit">
+                    <InputCn @bind-Value="_input"
+                             Placeholder="Type a message..."
+                             Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                    <ButtonCn type="submit"
+                              Size="ButtonSize.Icon"
+                              Variant="ButtonVariant.Ghost"
+                              Disabled="@(string.IsNullOrWhiteSpace(_input))"
+                              Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                        <LucideIconCn Name="send" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </form>
+            </div>
+        </div>
+
+        @* Right panel — Team Roster *@
+        <div class="flex w-72 shrink-0 flex-col border-l">
+            @* Roster header *@
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <span class="font-medium text-sm">Team Roster</span>
+                    <span class="flex items-center gap-1.5 text-muted-foreground text-[10px]">
+                        <span class="size-1.5 rounded-full bg-emerald-500" />
+                        @_onlineCount online
+                    </span>
+                </div>
+            </div>
+
+            @* Member list *@
+            <div class="flex-1 overflow-y-auto">
+                @foreach (var user in _users)
+                {
+                    var config = GetPresenceConfig(user.Status);
+                    <div class="border-b px-4 py-3 transition-colors hover:bg-muted/50">
+                        <div class="flex items-start gap-3">
+                            @* Avatar with status ring *@
+                            <div class="relative shrink-0">
+                                <AvatarCn Class="@Cn.Merge("size-9 ring-2 ring-offset-1 ring-offset-card", config.RingColor)">
+                                    <AvatarFallbackCn Class="text-xs">@user.Initials</AvatarFallbackCn>
+                                </AvatarCn>
+                            </div>
+                            @* User details *@
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="truncate font-medium text-xs">@user.Name</span>
+                                    @* Presence icon *@
+                                    @if (user.Status == "online")
+                                    {
+                                        <LucideIconCn Name="circle" Size="10" Class="size-2.5 fill-emerald-500 text-emerald-500" />
+                                    }
+                                    else if (user.Status == "away")
+                                    {
+                                        <LucideIconCn Name="moon" Size="10" Class="size-2.5 text-amber-500" />
+                                    }
+                                    else if (user.Status == "dnd")
+                                    {
+                                        <LucideIconCn Name="minus" Size="10" Class="size-2.5 text-red-500" />
+                                    }
+                                    else
+                                    {
+                                        <LucideIconCn Name="circle" Size="10" Class="size-2.5 text-zinc-400 dark:text-zinc-600" />
+                                    }
+                                </div>
+                                <p class="mt-0.5 truncate text-muted-foreground text-[10px]">
+                                    @(user.Status == "offline" && user.LastSeen != null ? user.LastSeen : user.StatusMessage)
+                                </p>
+                                @* Timezone row *@
+                                <div class="mt-1 flex items-center gap-1.5">
+                                    <LucideIconCn Name="clock" Size="10" Class="size-2.5 text-muted-foreground/60" />
+                                    <span class="font-mono text-muted-foreground/60 text-[10px]">
+                                        @user.LocalTime @user.Timezone
+                                    </span>
+                                </div>
+                                @* Calendar hint *@
+                                @if (user.CalendarStatus != null)
+                                {
+                                    <div class="mt-0.5 flex items-center gap-1.5">
+                                        <LucideIconCn Name="calendar" Size="10" Class="size-2.5 text-muted-foreground/60" />
+                                        <span class="truncate text-muted-foreground/60 text-[10px]">
+                                            @user.CalendarStatus
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Legend *@
+            <div class="border-t px-4 py-2.5">
+                <div class="flex items-center justify-between">
+                    @foreach (var entry in _legendEntries)
+                    {
+                        <span class="flex items-center gap-1 text-muted-foreground text-[10px]">
+                            <span class="@Cn.Merge("size-1.5 rounded-full", GetPresenceConfig(entry.Status).DotColor)" />
+                            @entry.Count
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record UserInfo(
+        string Id,
+        string Name,
+        string Initials,
+        string Status,
+        string StatusMessage,
+        string Timezone,
+        string LocalTime,
+        string? CalendarStatus = null,
+        string? LastSeen = null
+    );
+
+    private record MessageInfo(string Id, string Content, string SenderId, string Timestamp);
+
+    private record PresenceConfig(string RingColor, string DotColor, string Label);
+
+    private record LegendEntry(string Status, int Count);
+
+    private static PresenceConfig GetPresenceConfig(string status) => status switch
+    {
+        "online"  => new("ring-emerald-500",                           "bg-emerald-500",              "Online"),
+        "away"    => new("ring-amber-500",                             "bg-amber-500",                "Away"),
+        "dnd"     => new("ring-red-500",                               "bg-red-500",                  "Do Not Disturb"),
+        _         => new("ring-zinc-400 dark:ring-zinc-600",           "bg-zinc-400 dark:bg-zinc-600", "Offline"),
+    };
+
+    private static readonly UserInfo[] _users =
+    [
+        new("me",     "You",              "YO", "online",  "Building features",           "PST", "10:30 AM"),
+        new("sarah",  "Sarah Chen",       "SC", "online",  "Reviewing PRs",               "PST", "10:30 AM", "Free until 1pm"),
+        new("alex",   "Alex Rivera",      "AR", "away",    "In a meeting",                "CST", "12:30 PM", "Meeting until 2pm"),
+        new("jordan", "Jordan Kim",       "JK", "dnd",     "Deep work — no interruptions","EST", "1:30 PM",  "Focus time until 3pm"),
+        new("taylor", "Taylor Brooks",    "TB", "offline", "On vacation until April 3",   "GMT", "6:30 PM",  null, "Last seen 3h ago"),
+        new("priya",  "Priya Patel",      "PP", "online",  "Deploying staging",           "IST", "11:00 PM", "Free"),
+        new("kenji",  "Kenji Takahashi",  "KT", "offline", "",                            "JST", "2:30 AM",  null, "Last seen 8h ago"),
+    ];
+
+    private static readonly Dictionary<string, UserInfo> _usersById =
+        _users.ToDictionary(u => u.Id);
+
+    private static readonly MessageInfo[] _messages =
+    [
+        new("1", "Quick sync — the deploy pipeline is green. Anyone available to verify staging?",              "sarah", "10:15 AM"),
+        new("2", "I can check it now. Give me 5 minutes.",                                                      "me",    "10:17 AM"),
+        new("3", "I am stuck in a planning meeting. Can check after 2pm if nobody else gets to it.",            "alex",  "10:20 AM"),
+        new("4", "Staging looks good. Auth flow, dashboard, and billing all pass manual checks.",               "me",    "10:28 AM"),
+        new("5", "Excellent. I will merge to main and tag the release.",                                        "sarah", "10:30 AM"),
+        new("6", "Hold on — just noticed the rate limiter test is flaky. Let me re-run it before you merge.",   "me",    "10:32 AM"),
+        new("7", "Good catch. Standing by.",                                                                    "sarah", "10:33 AM"),
+        new("8", "All green on retry. It was a timing issue in CI, not a real failure. Safe to merge.",         "me",    "10:40 AM"),
+    ];
+
+    private int _onlineCount => _users.Count(u => u.Status == "online");
+
+    private LegendEntry[] _legendEntries =>
+    [
+        new("online",  _users.Count(u => u.Status == "online")),
+        new("away",    _users.Count(u => u.Status == "away")),
+        new("dnd",     _users.Count(u => u.Status == "dnd")),
+        new("offline", _users.Count(u => u.Status == "offline")),
+    ];
+
+    private string _input = "";
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

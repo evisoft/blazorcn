@@ -1,0 +1,349 @@
+@* ============================================================
+   Block: reviews-keyword-mentions
+   Title: ReviewsKeywordMentions
+   Description: A keyword frequency analysis component for React and Next.js with weighted tag cloud, sentiment-colored keywords, click-to-filter interaction, mention frequency bars, and filtered review list built with shadcn/ui Badge and Tooltip components, motion/react animations, and Tailwind CSS
+   Source: original/blocks/reviews/reviews-keyword-mentions.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="text-sm font-medium">Keyword Analysis</span>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    @(_keywords.Sum(k => k.Count).ToString("N0")) mentions across
+                    @_keywords.Length keywords from 1,247 reviews
+                </p>
+            </div>
+            @if (_selectedKeyword != null)
+            {
+                <button
+                    type="button"
+                    @onclick="@(() => _selectedKeyword = null)"
+                    class="text-xs text-muted-foreground transition-colors hover:text-foreground">
+                    Clear filter
+                </button>
+            }
+        </div>
+
+        @* Split layout: keywords + detail/search *@
+        <div class="grid grid-cols-5 border-b">
+
+            @* Keyword cloud — 3 cols *@
+            <div class="col-span-3 border-r p-4">
+                <span class="text-xs font-medium text-muted-foreground">
+                    Click a keyword to filter reviews
+                </span>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    @foreach (var kw in _keywords)
+                    {
+                        var keyword = kw;
+                        var isSelected = _selectedKeyword == keyword.Term;
+                        var sentColor = SentimentColor(keyword.Sentiment);
+                        var sizeClass = KeywordSize(keyword.Count);
+                        var buttonClass = Cn.Merge(
+                            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-all",
+                            sizeClass,
+                            isSelected
+                                ? "bg-foreground text-background ring-2 ring-foreground/20"
+                                : (_selectedKeyword != null
+                                    ? "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                                    : "bg-muted/50 text-foreground hover:bg-muted"));
+                        <TooltipProviderCn DelayDuration="200">
+                            <TooltipCn>
+                                <TooltipTriggerCn>
+                                    <button
+                                        type="button"
+                                        @onclick="@(() => _selectedKeyword = isSelected ? null : keyword.Term)"
+                                        class="@buttonClass">
+                                        <span class="@Cn.Merge("size-1.5 rounded-full", sentColor)"></span>
+                                        @keyword.Term
+                                        <span class="@Cn.Merge("tabular-nums", isSelected ? "text-background/60" : "text-muted-foreground")">
+                                            @keyword.Count
+                                        </span>
+                                    </button>
+                                </TooltipTriggerCn>
+                                <TooltipContentCn Class="text-xs">
+                                    <div class="space-y-1">
+                                        <div class="font-medium">@keyword.Term</div>
+                                        <div class="flex items-center gap-2 text-muted-foreground">
+                                            <span class="flex items-center gap-1">
+                                                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                @(keyword.Breakdown.Positive)%
+                                            </span>
+                                            <span class="flex items-center gap-1">
+                                                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                                                @(keyword.Breakdown.Neutral)%
+                                            </span>
+                                            <span class="flex items-center gap-1">
+                                                <span class="size-1.5 rounded-full bg-red-500"></span>
+                                                @(keyword.Breakdown.Negative)%
+                                            </span>
+                                        </div>
+                                        <div class="text-muted-foreground">
+                                            Trend: @TrendLabel(keyword.TrendDirection)
+                                        </div>
+                                    </div>
+                                </TooltipContentCn>
+                            </TooltipCn>
+                        </TooltipProviderCn>
+                    }
+                </div>
+            </div>
+
+            @* Detail panel — 2 cols *@
+            <div class="col-span-2 p-4">
+                @{
+                    var selectedData = _selectedKeyword != null
+                        ? System.Array.Find(_keywords, k => k.Term == _selectedKeyword)
+                        : null;
+                }
+                @if (selectedData != null)
+                {
+                    var sd = selectedData;
+                    var rankIndex = System.Array.FindIndex(_keywords, k => k.Term == sd.Term) + 1;
+                    <span class="text-xs font-medium text-muted-foreground">Keyword detail</span>
+                    <div class="mt-2">
+                        <span class="text-sm font-medium">@sd.Term</span>
+                        <div class="mt-1 flex items-baseline gap-2">
+                            <span class="text-2xl font-semibold tabular-nums">@sd.Count</span>
+                            <span class="text-xs text-muted-foreground">mentions</span>
+                        </div>
+                    </div>
+                    @* Sentiment breakdown bar *@
+                    <div class="mt-3">
+                        <span class="text-[10px] text-muted-foreground">
+                            Sentiment distribution
+                        </span>
+                        <div class="mt-1 flex h-2 overflow-hidden rounded-full bg-muted">
+                            <div
+                                class="bg-emerald-500 transition-all"
+                                style="@($"width:{sd.Breakdown.Positive}%")">
+                            </div>
+                            <div
+                                class="bg-amber-500 transition-all"
+                                style="@($"width:{sd.Breakdown.Neutral}%")">
+                            </div>
+                            <div
+                                class="bg-red-500 transition-all"
+                                style="@($"width:{sd.Breakdown.Negative}%")">
+                            </div>
+                        </div>
+                        <div class="mt-1.5 flex items-center gap-3">
+                            <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                @(sd.Breakdown.Positive)% positive
+                            </span>
+                            <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <span class="size-1.5 rounded-full bg-amber-500"></span>
+                                @(sd.Breakdown.Neutral)% neutral
+                            </span>
+                            <span class="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <span class="size-1.5 rounded-full bg-red-500"></span>
+                                @(sd.Breakdown.Negative)% negative
+                            </span>
+                        </div>
+                    </div>
+                    @* Frequency rank *@
+                    <div class="mt-4 rounded-md bg-muted/50 p-3">
+                        <span class="text-[10px] font-medium text-muted-foreground">
+                            Frequency rank
+                        </span>
+                        <div class="mt-1 flex items-center gap-2">
+                            <span class="text-sm font-semibold tabular-nums">#@rankIndex</span>
+                            <span class="text-xs text-muted-foreground">of @_keywords.Length keywords</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="flex flex-col items-center justify-center py-8 text-center">
+                        <LucideIconCn Name="message-square-text" Size="20" Class="size-5 text-muted-foreground/40" />
+                        <span class="mt-2 text-xs text-muted-foreground">
+                            Select a keyword to see detailed breakdown
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Search + filtered reviews *@
+        <div>
+            @* Search bar *@
+            <div class="flex items-center gap-2 border-b px-4 py-2">
+                <LucideIconCn Name="search" Size="14" Class="size-3.5 text-muted-foreground" />
+                <input
+                    type="text"
+                    placeholder="Search within reviews..."
+                    value="@_searchQuery"
+                    @oninput="@((e) => _searchQuery = e.Value?.ToString() ?? "")"
+                    class="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50" />
+                @{
+                    var filtered = FilteredReviews();
+                }
+                <span class="text-[10px] tabular-nums text-muted-foreground">
+                    @filtered.Length result@(filtered.Length != 1 ? "s" : "")
+                </span>
+            </div>
+
+            @* Reviews list *@
+            @{
+                var visibleReviews = FilteredReviews();
+            }
+            @if (visibleReviews.Length > 0)
+            {
+                for (int ri = 0; ri < visibleReviews.Length; ri++)
+                {
+                    var review = visibleReviews[ri];
+                    var isLast = ri == visibleReviews.Length - 1;
+                    <div class="@Cn.Merge("border-b px-4 py-3", isLast ? "border-b-0" : "")">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium">@review.Author</span>
+                                <div class="flex items-center gap-0.5">
+                                    @for (int si = 0; si < 5; si++)
+                                    {
+                                        var starIndex = si;
+                                        <LucideIconCn Name="star" Size="10" Class="@Cn.Merge("size-2.5", starIndex < review.Rating ? "fill-foreground text-foreground" : "text-muted-foreground/25")" />
+                                    }
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-[10px] tabular-nums text-muted-foreground">
+                                    @review.HelpfulCount helpful
+                                </span>
+                                <span class="text-xs text-muted-foreground">@review.Date</span>
+                            </div>
+                        </div>
+                        <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                            @review.Text
+                        </p>
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                            @foreach (var kwTerm in review.MatchedKeywords)
+                            {
+                                var kwData = System.Array.Find(_keywords, k => k.Term == kwTerm);
+                                var isHighlighted = _selectedKeyword == kwTerm;
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("gap-1 text-[10px] font-normal", isHighlighted ? "bg-foreground/10 ring-1 ring-foreground/20" : "")">
+                                    @if (kwData != null)
+                                    {
+                                        <span class="@Cn.Merge("size-1 rounded-full", SentimentColor(kwData.Sentiment))"></span>
+                                    }
+                                    @kwTerm
+                                </BadgeCn>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="flex items-center justify-center py-8 text-xs text-muted-foreground">
+                    No reviews match the current filters
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record SentimentBreakdown(int Positive, int Neutral, int Negative);
+
+    private record KeywordData(string Term, int Count, string Sentiment, SentimentBreakdown Breakdown, string TrendDirection);
+
+    private record ReviewEntry(string Id, string Author, int Rating, string Text, string Date, string[] MatchedKeywords, int HelpfulCount);
+
+    private static readonly KeywordData[] _keywords =
+    [
+        new("Battery life",       284, "positive", new(78, 14, 8),  "up"),
+        new("Noise cancellation", 247, "positive", new(82, 12, 6),  "up"),
+        new("Build quality",      198, "positive", new(71, 18, 11), "stable"),
+        new("Comfort fit",        176, "mixed",    new(52, 24, 24), "down"),
+        new("Sound quality",      163, "positive", new(74, 16, 10), "up"),
+        new("Bluetooth range",    134, "mixed",    new(38, 32, 30), "down"),
+        new("Microphone clarity", 112, "negative", new(22, 28, 50), "down"),
+        new("Carrying case",       89, "positive", new(64, 26, 10), "stable"),
+        new("Touch controls",      78, "mixed",    new(41, 27, 32), "stable"),
+        new("Charging speed",      67, "positive", new(69, 21, 10), "up"),
+        new("Ear cup padding",     54, "mixed",    new(44, 22, 34), "down"),
+        new("Multi-device pairing",48, "positive", new(72, 18, 10), "up"),
+    ];
+
+    private static readonly ReviewEntry[] _reviews =
+    [
+        new("kr-1", "Rachel Kim",    5,
+            "Battery life is truly exceptional -- I got 32 hours on a single charge with noise cancellation on. The build quality feels premium with the aluminum headband. Sound quality is warm and detailed across all frequencies.",
+            "Mar 28, 2026",
+            ["Battery life", "Noise cancellation", "Build quality", "Sound quality"],
+            47),
+        new("kr-2", "David Park",    4,
+            "Noise cancellation is best-in-class for this price range. Comfort fit is good for the first two hours but the clamping force gets noticeable in longer sessions. Touch controls are responsive but too sensitive -- I keep accidentally pausing.",
+            "Mar 25, 2026",
+            ["Noise cancellation", "Comfort fit", "Touch controls"],
+            34),
+        new("kr-3", "Emily Torres",  3,
+            "Build quality is solid but the Bluetooth range drops significantly past 10 meters. Microphone clarity is disappointing -- callers constantly ask me to repeat myself. The carrying case is compact and protective though.",
+            "Mar 22, 2026",
+            ["Build quality", "Bluetooth range", "Microphone clarity", "Carrying case"],
+            28),
+        new("kr-4", "James Liu",     5,
+            "Charging speed is impressive -- 10 minutes gets you 3 hours of playback. Multi-device pairing switches seamlessly between laptop and phone. Battery life easily lasts my entire work week.",
+            "Mar 19, 2026",
+            ["Charging speed", "Multi-device pairing", "Battery life"],
+            41),
+        new("kr-5", "Olivia Hansen", 4,
+            "Sound quality is rich with deep bass that does not overpower mids. The ear cup padding could be softer -- it leaves marks after extended wear. Noise cancellation handles office noise perfectly.",
+            "Mar 16, 2026",
+            ["Sound quality", "Ear cup padding", "Noise cancellation"],
+            22),
+        new("kr-6", "Marcus Webb",   2,
+            "Bluetooth range is a real problem in my workspace. Microphone clarity makes these unusable for calls. The comfort fit is decent but not enough to justify the price when core features underperform.",
+            "Mar 14, 2026",
+            ["Bluetooth range", "Microphone clarity", "Comfort fit"],
+            19),
+    ];
+
+    private static readonly int _maxCount = _keywords.Max(k => k.Count);
+
+    private string? _selectedKeyword;
+    private string _searchQuery = "";
+
+    private static string SentimentColor(string sentiment) => sentiment switch
+    {
+        "positive" => "bg-emerald-500",
+        "mixed"    => "bg-amber-500",
+        "negative" => "bg-red-500",
+        _          => "bg-muted",
+    };
+
+    private static string KeywordSize(int count)
+    {
+        var ratio = (double)count / _maxCount;
+        if (ratio > 0.8) return "text-sm font-medium";
+        if (ratio > 0.5) return "text-xs font-medium";
+        return "text-xs";
+    }
+
+    private static string TrendLabel(string trend) => trend switch
+    {
+        "up"   => "Rising",
+        "down" => "Declining",
+        _      => "Stable",
+    };
+
+    private ReviewEntry[] FilteredReviews()
+    {
+        var result = _reviews.AsEnumerable();
+        if (_selectedKeyword != null)
+            result = result.Where(r => r.MatchedKeywords.Contains(_selectedKeyword));
+        if (!string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            var q = _searchQuery.ToLowerInvariant();
+            result = result.Where(r =>
+                r.Text.ToLowerInvariant().Contains(q) ||
+                r.Author.ToLowerInvariant().Contains(q));
+        }
+        return result.ToArray();
+    }
+}

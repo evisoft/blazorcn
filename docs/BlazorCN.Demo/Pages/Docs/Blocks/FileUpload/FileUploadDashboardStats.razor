@@ -1,0 +1,193 @@
+@* ============================================================
+   Block: file-upload-dashboard-stats
+   Title: FileUploadDashboardStats
+   Description: Upload analytics dashboard for React and Next.js with total uploads, storage usage, bandwidth metrics, failure rate, uploads by file type breakdown, top uploaders list, and time period selector using shadcn/ui and Tailwind CSS
+   Source: original/blocks/file-upload/file-upload-dashboard-stats.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div>
+                <span class="font-medium text-sm">Upload analytics</span>
+                <p class="mt-0.5 text-muted-foreground text-xs">Storage and bandwidth metrics</p>
+            </div>
+            <div class="flex items-center gap-1">
+                @foreach (var p in _periodKeys)
+                {
+                    var period = p;
+                    <button
+                        type="button"
+                        @onclick="@(() => _period = period)"
+                        class="@Cn.Merge("rounded-md px-2 py-1 text-xs transition-colors", _period == period ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        @period
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Metrics grid *@
+        <div class="grid grid-cols-4 divide-x border-b">
+            @foreach (var metric in _metricsData[_period])
+            {
+                var m = metric;
+                var isFailure = m.Label == "Failed uploads";
+                var changeClass = isFailure
+                    ? (m.Change > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400")
+                    : (m.Change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400");
+                <div class="px-4 py-3">
+                    <div class="flex items-center gap-1.5 text-muted-foreground">
+                        <LucideIconCn Name="@m.IconName" Size="14" Class="size-3.5" />
+                        <span class="text-xs">@m.Label</span>
+                    </div>
+                    <div class="mt-1.5 flex items-baseline gap-2">
+                        <span class="font-semibold text-xl tabular-nums">@m.Value</span>
+                        <span class="@Cn.Merge("flex items-center gap-0.5 text-xs tabular-nums", changeClass)">
+                            @if (m.Change > 0)
+                            {
+                                <LucideIconCn Name="arrow-up" Size="12" Class="size-3" />
+                            }
+                            else
+                            {
+                                <LucideIconCn Name="arrow-down" Size="12" Class="size-3" />
+                            }
+                            @Math.Abs(m.Change)%
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Uploads by type *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-muted-foreground text-xs">Uploads by type</span>
+            <div class="mt-3 space-y-2.5">
+                @foreach (var ft in _uploadsByType)
+                {
+                    <div class="flex items-center gap-3">
+                        <span class="w-20 shrink-0 text-xs">@ft.Label</span>
+                        <div class="flex-1">
+                            <div class="h-2 w-full rounded-full bg-muted/50">
+                                <div class="@Cn.Merge("h-2 rounded-full", ft.Color)" style="@($"width:{ft.Percentage}%")"></div>
+                            </div>
+                        </div>
+                        <span class="w-12 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                            @ft.Percentage%
+                        </span>
+                        <span class="w-14 shrink-0 text-right font-medium text-xs tabular-nums">
+                            @ft.Count.ToString("N0")
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* Top uploaders *@
+        <div class="px-4 py-3">
+            <div class="mb-3 flex items-center justify-between">
+                <span class="font-medium text-muted-foreground text-xs">Top uploaders</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    Last @_periodLabels[_period]
+                </BadgeCn>
+            </div>
+            <div class="space-y-0">
+                @for (int i = 0; i < _topUploaders.Length; i++)
+                {
+                    var uploader = _topUploaders[i];
+                    var index = i;
+                    <div class="flex items-center gap-3 rounded-md px-0 py-2 transition-colors hover:bg-muted/50">
+                        <span class="w-5 shrink-0 text-center text-muted-foreground text-xs tabular-nums">
+                            @(index + 1)
+                        </span>
+                        <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/50">
+                            <span class="font-medium text-xs">@GetInitials(uploader.Name)</span>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <span class="block truncate font-medium text-sm">@uploader.Name</span>
+                            <span class="text-muted-foreground text-xs">@uploader.Email</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="block font-medium text-sm tabular-nums">@uploader.Uploads.ToString("N0")</span>
+                            <span class="text-muted-foreground text-xs">@uploader.Storage</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Metric(string Label, string Value, int Change, string IconName);
+    private record FileTypeBreakdown(string Label, int Count, int Percentage, string Color);
+    private record TopUploader(string Name, string Email, int Uploads, string Storage);
+
+    private static readonly string[] _periodKeys = ["24h", "7d", "30d", "90d"];
+
+    private static readonly Dictionary<string, string> _periodLabels = new()
+    {
+        ["24h"] = "24 hours",
+        ["7d"]  = "7 days",
+        ["30d"] = "30 days",
+        ["90d"] = "90 days",
+    };
+
+    private static readonly Dictionary<string, Metric[]> _metricsData = new()
+    {
+        ["24h"] =
+        [
+            new("Total uploads",  "342",     12,  "upload"),
+            new("Storage used",   "1.8 GB",   3,  "hard-drive"),
+            new("Bandwidth",      "4.2 GB",  -5,  "wifi"),
+            new("Failed uploads", "7",       40,  "alert-circle"),
+        ],
+        ["7d"] =
+        [
+            new("Total uploads",  "2,847",    8,  "upload"),
+            new("Storage used",   "14.3 GB", 11,  "hard-drive"),
+            new("Bandwidth",      "31.6 GB",  6,  "wifi"),
+            new("Failed uploads", "43",      -15, "alert-circle"),
+        ],
+        ["30d"] =
+        [
+            new("Total uploads",  "11,284",  14,  "upload"),
+            new("Storage used",   "58.7 GB", 22,  "hard-drive"),
+            new("Bandwidth",      "124 GB",  18,  "wifi"),
+            new("Failed uploads", "156",     -8,  "alert-circle"),
+        ],
+        ["90d"] =
+        [
+            new("Total uploads",  "32,691",  21,  "upload"),
+            new("Storage used",   "168 GB",  34,  "hard-drive"),
+            new("Bandwidth",      "372 GB",  27,  "wifi"),
+            new("Failed uploads", "412",     -12, "alert-circle"),
+        ],
+    };
+
+    private static readonly FileTypeBreakdown[] _uploadsByType =
+    [
+        new("Images",    4821, 42, "bg-foreground"),
+        new("Documents", 3412, 30, "bg-foreground/70"),
+        new("Videos",    1708, 15, "bg-foreground/50"),
+        new("Archives",   912,  8, "bg-foreground/30"),
+        new("Other",      431,  5, "bg-muted-foreground/40"),
+    ];
+
+    private static readonly TopUploader[] _topUploaders =
+    [
+        new("Sarah Chen",      "sarah@acme.com",   847, "12.4 GB"),
+        new("Marcus Johnson",  "marcus@acme.com",  623, "8.7 GB"),
+        new("Elena Rodriguez", "elena@acme.com",   518, "7.1 GB"),
+        new("David Kim",       "david@acme.com",   412, "5.9 GB"),
+        new("Priya Patel",     "priya@acme.com",   389, "4.3 GB"),
+    ];
+
+    private string _period = "30d";
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ');
+        return string.Concat(parts.Select(p => p.Length > 0 ? p[0].ToString() : ""));
+    }
+}

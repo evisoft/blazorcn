@@ -1,0 +1,311 @@
+@* ============================================================
+   Block: map-market-expansion
+   Title: MapMarketExpansion
+   Description: Interactive market expansion planner map with current and target market markers, opportunity scores, competitor locations, and expansion detail cards built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-market-expansion.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="target" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Market Expansion</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _statusFilter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _statusFilter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                >
+                    All (@_markets.Length)
+                </button>
+                @foreach (var st in _statuses)
+                {
+                    var status = st;
+                    <button
+                        type="button"
+                        @onclick="@(() => _statusFilter = _statusFilter == status ? null : status)"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _statusFilter == status ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")"
+                    >
+                        <span class="@($"size-1.5 rounded-full {StatusColor(status)}")"></span>
+                        @StatusLabel(status)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-4 border-b px-4 py-3">
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_currentCount current
+                </span>
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="size-1.5 rounded-full bg-blue-500"></span>
+                    @_targetCount targets
+                </span>
+            </div>
+            <span class="text-xs text-muted-foreground">·</span>
+            <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                <LucideIconCn Name="trending-up" Size="12" Class="size-3" />
+                Avg opportunity score
+                <span class="font-medium tabular-nums text-foreground">@_avgOpportunityScore</span>
+            </span>
+        </div>
+
+        @* Map placeholder *@
+        <div class="relative h-[500px]">
+            <div class="absolute inset-0 overflow-hidden">
+                @* Simulated map background *@
+                <div class="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900"></div>
+
+                @* Expansion route lines (simulated) *@
+                @foreach (var route in _expansionRoutes)
+                {
+                    var fromMarket = Array.Find(_markets, m => m.Id == route.From);
+                    var toMarket   = Array.Find(_markets, m => m.Id == route.To);
+                    @if (fromMarket != null && toMarket != null)
+                    {
+                        var fromPos = GetMarkerPosition(fromMarket.Longitude, fromMarket.Latitude);
+                        var toPos   = GetMarkerPosition(toMarket.Longitude, toMarket.Latitude);
+                        <svg class="absolute inset-0 h-full w-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                            <line
+                                x1="@($"{fromPos.X:F1}%")" y1="@($"{fromPos.Y:F1}%")"
+                                x2="@($"{toPos.X:F1}%")"   y2="@($"{toPos.Y:F1}%")"
+                                stroke="#6b7280"
+                                stroke-width="1.5"
+                                stroke-opacity="0.4"
+                                stroke-dasharray="6 4"
+                            />
+                        </svg>
+                    }
+                }
+
+                @* Market markers *@
+                @foreach (var mkt in _filtered)
+                {
+                    var market    = mkt;
+                    var isSelected = _selected == market.Id;
+                    var pos       = GetMarkerPosition(market.Longitude, market.Latitude);
+                    <div
+                        class="absolute -translate-x-1/2 -translate-y-1/2"
+                        style="@($"left:{pos.X:F1}%;top:{pos.Y:F1}%")"
+                    >
+                        <button
+                            type="button"
+                            @onclick="@(() => _selected = _selected == market.Id ? null : market.Id)"
+                            class="relative"
+                            title="@market.City"
+                        >
+                            <div class="@Cn.Merge("flex size-5 items-center justify-center rounded-full border-2 border-white shadow-md", StatusColor(market.Status))">
+                                @if (market.Status == "current")
+                                {
+                                    <LucideIconCn Name="building" Size="10" Class="size-2.5 text-white" />
+                                }
+                                else if (market.Status == "target")
+                                {
+                                    <LucideIconCn Name="target" Size="10" Class="size-2.5 text-white" />
+                                }
+                                else
+                                {
+                                    <span class="size-1.5 rounded-full bg-white"></span>
+                                }
+                            </div>
+                        </button>
+
+                        @* Tooltip shown always on hover (simulated as popup on select) *@
+                        @if (isSelected)
+                        {
+                            <div class="absolute left-1/2 z-10 mt-1.5 w-60 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg text-popover-foreground">
+                                <div class="mb-2 flex items-start justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium">@market.City</p>
+                                        <p class="text-xs text-muted-foreground">@market.Country</p>
+                                    </div>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@StatusLabel(market.Status)</BadgeCn>
+                                </div>
+                                <div class="mb-2 grid grid-cols-2 gap-2">
+                                    <div class="rounded-md bg-muted/50 p-2">
+                                        <p class="text-xs text-muted-foreground">TAM</p>
+                                        <p class="text-sm font-semibold">@market.Tam</p>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2">
+                                        <p class="text-xs text-muted-foreground">Score</p>
+                                        <p class="@Cn.Merge("text-sm font-semibold tabular-nums", ScoreColor(market.OpportunityScore))">@market.OpportunityScore/100</p>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2">
+                                        <p class="text-xs text-muted-foreground">Growth</p>
+                                        <p class="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">+@market.GrowthRate%</p>
+                                    </div>
+                                    <div class="rounded-md bg-muted/50 p-2">
+                                        <p class="text-xs text-muted-foreground">Competitors</p>
+                                        <p class="text-sm font-semibold tabular-nums">@market.Competitors</p>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-muted-foreground">@market.Notes</p>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="pointer-events-none select-none absolute bottom-2 left-2 z-10 rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                Map view — Global
+            </div>
+        </div>
+
+        @* Market list *@
+        <div>
+            @foreach (var (mkt, index) in _filtered.Select((m, i) => (m, i)))
+            {
+                var market     = mkt;
+                var isExpanded = _expanded == market.Id;
+                var isLast     = index == _filtered.Length - 1;
+                <div class="@(isLast && !isExpanded ? "" : "border-t")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = _expanded == market.Id ? null : market.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                    >
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", StatusColor(market.Status))"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="text-sm font-medium">@market.City</span>
+                            <p class="mt-0.5 text-xs text-muted-foreground">@market.Country · @market.Tam TAM</p>
+                        </div>
+                        <span class="@Cn.Merge("text-xs font-medium tabular-nums", ScoreColor(market.OpportunityScore))">@market.OpportunityScore</span>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="text-xs font-normal">@StatusLabel(market.Status)</BadgeCn>
+                        <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="px-4 pb-4 pl-9">
+                            <div class="mb-3 grid grid-cols-4 gap-3">
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <span class="text-xs font-medium text-muted-foreground">TAM</span>
+                                    <p class="mt-1 text-sm font-semibold">@market.Tam</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <span class="text-xs font-medium text-muted-foreground">Growth</span>
+                                    <p class="mt-1 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">+@market.GrowthRate%</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <span class="text-xs font-medium text-muted-foreground">Competitors</span>
+                                    <p class="mt-1 text-sm font-semibold tabular-nums">@market.Competitors</p>
+                                </div>
+                                <div class="rounded-md bg-muted/50 p-3">
+                                    <span class="text-xs font-medium text-muted-foreground">Entry cost</span>
+                                    <p class="mt-1 text-sm font-semibold">@market.EntryCost</p>
+                                </div>
+                            </div>
+                            <p class="text-sm text-muted-foreground">@market.Notes</p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Market(
+        string Id,
+        string City,
+        string Country,
+        string Status,
+        double Longitude,
+        double Latitude,
+        string Tam,
+        double GrowthRate,
+        int Competitors,
+        int OpportunityScore,
+        string EntryCost,
+        string Notes
+    );
+
+    private record ExpansionRoute(string Id, string From, string To);
+
+    private static readonly Market[] _markets =
+    [
+        new("m1", "San Francisco", "United States", "current", -122.4194,  37.7749, "$2.4B",  14.2, 12, 92, "-",     "HQ market. Strong brand presence."),
+        new("m2", "New York",      "United States", "current",  -74.006,   40.7128, "$3.8B",  11.8, 18, 85, "-",     "Second largest market. Enterprise focus."),
+        new("m3", "London",        "United Kingdom","target",    -0.1276,   51.5074, "$1.9B",  16.4,  8, 88, "$420k", "Strong fintech ecosystem. Low entry barriers."),
+        new("m4", "Berlin",        "Germany",       "target",    13.405,    52.52,   "$1.1B",  19.7,  5, 82, "$310k", "Fastest-growing EU tech hub. Talent pool."),
+        new("m5", "Singapore",     "Singapore",     "target",   103.8198,    1.3521, "$890M",  22.1,  4, 79, "$280k", "APAC gateway. Government incentives available."),
+        new("m6", "Tokyo",         "Japan",         "target",   139.6917,   35.6762, "$2.1B",   8.3, 14, 64, "$580k", "Large market but complex regulatory environment."),
+        new("m7", "Sydney",        "Australia",     "target",   151.2093,  -33.8688, "$720M",  17.8,  3, 76, "$350k", "Underserved market with growing demand."),
+        new("m8", "Toronto",       "Canada",        "current",  -79.3832,   43.6532, "$1.3B",  13.6,  9, 78, "-",     "Recent expansion. Building local team."),
+        new("m9", "Sao Paulo",     "Brazil",        "competitor",-46.6333, -23.5505, "$1.5B",  25.4,  7, 58, "$460k", "High growth but competitor has first-mover advantage."),
+    ];
+
+    private static readonly ExpansionRoute[] _expansionRoutes =
+    [
+        new("er1", "m2", "m3"),
+        new("er2", "m3", "m4"),
+        new("er3", "m1", "m5"),
+    ];
+
+    private static readonly string[] _statuses = ["current", "target", "competitor"];
+
+    private string? _statusFilter = null;
+    private string? _selected     = null;
+    private string? _expanded     = null;
+
+    private Market[] _filtered => _statusFilter == null
+        ? _markets
+        : Array.FindAll(_markets, m => m.Status == _statusFilter);
+
+    private int _currentCount => Array.FindAll(_markets, m => m.Status == "current").Length;
+    private int _targetCount  => Array.FindAll(_markets, m => m.Status == "target").Length;
+
+    private int _avgOpportunityScore
+    {
+        get
+        {
+            var targets = Array.FindAll(_markets, m => m.Status == "target");
+            if (targets.Length == 0) return 0;
+            int total = 0;
+            foreach (var t in targets) total += t.OpportunityScore;
+            return (int)Math.Round((double)total / targets.Length);
+        }
+    }
+
+    private static string StatusColor(string status) => status switch
+    {
+        "current"    => "bg-emerald-500",
+        "target"     => "bg-blue-500",
+        "competitor" => "bg-red-500",
+        _            => "bg-muted",
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "current"    => "Current",
+        "target"     => "Target",
+        "competitor" => "Competitor",
+        _            => status,
+    };
+
+    private static string ScoreColor(int score)
+    {
+        if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
+        if (score >= 60) return "text-blue-600 dark:text-blue-400";
+        if (score >= 40) return "text-amber-600 dark:text-amber-400";
+        return "text-red-600 dark:text-red-400";
+    }
+
+    // Maps lon/lat to CSS percentage positions for the world-view placeholder.
+    // Viewport: lon [-180, 180], lat [-60, 75]  (reasonable world extent)
+    private static (double X, double Y) GetMarkerPosition(double longitude, double latitude)
+    {
+        const double lonMin = -180.0, lonMax = 180.0;
+        const double latMin = -60.0,  latMax = 75.0;
+        var x = (longitude - lonMin) / (lonMax - lonMin) * 100.0;
+        var y = (1.0 - (latitude - latMin) / (latMax - latMin)) * 100.0;
+        x = Math.Clamp(x, 2, 96);
+        y = Math.Clamp(y, 2, 96);
+        return (x, y);
+    }
+}

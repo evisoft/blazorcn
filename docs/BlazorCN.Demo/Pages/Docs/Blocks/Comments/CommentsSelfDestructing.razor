@@ -1,0 +1,188 @@
+@* ============================================================
+   Block: comments-self-destructing
+   Title: CommentsSelfDestructing
+   Description: A self-destructing comment section for React and Next.js with auto-delete timers, view-once messages, and countdown indicators built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/comments/comments-self-destructing.tsx
+   ============================================================ *@
+
+@implements IDisposable
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Self-Destructing Comments</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        Messages auto-delete after expiration
+                    </p>
+                </div>
+                <BadgeCn Variant="BadgeVariant.Outline" Class="gap-1.5 text-xs">
+                    <LucideIconCn Name="flame" Size="12" Class="size-3" />
+                    Ephemeral
+                </BadgeCn>
+            </div>
+        </div>
+
+        @* Comment list *@
+        <div>
+            @for (var i = 0; i < _comments.Count; i++)
+            {
+                var comment = _comments[i];
+                var isLast = i == _comments.Count - 1;
+                var initials = GetInitials(comment.Author);
+                <div class="@(isLast ? "p-4" : "border-b p-4")">
+                    @if (comment.ViewOnce && !comment.Viewed)
+                    {
+                        var commentId = comment.Id;
+                        <button type="button" @onclick="@(() => ViewOnceComment(commentId))"
+                                class="flex w-full items-center gap-3 rounded-md border border-dashed bg-muted/30 p-4 text-left transition-colors hover:bg-muted/50">
+                            <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+                                <LucideIconCn Name="eye" Size="20" Class="size-5 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium">@comment.Author</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">
+                                        View once
+                                    </BadgeCn>
+                                </div>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    Click to view • Burns after reading
+                                </p>
+                            </div>
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="space-y-3">
+                            <div class="flex gap-3">
+                                <AvatarCn Class="size-8 shrink-0">
+                                    <AvatarImageCn Src="@comment.Avatar" Alt="@comment.Author" />
+                                    <AvatarFallbackCn Class="text-xs">@initials</AvatarFallbackCn>
+                                </AvatarCn>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium">@comment.Author</span>
+                                        <span class="text-xs text-muted-foreground">@comment.Timestamp</span>
+                                    </div>
+                                    <p class="mt-1.5 text-sm leading-relaxed">@comment.Content</p>
+                                </div>
+                            </div>
+
+                            <div class="rounded-md bg-muted/50 p-2.5">
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        @if (comment.ViewOnce)
+                                        {
+                                            <LucideIconCn Name="flame" Size="12" Class="size-3" />
+                                            <span>Burns in @FormatTime(comment.ExpiresIn)</span>
+                                        }
+                                        else
+                                        {
+                                            <LucideIconCn Name="timer" Size="12" Class="size-3" />
+                                            <span>Expires in @FormatTime(comment.ExpiresIn)</span>
+                                        }
+                                    </div>
+                                    <span class="font-mono text-xs tabular-nums text-muted-foreground">
+                                        @FormatTime(comment.ExpiresIn)
+                                    </span>
+                                </div>
+                                <ProgressCn Value="@GetProgressValue(comment)" Class="h-1" />
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_comments.Count == 0)
+            {
+                <div class="px-4 py-8 text-center">
+                    <LucideIconCn Name="clock" Size="32" Class="mx-auto size-8 text-muted-foreground/40" />
+                    <p class="mt-2 text-sm text-muted-foreground">All messages have expired</p>
+                </div>
+            }
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record CommentItem(
+        string Id,
+        string Author,
+        string Avatar,
+        string Content,
+        string Timestamp,
+        int ExpiresIn,
+        bool ViewOnce,
+        bool Viewed
+    );
+
+    private List<CommentItem> _comments =
+    [
+        new("1", "Sarah Chen", "", "The API keys for the staging environment are in 1Password. This message will self-destruct in 5 minutes.", "2 min ago", 180, false, false),
+        new("2", "James Wilson", "", "Click to view confidential compensation details. Burns after reading.", "5 min ago", 0, true, false),
+        new("3", "Maya Patel", "", "Quick reminder: standup moved to 2pm today. Auto-deletes in 1 hour.", "15 min ago", 2700, false, false),
+    ];
+
+    private System.Threading.Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        _timer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                _comments = _comments
+                    .Select(c => c with { ExpiresIn = c.ExpiresIn > 0 ? c.ExpiresIn - 1 : 0 })
+                    .Where(c => c.ExpiresIn > 0 || c.ViewOnce)
+                    .ToList();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+
+    private void ViewOnceComment(string id)
+    {
+        _comments = _comments
+            .Select(c => c.Id == id && c.ViewOnce ? c with { Viewed = true, ExpiresIn = 30 } : c)
+            .ToList();
+    }
+
+    private static string FormatTime(int seconds)
+    {
+        if (seconds >= 3600)
+        {
+            var hours = seconds / 3600;
+            var mins = (seconds % 3600) / 60;
+            return $"{hours}h {mins}m";
+        }
+        if (seconds >= 60)
+        {
+            var mins = seconds / 60;
+            var secs = seconds % 60;
+            return $"{mins}m {secs}s";
+        }
+        return $"{seconds}s";
+    }
+
+    private static int GetProgressValue(CommentItem comment)
+    {
+        if (comment.ViewOnce && !comment.Viewed) return 100;
+        var original = comment.Id == "1" ? 300 : comment.Id == "3" ? 3600 : 30;
+        return (int)((double)comment.ExpiresIn / original * 100);
+    }
+
+    private static string GetInitials(string author)
+    {
+        return string.Concat(author.Split(' ').Select(n => n[0])).ToUpper();
+    }
+}

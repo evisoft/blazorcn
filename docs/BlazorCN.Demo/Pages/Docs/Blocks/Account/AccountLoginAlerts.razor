@@ -1,0 +1,387 @@
+@* ============================================================
+   Block: account-login-alerts
+   Title: AccountLoginAlerts
+   Description: A security alert feed for React and Next.js with severity filtering, unread indicators, IP blocking, alert dismissal, and device context built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-login-alerts.tsx
+   ============================================================ *@
+
+<TooltipProviderCn>
+    <section class="mx-auto w-full max-w-2xl p-4">
+        <div class="overflow-hidden rounded-lg border bg-card">
+            @* Header *@
+            <div class="border-b px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <LucideShieldAlertCn Class="h-4 w-4 text-muted-foreground" Size="16" />
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-sm font-medium">Security Alerts</h2>
+                                @if (UnreadCount > 0)
+                                {
+                                    <BadgeCn Class="h-4 border-0 bg-red-500/10 px-1.5 py-0 text-[10px] text-red-700">@UnreadCount new</BadgeCn>
+                                }
+                            </div>
+                            <p class="text-xs text-muted-foreground">Login events requiring your attention</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-red-500"></span>
+                            @CriticalCount
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-amber-500"></span>
+                            @WarningCount
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="size-1.5 rounded-full bg-blue-500"></span>
+                            @InfoCount
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            @* Filter bar *@
+            <div class="border-b px-4 py-2">
+                <div class="flex items-center gap-1.5">
+                    @foreach (var tab in FilterTabs)
+                    {
+                        <button type="button" @onclick="@(() => _filter = tab.Key)"
+                                class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", _filter == tab.Key ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")">
+                            @tab.Label<span class="ml-1 text-[10px] text-muted-foreground">@tab.Count</span>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Alert list *@
+            <div class="divide-y">
+                @{
+                    var filteredAlerts = FilteredAlerts;
+                }
+                @if (filteredAlerts.Count == 0)
+                {
+                    <div class="px-4 py-10 text-center">
+                        <p class="text-sm text-muted-foreground">No alerts match this filter</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var alert in filteredAlerts)
+                    {
+                        var isExpanded = _expandedId == alert.Id;
+                        var isIpBlocked = _blockedIps.Contains(alert.Location.Ip);
+                        var severityBg = GetSeverityBg(alert.Severity);
+                        <div class="@Cn.Merge("border-l-2", !alert.IsRead ? GetSeverityBorder(alert.Severity) : "border-l-transparent")">
+                            @* Alert row - clickable *@
+                            <button type="button" @onclick="@(() => ToggleExpand(alert.Id))"
+                                    class="@Cn.Merge("flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50", isExpanded ? severityBg : "")">
+                                @if (alert.Severity == "critical")
+                                {
+                                    <LucideShieldXCn Class="mt-0.5 h-4 w-4 shrink-0 text-red-500" Size="16" />
+                                }
+                                else if (alert.Severity == "warning")
+                                {
+                                    <LucideAlertTriangleCn Class="mt-0.5 h-4 w-4 shrink-0 text-amber-500" Size="16" />
+                                }
+                                else
+                                {
+                                    <LucideInfoCn Class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" Size="16" />
+                                }
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="@Cn.Merge("text-sm font-medium", !alert.IsRead ? "text-foreground" : "text-muted-foreground")">
+                                            @alert.Title
+                                        </span>
+                                        @if (!alert.IsRead)
+                                        {
+                                            <span class="size-1.5 shrink-0 rounded-full bg-blue-500"></span>
+                                        }
+                                    </div>
+                                    <p class="mt-0.5 line-clamp-1 text-xs text-muted-foreground">@alert.Description</p>
+                                    <div class="mt-1.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                                        <span>@alert.Timestamp</span>
+                                        <span>*</span>
+                                        <span class="font-mono">@alert.Location.Ip</span>
+                                        <span>*</span>
+                                        <span>@alert.Location.City, @alert.Location.Country</span>
+                                    </div>
+                                </div>
+                                <LucideChevronDownCn Class="@Cn.Merge("mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", isExpanded ? "rotate-180" : "")" Size="14" />
+                            </button>
+
+                            @* Expanded detail *@
+                            @if (isExpanded)
+                            {
+                                <div class="overflow-hidden">
+                                    <div class="@($"px-4 pb-3 {severityBg}")">
+                                        <div class="ml-7 space-y-3">
+                                            <p class="text-xs text-muted-foreground leading-relaxed">@alert.Description</p>
+
+                                            <div class="grid grid-cols-2 gap-x-6 gap-y-2">
+                                                <div>
+                                                    <span class="text-[10px] font-medium text-muted-foreground">IP ADDRESS</span>
+                                                    <div class="mt-0.5 flex items-center gap-1.5">
+                                                        <span class="font-mono text-xs">@alert.Location.Ip</span>
+                                                        <TooltipCn>
+                                                            <TooltipTriggerCn>
+                                                                <button type="button"
+                                                                        @onclick="@(async () => await CopyIp(alert.Location.Ip))"
+                                                                        @onclick:stopPropagation="true"
+                                                                        class="text-muted-foreground hover:text-foreground">
+                                                                    @if (_copiedIp == alert.Location.Ip)
+                                                                    {
+                                                                        <LucideCheckCn Class="h-3 w-3 text-emerald-500" Size="12" />
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <LucideCopyCn Class="h-3 w-3" Size="12" />
+                                                                    }
+                                                                </button>
+                                                            </TooltipTriggerCn>
+                                                            <TooltipContentCn>
+                                                                <p>@(_copiedIp == alert.Location.Ip ? "Copied" : "Copy IP")</p>
+                                                            </TooltipContentCn>
+                                                        </TooltipCn>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span class="text-[10px] font-medium text-muted-foreground">LOCATION</span>
+                                                    <p class="mt-0.5 text-xs">@alert.Location.City, @alert.Location.Country</p>
+                                                </div>
+                                                <div>
+                                                    <span class="text-[10px] font-medium text-muted-foreground">BROWSER</span>
+                                                    <p class="mt-0.5 text-xs">@alert.Device.Browser</p>
+                                                </div>
+                                                <div>
+                                                    <span class="text-[10px] font-medium text-muted-foreground">OPERATING SYSTEM</span>
+                                                    <p class="mt-0.5 text-xs">@alert.Device.Os</p>
+                                                </div>
+                                            </div>
+
+                                            <div class="flex items-center gap-2 pt-1">
+                                                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 text-xs"
+                                                          OnClick="@(() => DismissAlert(alert.Id))">
+                                                    <LucideXCn Class="mr-1 h-3 w-3" Size="12" />
+                                                    Dismiss
+                                                </ButtonCn>
+                                                @if (alert.Location.Ip != "0.0.0.0")
+                                                {
+                                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                                              Class="@Cn.Merge("h-7 text-xs", isIpBlocked ? "text-red-600" : "")"
+                                                              Disabled="@isIpBlocked"
+                                                              OnClick="@(() => BlockIp(alert.Location.Ip))">
+                                                        <LucideBanCn Class="mr-1 h-3 w-3" Size="12" />
+                                                        @(isIpBlocked ? "IP Blocked" : "Block IP")
+                                                    </ButtonCn>
+                                                }
+                                                @if (alert.Severity == "critical")
+                                                {
+                                                    <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline"
+                                                              Class="h-7 text-xs text-red-600 hover:bg-red-500/10 hover:text-red-700">
+                                                        <LucideShieldAlertCn Class="mr-1 h-3 w-3" Size="12" />
+                                                        Report
+                                                    </ButtonCn>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+
+            @* Footer *@
+            <div class="border-t px-4 py-2.5">
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>@filteredAlerts.Count alert@(filteredAlerts.Count != 1 ? "s" : "") shown</span>
+                    @if (_alerts.Any(a => !a.IsRead))
+                    {
+                        <button type="button" @onclick="MarkAllAsRead"
+                                class="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                            Mark all as read
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </section>
+</TooltipProviderCn>
+
+@code {
+    private class AlertDevice
+    {
+        public string Browser { get; set; } = "";
+        public string Os { get; set; } = "";
+        public string Type { get; set; } = "";
+    }
+
+    private class AlertLocation
+    {
+        public string City { get; set; } = "";
+        public string Country { get; set; } = "";
+        public string Ip { get; set; } = "";
+    }
+
+    private class SecurityAlert
+    {
+        public string Id { get; set; } = "";
+        public string Severity { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Timestamp { get; set; } = "";
+        public AlertDevice Device { get; set; } = new();
+        public AlertLocation Location { get; set; } = new();
+        public bool IsRead { get; set; }
+        public string Category { get; set; } = "";
+    }
+
+    private record FilterTab(string Key, string Label, int Count);
+
+    private string _filter = "all";
+    private string? _expandedId = null;
+    private string? _copiedIp = null;
+    private HashSet<string> _blockedIps = [];
+
+    private List<SecurityAlert> FilteredAlerts => _filter == "all"
+        ? _alerts
+        : _alerts.Where(a => a.Severity == _filter).ToList();
+
+    private int UnreadCount => _alerts.Count(a => !a.IsRead);
+    private int CriticalCount => _alerts.Count(a => a.Severity == "critical");
+    private int WarningCount => _alerts.Count(a => a.Severity == "warning");
+    private int InfoCount => _alerts.Count(a => a.Severity == "info");
+
+    private FilterTab[] FilterTabs =>
+    [
+        new("all", "All", _alerts.Count),
+        new("critical", "Critical", CriticalCount),
+        new("warning", "Warning", WarningCount),
+        new("info", "Info", InfoCount),
+    ];
+
+    private static string GetSeverityBorder(string severity) => severity switch
+    {
+        "critical" => "border-l-red-500",
+        "warning" => "border-l-amber-500",
+        _ => "border-l-blue-500",
+    };
+
+    private static string GetSeverityBg(string severity) => severity switch
+    {
+        "critical" => "bg-red-500/5",
+        "warning" => "bg-amber-500/5",
+        _ => "bg-blue-500/5",
+    };
+
+    private void DismissAlert(string id)
+    {
+        _alerts.RemoveAll(a => a.Id == id);
+        if (_expandedId == id) _expandedId = null;
+    }
+
+    private void MarkAsRead(string id)
+    {
+        var alert = _alerts.FirstOrDefault(a => a.Id == id);
+        if (alert != null) alert.IsRead = true;
+    }
+
+    private void BlockIp(string ip) => _blockedIps.Add(ip);
+
+    private async Task CopyIp(string ip)
+    {
+        _copiedIp = ip;
+        StateHasChanged();
+        await Task.Delay(2000);
+        if (_copiedIp == ip) _copiedIp = null;
+    }
+
+    private void ToggleExpand(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+        MarkAsRead(id);
+    }
+
+    private void MarkAllAsRead()
+    {
+        foreach (var a in _alerts) a.IsRead = true;
+    }
+
+    private List<SecurityAlert> _alerts =
+    [
+        new()
+        {
+            Id = "alrt-001", Severity = "critical", Title = "Brute-force attack detected",
+            Description = "47 failed login attempts in the last 15 minutes from a single IP address. Rate limiting has been automatically applied.",
+            Timestamp = "2 min ago",
+            Device = new() { Browser = "curl/7.88.1", Os = "Linux", Type = "desktop" },
+            Location = new() { City = "Saint Petersburg", Country = "RU", Ip = "185.220.101.34" },
+            IsRead = false, Category = "brute-force",
+        },
+        new()
+        {
+            Id = "alrt-002", Severity = "critical", Title = "Credential found in data breach",
+            Description = "Your email address was found in the HaveIBeenPwned database from a breach disclosed 3 days ago. Password change strongly recommended.",
+            Timestamp = "18 min ago",
+            Device = new() { Browser = "N/A", Os = "N/A", Type = "desktop" },
+            Location = new() { City = "N/A", Country = "--", Ip = "0.0.0.0" },
+            IsRead = false, Category = "credential-leak",
+        },
+        new()
+        {
+            Id = "alrt-003", Severity = "warning", Title = "Login from new device in unusual location",
+            Description = "Successful authentication from a previously unseen Windows device in Lagos, Nigeria. This location has not been associated with your account before.",
+            Timestamp = "1 hour ago",
+            Device = new() { Browser = "Chrome 124", Os = "Windows 11", Type = "desktop" },
+            Location = new() { City = "Lagos", Country = "NG", Ip = "102.89.23.108" },
+            IsRead = false, Category = "new-device",
+        },
+        new()
+        {
+            Id = "alrt-004", Severity = "warning", Title = "Impossible travel detected",
+            Description = "Login from Tokyo, Japan occurred 23 minutes after a session in San Francisco, US. The geographic distance makes physical travel impossible in this timeframe.",
+            Timestamp = "3 hours ago",
+            Device = new() { Browser = "Safari 17.4", Os = "macOS Sonoma", Type = "desktop" },
+            Location = new() { City = "Tokyo", Country = "JP", Ip = "203.104.248.52" },
+            IsRead = true, Category = "geo-anomaly",
+        },
+        new()
+        {
+            Id = "alrt-005", Severity = "info", Title = "New device registered via passkey",
+            Description = "A new iPhone 15 Pro was registered as a trusted device using passkey authentication. Device name: \"Marcus's iPhone\".",
+            Timestamp = "5 hours ago",
+            Device = new() { Browser = "Safari 17.4", Os = "iOS 17.4", Type = "mobile" },
+            Location = new() { City = "San Francisco", Country = "US", Ip = "73.162.214.97" },
+            IsRead = true, Category = "new-device",
+        },
+        new()
+        {
+            Id = "alrt-006", Severity = "warning", Title = "Session token reuse from different IP",
+            Description = "An active session token was used from a different IP address than it was originally issued to. This may indicate session hijacking or a shared network change.",
+            Timestamp = "8 hours ago",
+            Device = new() { Browser = "Firefox 125", Os = "Ubuntu 22.04", Type = "desktop" },
+            Location = new() { City = "Berlin", Country = "DE", Ip = "91.198.174.192" },
+            IsRead = true, Category = "session-hijack",
+        },
+        new()
+        {
+            Id = "alrt-007", Severity = "info", Title = "2FA method downgrade attempted",
+            Description = "A request to remove TOTP authentication and fall back to SMS-only was submitted. No changes were made pending your confirmation.",
+            Timestamp = "1 day ago",
+            Device = new() { Browser = "Chrome 124", Os = "Windows 11", Type = "desktop" },
+            Location = new() { City = "New York", Country = "US", Ip = "72.229.28.185" },
+            IsRead = true, Category = "policy-violation",
+        },
+        new()
+        {
+            Id = "alrt-008", Severity = "info", Title = "Recovery codes accessed",
+            Description = "Your account recovery codes were viewed from a recognized device. If you did not initiate this action, change your password immediately.",
+            Timestamp = "2 days ago",
+            Device = new() { Browser = "Chrome 124", Os = "macOS Sonoma", Type = "desktop" },
+            Location = new() { City = "San Francisco", Country = "US", Ip = "73.162.214.97" },
+            IsRead = true, Category = "policy-violation",
+        },
+    ];
+}

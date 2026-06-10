@@ -1,0 +1,201 @@
+@* ============================================================
+   Block: timeline-error-trace
+   Title: TimelineErrorTrace
+   Description: React stack trace timeline with code snippets built with Next.js, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/timeline/timeline-error-trace.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Error header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="bg-red-500/10 font-mono text-red-600 text-xs dark:text-red-400">
+                    @_errorType
+                </BadgeCn>
+                <span class="text-muted-foreground text-xs">
+                    @_frames.Length frames · @_appFrames app
+                </span>
+            </div>
+            <p class="mt-1.5 font-mono text-sm leading-relaxed">@_errorMessage</p>
+        </div>
+
+        @* Stack frames timeline *@
+        <div class="px-4 py-3">
+            <div class="relative">
+                @foreach (var frame in _frames)
+                {
+                    var frameId = frame.Id;
+                    var index = System.Array.IndexOf(_frames, frame);
+                    var isLast = index == _frames.Length - 1;
+                    var isExpanded = _expanded == frame.Id;
+                    var fileName = frame.File.Split('/')[^1];
+
+                    <div class="relative flex gap-3 pb-4 last:pb-0">
+                        @* Vertical line *@
+                        @if (!isLast)
+                        {
+                            <div class="@Cn.Merge("absolute top-5 bottom-0 left-[7px] w-px", frame.IsRootCause ? "bg-red-500/40" : "bg-border")"></div>
+                        }
+
+                        @* Frame dot *@
+                        <div class="relative z-10 flex shrink-0 pt-1.5">
+                            @if (frame.IsRootCause)
+                            {
+                                <div class="size-[15px] rounded-full bg-red-500 ring-2 ring-red-500/20"></div>
+                            }
+                            else if (frame.IsLibrary)
+                            {
+                                <div class="size-[15px] rounded-full bg-muted-foreground/20 ring-2 ring-card"></div>
+                            }
+                            else
+                            {
+                                <div class="size-[15px] rounded-full bg-foreground/70 ring-2 ring-card"></div>
+                            }
+                        </div>
+
+                        @* Content *@
+                        <div class="min-w-0 flex-1">
+                            <button type="button"
+                                    @onclick="@(() => ToggleFrame(frameId, frame.Code != null))"
+                                    class="@Cn.Merge("flex w-full items-center gap-2 text-left", frame.Code != null ? "cursor-pointer" : "cursor-default")">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="@Cn.Merge("font-mono font-medium text-sm", frame.IsRootCause ? "text-red-600 dark:text-red-400" : frame.IsLibrary ? "text-muted-foreground" : "text-foreground")">
+                                            @frame.Fn
+                                        </span>
+                                        @if (frame.IsRootCause)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="bg-red-500/10 text-red-600 text-[10px] dark:text-red-400">Root cause</BadgeCn>
+                                        }
+                                        @if (frame.IsLibrary)
+                                        {
+                                            <BadgeCn Variant="BadgeVariant.Secondary" Class="text-[10px] font-normal">library</BadgeCn>
+                                        }
+                                    </div>
+                                    <div class="mt-0.5 flex items-center gap-1.5">
+                                        <LucideIconCn Name="file" Size="12" Class="size-3 shrink-0 text-muted-foreground/60" />
+                                        <span class="truncate font-mono text-muted-foreground text-xs">
+                                            @(frame.IsLibrary ? fileName : frame.File)
+                                        </span>
+                                        <span class="shrink-0 font-mono text-muted-foreground/60 text-xs">
+                                            :@(frame.Line):@(frame.Column)
+                                        </span>
+                                    </div>
+                                </div>
+
+                                @if (frame.Code != null)
+                                {
+                                    <LucideIconCn Name="chevron-right" Size="16" Class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                                }
+                            </button>
+
+                            @* Code snippet *@
+                            @if (isExpanded && frame.Code != null)
+                            {
+                                <div class="mt-2">
+                                    <div class="overflow-hidden rounded-md bg-zinc-950">
+                                        <div class="flex items-center justify-between px-3 py-1.5">
+                                            <span class="font-mono text-zinc-500 text-[10px]">
+                                                @(fileName):@(frame.Line)
+                                            </span>
+                                            <div @onclick:stopPropagation>
+                                                <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm"
+                                                          Class="h-5 gap-1 px-1.5 text-zinc-500 text-[10px] hover:text-zinc-300"
+                                                          OnClick="@(() => CopyLocation(frame))">
+                                                    @if (_copied == frame.Id)
+                                                    {
+                                                        <LucideIconCn Name="check" Size="10" Class="size-2.5" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <LucideIconCn Name="copy" Size="10" Class="size-2.5" />
+                                                    }
+                                                </ButtonCn>
+                                            </div>
+                                        </div>
+                                        <div class="px-3 pb-3">
+                                            @{
+                                                var codeLines = frame.Code.Split('\n');
+                                            }
+                                            @for (int i = 0; i < codeLines.Length; i++)
+                                            {
+                                                var lineNum = frame.Line - 1 + i;
+                                                var isErrorLine = lineNum == frame.Line;
+                                                var codeLine = codeLines[i];
+                                                <div class="@Cn.Merge("flex font-mono text-xs leading-relaxed", isErrorLine ? "rounded bg-red-500/10 text-red-400" : "text-zinc-400")">
+                                                    <span class="mr-3 w-5 shrink-0 text-right text-zinc-600 select-none">@lineNum</span>
+                                                    <span class="whitespace-pre">@codeLine</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private const string _errorType = "TypeError";
+    private const string _errorMessage = "Cannot read properties of undefined (reading 'userId')";
+
+    private record Frame(
+        string Id,
+        string File,
+        string Fn,
+        int Line,
+        int Column,
+        bool IsLibrary = false,
+        bool IsRootCause = false,
+        string? Code = null
+    );
+
+    private static readonly Frame[] _frames =
+    [
+        new("f1", "node_modules/express/lib/router/layer.js", "Layer.handle", 95, 5, IsLibrary: true),
+        new("f2", "node_modules/express/lib/router/route.js", "Route.dispatch", 114, 3, IsLibrary: true),
+        new("f3", "src/middleware/auth.ts", "authenticate", 42, 18, Code: @"const token = req.headers.authorization?.split(' ')[1]
+const decoded = jwt.verify(token, SECRET)
+const userId = decoded.userId  // decoded is undefined
+req.user = { id: userId }"),
+        new("f4", "src/controllers/users.ts", "getUserProfile", 28, 12, Code: @"export async function getUserProfile(req: Request, res: Response) {
+  const { userId } = req.user  // req.user is undefined
+  const profile = await db.user.findUnique({ where: { id: userId } })
+  return res.json(profile)"),
+        new("f5", "src/services/user-service.ts", "findUserById", 15, 8, IsRootCause: true, Code: @"export async function findUserById(id: string) {
+  const user = await prisma.user.findUnique({
+    where: { id },  // id is undefined, query returns null
+    include: { profile: true, settings: true },
+  })"),
+        new("f6", "src/routes/api/users.ts", "handler", 9, 3, Code: @"router.get('/profile', authenticate, async (req, res) => {
+  const profile = await getUserProfile(req, res)
+})"),
+    ];
+
+    private int _appFrames => System.Array.FindAll(_frames, f => !f.IsLibrary).Length;
+
+    private string? _expanded = "f5";
+    private string? _copied = null;
+
+    private void ToggleFrame(string id, bool hasCode)
+    {
+        if (!hasCode) return;
+        _expanded = _expanded == id ? null : id;
+    }
+
+    private void CopyLocation(Frame frame)
+    {
+        _copied = frame.Id;
+        // Note: clipboard API is not available server-side; the copy visual feedback still works
+        _ = Task.Delay(2000).ContinueWith(_ =>
+        {
+            _copied = null;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+}

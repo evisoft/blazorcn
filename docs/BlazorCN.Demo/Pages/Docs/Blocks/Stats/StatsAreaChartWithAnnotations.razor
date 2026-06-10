@@ -1,0 +1,175 @@
+@* ============================================================
+   Block: stats-area-chart-with-annotations
+   Title: StatsAreaChartWithAnnotations
+   Description: An area chart stats card for React and Next.js with ReferenceLine deploy markers, ReferenceDot incident annotations, gradient-filled AreaChart, and NumberFlow animated hero value built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-area-chart-with-annotations.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="text-sm font-medium">API p95 latency</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">/api/checkout · Last 15 hours</p>
+            </div>
+            <div class="flex items-center gap-4 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="h-[2px] w-3 bg-[var(--chart-3)]"></span>
+                    Deploy
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                    <span class="size-2 rounded-full bg-red-500"></span>
+                    Incident
+                </span>
+            </div>
+        </div>
+
+        <div class="flex items-start justify-between gap-4 px-4 py-4">
+            <div class="min-w-[120px]">
+                <div class="text-3xl font-semibold tabular-nums">115ms</div>
+                <div class="mt-1 flex items-center gap-1 text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <LucideIconCn Name="trending-down" Size="14" Class="size-3.5" />
+                    <span>-19.0%</span>
+                    <span class="text-muted-foreground font-normal">vs yesterday</span>
+                </div>
+            </div>
+            <div class="text-right text-xs text-muted-foreground">
+                <p class="font-medium text-foreground tabular-nums">286 ms peak</p>
+                <p class="mt-0.5">during incident at 17:00</p>
+            </div>
+        </div>
+
+        <div class="px-4 pb-4">
+            <div class="h-[200px] w-full">
+                @((MarkupString)BuildChartSvg())
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record LatencyPoint(string Time, int P95);
+
+    private record Annotation(string Id, string Kind, string Time, string Label, int? P95 = null);
+
+    private static readonly LatencyPoint[] _chartData =
+    [
+        new("08:00", 142),
+        new("09:00", 148),
+        new("10:00", 156),
+        new("11:00", 151),
+        new("12:00", 163),
+        new("13:00", 118),
+        new("14:00", 112),
+        new("15:00", 109),
+        new("16:00", 114),
+        new("17:00", 286),
+        new("18:00", 198),
+        new("19:00", 142),
+        new("20:00", 128),
+        new("21:00", 121),
+        new("22:00", 115),
+    ];
+
+    private static readonly Annotation[] _annotations =
+    [
+        new("deploy-1", "deploy", "13:00", "v4.12 deploy"),
+        new("incident-1", "incident", "17:00", "DB pool saturation", 286),
+        new("deploy-2", "deploy", "19:00", "v4.12.1 hotfix"),
+    ];
+
+    private static string BuildChartSvg()
+    {
+        const double chartLeft = 44.0;
+        const double chartRight = 528.0;
+        const double chartTop = 14.0;
+        const double chartBottom = 174.0;
+        const double chartWidth = chartRight - chartLeft;
+        const double chartHeight = chartBottom - chartTop;
+        const double yMin = 80.0;
+        const double yMax = 310.0;
+
+        double XAt(int idx) => chartLeft + idx * (chartWidth / (_chartData.Length - 1));
+        double YAt(double val) => chartBottom - (val - yMin) / (yMax - yMin) * chartHeight;
+
+        var points = _chartData.Select((d, i) => (x: XAt(i), y: YAt(d.P95))).ToList();
+
+        var sb = new System.Text.StringBuilder();
+
+        sb.Append("<svg viewBox=\"0 0 540 200\" class=\"h-full w-full\" aria-hidden=\"true\" preserveAspectRatio=\"none\">");
+
+        // defs: gradient
+        sb.Append("<defs>");
+        sb.Append("<linearGradient id=\"fill-p95-bcn\" x1=\"0\" x2=\"0\" y1=\"0\" y2=\"1\">");
+        sb.Append("<stop offset=\"0%\" stop-color=\"oklch(0.646 0.222 41.116)\" stop-opacity=\"0.35\" />");
+        sb.Append("<stop offset=\"100%\" stop-color=\"oklch(0.646 0.222 41.116)\" stop-opacity=\"0\" />");
+        sb.Append("</linearGradient>");
+        sb.Append("</defs>");
+
+        // Horizontal grid lines
+        var gridValues = new[] { 100, 150, 200, 250, 300 };
+        foreach (var gv in gridValues)
+        {
+            var gy = YAt(gv);
+            sb.Append($"<line x1=\"{chartLeft:F1}\" y1=\"{gy:F1}\" x2=\"{chartRight:F1}\" y2=\"{gy:F1}\" stroke=\"currentColor\" stroke-opacity=\"0.1\" stroke-dasharray=\"3 3\" />");
+            sb.Append($"<text x=\"{(chartLeft - 3):F1}\" y=\"{(gy + 3):F1}\" text-anchor=\"end\" font-size=\"10\" fill=\"currentColor\" fill-opacity=\"0.5\">{gv}ms</text>");
+        }
+
+        // Build SVG path
+        var pathParts = new System.Text.StringBuilder();
+        pathParts.Append($"M {points[0].x:F1},{points[0].y:F1}");
+        for (var pi = 1; pi < points.Count; pi++)
+        {
+            var prev = points[pi - 1];
+            var cur = points[pi];
+            var cpx = (prev.x + cur.x) / 2.0;
+            pathParts.Append($" C {cpx:F1},{prev.y:F1} {cpx:F1},{cur.y:F1} {cur.x:F1},{cur.y:F1}");
+        }
+        var linePath = pathParts.ToString();
+        var areaPath = linePath + $" L {points[^1].x:F1},{chartBottom:F1} L {points[0].x:F1},{chartBottom:F1} Z";
+
+        // Area fill
+        sb.Append($"<path d=\"{areaPath}\" fill=\"url(#fill-p95-bcn)\" />");
+
+        // Line stroke
+        sb.Append($"<path d=\"{linePath}\" fill=\"none\" stroke=\"oklch(0.646 0.222 41.116)\" stroke-width=\"2\" />");
+
+        // Deploy ReferenceLine annotations
+        foreach (var ann in _annotations.Where(a => a.Kind == "deploy"))
+        {
+            var dIdx = System.Array.FindIndex(_chartData, d => d.Time == ann.Time);
+            if (dIdx >= 0)
+            {
+                var dx = XAt(dIdx);
+                sb.Append($"<line x1=\"{dx:F1}\" y1=\"{chartTop:F1}\" x2=\"{dx:F1}\" y2=\"{chartBottom:F1}\" stroke=\"oklch(0.398 0.07 227.392)\" stroke-width=\"1.5\" stroke-dasharray=\"4 4\" />");
+                sb.Append($"<text x=\"{dx:F1}\" y=\"{(chartTop - 2):F1}\" text-anchor=\"middle\" font-size=\"10\" fill=\"currentColor\" fill-opacity=\"0.6\">{ann.Label}</text>");
+            }
+        }
+
+        // Incident ReferenceDot annotations
+        foreach (var ann in _annotations.Where(a => a.Kind == "incident"))
+        {
+            var iIdx = System.Array.FindIndex(_chartData, d => d.Time == ann.Time);
+            if (iIdx >= 0 && ann.P95.HasValue)
+            {
+                var ix = XAt(iIdx);
+                var iy = YAt(ann.P95.Value);
+                sb.Append($"<circle cx=\"{ix:F1}\" cy=\"{iy:F1}\" r=\"5\" fill=\"var(--background,white)\" stroke=\"oklch(0.58 0.2 25)\" stroke-width=\"2\" />");
+                sb.Append($"<text x=\"{ix:F1}\" y=\"{(iy - 12):F1}\" text-anchor=\"middle\" font-size=\"10\" fill=\"oklch(0.58 0.2 25)\">{ann.Label}</text>");
+            }
+        }
+
+        // X axis tick labels (every 2nd to avoid crowding)
+        for (var i = 0; i < _chartData.Length; i++)
+        {
+            if (i % 2 == 0)
+            {
+                var tx = XAt(i);
+                sb.Append($"<text x=\"{tx:F1}\" y=\"{(chartBottom + 14):F1}\" text-anchor=\"middle\" font-size=\"11\" fill=\"currentColor\" fill-opacity=\"0.5\">{_chartData[i].Time}</text>");
+            }
+        }
+
+        sb.Append("</svg>");
+        return sb.ToString();
+    }
+}

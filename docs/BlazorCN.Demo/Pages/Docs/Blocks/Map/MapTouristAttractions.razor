@@ -1,0 +1,259 @@
+@* ============================================================
+   Block: map-tourist-attractions
+   Title: MapTouristAttractions
+   Description: Interactive tourist attraction explorer map with category markers, rating stars, visit duration estimates, and attraction detail popups built with mapcn, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/map/map-tourist-attractions.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="map-pin" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="text-sm font-medium">Attractions</span>
+                <span class="text-xs text-muted-foreground">Paris, France</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button
+                    type="button"
+                    @onclick="@(() => _filter = null)"
+                    class="@Cn.Merge("rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == null ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    All
+                </button>
+                @foreach (var cat in _categories)
+                {
+                    var category = cat;
+                    var cfg = GetCategoryConfig(category);
+                    <button
+                        type="button"
+                        @onclick="@(() => _filter = (_filter == category ? null : category))"
+                        class="@Cn.Merge("flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors", _filter == category ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Color)"></span>
+                        @cfg.Label
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* Map — Map/MapMarker/MarkerPopup etc. are Next.js registry components with no BlazorCN
+           equivalent; rendered as a styled static map placeholder with absolute-positioned
+           category markers and attraction detail popups. *@
+        <div class="relative h-[500px] bg-muted/30">
+            @* Map background grid lines *@
+            <div class="absolute inset-0 overflow-hidden opacity-20">
+                <div class="grid h-full grid-cols-8 grid-rows-8">
+                    @for (int gi = 0; gi < 64; gi++)
+                    {
+                        <div class="border border-border/50"></div>
+                    }
+                </div>
+            </div>
+
+            @* Road-like lines *@
+            <div class="absolute inset-0 opacity-30">
+                <div class="absolute left-0 right-0 top-[30%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[55%] h-px bg-border"></div>
+                <div class="absolute left-0 right-0 top-[75%] h-px bg-border"></div>
+                <div class="absolute bottom-0 left-[25%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[50%] top-0 w-px bg-border"></div>
+                <div class="absolute bottom-0 left-[72%] top-0 w-px bg-border"></div>
+            </div>
+
+            @* Map label *@
+            <div class="absolute left-3 top-3 rounded-md bg-card/80 px-2 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+                Paris, France
+            </div>
+
+            @* Map zoom controls *@
+            <div class="absolute bottom-4 right-4 flex flex-col gap-1">
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="minus" Size="14" Class="size-3.5" />
+                </button>
+                <button type="button" class="flex size-7 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted/50">
+                    <LucideIconCn Name="compass" Size="14" Class="size-3.5" />
+                </button>
+            </div>
+
+            @* Attraction markers *@
+            @foreach (var a in GetFiltered())
+            {
+                var attraction = a;
+                var isSelected = _selected == attraction.Id;
+                var cfg = GetCategoryConfig(attraction.Category);
+                var pos = GetMarkerPosition(attraction);
+                <div class="absolute" style="@($"left:{pos.Left:F1}%; top:{pos.Top:F1}%; transform:translate(-50%,-100%)")">
+                    <button
+                        type="button"
+                        @onclick="@(() => ToggleSelected(attraction.Id))"
+                        class="group relative flex flex-col items-center">
+                        @* Category marker *@
+                        <div class="@Cn.Merge("flex size-7 items-center justify-center rounded-full border-2 border-white shadow-md", cfg.Color)">
+                            <LucideIconCn Name="@cfg.IconName" Size="14" Class="size-3.5 text-white" />
+                        </div>
+                        @* Hover tooltip *@
+                        <div class="absolute bottom-full left-1/2 mb-2 hidden min-w-[160px] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md group-hover:block">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-medium">@attraction.Name</span>
+                                <span class="flex items-center gap-0.5">
+                                    <LucideIconCn Name="star" Size="10" Class="size-2.5 fill-amber-400 text-amber-400" />
+                                    <span>@attraction.Rating</span>
+                                </span>
+                            </div>
+                        </div>
+                    </button>
+
+                    @* Popup (shown when selected) *@
+                    @if (isSelected)
+                    {
+                        <div class="absolute bottom-full left-1/2 mb-2 w-64 -translate-x-1/2 rounded-md border bg-popover p-3 shadow-lg" style="z-index:10">
+                            <div class="mb-1 flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm font-medium">@attraction.Name</p>
+                                    <p class="text-xs text-muted-foreground">@cfg.Label</p>
+                                </div>
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="shrink-0 text-[10px] font-normal">
+                                    @attraction.Admission
+                                </BadgeCn>
+                            </div>
+                            <p class="mb-2 text-xs text-muted-foreground leading-relaxed">
+                                @attraction.Description
+                            </p>
+                            <div class="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
+                                <span class="flex items-center gap-0.5">
+                                    <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                    <span class="font-medium tabular-nums text-foreground">@attraction.Rating</span>
+                                    <span>(@FormatReviewCount(attraction.ReviewCount))</span>
+                                </span>
+                                <span class="text-muted-foreground">·</span>
+                                <span class="flex items-center gap-1">
+                                    <LucideIconCn Name="clock" Size="12" Class="size-3" />
+                                    @attraction.Duration
+                                </span>
+                            </div>
+                            <div class="flex items-center justify-between border-t pt-2">
+                                <span class="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <LucideIconCn Name="ticket" Size="12" Class="size-3" />
+                                    @attraction.Hours
+                                </span>
+                                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-6 text-xs">
+                                    Directions
+                                </ButtonCn>
+                            </div>
+                            @* Close button *@
+                            <button type="button" @onclick="@(() => _selected = null)" class="absolute right-2 top-2 flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground">
+                                <LucideIconCn Name="x" Size="12" Class="size-3" />
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Footer stats *@
+        <div class="flex items-center gap-4 border-t px-4 py-2.5">
+            @foreach (var cat in _categories)
+            {
+                var category = cat;
+                var cfg = GetCategoryConfig(category);
+                var count = _attractions.Count(a => a.Category == category);
+                <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", cfg.Color)"></span>
+                    @cfg.Label (@count)
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record Attraction(
+        string Id,
+        string Name,
+        string Category,
+        double Rating,
+        int ReviewCount,
+        string Duration,
+        string Description,
+        string Hours,
+        string Admission,
+        double Longitude,
+        double Latitude
+    );
+
+    private record CategoryCfg(string Color, string Label, string IconName);
+
+    private record MarkerPos(double Left, double Top);
+
+    private static readonly string[] _categories = ["museum", "landmark", "park", "dining", "viewpoint"];
+
+    private static readonly Attraction[] _attractions =
+    [
+        new("a1", "Louvre Museum", "museum", 4.7, 284930, "3-4 hours",
+            "World's largest art museum housing the Mona Lisa, Venus de Milo, and over 380,000 objects spanning 9,000 years of history.",
+            "9:00 AM - 6:00 PM", "EUR 17", 2.3376, 48.8606),
+        new("a2", "Eiffel Tower", "landmark", 4.6, 312450, "1.5-2 hours",
+            "Iconic 330m iron lattice tower with observation decks offering panoramic views of Paris. Built for the 1889 World's Fair.",
+            "9:30 AM - 11:45 PM", "EUR 26.80", 2.2945, 48.8584),
+        new("a3", "Luxembourg Gardens", "park", 4.8, 87620, "1-2 hours",
+            "Elegant 23-hectare garden with formal lawns, tree-lined promenades, fountains, and the Medici Fountain dating to 1630.",
+            "7:30 AM - Sunset", "Free", 2.3371, 48.8462),
+        new("a4", "Le Comptoir du Pantheon", "dining", 4.4, 4250, "1-1.5 hours",
+            "Classic Parisian brasserie with sidewalk terrace facing the Pantheon. Known for duck confit and traditional French onion soup.",
+            "12:00 PM - 11:00 PM", "EUR 25-45 avg", 2.3462, 48.8463),
+        new("a5", "Sacre-Coeur Basilica", "viewpoint", 4.7, 156280, "1-1.5 hours",
+            "Romano-Byzantine basilica atop Montmartre hill with sweeping city views from the dome and free entry to the main nave.",
+            "6:00 AM - 10:30 PM", "Free (dome EUR 7)", 2.3431, 48.8867),
+        new("a6", "Musee d'Orsay", "museum", 4.8, 142780, "2-3 hours",
+            "Impressionist and post-impressionist masterpieces by Monet, Renoir, Van Gogh, and Degas housed in a former Beaux-Arts railway station.",
+            "9:30 AM - 6:00 PM", "EUR 16", 2.3265, 48.86),
+        new("a7", "Notre-Dame Cathedral", "landmark", 4.6, 198430, "1-1.5 hours",
+            "Medieval Gothic cathedral on Ile de la Cite, recently restored after the 2019 fire. Famous for flying buttresses and rose windows.",
+            "8:00 AM - 6:45 PM", "Free", 2.3499, 48.853),
+        new("a8", "Arc de Triomphe", "viewpoint", 4.5, 104320, "45 min - 1 hour",
+            "Monumental arch at the western end of the Champs-Elysees with a rooftop terrace offering 360-degree views of 12 radiating avenues.",
+            "10:00 AM - 11:00 PM", "EUR 16", 2.295, 48.8738),
+    ];
+
+    private string? _selected = null;
+    private string? _filter = null;
+
+    private Attraction[] GetFiltered() =>
+        _filter is null ? _attractions : _attractions.Where(a => a.Category == _filter).ToArray();
+
+    private void ToggleSelected(string id)
+    {
+        _selected = _selected == id ? null : id;
+    }
+
+    private static CategoryCfg GetCategoryConfig(string category) => category switch
+    {
+        "museum"    => new("bg-blue-500", "Museum", "palette"),
+        "landmark"  => new("bg-amber-500", "Landmark", "landmark"),
+        "park"      => new("bg-emerald-500", "Park", "trees"),
+        "dining"    => new("bg-red-500", "Dining", "utensils"),
+        "viewpoint" => new("bg-purple-500", "Viewpoint", "camera"),
+        _           => new("bg-gray-500", category, "map-pin"),
+    };
+
+    private static string FormatReviewCount(int count)
+    {
+        if (count >= 1000) return $"{count / 1000}K";
+        return count.ToString();
+    }
+
+    // Map bounding box: lon [2.285, 2.360], lat [48.840, 48.895]
+    private static MarkerPos GetMarkerPosition(Attraction a)
+    {
+        const double lonMin = 2.285;
+        const double lonMax = 2.360;
+        const double latMin = 48.840;
+        const double latMax = 48.895;
+        var left = (a.Longitude - lonMin) / (lonMax - lonMin) * 80.0 + 10.0;
+        var top  = (latMax - a.Latitude) / (latMax - latMin) * 80.0 + 10.0;
+        return new MarkerPos(left, top);
+    }
+}

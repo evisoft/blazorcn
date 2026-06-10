@@ -1,0 +1,199 @@
+@* ============================================================
+   Block: checkout-quantity-breaks
+   Title: CheckoutQuantityBreaks
+   Description: A quantity-based pricing checkout block for React and Next.js with tiered pricing display, quantity input, current tier highlight, savings calculation, and next-tier nudge using shadcn/ui Input, Button, Badge, and Tailwind CSS
+   Source: original/blocks/checkout/checkout-quantity-breaks.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-2 border-b px-4 py-3">
+            <LucideIconCn Name="package" Size="16" Class="size-4 text-muted-foreground" />
+            <span class="font-medium text-sm">Bulk Order</span>
+            @if (_savings > 0)
+            {
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="ml-auto font-normal text-xs">
+                    Saving $@_savings.ToString("F2")
+                </BadgeCn>
+            }
+        </div>
+
+        @* Product info *@
+        <div class="border-b px-4 py-3">
+            <span class="font-medium text-sm">@_productName</span>
+            <p class="mt-0.5 text-muted-foreground text-xs">@_productDescription</p>
+        </div>
+
+        @* Pricing tiers *@
+        <div class="border-b">
+            <div class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                    <LucideIconCn Name="tag" Size="14" Class="size-3.5 text-muted-foreground" />
+                    <span class="font-medium text-sm">Volume Pricing</span>
+                </div>
+            </div>
+            @{
+                var tierList = _tiers.ToList();
+            }
+            @foreach (var t in tierList)
+            {
+                var tier = t;
+                var isActive = tier == _currentTier;
+                var isLast = tierList.IndexOf(tier) == tierList.Count - 1;
+                var discount = (int)Math.Round((_basePricePerUnit - tier.UnitPrice) / _basePricePerUnit * 100);
+                <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5", isLast ? "" : "border-b", isActive ? "bg-muted/50" : "")">
+                    @if (isActive)
+                    {
+                        <span class="size-2 shrink-0 rounded-full bg-emerald-500"></span>
+                    }
+                    else
+                    {
+                        <span class="size-2 shrink-0 rounded-full bg-border"></span>
+                    }
+                    <span class="@Cn.Merge("flex-1 text-sm", isActive ? "font-medium" : "text-muted-foreground")">
+                        @tier.Label
+                    </span>
+                    <span class="@Cn.Merge("font-medium text-sm tabular-nums", isActive ? "" : "text-muted-foreground")">
+                        $@tier.UnitPrice.ToString("F2")<span class="font-normal text-muted-foreground text-xs"> /ea</span>
+                    </span>
+                    @if (discount > 0)
+                    {
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="@Cn.Merge("font-normal text-xs", isActive ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "")">
+                            @discount% off
+                        </BadgeCn>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Quantity selector *@
+        <div class="border-b px-4 py-4">
+            <span class="text-xs font-medium text-muted-foreground">Quantity</span>
+            <div class="mt-2 flex items-center gap-3">
+                <div class="flex items-center rounded-md border">
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-9 w-9 rounded-r-none p-0" OnClick="@(() => HandleQuantityChange(_quantity - 1))">
+                        <LucideIconCn Name="minus" Size="16" Class="size-4" />
+                    </ButtonCn>
+                    <input
+                        type="number"
+                        min="1"
+                        max="999"
+                        value="@_quantity"
+                        @onchange="@((ChangeEventArgs e) => { if (int.TryParse(e.Value?.ToString(), out var val)) HandleQuantityChange(val); })"
+                        class="h-9 w-16 border-x bg-transparent text-center text-sm tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-9 w-9 rounded-l-none p-0" OnClick="@(() => HandleQuantityChange(_quantity + 1))">
+                        <LucideIconCn Name="plus" Size="16" Class="size-4" />
+                    </ButtonCn>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <span class="font-medium text-sm tabular-nums">$@_unitPrice.ToString("F2") each</span>
+                    <p class="text-muted-foreground text-xs">@_currentTier.Label pricing</p>
+                </div>
+            </div>
+        </div>
+
+        @* Next tier nudge *@
+        @if (_nextTier != null && _qtyToNextTier > 0)
+        {
+            <div class="border-b px-4 py-3">
+                <div class="rounded-md bg-muted/50 p-3">
+                    <p class="text-sm">
+                        Add <span class="font-medium">@_qtyToNextTier more</span> for@(" ")
+                        <span class="font-medium text-emerald-600 dark:text-emerald-400">
+                            $@_nextTierSavings.ToString("F2") off each
+                        </span>
+                    </p>
+                    <p class="mt-0.5 text-muted-foreground text-xs">
+                        Next tier: @_nextTier.Label at $@_nextTier.UnitPrice.ToString("F2")/ea
+                    </p>
+                </div>
+            </div>
+        }
+
+        @* Order summary *@
+        <div class="px-4 py-3">
+            <div class="space-y-1.5">
+                <div class="flex justify-between text-sm">
+                    <span class="text-muted-foreground">
+                        @_quantity x $@_unitPrice.ToString("F2")
+                    </span>
+                    <span class="tabular-nums">$@_subtotal.ToString("F2")</span>
+                </div>
+                @if (_savings > 0)
+                {
+                    <div class="flex justify-between text-sm">
+                        <span class="text-muted-foreground">Volume discount</span>
+                        <span class="tabular-nums text-emerald-600 dark:text-emerald-400">
+                            -$@_savings.ToString("F2")
+                        </span>
+                    </div>
+                }
+                <div class="flex justify-between border-t pt-1.5 text-sm font-medium">
+                    <span>Total</span>
+                    <span class="tabular-nums">$@_subtotal.ToString("F2")</span>
+                </div>
+            </div>
+            <ButtonCn Class="mt-3 w-full" Size="ButtonSize.Sm">
+                Proceed to Checkout
+            </ButtonCn>
+        </div>
+    </div>
+</section>
+
+@code {
+    private record PricingTier(int MinQty, int? MaxQty, double UnitPrice, string Label);
+
+    private const string _productName = "Premium Branded Notebook";
+    private const string _productDescription = "A5 hardcover, 200 pages, custom debossed logo";
+
+    private static readonly PricingTier[] _tiers =
+    [
+        new(1,  9,    12.0, "1-9 units"),
+        new(10, 24,   10.0, "10-24 units"),
+        new(25, 49,    8.0, "25-49 units"),
+        new(50, null,  6.5, "50+ units"),
+    ];
+
+    private static readonly double _basePricePerUnit = _tiers[0].UnitPrice;
+
+    private int _quantity = 7;
+
+    private PricingTier _currentTier => GetCurrentTier(_quantity);
+    private PricingTier? _nextTier => GetNextTier(_quantity);
+    private double _unitPrice => _currentTier.UnitPrice;
+    private double _subtotal => _quantity * _unitPrice;
+    private double _fullPriceTotal => _quantity * _basePricePerUnit;
+    private double _savings => _fullPriceTotal - _subtotal;
+    private int _qtyToNextTier => _nextTier != null ? _nextTier.MinQty - _quantity : 0;
+    private double _nextTierSavings => _nextTier != null ? _currentTier.UnitPrice - _nextTier.UnitPrice : 0;
+
+    private static PricingTier GetCurrentTier(int qty)
+    {
+        for (var i = _tiers.Length - 1; i >= 0; i--)
+        {
+            if (qty >= _tiers[i].MinQty) return _tiers[i];
+        }
+        return _tiers[0];
+    }
+
+    private static PricingTier? GetNextTier(int qty)
+    {
+        var currentIndex = -1;
+        for (var i = 0; i < _tiers.Length; i++)
+        {
+            var t = _tiers[i];
+            bool match = t.MaxQty == null ? qty >= t.MinQty : qty >= t.MinQty && qty <= t.MaxQty;
+            if (match) { currentIndex = i; break; }
+        }
+        if (currentIndex >= 0 && currentIndex < _tiers.Length - 1)
+            return _tiers[currentIndex + 1];
+        return null;
+    }
+
+    private void HandleQuantityChange(int newQty)
+    {
+        if (newQty >= 1 && newQty <= 999)
+            _quantity = newQty;
+    }
+}

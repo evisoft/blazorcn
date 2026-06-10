@@ -1,0 +1,275 @@
+@* ============================================================
+   Block: chat-agent-assignment
+   Title: ChatAgentAssignment
+   Description: React agent assignment chat block for Next.js with department selection cards, animated connecting state, agent profile card with rating and languages, and live conversation handoff using TypeScript, shadcn/ui, and Tailwind CSS
+   Source: original/blocks/chat/chat-agent-assignment.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="flex h-[700px] flex-col overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center gap-3 border-b px-4 py-3">
+            <AvatarCn Class="size-8 shrink-0">
+                <AvatarFallbackCn Class="text-xs">
+                    @if (_phase == ChatPhase.Connected)
+                    {
+                        @_agent.Initials
+                    }
+                    else
+                    {
+                        <LucideIconCn Name="headphones" Size="14" Class="size-3.5" />
+                    }
+                </AvatarFallbackCn>
+            </AvatarCn>
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-sm">
+                    @(_phase == ChatPhase.Connected ? _agent.Name : "Acme Support")
+                </span>
+                <p class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", _phase == ChatPhase.Connecting ? "animate-pulse bg-amber-500" : "bg-emerald-500")"></span>
+                    @if (_phase == ChatPhase.Connecting)
+                    {
+                        @:Connecting...
+                    }
+                    else if (_phase == ChatPhase.Connected)
+                    {
+                        @_agent.Role
+                    }
+                    else
+                    {
+                        @:Online
+                    }
+                </p>
+            </div>
+            @if (_phase == ChatPhase.Connected)
+            {
+                <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                    <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                    @_agent.Rating
+                </span>
+            }
+        </div>
+
+        @* Messages *@
+        <div class="flex flex-1 flex-col overflow-y-auto py-2">
+            @for (int idx = 0; idx < _messages.Count; idx++)
+            {
+                var msg = _messages[idx];
+                if (msg.Role == "system")
+                {
+                    <div class="flex justify-center py-3">
+                        <span class="rounded-full bg-muted/50 px-3 py-1 text-muted-foreground text-xs">
+                            @msg.Content
+                        </span>
+                    </div>
+                }
+                else
+                {
+                    var isUser = msg.Role == "user";
+                    var isAgent = msg.Role == "agent";
+                    var prevMsg = idx > 0 ? _messages[idx - 1] : null;
+                    var showAvatar = prevMsg == null || prevMsg.Role != msg.Role || prevMsg.Role == "system";
+                    var senderName = isAgent ? _agent.Name : "Acme Bot";
+                    var senderInitials = isAgent ? _agent.Initials : "AB";
+
+                    if (isUser)
+                    {
+                        <div class="flex justify-end px-2 py-0.5">
+                            <div class="max-w-[75%]">
+                                <div class="rounded-2xl bg-foreground px-3 py-2 text-background text-sm leading-relaxed">
+                                    @msg.Content
+                                </div>
+                                <span class="mt-0.5 block text-right text-muted-foreground text-[10px]">
+                                    @msg.Timestamp
+                                </span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex gap-2 rounded-md px-2 py-0.5 transition-colors hover:bg-accent">
+                            <div class="w-8 shrink-0">
+                                @if (showAvatar)
+                                {
+                                    <AvatarCn Class="size-8">
+                                        <AvatarFallbackCn Class="text-xs">@senderInitials</AvatarFallbackCn>
+                                    </AvatarCn>
+                                }
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                @if (showAvatar)
+                                {
+                                    <span class="mb-0.5 block text-muted-foreground text-[10px]">
+                                        @senderName
+                                    </span>
+                                }
+                                <div class="max-w-[85%] rounded-2xl bg-muted px-3 py-2 text-sm leading-relaxed">
+                                    @msg.Content
+                                </div>
+                                <span class="mt-0.5 block text-muted-foreground text-[10px]">
+                                    @msg.Timestamp
+                                </span>
+                            </div>
+                        </div>
+                    }
+                }
+            }
+
+            @* Department selection cards *@
+            @if (_phase == ChatPhase.Department)
+            {
+                <div class="mx-2 mt-2 ml-12 flex flex-col gap-2 pr-2">
+                    @foreach (var dept in _departments)
+                    {
+                        var d = dept;
+                        <button
+                            type="button"
+                            @onclick="@(() => HandleSelectDepartment(d.Id))"
+                            class="flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+                            <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                                <LucideIconCn Name="@d.IconName" Size="16" Class="size-4" />
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <span class="block font-medium text-sm">@d.Name</span>
+                                <span class="text-muted-foreground text-xs">@d.Description</span>
+                            </div>
+                            <span class="shrink-0 text-muted-foreground text-[10px]">
+                                @d.WaitTime
+                            </span>
+                        </button>
+                    }
+                </div>
+            }
+
+            @* Connecting animation *@
+            @if (_phase == ChatPhase.Connecting)
+            {
+                <div class="flex flex-col items-center gap-2 py-6">
+                    <div class="flex items-center gap-1.5">
+                        @foreach (var i in new[] { 0, 1, 2 })
+                        {
+                            var delay = i;
+                            <span
+                                class="size-2 animate-pulse rounded-full bg-muted-foreground/40"
+                                style="@($"animation-delay:{delay * 200}ms")">
+                            </span>
+                        }
+                    </div>
+                    <span class="text-muted-foreground text-xs">
+                        Connecting you with a @(_departments.Find(d => d.Id == _selectedDept)?.Name ?? "") specialist...
+                    </span>
+                </div>
+            }
+
+            @* Agent profile card *@
+            @if (_phase == ChatPhase.Connected)
+            {
+                <div class="mx-auto my-3 w-full max-w-xs px-2">
+                    <div class="overflow-hidden rounded-lg border bg-muted/20">
+                        <div class="flex items-center gap-3 px-4 py-3">
+                            <AvatarCn Class="size-10">
+                                <AvatarFallbackCn Class="font-medium text-sm">@_agent.Initials</AvatarFallbackCn>
+                            </AvatarCn>
+                            <div class="min-w-0 flex-1">
+                                <span class="block font-medium text-sm">@_agent.Name</span>
+                                <span class="text-muted-foreground text-xs">@_agent.Role</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 border-t px-4 py-2">
+                            <span class="flex items-center gap-1 text-muted-foreground text-xs">
+                                <LucideIconCn Name="star" Size="12" Class="size-3 fill-amber-400 text-amber-400" />
+                                @_agent.Rating (@_agent.ReviewCount)
+                            </span>
+                            <span class="text-muted-foreground/40 text-xs">&middot;</span>
+                            <span class="text-muted-foreground text-xs">
+                                Avg. reply @_agent.ResponseTime
+                            </span>
+                        </div>
+                        <div class="flex gap-1.5 border-t px-4 py-2">
+                            @foreach (var lang in _agent.Languages)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-[10px]">@lang</BadgeCn>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Toolbar *@
+        <div class="border-t px-4 py-3">
+            <form @onsubmit="HandleSubmit" @onsubmit:preventDefault class="flex items-center gap-2">
+                <InputCn
+                    @bind-Value="_input"
+                    Placeholder="@(_phase == ChatPhase.Connecting ? "Please wait..." : "Type a message...")"
+                    Disabled="@(_phase == ChatPhase.Connecting || _phase == ChatPhase.Department)"
+                    Class="h-9 flex-1 border-0 bg-muted/50 shadow-none focus-visible:ring-0" />
+                <ButtonCn
+                    Type="submit"
+                    Size="ButtonSize.Icon"
+                    Variant="ButtonVariant.Ghost"
+                    Disabled="@(string.IsNullOrWhiteSpace(_input) || _phase == ChatPhase.Connecting || _phase == ChatPhase.Department)"
+                    Class="size-9 shrink-0 text-muted-foreground hover:text-foreground">
+                    <LucideIconCn Name="send" Size="16" Class="size-4" />
+                </ButtonCn>
+            </form>
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum ChatPhase { Department, Connecting, Connected }
+
+    private record AgentProfile(string Name, string Initials, string Role, double Rating, int ReviewCount, List<string> Languages, string ResponseTime);
+
+    private record ChatMessage(string Id, string Role, string Content, string Timestamp);
+
+    private record Department(string Id, string Name, string Description, string IconName, string WaitTime);
+
+    private ChatPhase _phase = ChatPhase.Department;
+    private string? _selectedDept = null;
+    private string _input = "";
+
+    private readonly AgentProfile _agent = new(
+        "Sarah Mitchell", "SM", "Senior Technical Support",
+        4.9, 847, ["English", "Spanish"], "~30s"
+    );
+
+    private readonly List<Department> _departments =
+    [
+        new("sales", "Sales", "Pricing, plans, and demos", "shopping-bag", "~1 min"),
+        new("technical", "Technical", "Bugs, integrations, and APIs", "wrench", "~3 min"),
+        new("billing", "Billing", "Invoices, refunds, and payments", "credit-card", "~2 min"),
+    ];
+
+    private readonly ChatMessage _botGreeting = new("1", "bot",
+        "Welcome to Acme Support! Please select a department so I can connect you with the right specialist.",
+        "11:00 AM");
+
+    private List<ChatMessage> _messages = default!;
+
+    protected override void OnInitialized()
+    {
+        _messages = [_botGreeting];
+    }
+
+    private void HandleSelectDepartment(string deptId)
+    {
+        if (_phase != ChatPhase.Department) return;
+        _selectedDept = deptId;
+        var dept = _departments.Find(d => d.Id == deptId);
+        _messages =
+        [
+            .._messages,
+            new("u-dept", "user", $"I'd like to speak with {dept?.Name ?? "support"}.", "11:01 AM"),
+            new("b-connect", "bot", $"Connecting you with a {dept?.Name ?? ""} specialist. One moment...", "11:01 AM"),
+        ];
+        _phase = ChatPhase.Connecting;
+    }
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+        _input = "";
+    }
+}

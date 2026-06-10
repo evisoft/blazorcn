@@ -1,0 +1,277 @@
+@* ============================================================
+   Block: account-quotes
+   Title: AccountQuotes
+   Description: A quotes and estimates management block for React and Next.js with status filtering, expandable line items, duplicate and send actions, and total calculations built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/account/account-quotes.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Quotes &amp; Estimates</h2>
+                    <p class="text-xs text-muted-foreground">
+                        @_quotes.Length quotes totaling @FormatCurrency(_quotes.Sum(q => ComputeQuoteTotal(q)))
+                    </p>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span class="flex items-center gap-1.5">
+                        <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                        @_quotes.Count(q => q.Status == "accepted") accepted
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        <span class="size-1.5 rounded-full bg-muted-foreground"></span>
+                        @_quotes.Count(q => q.Status == "draft") drafts
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        @{
+            var filtered = _filter == "all" ? _quotes : _quotes.Where(q => q.Status == _filter).ToArray();
+            var totalValue = filtered.Sum(q => ComputeQuoteTotal(q));
+        }
+
+        @* Filter bar *@
+        <div class="flex items-center gap-1 border-b px-4 py-2">
+            @foreach (var opt in _filterOptions)
+            {
+                var isActive = _filter == opt.Value;
+                var count = opt.Value == "all" ? _quotes.Length : _quotes.Count(q => q.Status == opt.Value);
+                <button type="button" @onclick="@(() => _filter = opt.Value)"
+                    class="@Cn.Merge("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", isActive ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/50")">
+                    @opt.Label
+                    <span class="ml-1 tabular-nums text-[10px] opacity-60">@count</span>
+                </button>
+            }
+            <div class="flex-1"></div>
+            <span class="text-xs text-muted-foreground tabular-nums">@FormatCurrency(totalValue) shown</span>
+        </div>
+
+        @* Quote list *@
+        <div>
+            @if (filtered.Length == 0)
+            {
+                <div class="px-4 py-10 text-center">
+                    <LucideFileTextCn Class="mx-auto mb-2 h-6 w-6 text-muted-foreground/40" Size="24" />
+                    <p class="text-xs text-muted-foreground">No quotes match this filter</p>
+                </div>
+            }
+            else
+            {
+                @for (int idx = 0; idx < filtered.Length; idx++)
+                {
+                    var quote = filtered[idx];
+                    var total = ComputeQuoteTotal(quote);
+                    var isExpanded = _expandedId == quote.Id;
+                    var status = GetStatusConfig(quote.Status);
+                    var lineCount = quote.LineItems.Length;
+                    var isLast = idx == filtered.Length - 1;
+
+                    <div class="@Cn.Merge(!isLast ? "border-b" : "")">
+                        @* Quote row *@
+                        <button type="button" @onclick="@(() => _expandedId = isExpanded ? null : quote.Id)"
+                            class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                            <div class="mt-1.5 flex flex-col items-center gap-1">
+                                <span class="@Cn.Merge("size-1.5 rounded-full", status.Dot)"></span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono text-xs text-muted-foreground">@quote.QuoteNumber</span>
+                                    <BadgeCn Variant="BadgeVariant.Secondary" Class="h-4 px-1.5 text-[10px]">@status.Label</BadgeCn>
+                                </div>
+                                <p class="mt-0.5 text-sm font-medium">@quote.ClientCompany</p>
+                                <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>@quote.ClientName</span>
+                                    <span class="text-muted-foreground/30">/</span>
+                                    <span>@quote.Date</span>
+                                    <span class="text-muted-foreground/30">/</span>
+                                    <span>@lineCount item@(lineCount != 1 ? "s" : "")</span>
+                                </div>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <p class="text-lg font-semibold tabular-nums">@FormatCurrency(total)</p>
+                                @if (quote.Status != "expired")
+                                {
+                                    <p class="flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+                                        <LucideClockCn Class="h-2.5 w-2.5" Size="10" />
+                                        Valid until @quote.ValidUntil
+                                    </p>
+                                }
+                            </div>
+                            <LucideChevronDownCn Class="@Cn.Merge("mt-1.5 h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform duration-200", isExpanded ? "rotate-180" : "")" Size="16" />
+                        </button>
+
+                        @* Expanded line items *@
+                        @if (isExpanded)
+                        {
+                            <div class="overflow-hidden">
+                                <div class="border-t bg-muted/30 px-4 py-3">
+                                    @* Line items table *@
+                                    <div class="mb-3 overflow-hidden rounded-md border bg-card">
+                                        <div class="grid grid-cols-[1fr_60px_90px_90px] gap-2 bg-muted/50 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            <span>Description</span>
+                                            <span class="text-right">Qty</span>
+                                            <span class="text-right">Unit Price</span>
+                                            <span class="text-right">Total</span>
+                                        </div>
+                                        @for (int liIdx = 0; liIdx < quote.LineItems.Length; liIdx++)
+                                        {
+                                            var li = quote.LineItems[liIdx];
+                                            var isLastLi = liIdx == quote.LineItems.Length - 1;
+                                            <div class="@Cn.Merge("grid grid-cols-[1fr_60px_90px_90px] gap-2 px-3 py-2", !isLastLi ? "border-b" : "")">
+                                                <span class="text-xs">@li.Description</span>
+                                                <span class="text-right font-mono text-xs tabular-nums text-muted-foreground">@li.Quantity</span>
+                                                <span class="text-right font-mono text-xs tabular-nums text-muted-foreground">@FormatCurrency(li.UnitPrice)</span>
+                                                <span class="text-right font-mono text-xs font-medium tabular-nums">@FormatCurrency(ComputeLineTotal(li))</span>
+                                            </div>
+                                        }
+                                        @* Totals row *@
+                                        <div class="grid grid-cols-[1fr_60px_90px_90px] gap-2 border-t bg-muted/30 px-3 py-2">
+                                            <span class="text-xs font-medium">Total</span>
+                                            <span></span>
+                                            <span></span>
+                                            <span class="text-right font-mono text-xs font-semibold tabular-nums">@FormatCurrency(total)</span>
+                                        </div>
+                                    </div>
+
+                                    @* Notes *@
+                                    @if (quote.Notes != null)
+                                    {
+                                        <p class="mb-3 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">@quote.Notes</p>
+                                    }
+
+                                    @* Actions *@
+                                    <div class="flex items-center gap-2">
+                                        <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="gap-1.5 text-xs"
+                                            OnClick="@(async () => await HandleDuplicate(quote.Id))">
+                                            @if (_duplicatedId == quote.Id)
+                                            {
+                                                <LucideCheckCircle2Cn Class="h-3 w-3" Size="12" />
+                                                @:Duplicated
+                                            }
+                                            else
+                                            {
+                                                <LucideCopyCn Class="h-3 w-3" Size="12" />
+                                                @:Duplicate
+                                            }
+                                        </ButtonCn>
+                                        @if (quote.Status == "draft")
+                                        {
+                                            <ButtonCn Size="ButtonSize.Sm" Class="gap-1.5 text-xs"
+                                                OnClick="@(async () => await HandleSend(quote.Id))">
+                                                @if (_sentId == quote.Id)
+                                                {
+                                                    <LucideCheckCircle2Cn Class="h-3 w-3" Size="12" />
+                                                    @:Sent
+                                                }
+                                                else
+                                                {
+                                                    <LucideSendCn Class="h-3 w-3" Size="12" />
+                                                    @:Send to Client
+                                                }
+                                            </ButtonCn>
+                                        }
+                                        @if (quote.Status == "expired")
+                                        {
+                                            <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="gap-1.5 text-xs">
+                                                <LucideClockCn Class="h-3 w-3" Size="12" />
+                                                Reissue
+                                            </ButtonCn>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record LineItem(string Id, string Description, int Quantity, int UnitPrice);
+    private record Quote(string Id, string QuoteNumber, string ClientName, string ClientCompany, string Date, string ValidUntil, string Status, LineItem[] LineItems, string? Notes = null);
+    private record FilterOption(string Value, string Label);
+
+    private string _filter = "all";
+    private string? _expandedId;
+    private string? _duplicatedId;
+    private string? _sentId;
+
+    private static (string Label, string Dot, string Bg) GetStatusConfig(string status) => status switch
+    {
+        "draft"    => ("Draft",    "bg-muted-foreground", "bg-muted/50"),
+        "sent"     => ("Sent",     "bg-blue-500",         "bg-blue-500/10"),
+        "accepted" => ("Accepted", "bg-emerald-500",      "bg-emerald-500/10"),
+        "expired"  => ("Expired",  "bg-red-500",          "bg-red-500/10"),
+        _          => (status,     "bg-muted-foreground", "bg-muted/50"),
+    };
+
+    private static int ComputeLineTotal(LineItem item) => item.Quantity * item.UnitPrice;
+    private static int ComputeQuoteTotal(Quote q) => q.LineItems.Sum(li => ComputeLineTotal(li));
+    private static string FormatCurrency(int amount) => $"${amount:N0}";
+
+    private async Task HandleDuplicate(string id)
+    {
+        _duplicatedId = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _duplicatedId = null;
+    }
+
+    private async Task HandleSend(string id)
+    {
+        _sentId = id;
+        StateHasChanged();
+        await Task.Delay(2000);
+        _sentId = null;
+    }
+
+    private static readonly FilterOption[] _filterOptions =
+    [
+        new("all",      "All"),
+        new("draft",    "Draft"),
+        new("sent",     "Sent"),
+        new("accepted", "Accepted"),
+        new("expired",  "Expired"),
+    ];
+
+    private static readonly Quote[] _quotes =
+    [
+        new("q1", "QT-2026-0041", "Rachel Torres", "Meridian Design Co.", "Mar 28, 2026", "Apr 28, 2026", "sent",
+            [
+                new("li1", "Brand identity package — logo, color system, typography", 1, 4500),
+                new("li2", "Website design — 8-page marketing site in Figma", 1, 6200),
+                new("li3", "Social media template kit (Instagram, LinkedIn)", 1, 1800),
+            ],
+            "Includes two rounds of revisions per deliverable."),
+        new("q2", "QT-2026-0039", "David Kim", "Stackline Analytics", "Mar 22, 2026", "Apr 22, 2026", "accepted",
+            [
+                new("li4", "Dashboard UI redesign — 12 screens", 1, 8400),
+                new("li5", "Design system documentation in Storybook", 1, 3200),
+            ]),
+        new("q3", "QT-2026-0037", "Sophie Andersen", "Nordic Health", "Mar 15, 2026", "Apr 15, 2026", "draft",
+            [
+                new("li6", "Patient portal UX audit and heuristic evaluation", 1, 2800),
+                new("li7", "Wireframes for appointment booking flow (mobile + web)", 1, 3600),
+                new("li8", "Prototype in Figma with interactive transitions", 1, 2200),
+                new("li9", "Usability testing — 6 participant sessions + report", 1, 4100),
+            ],
+            "Pricing assumes remote usability sessions. On-site testing available at additional cost."),
+        new("q4", "QT-2026-0032", "Marcus Webb", "Freight Logic", "Feb 28, 2026", "Mar 14, 2026", "expired",
+            [
+                new("li10", "Logistics dashboard MVP — design and front-end build", 1, 12000),
+                new("li11", "Route optimization map view component", 1, 3500),
+            ]),
+        new("q5", "QT-2026-0044", "Lena Park", "Culinary Studio", "Apr 1, 2026", "May 1, 2026", "draft",
+            [
+                new("li12", "E-commerce storefront design — Shopify theme", 1, 5800),
+                new("li13", "Product photography direction and style guide", 1, 1200),
+            ],
+            "Theme customization only; Shopify setup not included."),
+    ];
+}

@@ -1,0 +1,157 @@
+@* ============================================================
+   Block: crud-endpoint-manager
+   Title: CrudEndpointManager
+   Description: API endpoint management with HTTP methods, path configuration, authentication settings, and rate limiting
+   Source: original/blocks/crud/crud-endpoint-manager.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="border-b px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">API Endpoints</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        @(_endpoints.Count(e => e.Enabled)) active · @(_endpoints.Count) total
+                    </p>
+                </div>
+                <ButtonCn Size="ButtonSize.Sm" Variant="ButtonVariant.Outline" Class="h-7 gap-1 px-2 text-xs">
+                    <LucideIconCn Name="plus" Size="14" Class="size-3.5" />
+                    Add Endpoint
+                </ButtonCn>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-b px-4 py-2">
+            <div class="relative flex-1">
+                <LucideIconCn Name="search" Size="14" Class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <InputCn Class="h-8 border-0 bg-transparent pl-8 text-xs shadow-none focus-visible:ring-0"
+                         Placeholder="Search endpoints..."
+                         @bind-Value="_search" />
+            </div>
+            <div class="flex gap-1">
+                @foreach (var m in _methodFilters)
+                {
+                    var method = m;
+                    <button type="button"
+                            @onclick="@(() => _methodFilter = method)"
+                            class="@Cn.Merge("rounded-md px-2 py-1 text-xs font-medium transition-colors", _methodFilter == method ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground")">
+                        @(method == "all" ? "All" : method)
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div>
+            @{
+                var filtered = _endpoints
+                    .Where(e => _methodFilter == "all" || e.Method == _methodFilter)
+                    .Where(e => e.Path.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                                e.Description.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            @if (filtered.Count == 0)
+            {
+                <div class="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No endpoints found
+                </div>
+            }
+            else
+            {
+                @for (var i = 0; i < filtered.Count; i++)
+                {
+                    var ep = filtered[i];
+                    var isLast = i == filtered.Count - 1;
+                    var methodClass = _methodColors.TryGetValue(ep.Method, out var mc) ? mc : "";
+                    <div class="@Cn.Merge("flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50", !isLast ? "border-b" : "", !ep.Enabled ? "opacity-50" : "")">
+                        <SwitchCn Checked="@ep.Enabled" CheckedChanged="@(_ => ToggleEndpoint(ep.Id))" Class="shrink-0" />
+                        <BadgeCn Variant="BadgeVariant.Outline" Class="@Cn.Merge("w-16 justify-center text-[10px] font-mono px-1.5 py-0", methodClass)">
+                            @ep.Method
+                        </BadgeCn>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-mono text-sm font-medium">@ep.Path</span>
+                            <p class="text-xs text-muted-foreground">@ep.Description</p>
+                        </div>
+                        <div class="hidden items-center gap-2 sm:flex">
+                            @if (ep.Auth)
+                            {
+                                <BadgeCn Variant="BadgeVariant.Outline" Class="text-[10px] px-1.5 py-0">
+                                    Auth
+                                </BadgeCn>
+                            }
+                            <span class="text-xs text-muted-foreground tabular-nums">
+                                @ep.RateLimit
+                            </span>
+                        </div>
+                        <DropdownMenuCn>
+                            <DropdownMenuTriggerCn>
+                                <ButtonCn Size="ButtonSize.Icon" Variant="ButtonVariant.Ghost" Class="size-7 shrink-0">
+                                    <LucideIconCn Name="more-horizontal" Size="16" Class="size-4" />
+                                </ButtonCn>
+                            </DropdownMenuTriggerCn>
+                            <DropdownMenuContentCn Align="FloatingAlign.End">
+                                <DropdownMenuItemCn>Edit</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>Test</DropdownMenuItemCn>
+                                <DropdownMenuItemCn>View Logs</DropdownMenuItemCn>
+                                <DropdownMenuItemCn Class="text-destructive" OnClick="@(() => HandleDelete(ep.Id))">
+                                    <LucideIconCn Name="trash" Size="16" Class="mr-2 size-4" />
+                                    Delete
+                                </DropdownMenuItemCn>
+                            </DropdownMenuContentCn>
+                        </DropdownMenuCn>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private class EndpointItem
+    {
+        public int Id { get; set; }
+        public string Method { get; set; } = "";
+        public string Path { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool Auth { get; set; }
+        public string RateLimit { get; set; } = "";
+        public string Version { get; set; } = "";
+        public bool Enabled { get; set; }
+    }
+
+    private static readonly Dictionary<string, string> _methodColors = new()
+    {
+        ["GET"]    = "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+        ["POST"]   = "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+        ["PUT"]    = "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        ["PATCH"]  = "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+        ["DELETE"] = "bg-red-500/10 text-red-700 dark:text-red-400",
+    };
+
+    private static readonly string[] _methodFilters = ["all", "GET", "POST", "PUT", "DELETE"];
+
+    private string _search = "";
+    private string _methodFilter = "all";
+
+    private readonly List<EndpointItem> _endpoints =
+    [
+        new() { Id = 1,  Method = "GET",    Path = "/api/v1/users",     Description = "List all users",          Auth = true,  RateLimit = "100/min", Version = "v1", Enabled = true  },
+        new() { Id = 2,  Method = "POST",   Path = "/api/v1/users",     Description = "Create a new user",       Auth = true,  RateLimit = "20/min",  Version = "v1", Enabled = true  },
+        new() { Id = 3,  Method = "GET",    Path = "/api/v1/users/:id", Description = "Get user by ID",          Auth = true,  RateLimit = "100/min", Version = "v1", Enabled = true  },
+        new() { Id = 4,  Method = "PUT",    Path = "/api/v1/users/:id", Description = "Update user",             Auth = true,  RateLimit = "50/min",  Version = "v1", Enabled = true  },
+        new() { Id = 5,  Method = "DELETE", Path = "/api/v1/users/:id", Description = "Delete user",             Auth = true,  RateLimit = "10/min",  Version = "v1", Enabled = true  },
+        new() { Id = 6,  Method = "GET",    Path = "/api/v1/products",  Description = "List products",           Auth = false, RateLimit = "200/min", Version = "v1", Enabled = true  },
+        new() { Id = 7,  Method = "POST",   Path = "/api/v1/orders",    Description = "Create order",            Auth = true,  RateLimit = "30/min",  Version = "v1", Enabled = true  },
+        new() { Id = 8,  Method = "GET",    Path = "/api/v1/health",    Description = "Health check",            Auth = false, RateLimit = "1000/min",Version = "v1", Enabled = true  },
+        new() { Id = 9,  Method = "PATCH",  Path = "/api/v1/settings",  Description = "Update settings",         Auth = true,  RateLimit = "20/min",  Version = "v1", Enabled = true  },
+        new() { Id = 10, Method = "GET",    Path = "/api/v0/users",     Description = "List users (deprecated)", Auth = true,  RateLimit = "50/min",  Version = "v0", Enabled = false },
+    ];
+
+    private void ToggleEndpoint(int id)
+    {
+        var ep = _endpoints.FirstOrDefault(e => e.Id == id);
+        if (ep is not null) ep.Enabled = !ep.Enabled;
+    }
+
+    private void HandleDelete(int id) => _endpoints.RemoveAll(e => e.Id == id);
+}

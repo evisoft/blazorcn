@@ -1,0 +1,129 @@
+@* ============================================================
+   Block: stats-rate-limit-table
+   Title: StatsRateLimitTable
+   Description: A rate limit table stats card for React and Next.js with monospace API route rows, used/limit tabular values, reset countdowns, and threshold-keyed progress bars that shift from emerald to amber to red as quota fills built with shadcn/ui and Tailwind CSS
+   Source: original/blocks/stats/stats-rate-limit-table.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-start justify-between gap-4 border-b px-4 py-3">
+            <div>
+                <p class="flex items-center gap-2 text-sm font-medium">
+                    <LucideIconCn Name="zap" Size="14" Class="size-3.5 text-muted-foreground" />
+                    API rate limits
+                </p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    Current window · @routes.Length tracked routes
+                </p>
+            </div>
+            <div class="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest">
+                <span class="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 tabular-nums">
+                    <span aria-hidden="true" class="size-1.5 rounded-full bg-amber-500"></span>
+                    @warnCount warn
+                </span>
+                <span class="inline-flex items-center gap-1 text-red-600 dark:text-red-400 tabular-nums">
+                    <span aria-hidden="true" class="size-1.5 rounded-full bg-red-500"></span>
+                    @criticalCount critical
+                </span>
+            </div>
+        </div>
+
+        <div class="divide-y">
+            @foreach (var route in routes)
+            {
+                var percent = (double)route.Used / route.Limit * 100.0;
+                var severity = GetSeverity(percent);
+                var barColor = BarColorMap[severity];
+                var textColor = TextColorMap[severity];
+                var methodColor = MethodColorMap[route.Method];
+
+                <div class="px-4 py-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex min-w-0 items-center gap-2">
+                            <span class="@Cn.Merge("font-mono text-[10px] font-medium tabular-nums", methodColor)">
+                                @route.Method
+                            </span>
+                            <code class="truncate font-mono text-xs">@route.Path</code>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <span class="text-xs font-medium tabular-nums">
+                                @route.Used.ToString("N0")
+                                <span class="text-muted-foreground"> / @route.Limit.ToString("N0")</span>
+                            </span>
+                            <span class="@Cn.Merge("w-10 text-right text-xs font-medium tabular-nums", textColor)">
+                                @(percent.ToString("F0"))%
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mt-2 flex items-center gap-3">
+                        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div
+                                aria-valuemax="@route.Limit"
+                                aria-valuemin="0"
+                                aria-valuenow="@route.Used"
+                                class="@Cn.Merge("h-full rounded-full transition-all duration-700 ease-out", barColor)"
+                                role="progressbar"
+                                style="@($"width:{Math.Min(percent, 100.0).ToString("F1")}%")">
+                            </div>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground tabular-nums">
+                            <LucideIconCn Name="clock" Size="10" Class="size-2.5" />
+                            resets in @route.ResetIn
+                            <span class="text-muted-foreground/60">·</span>
+                            @route.Window window
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private enum Severity { Ok, Warn, Critical }
+
+    private record RateLimitRoute(string Id, string Method, string Path, int Used, int Limit, string Window, string ResetIn);
+
+    private static readonly RateLimitRoute[] routes =
+    [
+        new("signin",  "POST",   "/v1/auth/signin",       1847,  2000,  "1h",  "12 min"),
+        new("search",  "GET",    "/v1/search",           42310, 50000,  "1h",  "34 min"),
+        new("embed",   "POST",   "/v1/embeddings",       18920, 25000,  "1h",  "41 min"),
+        new("upload",  "PUT",    "/v1/files/upload",       312,   500,  "1h",   "6 min"),
+        new("webhook", "POST",   "/v1/webhooks/deliver",   890,  5000,  "1h",  "52 min"),
+        new("export",  "GET",    "/v1/reports/export",      47,    50, "24h", "3h 12m"),
+    ];
+
+    private static readonly Dictionary<Severity, string> BarColorMap = new()
+    {
+        [Severity.Ok]       = "bg-emerald-500",
+        [Severity.Warn]     = "bg-amber-500",
+        [Severity.Critical] = "bg-red-500",
+    };
+
+    private static readonly Dictionary<Severity, string> TextColorMap = new()
+    {
+        [Severity.Ok]       = "text-emerald-600 dark:text-emerald-400",
+        [Severity.Warn]     = "text-amber-600 dark:text-amber-400",
+        [Severity.Critical] = "text-red-600 dark:text-red-400",
+    };
+
+    private static readonly Dictionary<string, string> MethodColorMap = new()
+    {
+        ["GET"]    = "text-blue-600 dark:text-blue-400",
+        ["POST"]   = "text-emerald-600 dark:text-emerald-400",
+        ["PUT"]    = "text-amber-600 dark:text-amber-400",
+        ["DELETE"] = "text-red-600 dark:text-red-400",
+    };
+
+    private static Severity GetSeverity(double percent)
+    {
+        if (percent >= 85) return Severity.Critical;
+        if (percent >= 60) return Severity.Warn;
+        return Severity.Ok;
+    }
+
+    private int criticalCount => routes.Count(r => GetSeverity((double)r.Used / r.Limit * 100.0) == Severity.Critical);
+    private int warnCount     => routes.Count(r => GetSeverity((double)r.Used / r.Limit * 100.0) == Severity.Warn);
+}

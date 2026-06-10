@@ -1,0 +1,120 @@
+@* ============================================================
+   Block: monitoring-grpc-latency
+   Title: MonitoringGrpcLatency
+   Description: High-performance gRPC monitoring dashboard featuring RPC-level latency tracking, status code distribution, and streaming metrics with shadcn/ui and Framer Motion.
+   Source: original/blocks/monitoring/monitoring-grpc-latency.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <div class="flex size-8 items-center justify-center rounded-md bg-muted">
+                    <LucideIconCn Name="layers" Size="16" Class="size-4 text-foreground" />
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium leading-none">gRPC Latency</h3>
+                    <p class="mt-1 text-muted-foreground text-xs">Service-to-service RPC metrics</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield-check" Size="12" Class="size-3 text-emerald-500" />
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Secure (mTLS)</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 border-b">
+            @for (int idx = 0; idx < _stats.Length; idx++)
+            {
+                var stat = _stats[idx];
+                var isLast = idx == _stats.Length - 1;
+                <div class="@($"p-4{(isLast ? "" : " md:border-r border-b md:border-b-0")}")">
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">@stat.Label</p>
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-semibold tabular-nums tracking-tight">@stat.DisplayValue</span>
+                        <span class="text-xs text-muted-foreground font-medium">@stat.Unit</span>
+                    </div>
+                    <div class="mt-2">
+                        <div class="@($"size-1 rounded-full {(stat.Status == "warning" ? "bg-amber-500" : "bg-emerald-500")}")"></div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Latency Trends (ms)</span>
+                <div class="flex gap-4">
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-1.5 rounded-full bg-foreground"></div>
+                        <span class="text-[10px] text-muted-foreground">P99</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <div class="size-1.5 rounded-full bg-muted-foreground"></div>
+                        <span class="text-[10px] text-muted-foreground">P50</span>
+                    </div>
+                </div>
+            </div>
+            <div class="h-40 w-full">
+                @{
+                    var data = _latencyTrend;
+                    var count = data.Length;
+                    var chartW = 400;
+                    var chartH = 160;
+                    var allVals = data.SelectMany(d => new[] { d.P50, d.P99 }).ToArray();
+                    var minVal = allVals.Min();
+                    var maxVal = allVals.Max();
+                    var valRange = maxVal - minVal == 0 ? 1 : maxVal - minVal;
+                    double StepX(int i) => count <= 1 ? 0 : (double)chartW / (count - 1) * i;
+                    double StepY(int v) => chartH - (double)(v - minVal) / valRange * (chartH - 8);
+
+                    var p99Points = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{StepY(data[i].P99):F1}"));
+                    var p50Points = string.Join(" ", Enumerable.Range(0, count).Select(i => $"{StepX(i):F1},{StepY(data[i].P50):F1}"));
+                    var p99FillPoints = $"0,{chartH} " + p99Points + $" {chartW},{chartH}";
+                }
+                <svg viewBox="0 0 @chartW @chartH" preserveAspectRatio="none" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="p99GrpcGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stop-color="currentColor" stop-opacity="0.1" />
+                            <stop offset="95%" stop-color="currentColor" stop-opacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <polygon points="@p99FillPoints" fill="url(#p99GrpcGradient)" class="text-foreground" />
+                    <polyline points="@p99Points" fill="none" stroke="currentColor" stroke-width="2" class="text-foreground" />
+                    <polyline points="@p50Points" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4" class="text-muted-foreground" />
+                </svg>
+            </div>
+        </div>
+
+        <div class="px-4 py-2.5 bg-muted/30 flex items-center justify-between border-t">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground font-medium">
+                <LucideIconCn Name="activity" Size="12" Class="size-3" />
+                <span>4.2k Requests / min</span>
+            </div>
+            <button type="button" class="text-[10px] font-medium hover:underline text-foreground">
+                RPC Map →
+            </button>
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private record LatencyPoint(int P50, int P99);
+    private record StatItem(string Label, string DisplayValue, string Unit, string Status = "stable");
+
+    private static readonly LatencyPoint[] _latencyTrend =
+    [
+        new(12, 45), new(14, 52), new(13, 48),
+        new(18, 120), new(15, 65), new(14, 55),
+        new(16, 72), new(15, 60), new(13, 48),
+    ];
+
+    private static readonly StatItem[] _stats =
+    [
+        new("P50 Latency", "14", "ms"),
+        new("P99 Latency", "120", "ms", "warning"),
+        new("Error Rate", "0.02", "%"),
+    ];
+}

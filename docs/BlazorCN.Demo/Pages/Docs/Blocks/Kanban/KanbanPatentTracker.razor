@@ -1,0 +1,266 @@
+@* ============================================================
+   Block: kanban-patent-tracker
+   Title: KanbanPatentTracker
+   Description: React patent portfolio kanban for Next.js with lifecycle stage columns, compact cards, and Dialog detail overlay showing inventors, filing date, claims count, jurisdiction, and status using shadcn/ui Dialog and Tailwind CSS.
+   Source: original/blocks/kanban/kanban-patent-tracker.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-4xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        @* Header *@
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideIconCn Name="shield" Size="16" Class="size-4 text-muted-foreground" />
+                <span class="font-medium text-sm">Patent Portfolio</span>
+                <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                    @_patents.Length patents
+                </BadgeCn>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                    @_patents.Count(p => p.Stage == "granted") granted
+                </span>
+                <span class="text-muted-foreground text-xs">·</span>
+                <span class="text-muted-foreground text-xs">
+                    @_patents.Sum(p => p.ClaimsCount) total claims
+                </span>
+            </div>
+        </div>
+
+        @* Columns *@
+        <div class="grid grid-cols-4 divide-x">
+            @foreach (var col in _columns)
+            {
+                var colStage = col.Stage;
+                var colPatents = _patents.Where(p => p.Stage == colStage).ToArray();
+                <div>
+                    <div class="flex items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", _stageDot.TryGetValue(colStage, out var dot) ? dot : "")"></span>
+                        <span class="font-medium text-muted-foreground text-xs">@col.Label</span>
+                        <span class="text-muted-foreground/60 text-xs">@colPatents.Length</span>
+                    </div>
+                    <div>
+                        @for (int i = 0; i < colPatents.Length; i++)
+                        {
+                            var patent = colPatents[i];
+                            var isLast = i == colPatents.Length - 1;
+                            <div class="@(isLast ? "" : "border-b")">
+                                <button
+                                    type="button"
+                                    @onclick="@(() => _selectedId = patent.Id)"
+                                    class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate font-medium text-sm">@patent.Title</span>
+                                        <span class="block text-muted-foreground text-xs">
+                                            @patent.Jurisdiction@(patent.ClaimsCount > 0 ? $" · {patent.ClaimsCount} claims" : "")
+                                        </span>
+                                    </span>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* Footer *@
+        <div class="flex items-center justify-between border-t px-4 py-2.5">
+            <span class="text-muted-foreground text-xs">
+                @_patents.Count(p => p.Stage == "examination") in examination
+            </span>
+            <span class="text-muted-foreground/60 text-xs">Updated 1 hour ago</span>
+        </div>
+    </div>
+
+    @* Dialog *@
+    <DialogCn Open="@(_selectedId != null)" OpenChanged="@((bool v) => { if (!v) _selectedId = null; })">
+        <DialogContentCn Class="max-w-md p-0">
+            @{
+                var selected = _patents.FirstOrDefault(p => p.Id == _selectedId);
+            }
+            @if (selected != null)
+            {
+                <DialogHeaderCn Class="border-b px-4 py-3">
+                    <DialogTitleCn Class="font-medium text-sm">@selected.Title</DialogTitleCn>
+                    <DialogDescriptionCn Class="flex items-center gap-2 text-xs">
+                        <LucideIconCn Name="scale" Size="12" Class="size-3" />
+                        @selected.Assignee
+                    </DialogDescriptionCn>
+                </DialogHeaderCn>
+
+                <div class="border-b px-4 py-3">
+                    <div class="flex items-center gap-2">
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                            @selected.Jurisdiction
+                        </BadgeCn>
+                        <BadgeCn Variant="BadgeVariant.Secondary" Class="font-normal text-xs">
+                            @selected.TechnologyArea
+                        </BadgeCn>
+                    </div>
+                    <div class="mt-1.5 flex items-center gap-2">
+                        <span class="@Cn.Merge("size-1.5 rounded-full", _stageDot.TryGetValue(selected.Stage, out var selDot) ? selDot : "")"></span>
+                        <span class="text-muted-foreground text-xs capitalize">@selected.Stage</span>
+                    </div>
+                </div>
+
+                <div class="border-b px-4 py-3">
+                    <div class="space-y-2.5">
+                        <div class="flex items-center gap-2 text-xs">
+                            <LucideIconCn Name="users" Size="14" Class="size-3.5 text-muted-foreground" />
+                            <span class="text-muted-foreground">Inventors</span>
+                            <span class="ml-auto text-right font-medium">@string.Join(", ", selected.Inventors)</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(selected.FilingDate))
+                        {
+                            <div class="flex items-center gap-2 text-xs">
+                                <LucideIconCn Name="calendar" Size="14" Class="size-3.5 text-muted-foreground" />
+                                <span class="text-muted-foreground">Filed</span>
+                                <span class="ml-auto font-medium">@selected.FilingDate</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(selected.PatentNumber))
+                        {
+                            <div class="flex items-center gap-2 text-xs">
+                                <LucideIconCn Name="hash" Size="14" Class="size-3.5 text-muted-foreground" />
+                                <span class="text-muted-foreground">Patent number</span>
+                                <span class="ml-auto font-mono font-medium">@selected.PatentNumber</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(selected.ApplicationNumber))
+                        {
+                            <div class="flex items-center gap-2 text-xs">
+                                <LucideIconCn Name="file-text" Size="14" Class="size-3.5 text-muted-foreground" />
+                                <span class="text-muted-foreground">Application</span>
+                                <span class="ml-auto font-mono font-medium">@selected.ApplicationNumber</span>
+                            </div>
+                        }
+                        @if (selected.ClaimsCount > 0)
+                        {
+                            <div class="flex items-center gap-2 text-xs">
+                                <LucideIconCn Name="file-text" Size="14" Class="size-3.5 text-muted-foreground" />
+                                <span class="text-muted-foreground">Claims</span>
+                                <span class="ml-auto font-medium tabular-nums">@selected.ClaimsCount</span>
+                            </div>
+                        }
+                        <div class="flex items-center gap-2 text-xs">
+                            <LucideIconCn Name="globe" Size="14" Class="size-3.5 text-muted-foreground" />
+                            <span class="text-muted-foreground">Jurisdiction</span>
+                            <span class="ml-auto font-medium">@selected.Jurisdiction</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-b px-4 py-3">
+                    <span class="font-medium text-muted-foreground text-xs">Status</span>
+                    <p class="mt-1.5 text-muted-foreground text-sm leading-relaxed">
+                        @selected.StatusNotes
+                    </p>
+                </div>
+
+                <div class="flex gap-2 px-4 py-3">
+                    <ButtonCn Variant="ButtonVariant.Outline" Size="ButtonSize.Sm" Class="h-7 text-xs">
+                        Edit patent
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="h-7 text-muted-foreground text-xs">
+                        Move stage
+                    </ButtonCn>
+                    <ButtonCn Variant="ButtonVariant.Ghost" Size="ButtonSize.Sm" Class="ml-auto h-7 text-muted-foreground text-xs">
+                        Archive
+                    </ButtonCn>
+                </div>
+            }
+        </DialogContentCn>
+    </DialogCn>
+</section>
+
+@code {
+    private string? _selectedId;
+
+    private record Patent(
+        string Id,
+        string Title,
+        string[] Inventors,
+        string Stage,
+        string FilingDate,
+        string? PatentNumber,
+        string ApplicationNumber,
+        int ClaimsCount,
+        string Jurisdiction,
+        string StatusNotes,
+        string Assignee,
+        string TechnologyArea
+    );
+
+    private record Column(string Stage, string Label);
+
+    private static readonly Dictionary<string, string> _stageDot = new()
+    {
+        ["invention"]   = "bg-blue-500",
+        ["filing"]      = "bg-amber-500",
+        ["examination"] = "bg-purple-500",
+        ["granted"]     = "bg-emerald-500",
+    };
+
+    private static readonly Column[] _columns =
+    [
+        new("invention",   "Invention"),
+        new("filing",      "Filing"),
+        new("examination", "Examination"),
+        new("granted",     "Granted"),
+    ];
+
+    private static readonly Patent[] _patents =
+    [
+        new("pt1", "Adaptive Neural Network Compression for Edge Devices",
+            ["Dr. Elena Vasquez", "Dr. James Wu"],
+            "invention", "", null, "", 0, "US",
+            "Invention disclosure submitted Mar 15. Prior art search in progress. Novelty assessment meeting scheduled for Apr 10.",
+            "Meridian Technologies Inc.", "Machine Learning"),
+        new("pt2", "Self-Healing Polymer Composite for Structural Repairs",
+            ["Dr. Kenji Tanaka", "Dr. Sofia Reyes", "Dr. Marcus Chen"],
+            "invention", "", null, "", 0, "US",
+            "Lab results documented. Material properties exceed target thresholds. Patent committee review on Apr 22. Need to finalize claim scope.",
+            "Vertex Materials Corp.", "Materials Science"),
+        new("pt3", "Blockchain-Based Supply Chain Provenance Verification",
+            ["Dr. Amara Okafor", "Ryan Cho"],
+            "filing", "Mar 1", null, "US 18/542,891", 24, "US",
+            "Provisional application filed Mar 1. 12-month window to file non-provisional. International filing strategy under review for EU and Japan.",
+            "ChainTrust Systems LLC", "Blockchain"),
+        new("pt4", "Low-Latency Audio Codec for Real-Time Communication",
+            ["Dr. David Park"],
+            "filing", "Feb 14", null, "US 18/538,204", 18, "US",
+            "Non-provisional filed Feb 14. PCT application prepared for international coverage. Claims drafted with broad independent claims and narrow dependents.",
+            "Stratos Audio Inc.", "Signal Processing"),
+        new("pt5", "Photovoltaic Cell with Perovskite-Silicon Tandem Architecture",
+            ["Dr. Priya Sharma", "Dr. Omar Hassan", "Dr. Rachel Kim"],
+            "examination", "Sep 12", null, "US 18/421,567", 31, "US",
+            "First office action received Mar 20. Examiner cited 3 prior art references. Response due Jun 20. Claims 1-5 rejected, claims 6-31 allowed.",
+            "Horizon Energy Technologies", "Renewable Energy"),
+        new("pt6", "Autonomous Vehicle Pedestrian Prediction Algorithm",
+            ["Dr. Liam Chen", "Dr. Nina Okafor"],
+            "examination", "Jul 8", null, "EP 23184521.3", 22, "EU",
+            "EPO extended search report received. Positive novelty assessment. Examiner requested clarification on claims 12-15 regarding sensor fusion methodology.",
+            "Apex Autonomous Systems", "Computer Vision"),
+        new("pt7", "CRISPR-Based Diagnostic Assay for Respiratory Pathogens",
+            ["Dr. Amara Okafor", "Dr. Elena Vasquez"],
+            "examination", "May 22", null, "JP 2024-089123", 16, "JP",
+            "JPO examination requested. Awaiting first office action. Translation review completed. Expected response timeline 8-12 months.",
+            "BioDetect Diagnostics", "Biotechnology"),
+        new("pt8", "Distributed Ledger Consensus Protocol with Byzantine Fault Tolerance",
+            ["Ryan Cho", "Dr. James Wu"],
+            "granted", "Jan 15", "US 11,892,341", "US 18/312,456", 28, "US",
+            "Granted Mar 5. All 28 claims allowed. First maintenance fee due Jan 2028. Licensing discussions initiated with three potential partners.",
+            "ChainTrust Systems LLC", "Distributed Systems"),
+        new("pt9", "Wearable Biosensor Array for Continuous Glucose Monitoring",
+            ["Dr. David Park", "Dr. Sofia Reyes"],
+            "granted", "Nov 3", "US 11,845,672", "US 18/289,103", 35, "US",
+            "Granted Feb 18. Broadest claims cover any flexible substrate biosensor array with wireless transmission. PCT national phase entries filed in EU, JP, KR.",
+            "Meridian Technologies Inc.", "Medical Devices"),
+        new("pt10", "Quantum-Resistant Encryption Key Exchange Protocol",
+            ["Dr. Priya Sharma"],
+            "granted", "Aug 20", "EP 4,123,456", "EP 22189012.5", 19, "EU",
+            "Granted by EPO Jan 30. Validated in DE, FR, NL, SE. Annual renewal fees current through 2026. Cross-license agreement signed with Quantum Shield Corp.",
+            "Stratos Audio Inc.", "Cryptography"),
+    ];
+}

@@ -1,0 +1,146 @@
+@* ============================================================
+   Block: calendar-production-schedule
+   Title: CalendarProductionSchedule
+   Description: A production line schedule calendar block for Next.js with shift tracking, machine allocation, output targets, and downtime management using shadcn/ui and Tailwind CSS
+   Source: original/blocks/calendar/calendar-production-schedule.tsx
+   ============================================================ *@
+
+<section class="mx-auto w-full max-w-2xl p-4">
+    <div class="overflow-hidden rounded-lg border bg-card">
+        <div class="flex items-center justify-between border-b px-4 py-3">
+            <div class="flex items-center gap-2">
+                <LucideFactoryCn Size="16" class="size-4 text-muted-foreground" />
+                <div>
+                    <span class="font-medium text-sm">Production Schedule</span>
+                    <p class="text-muted-foreground text-xs">Tuesday, Mar 24, 2026</p>
+                </div>
+            </div>
+            <span class="text-muted-foreground text-xs tabular-nums">@_running lines active</span>
+        </div>
+
+        @* Summary *@
+        <div class="flex items-center gap-6 border-b px-4 py-3">
+            <div>
+                <span class="text-muted-foreground text-xs">Output</span>
+                <p class="font-semibold text-2xl tabular-nums">@_totalActual.ToString("N0")</p>
+            </div>
+            <div>
+                <span class="text-muted-foreground text-xs">Target</span>
+                <p class="text-muted-foreground text-sm tabular-nums">@_totalTarget.ToString("N0")</p>
+            </div>
+            <div>
+                <span class="text-muted-foreground text-xs">Efficiency</span>
+                <p class="text-sm tabular-nums">@(_totalTarget > 0 ? (int)Math.Round((double)_totalActual / _totalTarget * 100) : 0)%</p>
+            </div>
+        </div>
+
+        <div>
+            @for (var li = 0; li < _lines.Length; li++)
+            {
+                var lineIndex = li;
+                var line = _lines[lineIndex];
+                var isExpanded = _expanded == line.Id;
+                var config = _statusConfig[line.Status];
+                var pct = line.Target > 0 ? (int)Math.Round((double)line.Actual / line.Target * 100) : 0;
+
+                <div class="@(lineIndex < _lines.Length - 1 ? "border-b" : "")">
+                    <button
+                        type="button"
+                        @onclick="@(() => _expanded = isExpanded ? "" : line.Id)"
+                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+                        <span class="@Cn.Merge("size-2 shrink-0 rounded-full", config.Dot)"></span>
+                        <div class="min-w-0 flex-1">
+                            <span class="font-medium text-sm">@line.Name</span>
+                            <div class="mt-0.5 flex items-center gap-2 text-muted-foreground text-xs">
+                                <span>@line.Product</span>
+                                @if (line.Status == "running")
+                                {
+                                    <span class="flex items-center gap-1 tabular-nums">
+                                        <LucideGaugeCn Size="12" class="size-3" />
+                                        @pct%
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        <BadgeCn Variant="BadgeVariant.Secondary" class="shrink-0 font-normal text-[10px]">@config.Label</BadgeCn>
+                        <LucideChevronRightCn Size="16" class="@Cn.Merge("size-4 shrink-0 text-muted-foreground/60 transition-transform duration-200", isExpanded ? "rotate-90" : "")" />
+                    </button>
+
+                    @if (isExpanded)
+                    {
+                        <div class="border-t px-4 pb-3 pt-2">
+                            @if (line.Status == "running")
+                            {
+                                <div class="mb-2">
+                                    <div class="mb-1 flex justify-between text-xs">
+                                        <span class="text-muted-foreground">Progress</span>
+                                        <span class="tabular-nums">@line.Actual.ToString("N0") / @line.Target.ToString("N0")</span>
+                                    </div>
+                                    <div class="h-1.5 rounded-full bg-muted">
+                                        <div
+                                            class="h-1.5 rounded-full bg-emerald-500 transition-all"
+                                            style="@($"width:{Math.Min(pct, 100)}%")" />
+                                    </div>
+                                </div>
+                            }
+                            <div class="flex flex-col gap-1.5 text-muted-foreground text-xs">
+                                <span>
+                                    <span class="font-medium text-foreground">Shift:</span> @line.Shift
+                                </span>
+                                <span>
+                                    <span class="font-medium text-foreground">Supervisor:</span> @line.Supervisor
+                                </span>
+                            </div>
+                            @if (line.Status == "maintenance")
+                            {
+                                <div class="mt-2 flex items-center gap-1.5 text-muted-foreground text-xs">
+                                    <LucideWrenchCn Size="12" class="size-3" />
+                                    Scheduled maintenance
+                                </div>
+                            }
+                            <p class="mt-2 text-muted-foreground text-xs italic">@line.Notes</p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="flex items-center gap-4 border-t bg-muted/20 px-4 py-2">
+            @foreach (var kvp in _statusConfig)
+            {
+                <span class="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="@Cn.Merge("size-1.5 rounded-full", kvp.Value.Dot)"></span>
+                    @kvp.Value.Label
+                </span>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private record ProductionLine(string Id, string Name, string Product, string Shift, string Supervisor, string Status, int Target, int Actual, string StartTime, string EndTime, string Notes);
+    private record StatusConfig(string Dot, string Label);
+
+    private static readonly Dictionary<string, StatusConfig> _statusConfig = new()
+    {
+        ["running"] = new("bg-emerald-500", "Running"),
+        ["changeover"] = new("bg-amber-500", "Changeover"),
+        ["maintenance"] = new("bg-red-500", "Maintenance"),
+        ["idle"] = new("bg-zinc-400", "Idle"),
+    };
+
+    private static readonly ProductionLine[] _lines =
+    [
+        new("1", "Line A — Assembly", "Widget Pro X200", "Day Shift (6:00 AM - 2:00 PM)", "Maria Santos", "running", 1200, 847, "6:00 AM", "2:00 PM", "On track. New batch of raw materials arrived at 5:30 AM."),
+        new("2", "Line B — Packaging", "Widget Pro X200", "Day Shift (6:00 AM - 2:00 PM)", "James Wright", "running", 1000, 612, "6:00 AM", "2:00 PM", "Slightly behind due to label printer jam at 8:15 AM. Resolved."),
+        new("3", "Line C — Assembly", "Gadget Lite M100", "Day Shift (6:00 AM - 2:00 PM)", "Chen Wei", "changeover", 800, 0, "7:30 AM", "2:00 PM", "Product changeover in progress. Expected start at 7:30 AM. Tooling swap for M100."),
+        new("4", "Line D — Quality Control", "Widget Pro X200", "Day Shift (6:00 AM - 2:00 PM)", "Olga Petrov", "running", 1200, 1043, "6:00 AM", "2:00 PM", "Inspection pass rate at 98.2%. Two units flagged for cosmetic defects."),
+        new("5", "Line E — CNC Machining", "Custom Part #4472", "Night Shift (10:00 PM - 6:00 AM)", "Robert Kim", "maintenance", 0, 0, "10:00 PM", "6:00 AM", "Scheduled preventive maintenance. Spindle bearing replacement and calibration."),
+    ];
+
+    private int _running => _lines.Count(l => l.Status == "running");
+    private int _totalTarget => _lines.Where(l => l.Status == "running").Sum(l => l.Target);
+    private int _totalActual => _lines.Where(l => l.Status == "running").Sum(l => l.Actual);
+
+    private string _expanded = "1";
+}
