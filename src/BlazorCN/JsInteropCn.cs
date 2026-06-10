@@ -180,6 +180,24 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         await module.InvokeVoidAsync("destroyScrollArea", id);
     }
 
+    /// <summary>
+    /// Wires pointer-drag resizing to a resizable-panel-group element.
+    /// </summary>
+    public async ValueTask InitResizableAsync(ElementReference group, string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("initResizable", group, id);
+    }
+
+    /// <summary>
+    /// Tears down resizable drag listeners for the given ID.
+    /// </summary>
+    public async ValueTask DestroyResizableAsync(string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("destroyResizable", id);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

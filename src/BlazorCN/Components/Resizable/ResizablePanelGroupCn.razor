@@ -1,7 +1,9 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IAsyncDisposable
 
-<div class="@Cn.Merge(DefaultClasses, Class)"
+<div @ref="_groupRef"
+     class="@Cn.Merge(DefaultClasses, Class)"
      style="@Style"
      data-slot="resizable-panel-group"
      data-direction="@DirectionString"
@@ -14,10 +16,41 @@
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public ResizableDirection Direction { get; set; } = ResizableDirection.Horizontal;
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _groupRef;
+    private readonly string _id = $"resizable-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
 
     internal string DirectionString => Direction == ResizableDirection.Vertical ? "vertical" : "horizontal";
 
     private string DefaultClasses => Direction == ResizableDirection.Vertical
         ? "flex h-full w-full flex-col"
         : "flex h-full w-full";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInitialized)
+        {
+            _jsInitialized = true;
+            try
+            {
+                await JsInterop.InitResizableAsync(_groupRef, _id);
+            }
+            catch
+            {
+                _jsInitialized = false;
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.DestroyResizableAsync(_id); }
+            catch { /* circuit may be gone */ }
+            _jsInitialized = false;
+        }
+    }
 }

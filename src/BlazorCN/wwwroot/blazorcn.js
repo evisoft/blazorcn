@@ -621,6 +621,89 @@ export function destroyScrollArea(id) {
     }
 }
 
+// --- Resizable Panels ---
+
+/** @type {Map<string, AbortController>} */
+const resizableMap = new Map();
+
+/**
+ * Wires pointer-drag resizing to a resizable-panel-group. On handle drag, the panel
+ * immediately before and after the handle have their flex-grow adjusted so the total
+ * is preserved (the rest of the group stays fixed). Direction is read from the group's
+ * data-direction attribute (horizontal => width drag, vertical => height drag).
+ * @param {HTMLElement} group - the [data-slot="resizable-panel-group"] element
+ * @param {string} id - unique ID for cleanup
+ */
+export function initResizable(group, id) {
+    if (!group) return;
+    destroyResizable(id);
+
+    const controller = new AbortController();
+    resizableMap.set(id, controller);
+
+    const vertical = group.getAttribute('data-direction') === 'vertical';
+    // Only direct-child handles belong to THIS group (nested groups manage their own).
+    const handles = [...group.children].filter(
+        (c) => c.getAttribute && c.getAttribute('data-slot') === 'resizable-handle');
+
+    for (const handle of handles) {
+        handle.addEventListener('pointerdown', (e) => {
+            const prev = handle.previousElementSibling;
+            const next = handle.nextElementSibling;
+            if (!prev || !next) return;
+
+            e.preventDefault();
+            handle.setPointerCapture(e.pointerId);
+            handle.setAttribute('data-resize-handle-active', '');
+
+            const startPos = vertical ? e.clientY : e.clientX;
+            const prevRect = prev.getBoundingClientRect();
+            const nextRect = next.getBoundingClientRect();
+            const prevSize = vertical ? prevRect.height : prevRect.width;
+            const nextSize = vertical ? nextRect.height : nextRect.width;
+            const totalSize = prevSize + nextSize;
+
+            // Preserve the combined flex-grow across the two panels so siblings don't shift.
+            const prevGrow = parseFloat(getComputedStyle(prev).flexGrow) || 1;
+            const nextGrow = parseFloat(getComputedStyle(next).flexGrow) || 1;
+            const totalGrow = prevGrow + nextGrow;
+
+            const onMove = (ev) => {
+                const delta = (vertical ? ev.clientY : ev.clientX) - startPos;
+                let newPrev = prevSize + delta;
+                newPrev = Math.max(0, Math.min(newPrev, totalSize));
+                const prevRatio = totalSize > 0 ? newPrev / totalSize : 0.5;
+                prev.style.flexGrow = `${totalGrow * prevRatio}`;
+                next.style.flexGrow = `${totalGrow * (1 - prevRatio)}`;
+                prev.style.flexBasis = '0%';
+                next.style.flexBasis = '0%';
+            };
+            const onUp = (ev) => {
+                handle.releasePointerCapture(ev.pointerId);
+                handle.removeAttribute('data-resize-handle-active');
+                handle.removeEventListener('pointermove', onMove);
+                handle.removeEventListener('pointerup', onUp);
+                handle.removeEventListener('pointercancel', onUp);
+            };
+            handle.addEventListener('pointermove', onMove);
+            handle.addEventListener('pointerup', onUp);
+            handle.addEventListener('pointercancel', onUp);
+        }, { signal: controller.signal });
+    }
+}
+
+/**
+ * Tears down resizable drag listeners for a given ID.
+ * @param {string} id
+ */
+export function destroyResizable(id) {
+    const controller = resizableMap.get(id);
+    if (controller) {
+        controller.abort();
+        resizableMap.delete(id);
+    }
+}
+
 // --- Utilities ---
 
 /**
