@@ -22,6 +22,7 @@ A production-ready **Blazor component library that replicates [shadcn/ui](https:
 - [Render modes & AOT](#render-modes--aot)
 - [Project structure](#project-structure)
 - [Development](#development)
+- [AI coding skill (Claude Code)](#ai-coding-skill-claude-code)
 - [License](#license)
 
 ---
@@ -304,6 +305,74 @@ cd docs/BlazorCN.Demo
 npm install && npm run dev:css                 # Tailwind watch (separate terminal)
 dotnet run                                     # serves the component gallery
 ```
+
+---
+
+## AI coding skill (Claude Code)
+
+This repo ships an **Agent Skill** at [`skills/blazorcn/`](skills/blazorcn) that teaches AI
+assistants (Claude Code, and any agent that reads skill markdown) to write **correct** BlazorCN —
+component composition, `@bind-Value`/`@bind-Open`/`@bind-Checked`, variants/enums, Lucide icons,
+Tailwind setup, CSS‑variable theming, and porting shadcn React snippets to Blazor. It auto‑activates
+when you work on Blazor/Razor code that uses BlazorCN (no need to invoke it manually). In an internal
+benchmark it took model‑written BlazorCN from ~67% to ~99% rule‑correct.
+
+> Install it in **your consuming app** (or globally), not in this library repo. Pick one method.
+
+### Option A — install as a Claude Code plugin (recommended)
+
+The repo doubles as a single‑plugin marketplace (`.claude-plugin/`). In Claude Code:
+
+```text
+/plugin marketplace add evisoft/blazorcn
+/plugin install blazorcn@blazorcn
+```
+
+Already cloned the repo? Point the marketplace at your local checkout instead of GitHub:
+
+```text
+/plugin marketplace add C:\path\to\blazorcn      # or:  /plugin marketplace add ./
+/plugin install blazorcn@blazorcn
+```
+
+The skill activates automatically; enable it if Claude Code prompts you. Update later with
+`/plugin marketplace update blazorcn`.
+
+### Option B — install manually (any agent, no plugin system)
+
+Copy (or symlink) the skill folder into a Claude **skills** directory — `~/.claude/skills/` for all
+projects, or `<your-app>/.claude/skills/` for one project. Run these from a clone of this repo:
+
+```powershell
+# Windows PowerShell — personal scope (all projects)
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills" | Out-Null
+Copy-Item -Recurse -Force .\skills\blazorcn "$env:USERPROFILE\.claude\skills\blazorcn"
+```
+
+```bash
+# macOS / Linux — personal scope (all projects)
+mkdir -p ~/.claude/skills
+cp -r skills/blazorcn ~/.claude/skills/blazorcn
+```
+
+For **project scope**, replace the destination with `<your-app>/.claude/skills/blazorcn`. To stay in
+sync with the repo, symlink instead of copying:
+
+```bash
+ln -s "$(pwd)/skills/blazorcn" ~/.claude/skills/blazorcn          # macOS/Linux
+```
+```powershell
+New-Item -ItemType SymbolicLink -Path "$env:USERPROFILE\.claude\skills\blazorcn" `
+  -Target (Resolve-Path .\skills\blazorcn)                        # Windows (Dev Mode/admin)
+```
+
+### Other agents (Copilot CLI, Codex, Gemini)
+
+The skill is plain markdown. Drop `skills/blazorcn/` where your agent discovers skills, or point it at
+[`skills/blazorcn/SKILL.md`](skills/blazorcn/SKILL.md) as context — the body links the detailed
+references (`setup.md`, `customization.md`, `components.md`, `rules/*.md`) via progressive disclosure.
+
+> Keep the skill in sync with the BlazorCN package version you consume — it documents the API exactly.
 
 ---
 
