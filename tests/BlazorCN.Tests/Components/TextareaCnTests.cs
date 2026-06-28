@@ -63,4 +63,17 @@ public class TextareaCnTests : BunitContext
         textarea.GetAttribute("data-testid").Should().Be("ta-1");
         textarea.GetAttribute("rows").Should().Be("5");
     }
+
+    // Value must bind to the `value` attribute (which Blazor applies as the .value property), NOT child
+    // content. Child content only sets the textarea's DEFAULT value, which the HTML dirty-value flag ignores
+    // once the user types — so a programmatic reset (clearing a chat composer after send) would silently fail
+    // to clear. Binding `value` is what makes the reset reflect to the DOM.
+    [Fact]
+    public void Value_Binds_To_Value_Attribute_Not_Child_Content()
+    {
+        var cut = Render<TextareaCn>(p => p.Add(c => c.Value, "typed text"));
+
+        cut.Find("textarea").GetAttribute("value").Should().Be("typed text");
+        cut.Markup.Should().NotContain(">typed text</textarea>");
+    }
 }
