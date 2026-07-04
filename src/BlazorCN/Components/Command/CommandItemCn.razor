@@ -1,7 +1,12 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IDisposable
 
-<div class="@Cn.Merge("cn-command-item data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50", Class)"
+@* Visibility uses the `hidden` utility class (not the hidden attribute): the
+   cn-command-item rule sets display, and any author display beats the UA's
+   [hidden] { display:none }. *@
+<div @ref="_itemRef"
+     class="@Cn.Merge("cn-command-item data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50", IsVisible ? null : "hidden", Class)"
      style="@Style"
      data-slot="command-item"
      data-menu-item
@@ -21,8 +26,41 @@
     [Parameter] public string? Value { get; set; }
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public EventCallback OnSelect { get; set; }
+    [CascadingParameter] public CommandCn? Command { get; set; }
+    [CascadingParameter] public CommandGroupCn? Group { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
 
+    private ElementReference _itemRef;
     private bool _selected;
+    private string? _resolvedText;
+
+    /// <summary>Text the item is matched against: explicit Value, else its rendered text (cmdk behavior).</summary>
+    private string FilterText => Value ?? _resolvedText ?? string.Empty;
+
+    /// <summary>Whether the item matches the current Command search filter.</summary>
+    internal bool IsVisible =>
+        Command is null
+        || Command.Search.Length == 0
+        || FilterText.Contains(Command.Search, StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        Command?.RegisterItem(this);
+        Group?.RegisterItem(this);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Value is null && Command is not null)
+        {
+            try
+            {
+                _resolvedText = await JsInterop.GetTextContentAsync(_itemRef);
+                Command.NotifyItemTextResolved();
+            }
+            catch { /* Prerendering without JS — falls back to always-visible */ }
+        }
+    }
 
     private void HandleMouseEnter() => _selected = true;
 
@@ -31,5 +69,11 @@
     private async Task HandleClick()
     {
         if (!Disabled) await OnSelect.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        Command?.UnregisterItem(this);
+        Group?.UnregisterItem(this);
     }
 }

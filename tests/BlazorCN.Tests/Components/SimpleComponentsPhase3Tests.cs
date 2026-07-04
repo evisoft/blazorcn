@@ -178,10 +178,11 @@ public class SimpleComponentsPhase3Tests : BunitContext
     }
 
     [Fact]
-    public void BreadcrumbSeparator_Shows_Default_Slash()
+    public void BreadcrumbSeparator_Shows_Default_Chevron()
     {
+        // Reference default separator is a ChevronRight icon (rtl-flipped), not a "/" glyph.
         var cut = Render<BreadcrumbSeparatorCn>();
-        cut.Find("[data-slot='breadcrumb-separator']").TextContent.Should().Contain("/");
+        cut.Find("[data-slot='breadcrumb-separator'] svg").Should().NotBeNull();
     }
 
     [Fact]

@@ -120,9 +120,10 @@ public class AvatarCnTests : BunitContext
         el.ClassList.Should().Contain("absolute");
         el.ClassList.Should().Contain("bottom-0");
         el.ClassList.Should().Contain("right-0");
-        el.ClassList.Should().Contain("size-2.5");
         el.ClassList.Should().Contain("rounded-full");
-        el.ClassList.Should().Contain("border-2");
+        // Size is now driven by the parent avatar's data-size group variants; the ring
+        // (formerly border-2) lives in the cn-avatar-badge CSS class.
+        el.ClassList.Should().Contain("group-data-[size=default]/avatar:size-2.5");
     }
 
     [Fact]
@@ -188,8 +189,9 @@ public class AvatarCnTests : BunitContext
         el.ClassList.Should().Contain("shrink-0");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-center");
-        el.ClassList.Should().Contain("border-2");
-        el.ClassList.Should().Contain("border-background");
+        // Reference now uses a ring instead of a border.
+        el.ClassList.Should().Contain("ring-2");
+        el.ClassList.Should().Contain("ring-background");
     }
 
     [Fact]

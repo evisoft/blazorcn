@@ -20,6 +20,7 @@ internal sealed class KeyboardNavJsOptions
 {
     [JsonPropertyName("selector")] public string Selector { get; init; } = "[data-menu-item]";
     [JsonPropertyName("orientation")] public string Orientation { get; init; } = "vertical";
+    [JsonPropertyName("autoFocus")] public bool AutoFocus { get; init; } = true;
 }
 
 /// <summary>
@@ -153,12 +154,42 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
     }
 
     /// <summary>
+    /// Sets up arrow-key navigation for a persistent widget (e.g. a tabs list) that
+    /// has no Escape callback and must not steal focus on mount.
+    /// </summary>
+    public async ValueTask SetupKeyboardNavigationAsync(
+        ElementReference container, string id,
+        string itemSelector = "[data-menu-item]",
+        string orientation = "vertical")
+    {
+        var module = await GetModuleAsync();
+        var jsOptions = new KeyboardNavJsOptions
+        {
+            Selector = itemSelector,
+            Orientation = orientation,
+            AutoFocus = false,
+        };
+        await module.InvokeVoidAsync(
+            "setupKeyboardNavigation", container, id, null, null, jsOptions);
+    }
+
+    /// <summary>
     /// Cleans up keyboard navigation for a given ID.
     /// </summary>
     public async ValueTask CleanupKeyboardNavigationAsync(string id)
     {
         var module = await GetModuleAsync();
         await module.InvokeVoidAsync("cleanupKeyboardNavigation", id);
+    }
+
+    /// <summary>
+    /// Returns an element's rendered text content (used to derive a command item's
+    /// filter text when no explicit value is supplied).
+    /// </summary>
+    public async ValueTask<string> GetTextContentAsync(ElementReference element)
+    {
+        var module = await GetModuleAsync();
+        return await module.InvokeAsync<string>("getTextContent", element);
     }
 
     /// <summary>

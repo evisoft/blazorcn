@@ -18,12 +18,10 @@ public class ChartCnTests : BunitContext
     [Fact]
     public void Chart_Has_Default_Classes()
     {
+        // Layout (flex/aspect-video/justify-center/text-xs) now lives in the cn-chart CSS class.
         var cut = Render<ChartCn>(p => p.AddChildContent("Chart content"));
         var el = cut.Find("[data-slot='chart']");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("aspect-video");
-        el.ClassList.Should().Contain("justify-center");
-        el.ClassList.Should().Contain("text-xs");
+        el.ClassList.Should().Contain("cn-chart");
     }
 
     [Fact]

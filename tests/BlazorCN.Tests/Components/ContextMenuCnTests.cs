@@ -156,7 +156,7 @@ public class ContextMenuCnTests : BunitContext
         var content = cut.Find("[data-slot='context-menu-content']");
         content.ClassList.Should().Contain("cn-context-menu-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("overflow-hidden");
+        content.ClassList.Should().Contain("overflow-y-auto");
     }
 
     [Fact]
@@ -424,10 +424,11 @@ public class ContextMenuCnTests : BunitContext
     }
 
     [Fact]
-    public void ContextMenuCheckboxItem_Has_Pl8()
+    public void ContextMenuCheckboxItem_Has_Nova_Item_Class()
     {
+        // Indicator padding (pr-8/pl-1.5) now comes from the cn-* nova CSS class, not a pl-8 utility.
         var cut = Render<ContextMenuCheckboxItemCn>(p => p.AddChildContent("Check me"));
-        cut.Find("[data-slot='context-menu-checkbox-item']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='context-menu-checkbox-item']").ClassList.Should().Contain("cn-context-menu-checkbox-item");
     }
 
     // --- ContextMenuRadioGroupCn ---
@@ -634,7 +635,7 @@ public class ContextMenuCnTests : BunitContext
         var content = cut.Find("[data-slot='context-menu-sub-content']");
         content.ClassList.Should().Contain("cn-context-menu-sub-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("overflow-hidden");
+        content.ClassList.Should().Contain("overflow-y-auto");
     }
 
     // --- ARIA ---

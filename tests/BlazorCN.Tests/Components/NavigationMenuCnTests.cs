@@ -200,7 +200,7 @@ public class NavigationMenuCnTests : BunitContext
         el.ClassList.Should().Contain("h-9");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-center");
-        el.ClassList.Should().Contain("outline-hidden");
+        el.ClassList.Should().Contain("outline-none");
     }
 
     [Fact]
@@ -351,10 +351,8 @@ public class NavigationMenuCnTests : BunitContext
             .Add(c => c.Href, "/about")
             .AddChildContent("About"));
         var el = cut.Find("[data-slot='navigation-menu-link']");
+        // Layout (flex/gap/padding/focus styles) now lives in the cn-navigation-menu-link CSS class.
         el.ClassList.Should().Contain("cn-navigation-menu-link");
-        el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("gap-1");
-        el.ClassList.Should().Contain("outline-hidden");
     }
 
     [Fact]
@@ -401,7 +399,7 @@ public class NavigationMenuCnTests : BunitContext
         var cut = Render<NavigationMenuIndicatorCn>(p => p.AddChildContent("Arrow"));
         var el = cut.Find("[data-slot='navigation-menu-indicator']");
         el.ClassList.Should().Contain("top-full");
-        el.ClassList.Should().Contain("z-10");
+        el.ClassList.Should().Contain("z-1");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("h-1.5");
         el.ClassList.Should().Contain("items-end");

@@ -109,7 +109,7 @@ public class SelectCnTests : BunitContext
         el.ClassList.Should().Contain("w-full");
         el.ClassList.Should().Contain("items-center");
         el.ClassList.Should().Contain("justify-between");
-        el.ClassList.Should().Contain("outline-hidden");
+        el.ClassList.Should().Contain("outline-none");
     }
 
     [Fact]
@@ -270,7 +270,7 @@ public class SelectCnTests : BunitContext
         var content = cut.Find("[data-slot='select-content']");
         content.ClassList.Should().Contain("cn-select-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("overflow-hidden");
+        content.ClassList.Should().Contain("overflow-y-auto");
         content.ClassList.Should().Contain("p-1");
     }
 

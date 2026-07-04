@@ -227,7 +227,7 @@ public class MenubarCnTests : BunitContext
         var content = cut.Find("[data-slot='menubar-content']");
         content.ClassList.Should().Contain("cn-menubar-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("overflow-hidden");
+        content.ClassList.Should().Contain("overflow-y-auto");
     }
 
     [Fact]
@@ -485,10 +485,11 @@ public class MenubarCnTests : BunitContext
     }
 
     [Fact]
-    public void MenubarCheckboxItem_Has_Pl8()
+    public void MenubarCheckboxItem_Has_Nova_Item_Class()
     {
+        // Indicator padding (pr-8/pl-1.5) now comes from the cn-* nova CSS class, not a pl-8 utility.
         var cut = Render<MenubarCheckboxItemCn>(p => p.AddChildContent("Check"));
-        cut.Find("[data-slot='menubar-checkbox-item']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='menubar-checkbox-item']").ClassList.Should().Contain("cn-menubar-checkbox-item");
     }
 
     // --- MenubarRadioGroupCn ---

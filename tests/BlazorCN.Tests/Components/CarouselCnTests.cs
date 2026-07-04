@@ -223,8 +223,9 @@ public class CarouselCnTests : BunitContext
         var cut = Render<CarouselCn>(p => p
             .AddChildContent<CarouselPreviousCn>());
         var btn = cut.Find("[data-slot='carousel-previous']");
+        // touch-manipulation now lives in the cn-carousel-previous CSS class.
+        btn.ClassList.Should().Contain("cn-carousel-previous");
         btn.ClassList.Should().Contain("absolute");
-        btn.ClassList.Should().Contain("touch-manipulation");
         btn.ClassList.Should().Contain("top-1/2");
         btn.ClassList.Should().Contain("-left-12");
         btn.ClassList.Should().Contain("-translate-y-1/2");
@@ -237,8 +238,9 @@ public class CarouselCnTests : BunitContext
             .Add(c => c.Orientation, CarouselOrientation.Vertical)
             .AddChildContent<CarouselPreviousCn>());
         var btn = cut.Find("[data-slot='carousel-previous']");
+        // touch-manipulation now lives in the cn-carousel-previous CSS class.
+        btn.ClassList.Should().Contain("cn-carousel-previous");
         btn.ClassList.Should().Contain("absolute");
-        btn.ClassList.Should().Contain("touch-manipulation");
         btn.ClassList.Should().Contain("-top-12");
         btn.ClassList.Should().Contain("left-1/2");
         btn.ClassList.Should().Contain("-translate-x-1/2");
@@ -286,8 +288,9 @@ public class CarouselCnTests : BunitContext
         var cut = Render<CarouselCn>(p => p
             .AddChildContent<CarouselNextCn>());
         var btn = cut.Find("[data-slot='carousel-next']");
+        // touch-manipulation now lives in the cn-carousel-next CSS class.
+        btn.ClassList.Should().Contain("cn-carousel-next");
         btn.ClassList.Should().Contain("absolute");
-        btn.ClassList.Should().Contain("touch-manipulation");
         btn.ClassList.Should().Contain("top-1/2");
     }
 

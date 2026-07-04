@@ -305,7 +305,7 @@ public class DrawerCnTests : BunitContext
         var cut = Render<DrawerHeaderCn>(p => p.AddChildContent("Header"));
         var el = cut.Find("[data-slot='drawer-header']");
         el.ClassList.Should().Contain("cn-drawer-header");
-        el.ClassList.Should().Contain("grid");
+        el.ClassList.Should().Contain("flex-col");
     }
 
     [Fact]

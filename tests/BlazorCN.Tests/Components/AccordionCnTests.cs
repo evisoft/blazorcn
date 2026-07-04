@@ -117,4 +117,66 @@ public class AccordionCnTests : BunitContext
         triggerId.Should().NotBeNullOrEmpty();
         content.GetAttribute("aria-labelledby").Should().Be(triggerId);
     }
+
+    [Fact]
+    public void SingleMode_Opening_Item_Closes_Others()
+    {
+        var cut = Render<AccordionCn>(p => p.AddChildContent(builder =>
+        {
+            builder.OpenComponent<AccordionItemCn>(0);
+            builder.AddAttribute(1, "DefaultOpen", true);
+            builder.AddAttribute(2, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b =>
+            {
+                b.OpenComponent<AccordionTriggerCn>(0);
+                b.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(t => t.AddContent(0, "One")));
+                b.CloseComponent();
+            }));
+            builder.CloseComponent();
+            builder.OpenComponent<AccordionItemCn>(3);
+            builder.AddAttribute(4, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b =>
+            {
+                b.OpenComponent<AccordionTriggerCn>(0);
+                b.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(t => t.AddContent(0, "Two")));
+                b.CloseComponent();
+            }));
+            builder.CloseComponent();
+        }));
+
+        cut.FindAll("[data-slot='accordion-trigger']")[1].Click();
+        var items = cut.FindAll("[data-slot='accordion-item']");
+        items[0].GetAttribute("data-state").Should().Be("closed");
+        items[1].GetAttribute("data-state").Should().Be("open");
+    }
+
+    [Fact]
+    public void MultipleMode_Keeps_Other_Items_Open()
+    {
+        var cut = Render<AccordionCn>(p => p
+            .Add(c => c.Multiple, true)
+            .AddChildContent(builder =>
+        {
+            builder.OpenComponent<AccordionItemCn>(0);
+            builder.AddAttribute(1, "DefaultOpen", true);
+            builder.AddAttribute(2, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b =>
+            {
+                b.OpenComponent<AccordionTriggerCn>(0);
+                b.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(t => t.AddContent(0, "One")));
+                b.CloseComponent();
+            }));
+            builder.CloseComponent();
+            builder.OpenComponent<AccordionItemCn>(3);
+            builder.AddAttribute(4, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b =>
+            {
+                b.OpenComponent<AccordionTriggerCn>(0);
+                b.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(t => t.AddContent(0, "Two")));
+                b.CloseComponent();
+            }));
+            builder.CloseComponent();
+        }));
+
+        cut.FindAll("[data-slot='accordion-trigger']")[1].Click();
+        var items = cut.FindAll("[data-slot='accordion-item']");
+        items[0].GetAttribute("data-state").Should().Be("open");
+        items[1].GetAttribute("data-state").Should().Be("open");
+    }
 }

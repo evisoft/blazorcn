@@ -8,7 +8,7 @@ public partial class ComboboxContentCn : IAsyncDisposable
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public FloatingSide Side { get; set; } = FloatingSide.Bottom;
     [Parameter] public int SideOffset { get; set; } = 4;
-    [Parameter] public FloatingAlign Align { get; set; } = FloatingAlign.Center;
+    [Parameter] public FloatingAlign Align { get; set; } = FloatingAlign.Start;
     [Parameter] public int AlignOffset { get; set; }
     [CascadingParameter] public ComboboxCn? Combobox { get; set; }
     [Inject] private JsInteropCn JsInterop { get; set; } = default!;

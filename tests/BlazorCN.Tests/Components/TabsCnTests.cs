@@ -1,12 +1,21 @@
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
 
 public class TabsCnTests : BunitContext
 {
+    public TabsCnTests()
+    {
+        // TabsListCn injects JsInteropCn (arrow-key navigation).
+        // Loose mode lets those interop calls no-op, and registering the service satisfies [Inject].
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     [Fact]
     public void Tabs_Renders_With_DataSlot()
     {
@@ -124,5 +133,41 @@ public class TabsCnTests : BunitContext
                     .AddChildContent("Tab 2"))));
         var trigger = cut.Find("[data-slot='tabs-trigger']");
         trigger.HasAttribute("disabled").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Roving_Tabindex_Only_Active_Trigger_Is_Focusable()
+    {
+        var cut = Render<TabsCn>(p => p
+            .Add(c => c.DefaultValue, "tab1")
+            .AddChildContent<TabsListCn>(list => list
+                .AddChildContent(builder =>
+                {
+                    builder.OpenComponent<TabsTriggerCn>(0);
+                    builder.AddAttribute(1, "Value", "tab1");
+                    builder.AddAttribute(2, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Tab 1")));
+                    builder.CloseComponent();
+                    builder.OpenComponent<TabsTriggerCn>(3);
+                    builder.AddAttribute(4, "Value", "tab2");
+                    builder.AddAttribute(5, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Tab 2")));
+                    builder.CloseComponent();
+                })));
+        var triggers = cut.FindAll("[data-slot='tabs-trigger']");
+        triggers[0].GetAttribute("tabindex").Should().Be("0");
+        triggers[1].GetAttribute("tabindex").Should().Be("-1");
+    }
+
+    [Fact]
+    public void Focusing_Trigger_Activates_It()
+    {
+        var cut = Render<TabsCn>(p => p
+            .Add(c => c.DefaultValue, "tab1")
+            .AddChildContent<TabsListCn>(list => list
+                .AddChildContent<TabsTriggerCn>(t => t
+                    .Add(c => c.Value, "tab2")
+                    .AddChildContent("Tab 2"))));
+        var trigger = cut.Find("[data-slot='tabs-trigger']");
+        trigger.Focus();
+        cut.Find("[data-slot='tabs-trigger']").GetAttribute("data-state").Should().Be("active");
     }
 }

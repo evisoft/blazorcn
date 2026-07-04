@@ -1,12 +1,21 @@
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
 
 public class CommandCnTests : BunitContext
 {
+    public CommandCnTests()
+    {
+        // CommandCn/CommandItemCn inject JsInteropCn (keyboard nav + filter-text capture).
+        // Loose mode lets those interop calls no-op, and registering the service satisfies [Inject].
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     // --- CommandCn ---
 
     [Fact]
@@ -481,5 +490,66 @@ public class CommandCnTests : BunitContext
         cut.FindAll("[data-slot='command-group']").Should().HaveCount(2);
         cut.Find("[data-slot='command-separator']").Should().NotBeNull();
         cut.FindAll("[data-slot='command-item']").Should().HaveCount(2);
+    }
+
+    // --- Filtering (cmdk behavior) ---
+
+    private IRenderedComponent<CommandCn> RenderFilterableCommand()
+    {
+        return Render<CommandCn>(p => p.AddChildContent(builder =>
+        {
+            builder.OpenComponent<CommandInputCn>(0);
+            builder.CloseComponent();
+            builder.OpenComponent<CommandEmptyCn>(1);
+            builder.AddAttribute(2, "ChildContent", (RenderFragment)(b => b.AddContent(0, "No results found.")));
+            builder.CloseComponent();
+            builder.OpenComponent<CommandGroupCn>(3);
+            builder.AddAttribute(4, "Heading", "Suggestions");
+            builder.AddAttribute(5, "ChildContent", (RenderFragment)(gb =>
+            {
+                gb.OpenComponent<CommandItemCn>(0);
+                gb.AddAttribute(1, "Value", "Calendar");
+                gb.AddAttribute(2, "ChildContent", (RenderFragment)(ib => ib.AddContent(0, "Calendar")));
+                gb.CloseComponent();
+                gb.OpenComponent<CommandItemCn>(3);
+                gb.AddAttribute(4, "Value", "Settings");
+                gb.AddAttribute(5, "ChildContent", (RenderFragment)(ib => ib.AddContent(0, "Settings")));
+                gb.CloseComponent();
+            }));
+            builder.CloseComponent();
+        }));
+    }
+
+    [Fact]
+    public void Command_Typing_Filters_NonMatching_Items()
+    {
+        var cut = RenderFilterableCommand();
+        cut.Find("[data-slot='command-input']").Input("cal");
+
+        cut.Find("[data-value='Calendar']").ClassList.Should().NotContain("hidden");
+        cut.Find("[data-value='Settings']").ClassList.Should().Contain("hidden");
+    }
+
+    [Fact]
+    public void Command_Clearing_Search_Restores_All_Items()
+    {
+        var cut = RenderFilterableCommand();
+        cut.Find("[data-slot='command-input']").Input("cal");
+        cut.Find("[data-slot='command-input']").Input("");
+
+        cut.Find("[data-value='Calendar']").ClassList.Should().NotContain("hidden");
+        cut.Find("[data-value='Settings']").ClassList.Should().NotContain("hidden");
+    }
+
+    [Fact]
+    public void Command_Empty_Hidden_Until_Search_Matches_Nothing()
+    {
+        var cut = RenderFilterableCommand();
+        cut.Find("[data-slot='command-empty']").ClassList.Should().Contain("hidden");
+
+        cut.Find("[data-slot='command-input']").Input("zzz");
+
+        cut.Find("[data-slot='command-empty']").ClassList.Should().NotContain("hidden");
+        cut.Find("[data-slot='command-group']").ClassList.Should().Contain("hidden");
     }
 }

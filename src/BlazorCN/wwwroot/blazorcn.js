@@ -189,22 +189,50 @@ export function destroyFloating(id) {
  */
 function computePosition(reference, floating, options) {
     const refRect = reference.getBoundingClientRect();
-    const rawFloatRect = floating.getBoundingClientRect();
-
-    // If the floating element is hidden (width/height = 0), use scrollWidth/scrollHeight as fallbacks
-    const floatRect = {
-        top: rawFloatRect.top,
-        left: rawFloatRect.left,
-        bottom: rawFloatRect.bottom,
-        right: rawFloatRect.right,
-        width: rawFloatRect.width === 0 ? floating.scrollWidth : rawFloatRect.width,
-        height: rawFloatRect.height === 0 ? floating.scrollHeight : rawFloatRect.height
-    };
 
     const viewportW = window.innerWidth;
     const viewportH = window.innerHeight;
 
     let { side, sideOffset, align, alignOffset } = options;
+
+    // Expose the reference (trigger) width so width-matching popovers (Select,
+    // DropdownMenu, Combobox) can size themselves via `w-(--anchor-width)`.
+    // Mirrors Base UI's `--anchor-width`; `--cn-trigger-width` kept for min-w
+    // consumers. MUST be set BEFORE measuring the floating rect, otherwise the
+    // position is computed for the natural width and goes stale once the width
+    // var kicks in (content appears shifted sideways on first open).
+    floating.style.setProperty('--cn-trigger-width', `${refRect.width}px`);
+    floating.style.setProperty('--anchor-width', `${refRect.width}px`);
+
+    // Available space between the anchor and the viewport edge on a given side
+    // (mirrors Base UI's --available-height/--available-width). Read by
+    // `max-h-(--available-height)` clamps so tall dropdowns scroll instead of
+    // overflowing the viewport. Set before measuring so the clamp is in effect.
+    const VIEWPORT_PAD = 10;
+    function setAvailableSpace(s) {
+        let availH, availW;
+        switch (s) {
+            case 'top': availH = refRect.top - sideOffset - VIEWPORT_PAD; availW = viewportW - 2 * VIEWPORT_PAD; break;
+            case 'left': availW = refRect.left - sideOffset - VIEWPORT_PAD; availH = viewportH - 2 * VIEWPORT_PAD; break;
+            case 'right': availW = viewportW - refRect.right - sideOffset - VIEWPORT_PAD; availH = viewportH - 2 * VIEWPORT_PAD; break;
+            case 'bottom':
+            default: availH = viewportH - refRect.bottom - sideOffset - VIEWPORT_PAD; availW = viewportW - 2 * VIEWPORT_PAD; break;
+        }
+        floating.style.setProperty('--available-height', `${Math.max(0, Math.round(availH))}px`);
+        floating.style.setProperty('--available-width', `${Math.max(0, Math.round(availW))}px`);
+    }
+    setAvailableSpace(side);
+
+    // Measure via offsetWidth/offsetHeight (layout size): getBoundingClientRect
+    // is skewed by the open animation's scale transform mid-flight, producing a
+    // few px of misposition. Falls back to scroll size if hidden.
+    function measure() {
+        return {
+            width: floating.offsetWidth || floating.scrollWidth,
+            height: floating.offsetHeight || floating.scrollHeight
+        };
+    }
+    let floatRect = measure();
 
     // Calculate position for a given side
     function calcForSide(s) {
@@ -235,16 +263,39 @@ function computePosition(reference, floating, options) {
     let pos = calcForSide(side);
     let actualSide = side;
 
-    // Auto-flip if overflowing viewport
+    // Auto-flip if overflowing viewport. Available-space clamps are re-applied
+    // and the element re-measured per candidate side, since the clamp changes
+    // the element's height.
     if (overflows(pos, floatRect, viewportW, viewportH)) {
         const opposite = getOppositeSide(side);
+        setAvailableSpace(opposite);
+        floatRect = measure();
         const altPos = calcForSide(opposite);
         if (!overflows(altPos, floatRect, viewportW, viewportH)) {
             pos = altPos;
             actualSide = opposite;
+        } else {
+            // Both overflow: keep original side; restore its clamp and position.
+            setAvailableSpace(side);
+            floatRect = measure();
+            pos = calcForSide(side);
         }
-        // If both overflow, keep original side
     }
+
+    // Anchor the open/close zoom animation to the trigger edge, mirroring
+    // Base UI's --transform-origin (read via `origin-(--transform-origin)`).
+    let originX, originY;
+    if (actualSide === 'top' || actualSide === 'bottom') {
+        originY = actualSide === 'top' ? 'bottom' : 'top';
+        originX = align === 'start' ? 'left' : align === 'end' ? 'right' : 'center';
+    } else {
+        originX = actualSide === 'left' ? 'right' : 'left';
+        originY = align === 'start' ? 'top' : align === 'end' ? 'bottom' : 'center';
+    }
+    floating.style.setProperty('--transform-origin', `${originX} ${originY}`);
+
+    // Viewport coordinates, kept for arrow math before the containing-block shift.
+    const viewportPos = { top: pos.top, left: pos.left };
 
     // CSS transforms (and other properties) create a new containing block for
     // fixed-positioned descendants. When that happens, position:fixed coordinates
@@ -263,14 +314,8 @@ function computePosition(reference, floating, options) {
     floating.style.margin = '0';
     floating.setAttribute('data-side', actualSide);
 
-    // Expose the reference (trigger) width so width-matching popovers (e.g. Select)
-    // can size themselves to the trigger via `min-w-[var(--cn-trigger-width)]`.
-    // Mirrors Radix's `--radix-select-trigger-width`. Recomputed on every reposition
-    // (scroll/resize) so it stays in sync. Harmless for floats that don't read it.
-    floating.style.setProperty('--cn-trigger-width', `${refRect.width}px`);
-
     // Position the arrow (tooltip) on the resolved side, centered on the reference.
-    positionArrow(floating, refRect, actualSide);
+    positionArrow(floating, refRect, actualSide, viewportPos);
 
     return actualSide;
 }
@@ -284,27 +329,30 @@ function computePosition(reference, floating, options) {
  * @param {HTMLElement} floating
  * @param {DOMRect} refRect - reference's viewport rect
  * @param {string} side - resolved side (top|bottom|left|right)
+ * @param {object} pos - floating element's viewport position ({top, left}),
+ *   used instead of getBoundingClientRect which is skewed mid-animation
  */
-function positionArrow(floating, refRect, side) {
+function positionArrow(floating, refRect, side, pos) {
     const arrow = floating.querySelector('[data-slot="tooltip-arrow"]');
     if (!arrow) return;
 
-    const fRect = floating.getBoundingClientRect();
+    const fWidth = floating.offsetWidth;
+    const fHeight = floating.offsetHeight;
     const size = arrow.offsetWidth || 10;
     const half = size / 2;
     const pad = 6; // keep the arrow off the rounded corners
 
     if (side === 'top' || side === 'bottom') {
         const refCenterX = refRect.left + refRect.width / 2;
-        let x = refCenterX - fRect.left - half;
-        x = Math.max(pad, Math.min(x, fRect.width - size - pad));
+        let x = refCenterX - pos.left - half;
+        x = Math.max(pad, Math.min(x, fWidth - size - pad));
         arrow.style.left = `${x}px`;
         arrow.style.top = side === 'top' ? '100%' : '0px';
         arrow.style.transform = 'translateY(-50%) rotate(45deg)';
     } else {
         const refCenterY = refRect.top + refRect.height / 2;
-        let y = refCenterY - fRect.top - half;
-        y = Math.max(pad, Math.min(y, fRect.height - size - pad));
+        let y = refCenterY - pos.top - half;
+        y = Math.max(pad, Math.min(y, fHeight - size - pad));
         arrow.style.top = `${y}px`;
         arrow.style.left = side === 'left' ? '100%' : '0px';
         arrow.style.transform = 'translateX(-50%) rotate(45deg)';
@@ -396,8 +444,27 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
 
     const selector = options?.selector ?? '[data-menu-item]';
     const orientation = options?.orientation ?? 'vertical';
+    // autoFocus: focus the first item on setup and restore focus to the pre-open
+    // element on teardown (menu behavior). Pass false for persistent widgets
+    // (e.g. a tabs list) that must not steal focus on mount.
+    const autoFocus = options?.autoFocus ?? true;
+    const previouslyFocused = document.activeElement;
     const controller = new AbortController();
-    cleanupMap.set(id + ':kbd', controller);
+    cleanupMap.set(id + ':kbd', {
+        abort: () => {
+            controller.abort();
+            // Return focus to the trigger when the menu closes (Radix behavior).
+            // Skipped if focus already moved to another element — e.g. the user
+            // closed by clicking into an input — so we don't steal it.
+            const active = document.activeElement;
+            if (autoFocus
+                && previouslyFocused && previouslyFocused.isConnected
+                && (active === document.body || active === document.documentElement
+                    || container.contains(active))) {
+                previouslyFocused.focus();
+            }
+        }
+    });
 
     container.addEventListener('keydown', (e) => {
         const items = getNavigableItems(container, selector);
@@ -441,10 +508,22 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
         }
     }, { signal: controller.signal });
 
-    // Focus the first enabled item
-    const items = getNavigableItems(container, selector);
-    const firstEnabled = findNextEnabled(items, -1);
-    if (firstEnabled >= 0) items[firstEnabled].focus();
+    // Focus the first enabled item (menus only — persistent widgets keep focus)
+    if (autoFocus) {
+        const items = getNavigableItems(container, selector);
+        const firstEnabled = findNextEnabled(items, -1);
+        if (firstEnabled >= 0) items[firstEnabled].focus();
+    }
+}
+
+/**
+ * Returns an element's text content — used to derive a command item's filter
+ * text when no explicit Value parameter is supplied.
+ * @param {HTMLElement} element
+ * @returns {string}
+ */
+export function getTextContent(element) {
+    return element?.textContent?.trim() ?? '';
 }
 
 /**

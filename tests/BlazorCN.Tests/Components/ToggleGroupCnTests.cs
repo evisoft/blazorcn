@@ -26,11 +26,12 @@ public class ToggleGroupCnTests : BunitContext
     [Fact]
     public void ToggleGroup_Has_Default_Classes()
     {
+        // Gap is now driven by the --gap CSS variable (Spacing parameter), not a fixed gap-0.
         var cut = Render<ToggleGroupCn>(p => p.AddChildContent("Content"));
         var el = cut.Find("[data-slot='toggle-group']");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("items-center");
-        el.ClassList.Should().Contain("gap-0");
+        el.ClassList.Should().Contain("gap-[--spacing(var(--gap))]");
     }
 
     [Fact]

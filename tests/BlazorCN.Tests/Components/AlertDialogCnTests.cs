@@ -286,11 +286,10 @@ public class AlertDialogCnTests : BunitContext
     [Fact]
     public void AlertDialogFooter_Has_Default_Classes()
     {
+        // Layout (flex/flex-col-reverse/gap-2) now lives in the cn-alert-dialog-footer CSS class.
         var cut = Render<AlertDialogFooterCn>(p => p.AddChildContent("Footer"));
         var el = cut.Find("[data-slot='alert-dialog-footer']");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("flex-col-reverse");
-        el.ClassList.Should().Contain("gap-2");
+        el.ClassList.Should().Contain("cn-alert-dialog-footer");
     }
 
     [Fact]

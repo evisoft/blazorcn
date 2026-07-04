@@ -272,11 +272,10 @@ public class DialogCnTests : BunitContext
     [Fact]
     public void DialogFooter_Has_Default_Classes()
     {
+        // Layout (flex/flex-col-reverse/gap-2) now lives in the cn-dialog-footer CSS class.
         var cut = Render<DialogFooterCn>(p => p.AddChildContent("Footer"));
         var el = cut.Find("[data-slot='dialog-footer']");
         el.ClassList.Should().Contain("cn-dialog-footer");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("flex-col-reverse");
     }
 
     [Fact]

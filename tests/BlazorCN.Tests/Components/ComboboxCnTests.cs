@@ -210,14 +210,14 @@ public class ComboboxCnTests : BunitContext
     }
 
     [Fact]
-    public void ComboboxContent_Default_Align_Is_Center()
+    public void ComboboxContent_Default_Align_Is_Start()
     {
         SetupJsInterop();
         var cut = Render<ComboboxCn>(p => p
             .Add(c => c.Open, true)
             .AddChildContent<ComboboxContentCn>(c => c
                 .AddChildContent("Body")));
-        cut.Find("[data-slot='combobox-content']").GetAttribute("data-align").Should().Be("center");
+        cut.Find("[data-slot='combobox-content']").GetAttribute("data-align").Should().Be("start");
     }
 
     [Fact]
@@ -401,7 +401,7 @@ public class ComboboxCnTests : BunitContext
         item.ClassList.Should().Contain("cursor-default");
         item.ClassList.Should().Contain("select-none");
         item.ClassList.Should().Contain("items-center");
-        item.ClassList.Should().Contain("pl-8");
+        // Indicator padding now comes from the cn-combobox-item nova CSS class, not a pl-8 utility.
         item.ClassList.Should().Contain("outline-hidden");
     }
 

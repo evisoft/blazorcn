@@ -1,7 +1,8 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IAsyncDisposable
 
-<div class="@Cn.Merge("cn-command flex h-full w-full flex-col overflow-hidden border", Class)" style="@Style" data-slot="command" @attributes="AdditionalAttributes">
+<div @ref="_rootRef" class="@Cn.Merge("cn-command flex h-full w-full flex-col overflow-hidden border", Class)" style="@Style" data-slot="command" @attributes="AdditionalAttributes">
     <CascadingValue Value="this" IsFixed="false">
         @ChildContent
     </CascadingValue>
@@ -9,4 +10,58 @@
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _rootRef;
+    private readonly string _keyboardNavId = $"command-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // ArrowDown/Up from the input moves focus through the (still
+                // visible) items; Enter selects — cmdk's keyboard model.
+                await JsInterop.SetupKeyboardNavigationAsync(_rootRef, _keyboardNavId,
+                    "[data-slot=command-item]:not(.hidden)");
+                _jsInitialized = true;
+            }
+            catch { /* Prerendering without JS — keyboard nav is progressive enhancement */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupKeyboardNavigationAsync(_keyboardNavId); }
+            catch { /* Circuit may already be gone */ }
+        }
+    }
+
+    private readonly List<CommandItemCn> _items = new();
+
+    /// <summary>Current filter text, set by CommandInputCn as the user types (cmdk behavior).</summary>
+    internal string Search { get; private set; } = string.Empty;
+
+    internal void SetSearch(string value)
+    {
+        Search = value;
+        StateHasChanged();
+    }
+
+    internal void RegisterItem(CommandItemCn item) => _items.Add(item);
+    internal void UnregisterItem(CommandItemCn item) => _items.Remove(item);
+
+    /// <summary>True while at least one item matches the filter — drives CommandEmptyCn.</summary>
+    internal bool HasVisibleItems => _items.Count == 0 || _items.Any(i => i.IsVisible);
+
+    /// <summary>Re-evaluates visibility after an item resolves its filter text asynchronously.</summary>
+    internal void NotifyItemTextResolved()
+    {
+        if (Search.Length > 0) StateHasChanged();
+    }
 }

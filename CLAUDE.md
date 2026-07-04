@@ -303,3 +303,24 @@ internal sealed class FloatingJsOptions
 The current `JsInteropCn.FloatingJsOptions` and `KeyboardNavJsOptions` are correct. **Don't "modernize" them back to records or anonymous types.**
 
 **Diagnostic technique:** Surface the exception. The default `catch` blocks in `*ContentCn.razor.cs` swallow silently. Add `Console.WriteLine($"[component] EXCEPTION: {ex.GetType().Name}: {ex.Message}")` inside the catch, deploy, repro in the browser, read the message — the `ConstructorContainsNullParameterNames` text is the giveaway. Remove the logging once fixed.
+
+### Cascade-layer order is load-bearing — never remove the `@layer` statement atop blazorcn.css
+
+All `cn-*` rules in `blazorcn-components.css` live in `@layer components` (like the canonical
+nova preset) so consumer utilities passed via `Class=` beat component defaults. CSS fixes layer
+precedence by **first appearance across all stylesheets**, and `_content/BlazorCN/blazorcn.css`
+loads before the consumer's Tailwind bundle. Without the leading
+`@layer theme, base, components, utilities;` statement in `blazorcn.css`, the imported file's
+`@layer components {` would register "components" as the LOWEST-priority layer and Tailwind's
+base/preflight would override every component style (buttons/tabs/badges render completely
+unstyled). Also: any global rule added to `blazorcn.css` (`* { border-color: ... }`, cursor
+restores) must go inside `@layer base` — an unlayered rule beats every layer and silently
+overrides both component styles and consumer utilities.
+
+### Tooltips (and any hover-opened float) must keep `pointer-events-none`
+
+`TooltipContentCn` renders with `pointer-events-none`. The popup + its rotated arrow straddle
+the trigger gap, and the enter animation slides them across it — a hit-testable tooltip steals
+hover from the trigger mid-animation, fires `mouseleave`, closes, re-fires `mouseenter`, and
+flickers in an infinite open/close loop. Don't remove it, and apply the same rule to any new
+hover-opened floating content that lacks hoverable-content grace logic.

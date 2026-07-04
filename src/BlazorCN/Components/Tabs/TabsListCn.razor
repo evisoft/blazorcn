@@ -1,9 +1,16 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
-<div class="@CssClass" style="@Style" role="tablist" aria-label="Tabs" data-slot="tabs-list" data-variant="@VariantValue" @attributes="AdditionalAttributes">@ChildContent</div>
+@implements IAsyncDisposable
+<div @ref="_listRef" class="@CssClass" style="@Style" role="tablist" aria-label="Tabs" data-slot="tabs-list" data-variant="@VariantValue" @attributes="AdditionalAttributes">@ChildContent</div>
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public TabsListVariant Variant { get; set; } = TabsListVariant.Default;
+    [CascadingParameter] private TabsCn? Tabs { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _listRef;
+    private readonly string _keyboardNavId = $"tabs-list-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
 
     private string VariantValue => Variant == TabsListVariant.Line ? "line" : "default";
 
@@ -11,4 +18,31 @@
         "cn-tabs-list group/tabs-list inline-flex w-fit items-center justify-center text-muted-foreground group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
         Variant == TabsListVariant.Line ? "gap-1 bg-transparent" : "bg-muted",
         Class);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Arrow keys move focus between triggers; combined with the roving
+                // tabindex + focus-activation on TabsTriggerCn this gives Radix's
+                // "automatic activation" keyboard model.
+                await JsInterop.SetupKeyboardNavigationAsync(_listRef, _keyboardNavId,
+                    "[data-slot=tabs-trigger]",
+                    Tabs?.Orientation == Orientation.Vertical ? "vertical" : "horizontal");
+                _jsInitialized = true;
+            }
+            catch { /* Prerendering without JS — keyboard nav is progressive enhancement */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupKeyboardNavigationAsync(_keyboardNavId); }
+            catch { /* Circuit may already be gone */ }
+        }
+    }
 }

@@ -1,11 +1,20 @@
 using Bunit;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
 
 public class ResizableCnTests : BunitContext
 {
+    public ResizableCnTests()
+    {
+        // ResizablePanelGroupCn injects JsInteropCn and calls initResizable in OnAfterRenderAsync.
+        // Loose mode lets those interop calls no-op, and registering the service satisfies [Inject].
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     // --- ResizablePanelGroupCn ---
 
     [Fact]

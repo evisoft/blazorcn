@@ -163,7 +163,7 @@ public class DropdownMenuCnTests : BunitContext
         var content = cut.Find("[data-slot='dropdown-menu-content']");
         content.ClassList.Should().Contain("cn-dropdown-menu-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("overflow-hidden");
+        content.ClassList.Should().Contain("overflow-y-auto");
     }
 
     [Fact]
@@ -502,10 +502,11 @@ public class DropdownMenuCnTests : BunitContext
     }
 
     [Fact]
-    public void DropdownMenuCheckboxItem_Has_Pl8()
+    public void DropdownMenuCheckboxItem_Has_Nova_Item_Class()
     {
+        // Indicator padding (pr-8/pl-1.5) now comes from the cn-* nova CSS class, not a pl-8 utility.
         var cut = Render<DropdownMenuCheckboxItemCn>(p => p.AddChildContent("Check me"));
-        cut.Find("[data-slot='dropdown-menu-checkbox-item']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='dropdown-menu-checkbox-item']").ClassList.Should().Contain("cn-dropdown-menu-checkbox-item");
     }
 
     [Fact]
@@ -595,14 +596,15 @@ public class DropdownMenuCnTests : BunitContext
     }
 
     [Fact]
-    public void DropdownMenuRadioItem_Has_Pl8()
+    public void DropdownMenuRadioItem_Has_Nova_Item_Class()
     {
+        // Indicator padding (pr-8/pl-1.5) now comes from the cn-* nova CSS class, not a pl-8 utility.
         var cut = Render<DropdownMenuRadioGroupCn>(p => p
             .Add(c => c.Value, "a")
             .AddChildContent<DropdownMenuRadioItemCn>(i => i
                 .Add(x => x.Value, "a")
                 .AddChildContent("Option A")));
-        cut.Find("[data-slot='dropdown-menu-radio-item']").ClassList.Should().Contain("pl-8");
+        cut.Find("[data-slot='dropdown-menu-radio-item']").ClassList.Should().Contain("cn-dropdown-menu-radio-item");
     }
 
     [Fact]
@@ -745,7 +747,7 @@ public class DropdownMenuCnTests : BunitContext
         var content = cut.Find("[data-slot='dropdown-menu-sub-content']");
         content.ClassList.Should().Contain("cn-dropdown-menu-sub-content");
         content.ClassList.Should().Contain("z-50");
-        content.ClassList.Should().Contain("overflow-hidden");
+        content.ClassList.Should().Contain("overflow-y-auto");
     }
 
     [Fact]

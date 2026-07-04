@@ -123,4 +123,26 @@ public class SliderCnTests : BunitContext
         var slider = cut.Find("[data-slot='slider']");
         slider.ClassList.Should().Contain("opacity-50");
     }
+
+    // --- Focus ring (thumb mirrors the invisible native input's focus) ---
+
+    [Fact]
+    public void Focusing_Input_Marks_Matching_Thumb_As_Focused()
+    {
+        var cut = Render<SliderCn>(p => p.Add(c => c.Values, new[] { 25.0, 75.0 }));
+        cut.FindAll("input[type='range']")[1].Focus();
+        var thumbs = cut.FindAll("[data-slot='slider-thumb']");
+        thumbs[0].HasAttribute("data-focused").Should().BeFalse();
+        thumbs[1].HasAttribute("data-focused").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Blurring_Input_Clears_Thumb_Focus()
+    {
+        var cut = Render<SliderCn>(p => p.Add(c => c.Value, 50));
+        cut.Find("input[type='range']").Focus();
+        cut.Find("[data-slot='slider-thumb']").HasAttribute("data-focused").Should().BeTrue();
+        cut.Find("input[type='range']").Blur();
+        cut.Find("[data-slot='slider-thumb']").HasAttribute("data-focused").Should().BeFalse();
+    }
 }

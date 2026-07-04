@@ -66,6 +66,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipTrigger_Renders_With_DataSlot()
     {
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .AddChildContent("Hover me")));
         cut.Find("[data-slot='tooltip-trigger']").Should().NotBeNull();
@@ -75,10 +76,12 @@ public class TooltipCnTests : BunitContext
     public void TooltipTrigger_Hover_Opens_Tooltip()
     {
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .AddChildContent("Hover me")));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open");
     }
 
@@ -86,10 +89,12 @@ public class TooltipCnTests : BunitContext
     public void TooltipTrigger_MouseLeave_Closes_Tooltip()
     {
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .AddChildContent("Hover me")));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open");
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseleave", new MouseEventArgs());
@@ -100,10 +105,12 @@ public class TooltipCnTests : BunitContext
     public void TooltipTrigger_Focus_Opens_Tooltip()
     {
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .AddChildContent("Focus me")));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onfocus", new FocusEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open");
     }
 
@@ -111,10 +118,12 @@ public class TooltipCnTests : BunitContext
     public void TooltipTrigger_Blur_Closes_Tooltip()
     {
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .AddChildContent("Focus me")));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onfocus", new FocusEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open");
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onblur", new FocusEventArgs());
@@ -125,6 +134,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipTrigger_Class_Passthrough()
     {
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .Add(c => c.Class, "trigger-class")
                 .AddChildContent("Hover")));
@@ -135,6 +145,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipTrigger_AdditionalAttributes_Passthrough()
     {
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .Add(c => c.AdditionalAttributes, new Dictionary<string, object?> { { "aria-label", "info" } })
                 .AddChildContent("Hover")));
@@ -158,12 +169,13 @@ public class TooltipCnTests : BunitContext
     {
         SetupJsInterop();
         var cut = Render<TooltipCn>(p => p
+            .Add(c => c.OpenDelay, 0)
             .AddChildContent<TooltipTriggerCn>(t => t
                 .AddChildContent("Hover")));
 
         // Need to re-render with content after opening
         // Actually, let's build a full tooltip that includes both trigger and content
-        var cut2 = Render<TooltipCn>(p => p.AddChildContent(builder =>
+        var cut2 = Render<TooltipCn>(p => p.Add(c => c.OpenDelay, 0).AddChildContent(builder =>
         {
             builder.OpenComponent<TooltipTriggerCn>(0);
             builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Hover me")));
@@ -175,7 +187,7 @@ public class TooltipCnTests : BunitContext
 
         // Open via hover
         cut2.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
-        cut2.Find("[data-slot='tooltip-content']").Should().NotBeNull();
+        cut2.WaitForAssertion(() => cut2.Find("[data-slot='tooltip-content']").Should().NotBeNull());
         cut2.Find("[data-slot='tooltip-content']").TextContent.Should().Contain("Tooltip text");
     }
 
@@ -183,7 +195,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipContent_Has_Default_Classes()
     {
         SetupJsInterop();
-        var cut = Render<TooltipCn>(p => p.AddChildContent(builder =>
+        var cut = Render<TooltipCn>(p => p.Add(c => c.OpenDelay, 0).AddChildContent(builder =>
         {
             builder.OpenComponent<TooltipTriggerCn>(0);
             builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Hover")));
@@ -194,6 +206,7 @@ public class TooltipCnTests : BunitContext
         }));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         var content = cut.Find("[data-slot='tooltip-content']");
         content.ClassList.Should().Contain("cn-tooltip-content");
         content.ClassList.Should().Contain("z-50");
@@ -207,7 +220,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipContent_Default_Side_Is_Top()
     {
         SetupJsInterop();
-        var cut = Render<TooltipCn>(p => p.AddChildContent(builder =>
+        var cut = Render<TooltipCn>(p => p.Add(c => c.OpenDelay, 0).AddChildContent(builder =>
         {
             builder.OpenComponent<TooltipTriggerCn>(0);
             builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Hover")));
@@ -218,6 +231,7 @@ public class TooltipCnTests : BunitContext
         }));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip-content']").GetAttribute("data-side").Should().Be("top");
     }
 
@@ -225,7 +239,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipContent_Custom_Side()
     {
         SetupJsInterop();
-        var cut = Render<TooltipCn>(p => p.AddChildContent(builder =>
+        var cut = Render<TooltipCn>(p => p.Add(c => c.OpenDelay, 0).AddChildContent(builder =>
         {
             builder.OpenComponent<TooltipTriggerCn>(0);
             builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Hover")));
@@ -237,6 +251,7 @@ public class TooltipCnTests : BunitContext
         }));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip-content']").GetAttribute("data-side").Should().Be("bottom");
     }
 
@@ -244,7 +259,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipContent_Default_Align_Is_Center()
     {
         SetupJsInterop();
-        var cut = Render<TooltipCn>(p => p.AddChildContent(builder =>
+        var cut = Render<TooltipCn>(p => p.Add(c => c.OpenDelay, 0).AddChildContent(builder =>
         {
             builder.OpenComponent<TooltipTriggerCn>(0);
             builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Hover")));
@@ -255,6 +270,7 @@ public class TooltipCnTests : BunitContext
         }));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip-content']").GetAttribute("data-align").Should().Be("center");
     }
 
@@ -262,7 +278,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipContent_Class_Passthrough()
     {
         SetupJsInterop();
-        var cut = Render<TooltipCn>(p => p.AddChildContent(builder =>
+        var cut = Render<TooltipCn>(p => p.Add(c => c.OpenDelay, 0).AddChildContent(builder =>
         {
             builder.OpenComponent<TooltipTriggerCn>(0);
             builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Hover")));
@@ -274,6 +290,7 @@ public class TooltipCnTests : BunitContext
         }));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip-content']").ClassList.Should().Contain("custom-tip");
     }
 
@@ -281,7 +298,7 @@ public class TooltipCnTests : BunitContext
     public void TooltipContent_AdditionalAttributes_Passthrough()
     {
         SetupJsInterop();
-        var cut = Render<TooltipCn>(p => p.AddChildContent(builder =>
+        var cut = Render<TooltipCn>(p => p.Add(c => c.OpenDelay, 0).AddChildContent(builder =>
         {
             builder.OpenComponent<TooltipTriggerCn>(0);
             builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Hover")));
@@ -293,6 +310,7 @@ public class TooltipCnTests : BunitContext
         }));
 
         cut.Find("[data-slot='tooltip-trigger']").TriggerEvent("onmouseenter", new MouseEventArgs());
+        cut.WaitForAssertion(() => cut.Find("[data-slot='tooltip']").GetAttribute("data-state").Should().Be("open"));
         cut.Find("[data-slot='tooltip-content']").GetAttribute("role").Should().Be("tooltip");
     }
 }
