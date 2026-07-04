@@ -1,5 +1,6 @@
-using Bunit;
+﻿using Bunit;
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -260,7 +261,7 @@ public class ToastCnTests : BunitContext
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("success");
         toast.ClassList.Should().Contain("cn-toast");
-        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().Be(1); // variant icon only — no built-in close X (reference Toaster has no closeButton)
     }
 
     [Fact]
@@ -274,7 +275,7 @@ public class ToastCnTests : BunitContext
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("error");
         toast.ClassList.Should().Contain("cn-toast");
-        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().Be(1); // variant icon only — no built-in close X (reference Toaster has no closeButton)
     }
 
     [Fact]
@@ -288,7 +289,7 @@ public class ToastCnTests : BunitContext
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("warning");
         toast.ClassList.Should().Contain("cn-toast");
-        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().Be(1); // variant icon only — no built-in close X (reference Toaster has no closeButton)
     }
 
     [Fact]
@@ -302,7 +303,7 @@ public class ToastCnTests : BunitContext
         var toast = cut.Find("[data-slot='toast']");
         toast.GetAttribute("data-variant").Should().Be("info");
         toast.ClassList.Should().Contain("cn-toast");
-        cut.FindAll("[data-slot='toast'] svg").Count.Should().BeGreaterThan(1);
+        cut.FindAll("[data-slot='toast'] svg").Count.Should().Be(1); // variant icon only — no built-in close X (reference Toaster has no closeButton)
     }
 
     [Fact]
@@ -328,27 +329,28 @@ public class ToastCnTests : BunitContext
     }
 
     [Fact]
-    public void Toast_Has_Close_Button()
+    public void Toast_Has_No_Close_Button_By_Default()
     {
+        // Matches the reference Toaster, which never enables Sonner's closeButton
         var service = RegisterToastService();
         var cut = Render<ToasterCn>();
 
         service.Show("Hello");
 
-        cut.Find("[data-slot='toast-close']").Should().NotBeNull();
+        cut.FindAll("[data-slot='toast-close']").Should().BeEmpty();
     }
 
     [Fact]
-    public void Toast_Close_Button_Removes_Toast()
+    public void Toast_CloseButton_OptIn_Renders_And_Dismisses()
     {
-        var service = RegisterToastService();
-        var cut = Render<ToasterCn>();
-
-        service.Show("Hello");
-        cut.FindAll("[data-slot='toast']").Should().HaveCount(1);
+        var dismissedId = "";
+        var cut = Render<ToastCn>(p => p
+            .Add(c => c.Message, new ToastMessage("t1", "Hello", ToastVariant.Default))
+            .Add(c => c.CloseButton, true)
+            .Add(c => c.OnDismiss, EventCallback.Factory.Create<string>(this, id => dismissedId = id)));
 
         cut.Find("[data-slot='toast-close']").Click();
-        cut.FindAll("[data-slot='toast']").Should().BeEmpty();
+        dismissedId.Should().Be("t1");
     }
 
     [Fact]

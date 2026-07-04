@@ -416,6 +416,16 @@ public class NavigationMenuCnTests : BunitContext
         cut.Find("[data-slot='navigation-menu-indicator']").ClassList.Should().Contain("custom-indicator");
     }
 
+    [Fact]
+    public void NavigationMenuIndicator_Renders_BuiltIn_Arrow()
+    {
+        // Reference indicator always includes the rotated arrow element; without it
+        // <NavigationMenuIndicatorCn /> would be an empty overflow-hidden box.
+        var cut = Render<NavigationMenuIndicatorCn>();
+        var arrow = cut.Find(".cn-navigation-menu-indicator-arrow");
+        arrow.ClassList.Should().Contain("rotate-45");
+    }
+
     // --- NavigationMenuViewportCn ---
 
     [Fact]

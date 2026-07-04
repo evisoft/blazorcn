@@ -9,5 +9,6 @@ public enum ToastVariant
     Success,
     Error,
     Warning,
-    Info
+    Info,
+    Loading
 }

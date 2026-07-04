@@ -251,18 +251,15 @@ public class ComboboxCnTests : BunitContext
     }
 
     [Fact]
-    public void ComboboxInput_Has_Default_Classes()
+    public void ComboboxInput_Is_Composed_On_InputGroup()
     {
+        // Reference ComboboxInput renders an InputGroup wrapper; the popup CSS
+        // (*:data-[slot=input-group]) keys off that slot for the inset search row.
         var cut = Render<ComboboxInputCn>(p => p
             .Add(c => c.Placeholder, "Search..."));
-        var el = cut.Find("[data-slot='combobox-input']");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("h-9");
-        el.ClassList.Should().Contain("w-full");
-        el.ClassList.Should().Contain("rounded-md");
-        el.ClassList.Should().Contain("bg-transparent");
-        el.ClassList.Should().Contain("text-sm");
-        el.ClassList.Should().Contain("outline-hidden");
+        var group = cut.Find("[data-slot='input-group']");
+        group.ClassList.Should().Contain("cn-combobox-input");
+        cut.Find("[data-slot='combobox-input']").ClassList.Should().Contain("cn-input");
     }
 
     [Fact]
@@ -274,11 +271,12 @@ public class ComboboxCnTests : BunitContext
     }
 
     [Fact]
-    public void ComboboxInput_Has_Search_Icon()
+    public void ComboboxInput_Has_No_Search_Icon()
     {
+        // The reference popup search row has no magnifier icon (unlike Command)
         var cut = Render<ComboboxInputCn>(p => p
             .Add(c => c.Placeholder, "Search..."));
-        cut.FindAll("svg").Should().NotBeEmpty();
+        cut.FindAll("svg").Should().BeEmpty();
     }
 
     [Fact]
@@ -295,10 +293,11 @@ public class ComboboxCnTests : BunitContext
     [Fact]
     public void ComboboxInput_Class_Passthrough()
     {
+        // Class lands on the InputGroup wrapper, mirroring the reference's className placement
         var cut = Render<ComboboxInputCn>(p => p
             .Add(c => c.Placeholder, "Search...")
             .Add(c => c.Class, "custom-input"));
-        cut.Find("[data-slot='combobox-input']").ClassList.Should().Contain("custom-input");
+        cut.Find("[data-slot='input-group']").ClassList.Should().Contain("custom-input");
     }
 
     // --- ComboboxEmptyCn ---

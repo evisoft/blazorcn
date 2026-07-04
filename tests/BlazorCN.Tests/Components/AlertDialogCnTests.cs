@@ -184,6 +184,46 @@ public class AlertDialogCnTests : BunitContext
     }
 
     [Fact]
+    public void AlertDialogContent_Defaults_To_Default_Size()
+    {
+        SetupJsInterop();
+        var cut = Render<AlertDialogCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<AlertDialogContentCn>(c => c
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='alert-dialog-content']").GetAttribute("data-size").Should().Be("default");
+    }
+
+    [Fact]
+    public void AlertDialogContent_Sm_Size_Sets_DataSize()
+    {
+        SetupJsInterop();
+        var cut = Render<AlertDialogCn>(p => p
+            .Add(c => c.Open, true)
+            .AddChildContent<AlertDialogContentCn>(c => c
+                .Add(x => x.Size, AlertDialogSize.Sm)
+                .AddChildContent("Body")));
+        cut.Find("[data-slot='alert-dialog-content']").GetAttribute("data-size").Should().Be("sm");
+    }
+
+    [Fact]
+    public void AlertDialogMedia_Renders_With_DataSlot_And_Class()
+    {
+        var cut = Render<AlertDialogMediaCn>(p => p.AddChildContent("<svg></svg>"));
+        var el = cut.Find("[data-slot='alert-dialog-media']");
+        el.ClassList.Should().Contain("cn-alert-dialog-media");
+    }
+
+    [Fact]
+    public void AlertDialogMedia_Class_Passthrough()
+    {
+        var cut = Render<AlertDialogMediaCn>(p => p
+            .Add(c => c.Class, "bg-destructive/10")
+            .AddChildContent("<svg></svg>"));
+        cut.Find("[data-slot='alert-dialog-media']").ClassList.Should().Contain("bg-destructive/10");
+    }
+
+    [Fact]
     public void AlertDialogContent_Has_No_Close_Button()
     {
         SetupJsInterop();

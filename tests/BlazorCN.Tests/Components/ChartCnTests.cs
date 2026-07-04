@@ -93,6 +93,59 @@ public class ChartCnTests : BunitContext
         cut.Find("[data-slot='chart-container']").GetAttribute("id").Should().Be("container-1");
     }
 
+    // --- ChartLegendCn / ChartLegendItemCn ---
+
+    [Fact]
+    public void ChartLegend_Renders_With_DataSlot_And_Class()
+    {
+        var cut = Render<ChartLegendCn>(p => p.AddChildContent("Legend"));
+        cut.Find("[data-slot='chart-legend']").ClassList.Should().Contain("cn-chart-legend");
+    }
+
+    [Fact]
+    public void ChartLegendItem_With_Color_Renders_Swatch()
+    {
+        var cut = Render<ChartLegendItemCn>(p => p
+            .Add(c => c.Color, "#2563eb")
+            .AddChildContent("Desktop"));
+        var el = cut.Find("[data-slot='chart-legend-item']");
+        el.ClassList.Should().Contain("cn-chart-legend-item");
+        var swatch = el.QuerySelector("div");
+        swatch.Should().NotBeNull();
+        swatch!.GetAttribute("style").Should().Contain("#2563eb");
+        el.TextContent.Should().Contain("Desktop");
+    }
+
+    [Fact]
+    public void ChartLegendItem_Without_Color_Has_No_Swatch()
+    {
+        var cut = Render<ChartLegendItemCn>(p => p.AddChildContent("<svg></svg>Icon legend"));
+        var el = cut.Find("[data-slot='chart-legend-item']");
+        el.QuerySelectorAll("div").Should().BeEmpty();
+        el.QuerySelector("svg").Should().NotBeNull();
+    }
+
+    // --- ChartTooltipCn / ChartTooltipItemCn ---
+
+    [Fact]
+    public void ChartTooltip_Renders_With_DataSlot_And_Class()
+    {
+        var cut = Render<ChartTooltipCn>(p => p.AddChildContent("Tip"));
+        cut.Find("[data-slot='chart-tooltip']").ClassList.Should().Contain("cn-chart-tooltip");
+    }
+
+    [Fact]
+    public void ChartTooltipItem_With_Color_Renders_Dot_And_Centers()
+    {
+        var cut = Render<ChartTooltipItemCn>(p => p
+            .Add(c => c.Color, "#60a5fa")
+            .AddChildContent("Mobile"));
+        var el = cut.Find("[data-slot='chart-tooltip-item']");
+        el.ClassList.Should().Contain("cn-chart-tooltip-item");
+        el.ClassList.Should().Contain("items-center");
+        el.QuerySelector("div")!.GetAttribute("style").Should().Contain("#60a5fa");
+    }
+
     // --- Nested ---
 
     [Fact]

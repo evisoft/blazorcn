@@ -44,4 +44,9 @@ public class ToastService
     /// Shows an info toast.
     /// </summary>
     public void Info(string message, string? title = null) => Show(message, ToastVariant.Info, title);
+
+    /// <summary>
+    /// Shows a loading toast with a spinner icon.
+    /// </summary>
+    public void Loading(string message, string? title = null) => Show(message, ToastVariant.Loading, title);
 }

@@ -26,7 +26,10 @@ public class AvatarCnTests : BunitContext
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("shrink-0");
         el.ClassList.Should().Contain("select-none");
-        el.ClassList.Should().Contain("overflow-hidden");
+        // No overflow-hidden: the reference leaves the root unclipped so the
+        // corner badge can overhang; the after:border overlay rounds the edge.
+        el.ClassList.Should().NotContain("overflow-hidden");
+        el.GetAttribute("data-size").Should().Be("default");
     }
 
     [Fact]

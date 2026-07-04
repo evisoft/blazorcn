@@ -186,10 +186,12 @@ public class SimpleComponentsPhase3Tests : BunitContext
     }
 
     [Fact]
-    public void BreadcrumbEllipsis_Shows_Dots()
+    public void BreadcrumbEllipsis_Shows_Dots_Icon()
     {
+        // Reference renders the horizontal-dots svg (MoreHorizontalIcon), not literal text
         var cut = Render<BreadcrumbEllipsisCn>();
-        cut.Find("[data-slot='breadcrumb-ellipsis']").TextContent.Should().Contain("...");
+        cut.Find("[data-slot='breadcrumb-ellipsis'] svg").Should().NotBeNull();
+        cut.Find("[data-slot='breadcrumb-ellipsis'] .sr-only").TextContent.Should().Contain("More");
     }
 
     // KbdCn tests

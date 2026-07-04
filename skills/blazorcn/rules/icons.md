@@ -1,8 +1,10 @@
 # Icons
 
 BlazorCN bundles all **1,702 Lucide icons** as Blazor components. There is **no
-separate icon package to install** and — importantly — **no `data-icon`
-attribute convention** (that is a shadcn/React thing; it does nothing here).
+separate icon package to install**. The shadcn `data-icon` attribute convention
+**is honored**: BlazorCN's shipped CSS uses `has-data-[icon=...]` rules to tighten
+icon-side padding on buttons and badges — mark icons beside text with it (see
+["`data-icon` — mark icons beside text"](#data-icon--mark-icons-beside-text) below).
 
 ## Two ways to use an icon
 
@@ -38,27 +40,27 @@ on the component's base class. So an icon inside `ButtonCn`, `DropdownMenuItemCn
 of the icon's `Size` parameter** — CSS `size-*` overrides the SVG width/height
 attributes.
 
-**Incorrect** (redundant/ignored sizing, and the `data-icon` does nothing):
+**Incorrect** (redundant/ignored sizing, and manual `mr-2` fights the built-in gap):
 
 ```razor
 <ButtonCn>
-  <LucideSearchCn Size="16" Class="mr-2 size-4" data-icon="inline-start" />
+  <LucideSearchCn Size="16" Class="mr-2 size-4" />
   Search
 </ButtonCn>
 ```
 
 **Correct** — just nest the icon; the button handles size *and* spacing (its base
-class includes `gap-2`):
+class includes `gap-2`). Add `data-icon` so the icon-side padding tightens:
 
 ```razor
 <ButtonCn>
-  <LucideSearchCn />
+  <LucideSearchCn data-icon="inline-start" />
   Search
 </ButtonCn>
 
 <ButtonCn>
   Next
-  <LucideArrowRightCn />
+  <LucideArrowRightCn data-icon="inline-end" />
 </ButtonCn>
 ```
 
@@ -78,6 +80,36 @@ For a **standalone** icon (not inside a sizing component), use `Size`:
 ```razor
 <LucideLoaderCn Size="32" Class="animate-spin text-muted-foreground" />
 ```
+
+---
+
+## `data-icon` — mark icons beside text
+
+BlazorCN ships shadcn's `has-data-[icon=...]` CSS: the button size classes
+(`.cn-button-size-*`) and `.cn-badge` tighten the padding on the side the icon
+sits on (e.g. `has-data-[icon=inline-start]:pl-2`,
+`has-data-[icon=inline-end]:pr-2`). Every `Lucide*Cn` icon and `SpinnerCn` splat
+`AdditionalAttributes` onto their root `<svg>`, so pass the attribute directly:
+
+- `data-icon="inline-start"` on a **leading** icon or spinner (before the text)
+- `data-icon="inline-end"` on a **trailing** icon (after the text)
+- **omit it** on icon-only buttons (`ButtonSize.Icon`/`IconSm`/`IconLg`/`IconXs`)
+  — the icon size classes have no `has-data-[icon]` padding rules
+
+```razor
+<BadgeCn Variant="BadgeVariant.Secondary">
+  <LucideBadgeCheckCn data-icon="inline-start" />
+  Verified
+</BadgeCn>
+
+<ButtonCn Variant="ButtonVariant.Outline">
+  Fork
+  <LucideGitForkCn data-icon="inline-end" />
+</ButtonCn>
+```
+
+Without the attribute nothing breaks, but the button/badge keeps symmetric
+padding instead of the tighter icon-side padding the shadcn reference shows.
 
 ---
 
