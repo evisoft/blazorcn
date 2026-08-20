@@ -1,17 +1,24 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IDisposable
 
 @* Mirrors reference combobox.tsx ComboboxInput: an InputGroup (data-slot="input-group") so the
    .cn-combobox-content *:data-[slot=input-group] inset styling (m-1/mb-0/h-8/shadow-none/bg-input/30)
    applies. Class="cn-input" on the inner input restores the Input component classes the reference
    composes via <InputGroupInput> (which wraps Input). No trigger/clear addon buttons are rendered:
    this component is only used inside the popup, matching the reference's
-   <ComboboxInput showTrigger={false} /> usage (empty inline-end addon included, as the reference renders it). *@
-<InputGroupCn Class="@Cn.Merge("cn-combobox-input w-auto", Class)" Style="@Style">
+   <ComboboxInput showTrigger={false} /> usage (empty inline-end addon included, as the reference renders it).
+   The APG combobox ARIA contract (role/aria-autocomplete/aria-expanded/aria-controls) flows to the
+   <input> via InputGroupInputCn's attribute splat. *@
+<InputGroupCn @ref="_group" Class="@Cn.Merge("cn-combobox-input w-auto", Class)" Style="@Style">
     <InputGroupInputCn Class="cn-input"
                        Placeholder="@Placeholder"
                        Value="@SearchValue"
                        ValueChanged="HandleValueChanged"
+                       role="combobox"
+                       aria-autocomplete="list"
+                       aria-expanded="@(Combobox?.IsOpen == true ? "true" : "false")"
+                       aria-controls="@Combobox?.ContentId"
                        data-slot="combobox-input"
                        @attributes="AdditionalAttributes" />
     <InputGroupAddonCn Align="InputGroupAddonAlign.InlineEnd" />
@@ -23,10 +30,28 @@
     [Parameter] public string? Placeholder { get; set; }
     [Parameter] public string? SearchValue { get; set; }
     [Parameter] public EventCallback<string> SearchValueChanged { get; set; }
+    [CascadingParameter] public ComboboxCn? Combobox { get; set; }
+
+    private InputGroupCn? _group;
+    private Func<Task>? _focusDelegate;
+
+    protected override void OnInitialized()
+    {
+        // The input only mounts inside the open popup, so registering here lets
+        // ComboboxContentCn move focus into it right after positioning.
+        _focusDelegate = () => _group?.FocusControlAsync() ?? Task.CompletedTask;
+        Combobox?.RegisterInputFocus(_focusDelegate);
+    }
 
     private async Task HandleValueChanged(string value)
     {
         SearchValue = value;
+        Combobox?.SetSearch(value ?? string.Empty);
         await SearchValueChanged.InvokeAsync(value);
+    }
+
+    public void Dispose()
+    {
+        if (_focusDelegate is not null) Combobox?.UnregisterInputFocus(_focusDelegate);
     }
 }

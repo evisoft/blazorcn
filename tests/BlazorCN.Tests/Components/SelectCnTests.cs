@@ -573,12 +573,16 @@ public class SelectCnTests : BunitContext
     [Fact]
     public void SelectContent_Has_Default_AriaLabel()
     {
+        // The hardcoded "Options" label was replaced with aria-labelledby → trigger id
+        // (localizable; the trigger text names the listbox).
         SetupJsInterop();
         var cut = Render<SelectCn>(p => p
             .Add(c => c.Open, true)
             .AddChildContent<SelectContentCn>(c => c
                 .AddChildContent("Body")));
-        cut.Find("[data-slot='select-content']").GetAttribute("aria-label").Should().Be("Options");
+        var content = cut.Find("[data-slot='select-content']");
+        content.GetAttribute("aria-label").Should().BeNull();
+        content.GetAttribute("aria-labelledby").Should().NotBeNullOrEmpty();
     }
 
     [Fact]

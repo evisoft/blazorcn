@@ -4,7 +4,18 @@
 
 @if (Drawer?.IsOpen == true)
 {
+    @* Built-in backdrop (drawer.tsx always renders the overlay inside Content).
+       Skipped when the consumer places an explicit DrawerOverlayCn. *@
+    @if (!Drawer.HasExplicitOverlay)
+    {
+        <div class="cn-drawer-overlay fixed inset-0 z-50"
+             data-slot="drawer-overlay"
+             data-state="open"
+             @onclick="HandleOverlayClick">
+        </div>
+    }
     <div @ref="_element"
+         id="@Drawer.ContentId"
          class="@Cn.Merge(GetClasses(), Class)"
          style="@Style"
          data-slot="drawer-content"
@@ -14,15 +25,18 @@
          aria-modal="true"
          aria-labelledby="@(_titleLink.IsLinked ? _titleLink.Id : null)"
          aria-label="@(!_titleLink.IsLinked ? "Drawer" : null)"
+         aria-describedby="@(_descriptionLink.IsLinked ? _descriptionLink.Id : null)"
          tabindex="-1"
          @onkeydown="HandleKeyDown"
          @attributes="AdditionalAttributes">
         <CascadingValue Value="@_titleLink" Name="ContentTitleLink" IsFixed="true">
-            @if (Direction == DrawerDirection.Bottom)
-            {
-                <div class="cn-drawer-handle" data-slot="drawer-handle"></div>
-            }
-            @ChildContent
+            <CascadingValue Value="@_descriptionLink" Name="ContentDescriptionLink" IsFixed="true">
+                @if (Direction == DrawerDirection.Bottom)
+                {
+                    <div class="cn-drawer-handle" data-slot="drawer-handle" aria-hidden="true"></div>
+                }
+                @ChildContent
+            </CascadingValue>
         </CascadingValue>
     </div>
 }
@@ -36,16 +50,28 @@
     private ElementReference _element;
     private string _id = $"drawer-content-{Guid.NewGuid():N}";
     private TitleLink _titleLink = new($"drawer-title-{Guid.NewGuid():N}");
+    private TitleLink _descriptionLink = new($"drawer-description-{Guid.NewGuid():N}");
     private bool _titleLinked;
+    private bool _descriptionLinked;
     private bool _jsInitialized;
 
     private string GetClasses() => "cn-drawer-content fixed z-50 group/drawer-content";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        var needsRelink = false;
         if (_titleLink.IsLinked && !_titleLinked)
         {
             _titleLinked = true;
+            needsRelink = true;
+        }
+        if (_descriptionLink.IsLinked && !_descriptionLinked)
+        {
+            _descriptionLinked = true;
+            needsRelink = true;
+        }
+        if (needsRelink)
+        {
             StateHasChanged();
             return;
         }
@@ -76,6 +102,11 @@
         {
             await Drawer.SetOpen(false);
         }
+    }
+
+    private async Task HandleOverlayClick()
+    {
+        if (Drawer is not null) await Drawer.SetOpen(false);
     }
 
     public async ValueTask DisposeAsync()

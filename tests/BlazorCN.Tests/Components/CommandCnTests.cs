@@ -271,10 +271,12 @@ public class CommandCnTests : BunitContext
     }
 
     [Fact]
-    public void CommandItem_Has_DataMenuItem_Attribute()
+    public void CommandItem_Has_Option_Role()
     {
+        // cmdk model: items are listbox options (data-menu-item was the old JS
+        // keyboard-nav hook, removed with the virtual-highlight rework).
         var cut = Render<CommandItemCn>(p => p.AddChildContent("Item"));
-        cut.Find("[data-menu-item]").Should().NotBeNull();
+        cut.Find("[data-slot='command-item']").GetAttribute("role").Should().Be("option");
     }
 
     [Fact]

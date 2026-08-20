@@ -56,6 +56,9 @@ Always enforced. Each links to a file with Incorrect/Correct pairs.
 - **No manual `dark:` color overrides.** Semantic tokens flip with `.dark`.
 - **Conditional classes via `Cn.Merge(...)`,** not string-concatenated ternaries.
 - **No manual `z-index` on overlays.** Dialog/Sheet/Popover/etc. self-stack.
+- **`aria-*`/`data-*` stay lowercase.** There is no `AriaLabel` parameter —
+  PascalCase compiles fine and renders a useless `arialabel` attribute, leaving
+  icon-only controls unnamed. Every icon-only control needs `aria-label`.
 
 ### Forms & Inputs → [forms.md](./rules/forms.md)
 
@@ -179,8 +182,10 @@ The Blazor analog of shadcn's "key fields":
 - **`Cn` suffix + flat namespace.** Every component is `XxxCn` under `@using BlazorCN`.
 - **`Class` / `Style` / arbitrary attributes** are accepted by every component
   (`ComponentBaseCn`). `Class` is merged via `Cn.Merge`; `id`/`data-*`/`aria-*`
-  are forwarded to the root element. Use **`Class=` (capital C)** — lowercase
-  `class=` lands in the attribute splat and can emit a duplicate `class` attribute.
+  are forwarded to the root element, and a forwarded `id` overrides the component's
+  own generated one (which is how `<LabelCn For>` can name a `SelectTriggerCn`).
+  Prefer **`Class=` (capital C)** for readability — lowercase `class=` binds to the
+  same parameter, since Blazor matches parameter names case-insensitively.
 - **`@bind-Value`** for form controls (control exposes `Value` + `ValueChanged`).
   **`@bind-Open`** for overlays (`Open` + `OpenChanged`).
 - **Enum variants/sizes** — `ButtonVariant`, `ButtonSize`, `BadgeVariant`,

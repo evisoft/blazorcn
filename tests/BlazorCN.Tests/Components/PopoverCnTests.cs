@@ -248,11 +248,11 @@ public class PopoverCnTests : BunitContext
     [Fact]
     public void PopoverHeader_Has_Default_Classes()
     {
+        // Layout moved from inline utilities to the nova cn-popover-header rule
+        // (flex flex-col gap-0.5 text-sm via @apply).
         var cut = Render<PopoverHeaderCn>(p => p.AddChildContent("Header"));
         var el = cut.Find("[data-slot='popover-header']");
-        el.ClassList.Should().Contain("flex");
-        el.ClassList.Should().Contain("flex-col");
-        el.ClassList.Should().Contain("gap-2");
+        el.ClassList.Should().Contain("cn-popover-header");
     }
 
     [Fact]

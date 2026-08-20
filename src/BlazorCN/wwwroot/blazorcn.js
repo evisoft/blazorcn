@@ -18,24 +18,33 @@ export function trapFocus(element, id) {
     cleanupMap.set(focusKey, { abort: () => controller.abort(), previouslyFocused });
 
     const focusable = getFocusableElements(element);
-    if (focusable.length === 0) return;
-
-    focusable[0].focus();
+    // No focusable children: focus the container itself (modal content divs carry
+    // tabindex="-1") so focus still enters the dialog — its Escape handler can then
+    // fire — and the Tab handler below pins focus in place (APG modal dialog).
+    if (focusable.length > 0) focusable[0].focus();
+    else element.focus();
 
     element.addEventListener('keydown', (e) => {
         if (e.key !== 'Tab') return;
 
         const currentFocusable = getFocusableElements(element);
+        if (currentFocusable.length === 0) {
+            e.preventDefault();
+            return;
+        }
         const first = currentFocusable[0];
         const last = currentFocusable[currentFocusable.length - 1];
+        // Focus can sit on a non-tabbable element (e.g. the container itself after
+        // a click on dialog text) — treat that as outside the list and wrap.
+        const inList = currentFocusable.includes(document.activeElement);
 
         if (e.shiftKey) {
-            if (document.activeElement === first) {
+            if (!inList || document.activeElement === first) {
                 e.preventDefault();
                 last.focus();
             }
         } else {
-            if (document.activeElement === last) {
+            if (!inList || document.activeElement === last) {
                 e.preventDefault();
                 first.focus();
             }
@@ -49,8 +58,12 @@ export function trapFocus(element, id) {
  * @param {string} id - unique ID for cleanup
  * @param {object} dotnetRef - .NET object reference for callback
  * @param {string} methodName - .NET method to invoke
+ * @param {HTMLElement} [excluded] - optional element (typically the trigger) treated
+ *   as INSIDE the dismissable layer: pointerdown on it does not fire the callback,
+ *   so the trigger's own click toggle performs the close instead of a
+ *   close-then-reopen race (Radix DismissableLayer behavior)
  */
-export function onOutsideClick(element, id, dotnetRef, methodName) {
+export function onOutsideClick(element, id, dotnetRef, methodName, excluded) {
     if (!element) return;
     cleanup(id);
 
@@ -61,6 +74,7 @@ export function onOutsideClick(element, id, dotnetRef, methodName) {
         if (controller.signal.aborted) return;
         document.addEventListener('pointerdown', (e) => {
             if (!element.isConnected) return;
+            if (excluded && (excluded === e.target || excluded.contains(e.target))) return;
             if (!element.contains(e.target)) {
                 dotnetRef.invokeMethodAsync(methodName);
             }
@@ -81,6 +95,11 @@ export function lockScroll(id) {
     if (cleanupMap.has(scrollKey)) return; // already locked by this id
     if (_scrollLockCount === 0) {
         _savedScrollY = window.scrollY;
+        // Reserve the scrollbar gap BEFORE position:fixed removes the scrollbar,
+        // otherwise the page reflows ~15px wider on scrollbar-visible platforms
+        // (react-remove-scroll does the same). Overlay scrollbars yield gap 0.
+        const gap = window.innerWidth - document.documentElement.clientWidth;
+        if (gap > 0) document.body.style.paddingRight = `${gap}px`;
         document.body.style.position = 'fixed';
         document.body.style.top = `-${_savedScrollY}px`;
         document.body.style.left = '0';
@@ -100,6 +119,7 @@ function unlockScrollInternal(scrollY) {
     document.body.style.left = '';
     document.body.style.right = '';
     document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
     window.scrollTo(0, scrollY);
 }
 
@@ -282,6 +302,18 @@ function computePosition(reference, floating, options) {
         }
     }
 
+    // Shift along the alignment (cross) axis — Floating UI's `shift` middleware
+    // analog. Flipping only swaps the main-axis side, so a popup anchored near a
+    // viewport edge (or wider than the space beside its trigger) must be slid back
+    // into view. Applied BEFORE viewportPos is captured so the arrow keeps pointing
+    // at the trigger. Math.max runs last so content wider than the viewport pins to
+    // the pad edge instead of hanging off the left/top.
+    if (actualSide === 'top' || actualSide === 'bottom') {
+        pos.left = Math.max(VIEWPORT_PAD, Math.min(pos.left, viewportW - floatRect.width - VIEWPORT_PAD));
+    } else {
+        pos.top = Math.max(VIEWPORT_PAD, Math.min(pos.top, viewportH - floatRect.height - VIEWPORT_PAD));
+    }
+
     // Anchor the open/close zoom animation to the trigger edge, mirroring
     // Base UI's --transform-origin (read via `origin-(--transform-origin)`).
     let originX, originY;
@@ -436,7 +468,8 @@ function getContainingBlock(element) {
  * @param {string} id - for cleanup
  * @param {object} dotnetRef - .NET reference for escape callback
  * @param {string} escapeMethodName - method to call on escape
- * @param {object} options - { selector: string, orientation: 'vertical'|'horizontal'|'both' }
+ * @param {object} options - { selector: string, orientation: 'vertical'|'horizontal'|'both',
+ *   autoFocus: boolean, initialSelector: string }
  */
 export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodName, options) {
     if (!container) return;
@@ -466,7 +499,16 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
         }
     });
 
+    // Typeahead state (APG: printable characters move focus to the matching item).
+    let typeaheadBuffer = '';
+    let typeaheadTimer = 0;
+
     container.addEventListener('keydown', (e) => {
+        // A nested submenu's own listener (attached to a descendant container)
+        // already consumed this key — without this guard the parent menu would
+        // process it a second time and focus would jump two items per press.
+        if (e.defaultPrevented) return;
+
         const items = getNavigableItems(container, selector);
         if (items.length === 0) return;
 
@@ -495,8 +537,32 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
             e.preventDefault();
             const lastEnabled = findPrevEnabled(items, items.length);
             if (lastEnabled >= 0) items[lastEnabled].focus();
+        } else if (e.key === 'ArrowRight' && orientation === 'vertical') {
+            // APG menu: ArrowRight on a submenu trigger opens it — the opening
+            // sub-content's own keyboard setup then focuses its first item.
+            const active = document.activeElement;
+            if (active && active.matches('[data-slot$="sub-trigger"]') && !isItemDisabled(active)) {
+                e.preventDefault();
+                e.stopPropagation();
+                active.click();
+            }
+        } else if (e.key === 'ArrowLeft' && orientation === 'vertical') {
+            // APG menu: ArrowLeft inside a submenu closes it and returns focus to
+            // the parent trigger (the kbd-cleanup focus restore handles the return).
+            if ((container.getAttribute('data-slot') ?? '').endsWith('sub-content')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (dotnetRef && escapeMethodName) {
+                    dotnetRef.invokeMethodAsync(escapeMethodName);
+                }
+            }
         } else if (e.key === 'Escape') {
             e.preventDefault();
+            // Only the innermost open surface may close (APG): without
+            // stopPropagation the key bubbles to ancestor menu listeners and to
+            // Blazor's document-level delegation (e.g. a Dialog's @onkeydown),
+            // closing every layer at once.
+            e.stopPropagation();
             if (dotnetRef && escapeMethodName) {
                 dotnetRef.invokeMethodAsync(escapeMethodName);
             }
@@ -505,14 +571,51 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
                 e.preventDefault();
                 items[currentIndex].click();
             }
+        } else if (e.key === 'Tab') {
+            // APG menu: Tab moves focus out of the menu and closes it. No
+            // preventDefault — the browser moves focus naturally, and the
+            // kbd-cleanup focus-restore guard skips restoration because focus
+            // lands outside the container. Persistent widgets (autoFocus=false)
+            // keep default Tab behavior.
+            if (autoFocus && dotnetRef && escapeMethodName) {
+                dotnetRef.invokeMethodAsync(escapeMethodName);
+            }
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            // Typeahead (APG): focus the next enabled item whose text starts with
+            // the typed string. Skipped when an input hosts the keystrokes
+            // (Combobox/Command search fields must keep filtering).
+            if ((e.target.matches && e.target.matches('input, textarea, [contenteditable]'))
+                || container.querySelector('input') !== null) return;
+            typeaheadBuffer += e.key.toLowerCase();
+            clearTimeout(typeaheadTimer);
+            typeaheadTimer = setTimeout(() => { typeaheadBuffer = ''; }, 1000);
+            // Start after the current item, wrap, and check the current item last
+            // so a multi-char buffer can still match it.
+            const start = currentIndex;
+            for (let i = 1; i <= items.length; i++) {
+                const candidate = items[(start + i) % items.length];
+                if (!isItemDisabled(candidate)
+                    && (candidate.textContent ?? '').trim().toLowerCase().startsWith(typeaheadBuffer)) {
+                    candidate.focus();
+                    break;
+                }
+            }
         }
     }, { signal: controller.signal });
 
-    // Focus the first enabled item (menus only — persistent widgets keep focus)
+    // Focus the first match of initialSelector (e.g. the selected option, or a
+    // combobox's search input), else the first enabled item (menus only —
+    // persistent widgets keep focus).
     if (autoFocus) {
-        const items = getNavigableItems(container, selector);
-        const firstEnabled = findNextEnabled(items, -1);
-        if (firstEnabled >= 0) items[firstEnabled].focus();
+        const preferred = options?.initialSelector
+            ? container.querySelector(options.initialSelector) : null;
+        if (preferred && !isItemDisabled(preferred)) {
+            preferred.focus();
+        } else {
+            const items = getNavigableItems(container, selector);
+            const firstEnabled = findNextEnabled(items, -1);
+            if (firstEnabled >= 0) items[firstEnabled].focus();
+        }
     }
 }
 
@@ -536,12 +639,18 @@ export function cleanupKeyboardNavigation(id) {
 
 /**
  * Gets all items matching the selector within a container. Disabled items are handled during navigation.
+ * Items inside a NESTED submenu are excluded — the submenu container runs its own
+ * navigation setup, and without the filter Home/End (and wrap-around) from the
+ * parent menu would jump into submenu items.
  * @param {HTMLElement} container
  * @param {string} selector
  * @returns {HTMLElement[]}
  */
 function getNavigableItems(container, selector) {
-    return [...container.querySelectorAll(selector)];
+    return [...container.querySelectorAll(selector)].filter((el) => {
+        const sub = el.closest('[data-slot$="sub-content"]');
+        return !sub || sub === container || !container.contains(sub);
+    });
 }
 
 /**
@@ -670,9 +779,11 @@ export function initScrollArea(root, id) {
                 thumb.releasePointerCapture(ev.pointerId);
                 thumb.removeEventListener('pointermove', onMove);
                 thumb.removeEventListener('pointerup', onUp);
+                thumb.removeEventListener('pointercancel', onUp);
             };
             thumb.addEventListener('pointermove', onMove);
             thumb.addEventListener('pointerup', onUp);
+            thumb.addEventListener('pointercancel', onUp);
         }, { signal: controller.signal });
     }
 
@@ -706,10 +817,33 @@ export function destroyScrollArea(id) {
 const resizableMap = new Map();
 
 /**
- * Wires pointer-drag resizing to a resizable-panel-group. On handle drag, the panel
- * immediately before and after the handle have their flex-grow adjusted so the total
- * is preserved (the rest of the group stays fixed). Direction is read from the group's
- * data-direction attribute (horizontal => width drag, vertical => height drag).
+ * Splits the combined flex-grow of the two panels flanking a handle so the previous
+ * panel takes `newPrev` of `totalSize` pixels. Shared by pointer-drag and keyboard
+ * resizing. Returns the resulting prev ratio (0..1) for aria-valuenow updates.
+ * @param {HTMLElement} prev
+ * @param {HTMLElement} next
+ * @param {number} newPrev - desired pixel size of the previous panel
+ * @param {number} totalSize - combined pixel size of both panels
+ * @param {number} totalGrow - combined flex-grow of both panels
+ * @returns {number}
+ */
+function applyPanelSizes(prev, next, newPrev, totalSize, totalGrow) {
+    newPrev = Math.max(0, Math.min(newPrev, totalSize));
+    const prevRatio = totalSize > 0 ? newPrev / totalSize : 0.5;
+    prev.style.flexGrow = `${totalGrow * prevRatio}`;
+    next.style.flexGrow = `${totalGrow * (1 - prevRatio)}`;
+    prev.style.flexBasis = '0%';
+    next.style.flexBasis = '0%';
+    return prevRatio;
+}
+
+/**
+ * Wires pointer-drag AND keyboard resizing to a resizable-panel-group. On handle
+ * drag (or Arrow/Home/End on the focused handle), the panel immediately before and
+ * after the handle have their flex-grow adjusted so the total is preserved (the rest
+ * of the group stays fixed). Direction is read from the group's data-direction
+ * attribute (horizontal => width drag, vertical => height drag). Also maintains
+ * aria-valuenow/aria-controls on each role="separator" handle (APG window splitter).
  * @param {HTMLElement} group - the [data-slot="resizable-panel-group"] element
  * @param {string} id - unique ID for cleanup
  */
@@ -725,37 +859,48 @@ export function initResizable(group, id) {
     const handles = [...group.children].filter(
         (c) => c.getAttribute && c.getAttribute('data-slot') === 'resizable-handle');
 
-    for (const handle of handles) {
+    // Measures the panels flanking a handle. Recomputed per interaction — panel
+    // sizes change between events (other handles, container resizes).
+    function measurePanels(handle) {
+        const prev = handle.previousElementSibling;
+        const next = handle.nextElementSibling;
+        if (!prev || !next) return null;
+        const prevRect = prev.getBoundingClientRect();
+        const nextRect = next.getBoundingClientRect();
+        const prevSize = vertical ? prevRect.height : prevRect.width;
+        const nextSize = vertical ? nextRect.height : nextRect.width;
+        // Preserve the combined flex-grow across the two panels so siblings don't shift.
+        const prevGrow = parseFloat(getComputedStyle(prev).flexGrow) || 1;
+        const nextGrow = parseFloat(getComputedStyle(next).flexGrow) || 1;
+        return { prev, next, prevSize, totalSize: prevSize + nextSize, totalGrow: prevGrow + nextGrow };
+    }
+
+    handles.forEach((handle, index) => {
+        // APG window splitter: expose the split position to assistive tech.
+        // aria-valuemin/valuemax are rendered statically by ResizableHandleCn.
+        const initial = measurePanels(handle);
+        if (initial) {
+            if (!initial.prev.id) initial.prev.id = `${id}-panel-${index}`;
+            handle.setAttribute('aria-controls', initial.prev.id);
+            handle.setAttribute('aria-valuenow',
+                `${Math.round((initial.totalSize > 0 ? initial.prevSize / initial.totalSize : 0.5) * 100)}`);
+        }
+
         handle.addEventListener('pointerdown', (e) => {
-            const prev = handle.previousElementSibling;
-            const next = handle.nextElementSibling;
-            if (!prev || !next) return;
+            const panels = measurePanels(handle);
+            if (!panels) return;
+            const { prev, next, prevSize, totalSize, totalGrow } = panels;
 
             e.preventDefault();
             handle.setPointerCapture(e.pointerId);
             handle.setAttribute('data-resize-handle-active', '');
 
             const startPos = vertical ? e.clientY : e.clientX;
-            const prevRect = prev.getBoundingClientRect();
-            const nextRect = next.getBoundingClientRect();
-            const prevSize = vertical ? prevRect.height : prevRect.width;
-            const nextSize = vertical ? nextRect.height : nextRect.width;
-            const totalSize = prevSize + nextSize;
-
-            // Preserve the combined flex-grow across the two panels so siblings don't shift.
-            const prevGrow = parseFloat(getComputedStyle(prev).flexGrow) || 1;
-            const nextGrow = parseFloat(getComputedStyle(next).flexGrow) || 1;
-            const totalGrow = prevGrow + nextGrow;
 
             const onMove = (ev) => {
                 const delta = (vertical ? ev.clientY : ev.clientX) - startPos;
-                let newPrev = prevSize + delta;
-                newPrev = Math.max(0, Math.min(newPrev, totalSize));
-                const prevRatio = totalSize > 0 ? newPrev / totalSize : 0.5;
-                prev.style.flexGrow = `${totalGrow * prevRatio}`;
-                next.style.flexGrow = `${totalGrow * (1 - prevRatio)}`;
-                prev.style.flexBasis = '0%';
-                next.style.flexBasis = '0%';
+                const prevRatio = applyPanelSizes(prev, next, prevSize + delta, totalSize, totalGrow);
+                handle.setAttribute('aria-valuenow', `${Math.round(prevRatio * 100)}`);
             };
             const onUp = (ev) => {
                 handle.releasePointerCapture(ev.pointerId);
@@ -768,7 +913,31 @@ export function initResizable(group, id) {
             handle.addEventListener('pointerup', onUp);
             handle.addEventListener('pointercancel', onUp);
         }, { signal: controller.signal });
-    }
+
+        // APG window splitter keyboard support: arrows along the group axis move
+        // the splitter (Shift = coarse step), Home/End snap to min/max. Panel
+        // Min/MaxSize still clamp via the min/max CSS ResizablePanelCn emits.
+        handle.addEventListener('keydown', (e) => {
+            const prevKey = vertical ? 'ArrowUp' : 'ArrowLeft';
+            const nextKey = vertical ? 'ArrowDown' : 'ArrowRight';
+            if (e.key !== prevKey && e.key !== nextKey && e.key !== 'Home' && e.key !== 'End') return;
+
+            const panels = measurePanels(handle);
+            if (!panels) return;
+            const { prev, next, prevSize, totalSize, totalGrow } = panels;
+
+            e.preventDefault();
+            const step = totalSize * (e.shiftKey ? 0.10 : 0.02);
+            let newPrev;
+            if (e.key === 'Home') newPrev = 0;
+            else if (e.key === 'End') newPrev = totalSize;
+            else if (e.key === prevKey) newPrev = prevSize - step;
+            else newPrev = prevSize + step;
+
+            const prevRatio = applyPanelSizes(prev, next, newPrev, totalSize, totalGrow);
+            handle.setAttribute('aria-valuenow', `${Math.round(prevRatio * 100)}`);
+        }, { signal: controller.signal });
+    });
 }
 
 /**
@@ -783,15 +952,123 @@ export function destroyResizable(id) {
     }
 }
 
+// --- Media query watcher & sidebar shortcut ---
+
+let _mediaWatchCounter = 0;
+
+/**
+ * Watches a CSS media query and reports match-state changes to .NET. Invokes the
+ * callback immediately with the current state, then on every change (used by
+ * SidebarProviderCn to drive the mobile Sheet branch below 768px).
+ * @param {string} query - media query, e.g. '(max-width: 767px)'
+ * @param {object} dotnetRef - .NET object reference for callback
+ * @param {string} methodName - [JSInvokable] method receiving a bool
+ * @returns {string} watcher ID for unwatchMedia
+ */
+export function watchMedia(query, dotnetRef, methodName) {
+    const id = `media-watch-${++_mediaWatchCounter}`;
+    const mql = window.matchMedia(query);
+    const notify = () => dotnetRef.invokeMethodAsync(methodName, mql.matches);
+    mql.addEventListener('change', notify);
+    cleanupMap.set(id, { abort: () => mql.removeEventListener('change', notify) });
+    notify();
+    return id;
+}
+
+/**
+ * Stops a media-query watcher created by watchMedia.
+ * @param {string} id
+ */
+export function unwatchMedia(id) {
+    cleanup(id);
+}
+
+/**
+ * Registers the global Ctrl/Cmd+B sidebar-toggle shortcut (shadcn's
+ * SIDEBAR_KEYBOARD_SHORTCUT). preventDefault must run synchronously in JS —
+ * Blazor @onkeydown can't stop the browser's own Ctrl+B binding. Torn down
+ * via cleanup(id).
+ * @param {string} id - unique ID for cleanup
+ * @param {object} dotnetRef - .NET object reference for callback
+ * @param {string} methodName - [JSInvokable] method toggling the sidebar
+ */
+export function initSidebarShortcut(id, dotnetRef, methodName) {
+    cleanup(id);
+    const controller = new AbortController();
+    cleanupMap.set(id, controller);
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'b' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            dotnetRef.invokeMethodAsync(methodName);
+        }
+    }, { signal: controller.signal });
+}
+
 // --- Utilities ---
 
 /**
- * Gets all focusable elements within a container.
+ * Gets all focusable elements within a container. Invisible elements are excluded:
+ * calling .focus() on a hidden element is a silent no-op, which would break the
+ * focus-trap wrap (preventDefault fires but focus never moves).
  * @param {HTMLElement} container
  * @returns {HTMLElement[]}
  */
 function getFocusableElements(container) {
     return [...container.querySelectorAll(
         'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )];
+    )].filter((el) => el.checkVisibility ? el.checkVisibility() : el.offsetParent !== null);
+}
+
+// --- Context menu positioning (self-contained, appended) ---
+
+/**
+ * Positions a context-menu popup at pointer coordinates with Radix-style
+ * viewport collision handling: flips across the pointer when the menu would
+ * overflow the right/bottom edge, clamps into the viewport with an 8px pad,
+ * and sets --available-height / --transform-origin on the element so
+ * `max-h-(--available-height)` and `origin-(--transform-origin)` resolve.
+ * @param {HTMLElement} el
+ * @param {number} x
+ * @param {number} y
+ */
+export function positionContextMenu(el, x, y) {
+    if (!el) return;
+    const pad = 8;
+    const width = el.offsetWidth;
+    const height = el.offsetHeight;
+
+    let flippedX = false;
+    let flippedY = false;
+
+    if (x + width > window.innerWidth - pad) {
+        x = x - width;
+        flippedX = true;
+    }
+    x = Math.max(pad, Math.min(x, window.innerWidth - width - pad));
+
+    if (y + height > window.innerHeight - pad) {
+        y = y - height;
+        flippedY = true;
+    }
+    y = Math.max(pad, Math.min(y, window.innerHeight - height - pad));
+
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.style.setProperty('--available-height', `${window.innerHeight - y - pad}px`);
+    el.style.setProperty('--transform-origin', `${flippedY ? 'bottom' : 'top'} ${flippedX ? 'right' : 'left'}`);
+}
+
+// --- Command virtual highlight (self-contained, appended) ---
+
+/**
+ * Scrolls a command item into view inside its scrollable list. Used by the
+ * cmdk-style virtual highlight in CommandCn: DOM focus stays in the input,
+ * so the highlighted item must be scrolled into view manually.
+ * @param {HTMLElement} listEl - the scrollable list (or root) container
+ * @param {string} itemId - id of the highlighted item element
+ */
+export function scrollItemIntoView(listEl, itemId) {
+    if (!listEl || !itemId) return;
+    const item = listEl.querySelector('#' + CSS.escape(itemId)) ?? document.getElementById(itemId);
+    if (item) item.scrollIntoView({ block: 'nearest' });
 }

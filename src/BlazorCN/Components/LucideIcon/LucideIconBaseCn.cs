@@ -26,4 +26,17 @@ public abstract class LucideIconBaseCn : ComponentBaseCn
     /// The SVG stroke width. Defaults to 2.
     /// </summary>
     [Parameter] public int StrokeWidth { get; set; } = 2;
+
+    /// <summary>
+    /// Icons are decorative by default and hidden from assistive technology.
+    /// Passing aria-label, aria-labelledby, role, or aria-hidden suppresses the default
+    /// so an icon can be exposed as meaningful content.
+    /// </summary>
+    protected string? AriaHiddenDefault =>
+        HasAttribute("aria-label")
+        || HasAttribute("aria-labelledby")
+        || HasAttribute("role")
+        || HasAttribute("aria-hidden")
+            ? null
+            : "true";
 }

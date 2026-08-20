@@ -8,12 +8,14 @@
 <div @ref="_itemRef"
      class="@Cn.Merge("cn-command-item group/command-item data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0", IsVisible ? null : "hidden", Class)"
      style="@Style"
+     id="@ItemId"
+     role="option"
+     aria-selected="@(Highlighted ? "true" : "false")"
+     aria-disabled="@(Disabled ? "true" : null)"
      data-slot="command-item"
-     data-menu-item
      data-disabled="@(Disabled ? "true" : null)"
-     data-selected="@(_selected && !Disabled ? "true" : null)"
+     data-selected="@(Highlighted ? "true" : null)"
      data-value="@Value"
-     tabindex="-1"
      @onmouseenter="HandleMouseEnter"
      @onmouseleave="HandleMouseLeave"
      @onclick="HandleClick"
@@ -33,6 +35,15 @@
     private ElementReference _itemRef;
     private bool _selected;
     private string? _resolvedText;
+
+    /// <summary>Element id — referenced by the input's aria-activedescendant (cmdk model).</summary>
+    internal string ItemId { get; } = $"command-item-{Guid.NewGuid():N}";
+
+    /// <summary>Whether this item carries the highlight (keyboard or hover) — drives
+    /// data-selected/aria-selected. The root tracks a single highlight; the local flag
+    /// only serves items used without a CommandCn ancestor.</summary>
+    private bool Highlighted =>
+        !Disabled && (Command is not null ? ReferenceEquals(Command.HighlightedItem, this) : _selected);
 
     /// <summary>Text the item is matched against: explicit Value, else its rendered text (cmdk behavior).</summary>
     private string FilterText => Value ?? _resolvedText ?? string.Empty;
@@ -62,14 +73,26 @@
         }
     }
 
-    private void HandleMouseEnter() => _selected = true;
+    private void HandleMouseEnter()
+    {
+        if (Disabled) return;
+        if (Command is not null) Command.SetHighlight(this);
+        else _selected = true;
+    }
 
-    private void HandleMouseLeave() => _selected = false;
+    private void HandleMouseLeave()
+    {
+        if (Command is not null) Command.ClearHighlight(this);
+        else _selected = false;
+    }
 
     private async Task HandleClick()
     {
         if (!Disabled) await OnSelect.InvokeAsync();
     }
+
+    /// <summary>Activates the item as if clicked — used by the root's Enter handling.</summary>
+    internal Task SelectAsync() => HandleClick();
 
     public void Dispose()
     {

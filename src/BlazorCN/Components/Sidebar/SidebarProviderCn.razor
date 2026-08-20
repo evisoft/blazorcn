@@ -1,5 +1,6 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IAsyncDisposable
 
 <div class="@CssClass"
      style="@GetStyle()"
@@ -15,12 +16,18 @@
     [Parameter] public bool DefaultOpen { get; set; } = true;
     [Parameter] public bool? Open { get; set; }
     [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
 
     internal bool IsOpen { get; private set; } = true;
-    internal bool IsMobile { get; set; }
+    internal bool IsMobile { get; private set; }
     internal bool OpenMobile { get; private set; }
 
     internal string State => IsOpen ? "expanded" : "collapsed";
+
+    private DotNetObjectReference<SidebarProviderCn>? _dotnetRef;
+    private string? _mediaWatchId;
+    private readonly string _shortcutId = $"sidebar-shortcut-{Guid.NewGuid():N}";
+    private bool _shortcutInitialized;
 
     protected override void OnInitialized()
     {
@@ -32,6 +39,37 @@
         if (Open.HasValue && Open.Value != IsOpen)
             IsOpen = Open.Value;
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _dotnetRef = DotNetObjectReference.Create(this);
+                // Mirrors shadcn's useIsMobile hook: below 768px SidebarCn renders
+                // the mobile Sheet branch instead of the fixed desktop sidebar.
+                _mediaWatchId = await JsInterop.WatchMediaAsync(
+                    "(max-width: 767px)", _dotnetRef, nameof(OnIsMobileChanged));
+                // Ctrl/Cmd+B toggles the sidebar (shadcn's SIDEBAR_KEYBOARD_SHORTCUT).
+                await JsInterop.InitSidebarShortcutAsync(
+                    _shortcutId, _dotnetRef, nameof(OnSidebarShortcut));
+                _shortcutInitialized = true;
+            }
+            catch { /* Prerendering without JS — mobile detection is progressive enhancement */ }
+        }
+    }
+
+    [JSInvokable]
+    public void OnIsMobileChanged(bool isMobile)
+    {
+        if (IsMobile == isMobile) return;
+        IsMobile = isMobile;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public Task OnSidebarShortcut() => ToggleSidebar();
 
     internal async Task SetOpen(bool open)
     {
@@ -70,5 +108,20 @@
     {
         var vars = "--sidebar-width: 16rem; --sidebar-width-icon: 3rem;";
         return string.IsNullOrEmpty(Style) ? vars : $"{vars} {Style}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_mediaWatchId is not null)
+        {
+            try { await JsInterop.UnwatchMediaAsync(_mediaWatchId); }
+            catch { /* Circuit may already be gone */ }
+        }
+        if (_shortcutInitialized)
+        {
+            try { await JsInterop.CleanupAsync(_shortcutId); }
+            catch { /* Circuit may already be gone */ }
+        }
+        _dotnetRef?.Dispose();
     }
 }

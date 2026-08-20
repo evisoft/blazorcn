@@ -10,6 +10,9 @@ public partial class SelectContentCn : IAsyncDisposable
     [Parameter] public int SideOffset { get; set; } = 4;
     [Parameter] public FloatingAlign Align { get; set; } = FloatingAlign.Center;
     [Parameter] public int AlignOffset { get; set; }
+    /// <summary>Explicit accessible name for the listbox. When null (default) the
+    /// listbox is labelled by the trigger via aria-labelledby.</summary>
+    [Parameter] public string? AriaLabel { get; set; }
     [CascadingParameter] public SelectCn? Select { get; set; }
     [Inject] private JsInteropCn JsInterop { get; set; } = default!;
 
@@ -36,8 +39,11 @@ public partial class SelectContentCn : IAsyncDisposable
                         Align = Align,
                         AlignOffset = AlignOffset
                     });
-                await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick");
-                await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
+                await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick", Select?.TriggerElement);
+                // APG select-only combobox: opening the listbox puts focus on the
+                // currently-selected option (falls back to the first enabled item).
+                await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey",
+                    initialSelector: "[data-slot=select-item][aria-selected=true]:not([data-disabled])");
             }
             catch
             {

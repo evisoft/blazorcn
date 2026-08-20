@@ -2,21 +2,27 @@
 @inherits ComponentBaseCn
 @using System.Text.RegularExpressions
 
+@* The real input is sr-only; clicking/tapping the visible slots must focus it,
+   and consumer attributes (id, name, aria-*) must land on the input — not the
+   container — so labels and accessible names reach the actual control. *@
 <div class="@Cn.Merge("cn-input-otp flex items-center", Class)"
      style="@Style"
      data-slot="input-otp"
-     @attributes="AdditionalAttributes">
+     @onclick="FocusInputAsync">
     <input type="text"
            class="sr-only"
+           aria-label="@AriaLabelDefault"
            maxlength="@MaxLength"
            value="@Value"
            disabled="@Disabled"
            @oninput="HandleInput"
+           @onkeydown="HandleKeyDown"
            @onfocus="HandleFocus"
            @onblur="HandleBlur"
            @ref="_inputRef"
            autocomplete="one-time-code"
-           inputmode="@ResolvedInputMode" />
+           inputmode="@ResolvedInputMode"
+           @attributes="AdditionalAttributes" />
     <CascadingValue Value="this" IsFixed="false">
         @ChildContent
     </CascadingValue>
@@ -31,6 +37,13 @@
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public int MaxLength { get; set; } = 6;
+
+    // Default accessible name for the sr-only input when the consumer wired none.
+    // Suppressed if they passed aria-label/aria-labelledby, or an id (aria-label
+    // would override an associated <label for> otherwise).
+    private string? AriaLabelDefault =>
+        HasAttribute("aria-label") || HasAttribute("aria-labelledby") || HasAttribute("id")
+            ? null : "One-time code";
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
     [Parameter] public bool Disabled { get; set; }
@@ -71,11 +84,40 @@
 
     private async Task HandleInput(ChangeEventArgs e)
     {
+        var oldLength = Value?.Length ?? 0;
         var newValue = e.Value?.ToString() ?? string.Empty;
         var filtered = new string(newValue.Where(MatchesPattern).Take(MaxLength).ToArray());
         Value = filtered;
-        ActiveIndex = Math.Min(filtered.Length, MaxLength - 1);
+        // Approximate the DOM caret: characters are inserted/removed at the tracked
+        // position, so shift the highlight by the length delta instead of snapping it
+        // to the end (which lies after Backspace/typing mid-string). Delete removes
+        // AFTER the caret, so the caret — and the highlight — stay put.
+        var delta = filtered.Length - oldLength;
+        if (delta < 0 && _lastKey == "Delete")
+            delta = 0;
+        ActiveIndex = Math.Clamp(ActiveIndex + delta, 0, Math.Min(filtered.Length, MaxLength - 1));
         await ValueChanged.InvokeAsync(Value);
+    }
+
+    private string? _lastKey;
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        _lastKey = e.Key;
+        // Selection (Shift/Ctrl) desyncs a keydown-based caret model; leave the
+        // highlight alone rather than guess wrong.
+        if (e.ShiftKey || e.CtrlKey || e.MetaKey || e.AltKey)
+            return;
+
+        var caretMax = Math.Min(Value?.Length ?? 0, MaxLength - 1);
+        ActiveIndex = e.Key switch
+        {
+            "ArrowLeft" => Math.Max(0, ActiveIndex - 1),
+            "ArrowRight" => Math.Min(caretMax, ActiveIndex + 1),
+            "Home" => 0,
+            "End" => caretMax,
+            _ => ActiveIndex
+        };
     }
 
     private void HandleFocus()
@@ -87,6 +129,12 @@
     private void HandleBlur()
     {
         IsFocused = false;
+    }
+
+    private async Task FocusInputAsync()
+    {
+        if (!Disabled)
+            await _inputRef.FocusAsync();
     }
 
     protected override void OnParametersSet()

@@ -42,7 +42,7 @@ public class CarouselCnTests : BunitContext
     public void Carousel_Has_Default_AriaLabel()
     {
         var cut = Render<CarouselCn>(p => p.AddChildContent("Content"));
-        cut.Find("[data-slot='carousel']").GetAttribute("aria-label").Should().Be("Carousel");
+        cut.Find("[data-slot='carousel']").GetAttribute("aria-label").Should().BeNull(); // hardcoded label removed — consumers supply their own via splat
     }
 
     [Fact]

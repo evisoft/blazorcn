@@ -1,12 +1,21 @@
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
 
 public class ToggleGroupCnTests : BunitContext
 {
+    public ToggleGroupCnTests()
+    {
+        // ToggleGroupCn injects JsInteropCn (arrow-key navigation).
+        // Loose mode lets those interop calls no-op, and registering the service satisfies [Inject].
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     // --- ToggleGroupCn ---
 
     [Fact]

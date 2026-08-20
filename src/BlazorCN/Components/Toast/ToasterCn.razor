@@ -3,19 +3,49 @@
 @implements IDisposable
 @inject ToastService ToastService
 
-<div class="@Cn.Merge("fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:right-0 sm:top-auto sm:bottom-0 sm:flex-col md:max-w-[420px]", Class)"
-     style="@Style"
-     data-slot="toaster"
-     @attributes="AdditionalAttributes">
-    @foreach (var toast in _toasts)
+@* pointer-events-none: the fixed strip must never block clicks on UI underneath;
+   ToastCn restores pointer-events-auto on each toast. The section landmark +
+   tabindex=-1 give AT users a labeled region and RemoveToast a focus target. *@
+<section @ref="_containerRef"
+         class="@Cn.Merge("pointer-events-none fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:right-0 sm:top-auto sm:bottom-0 sm:flex-col md:max-w-[420px]", Class)"
+         style="@Style"
+         aria-label="Notifications"
+         tabindex="-1"
+         data-slot="toaster"
+         @attributes="AdditionalAttributes">
+    @foreach (var toast in VisibleToasts)
     {
-        <ToastCn @key="toast.Id" Message="@toast" OnDismiss="RemoveToast" />
+        <ToastCn @key="toast.Id"
+                 Message="@toast"
+                 OnDismiss="RemoveToast"
+                 OnPause="PauseTimer"
+                 OnResume="ResumeTimer"
+                 OnFocusIn="HandleToastFocusIn"
+                 OnFocusOut="HandleToastFocusOut" />
     }
-</div>
+</section>
 
 @code {
+    // Sonner-style cap: render only the newest toasts; queued ones keep their
+    // timers running so the backlog drains naturally.
+    private const int MaxVisibleToasts = 3;
+
     private readonly List<ToastMessage> _toasts = new();
-    private readonly Dictionary<string, CancellationTokenSource> _timers = new();
+    private readonly Dictionary<string, ToastTimer> _timers = new();
+    private ElementReference _containerRef;
+    private string? _focusedToastId;
+
+    private IEnumerable<ToastMessage> VisibleToasts => _toasts.Skip(Math.Max(0, _toasts.Count - MaxVisibleToasts));
+
+    // Pausable auto-dismiss state (WCAG 2.2.1 Timing Adjustable): hover and focus
+    // pause the countdown; PauseCount balances overlapping hover + focus pauses.
+    private sealed class ToastTimer
+    {
+        public CancellationTokenSource? Cts;
+        public long StartedAt;
+        public int RemainingMs;
+        public int PauseCount;
+    }
 
     protected override void OnInitialized()
     {
@@ -28,29 +58,71 @@
         {
             _toasts.Add(message);
             StateHasChanged();
-            _ = AutoDismissAsync(message);
+            var timer = new ToastTimer { RemainingMs = message.DurationMs };
+            _timers[message.Id] = timer;
+            _ = RunTimerAsync(message.Id, timer);
         });
     }
 
-    private async Task AutoDismissAsync(ToastMessage message)
+    private async Task RunTimerAsync(string id, ToastTimer timer)
     {
         var cts = new CancellationTokenSource();
-        _timers[message.Id] = cts;
+        timer.Cts = cts;
+        timer.StartedAt = Environment.TickCount64;
         try
         {
-            await Task.Delay(message.DurationMs, cts.Token);
-            await InvokeAsync(() => RemoveToast(message.Id));
+            await Task.Delay(timer.RemainingMs, cts.Token);
+            await InvokeAsync(() => RemoveToast(id));
         }
         catch (TaskCanceledException) { }
+    }
+
+    internal void PauseTimer(string id)
+    {
+        if (!_timers.TryGetValue(id, out var timer)) return;
+        timer.PauseCount++;
+        if (timer.Cts is null) return;
+        var elapsed = (int)Math.Min(Environment.TickCount64 - timer.StartedAt, int.MaxValue);
+        timer.RemainingMs = Math.Max(0, timer.RemainingMs - elapsed);
+        timer.Cts.Cancel();
+        timer.Cts.Dispose();
+        timer.Cts = null;
+    }
+
+    internal void ResumeTimer(string id)
+    {
+        if (!_timers.TryGetValue(id, out var timer)) return;
+        timer.PauseCount = Math.Max(0, timer.PauseCount - 1);
+        if (timer.PauseCount == 0 && timer.Cts is null)
+            _ = RunTimerAsync(id, timer);
+    }
+
+    private void HandleToastFocusIn(string id)
+    {
+        _focusedToastId = id;
+        PauseTimer(id);
+    }
+
+    private void HandleToastFocusOut(string id)
+    {
+        if (_focusedToastId == id)
+            _focusedToastId = null;
+        ResumeTimer(id);
     }
 
     internal void RemoveToast(string id)
     {
         _toasts.RemoveAll(t => t.Id == id);
-        if (_timers.Remove(id, out var cts))
+        if (_timers.Remove(id, out var timer) && timer.Cts is not null)
         {
-            cts.Cancel();
-            cts.Dispose();
+            timer.Cts.Cancel();
+            timer.Cts.Dispose();
+        }
+        if (_focusedToastId == id)
+        {
+            // Don't strand keyboard focus on <body> when the focused toast goes away.
+            _focusedToastId = null;
+            _ = _containerRef.FocusAsync();
         }
         StateHasChanged();
     }
@@ -58,10 +130,10 @@
     public void Dispose()
     {
         ToastService.OnShow -= HandleShow;
-        foreach (var cts in _timers.Values)
+        foreach (var timer in _timers.Values)
         {
-            cts.Cancel();
-            cts.Dispose();
+            timer.Cts?.Cancel();
+            timer.Cts?.Dispose();
         }
         _timers.Clear();
     }

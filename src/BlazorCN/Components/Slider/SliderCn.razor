@@ -13,6 +13,17 @@
     var rangeClasses = isVertical
         ? "cn-slider-range absolute select-none w-full"
         : "cn-slider-range absolute select-none h-full";
+    // The root collapses to the 4px track, so the hit strip extends 12px beyond it
+    // on the cross axis (-inset-*-3) to match the reference thumb's ~28px grab area.
+    var inputClasses = isVertical
+        ? "absolute inset-y-0 -inset-x-3 h-full w-auto cursor-pointer opacity-0"
+        : "absolute inset-x-0 -inset-y-3 h-auto w-full cursor-pointer opacity-0";
+    // Consumer id / name / aria-label / aria-labelledby must land on the focusable
+    // native range input(s) — a div is neither labelable nor focusable.
+    var forwardedId = GetForwarded("id");
+    var forwardedName = GetForwarded("name");
+    var forwardedLabel = GetForwarded("aria-label");
+    var forwardedLabelledBy = GetForwarded("aria-labelledby");
 }
 
 <div class="@rootClasses"
@@ -20,7 +31,7 @@
      data-slot="slider"
      data-disabled="@(Disabled ? "true" : null)"
      data-orientation="@orientationAttr"
-     @attributes="AdditionalAttributes">
+     @attributes="RootAttributes">
     <div class="@trackClasses" data-slot="slider-track" data-orientation="@orientationAttr">
         <div class="@rangeClasses"
              style="@RangeStyle"
@@ -32,9 +43,11 @@
     {
         var index = i;
         var percent = GetPercent(ResolvedValues[index]);
+        // inset-inline-start (not left) so the drawn thumb mirrors under dir="rtl"
+        // exactly like the natively-mirrored range inputs do.
         var thumbStyle = isVertical
             ? $"bottom: calc({percent.ToString(Inv)}% - 6px); left: calc(50% - 6px)"
-            : $"left: calc({percent.ToString(Inv)}% - 6px)";
+            : $"inset-inline-start: calc({percent.ToString(Inv)}% - 6px)";
         <div class="cn-slider-thumb absolute block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50"
              style="@thumbStyle"
              data-slot="slider-thumb"
@@ -45,7 +58,14 @@
     {
         var index = i;
         <input type="range"
-               class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+               class="@inputClasses"
+               style="@GetInputStyle(index)"
+               id="@(index == 0 ? forwardedId : null)"
+               name="@forwardedName"
+               aria-label="@GetInputAriaLabel(index, forwardedLabel)"
+               aria-labelledby="@forwardedLabelledBy"
+               aria-orientation="@(isVertical ? "vertical" : null)"
+               orient="@(isVertical ? "vertical" : null)"
                min="@Min.ToString(Inv)"
                max="@Max.ToString(Inv)"
                step="@Step.ToString(Inv)"
@@ -82,6 +102,74 @@
 
     private double[] ResolvedValues => IsMultiValue ? Values! : new[] { Value };
 
+    // These consumer attributes are rendered on the native range input(s) instead
+    // of the root div; everything else still splats on the root.
+    private static readonly string[] InputForwardedAttributes = { "id", "name", "aria-label", "aria-labelledby" };
+
+    // Blazor's parameter/attribute capture preserves the case the consumer typed, and HTML
+    // attribute names are case-insensitive — so `Id="x"` and `id="x"` are the same attribute to
+    // the browser but different dictionary keys here. Matching case-sensitively let `Id="x"`
+    // slip past the filter and splat onto the root div while ALSO reaching the input: the id
+    // was emitted twice, and `label[for=x]` resolved to the div — which is not labelable, so
+    // the slider ended up with no accessible name at all.
+    private static bool IsForwarded(string key) =>
+        InputForwardedAttributes.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    private Dictionary<string, object?>? RootAttributes
+    {
+        get
+        {
+            if (AdditionalAttributes is null) return null;
+            if (!AdditionalAttributes.Keys.Any(IsForwarded)) return AdditionalAttributes;
+            return AdditionalAttributes
+                .Where(kv => !IsForwarded(kv.Key))
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+        }
+    }
+
+    private string? GetForwarded(string key) =>
+        AdditionalAttributes?.FirstOrDefault(kv => string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
+            .Value?.ToString();
+
+    // Two thumbs share one label: distinguish them the way Radix documents
+    // ("Minimum"/"Maximum" thumb names).
+    private string? GetInputAriaLabel(int index, string? label)
+    {
+        if (label is null || ResolvedValues.Length != 2) return label;
+        return label + (index == 0 ? " minimum" : " maximum");
+    }
+
+    private string? GetInputStyle(int index)
+    {
+        var parts = new List<string>(2);
+        if (Orientation == SliderOrientation.Vertical)
+        {
+            // vertical-lr makes the native input track the block (vertical) axis;
+            // direction: rtl puts min at the bottom, matching the bottom-up
+            // GetPercent math used for the drawn thumb/range.
+            parts.Add("writing-mode: vertical-lr; direction: rtl");
+        }
+        if (ResolvedValues.Length > 1)
+            parts.Add(GetInputClipPath(index));
+        return parts.Count == 0 ? null : string.Join("; ", parts);
+    }
+
+    // Multi-thumb: every input spans the whole track, so without clipping only the
+    // last sibling is hit-testable. clip-path also clips hit-testing, so each input
+    // is limited to the span around its own thumb up to the midpoints toward its
+    // neighbors — pointer-down anywhere grabs the nearest thumb, while the native
+    // implicit pointer capture keeps a started drag tracking across the full track.
+    private string GetInputClipPath(int index)
+    {
+        var vals = ResolvedValues;
+        var percent = GetPercent(vals[index]);
+        var lowBound = index == 0 ? 0d : (GetPercent(vals[index - 1]) + percent) / 2;
+        var highBound = index == vals.Length - 1 ? 100d : (percent + GetPercent(vals[index + 1])) / 2;
+        return Orientation == SliderOrientation.Vertical
+            ? $"clip-path: inset({(100 - highBound).ToString(Inv)}% 0 {lowBound.ToString(Inv)}% 0)"
+            : $"clip-path: inset(0 {(100 - highBound).ToString(Inv)}% 0 {lowBound.ToString(Inv)}%)";
+    }
+
     private double GetPercent(double val) =>
         Max > Min ? Math.Clamp((val - Min) / (Max - Min) * 100, 0, 100) : 0;
 
@@ -97,14 +185,14 @@
                 var p = GetPercent(sorted[0]);
                 return isVertical
                     ? $"bottom: 0%; height: {p.ToString(Inv)}%"
-                    : $"left: 0%; width: {p.ToString(Inv)}%";
+                    : $"inset-inline-start: 0%; width: {p.ToString(Inv)}%";
             }
 
             var minP = GetPercent(sorted[0]);
             var maxP = GetPercent(sorted[^1]);
             return isVertical
                 ? $"bottom: {minP.ToString(Inv)}%; height: {(maxP - minP).ToString(Inv)}%"
-                : $"left: {minP.ToString(Inv)}%; width: {(maxP - minP).ToString(Inv)}%";
+                : $"inset-inline-start: {minP.ToString(Inv)}%; width: {(maxP - minP).ToString(Inv)}%";
         }
     }
 

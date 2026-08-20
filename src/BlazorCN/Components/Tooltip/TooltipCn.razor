@@ -10,11 +10,21 @@
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
-    [Parameter] public int OpenDelay { get; set; } = 700;
-    [Parameter] public int CloseDelay { get; set; } = 0;
+    // shadcn's TooltipProvider sets delayDuration=0; Radix's primitive default of 700 is opt-in.
+    [Parameter] public int OpenDelay { get; set; }
+    [Parameter] public int CloseDelay { get; set; }
+
+    /// <summary>Optional ancestor provider supplying default delays (shadcn's TooltipProvider).</summary>
+    [CascadingParameter] public TooltipProviderCn? Provider { get; set; }
+
+    // A tooltip's own delay wins; otherwise inherit the provider's. Both default to 0, so
+    // behaviour is unchanged unless a consumer opts in.
+    private int EffectiveOpenDelay => OpenDelay > 0 ? OpenDelay : (Provider?.Delay ?? 0);
+    private int EffectiveCloseDelay => CloseDelay > 0 ? CloseDelay : (Provider?.CloseDelay ?? 0);
 
     internal bool IsOpen { get; private set; }
     internal ElementReference TriggerElement { get; set; }
+    internal string ContentId { get; } = $"tooltip-content-{Guid.NewGuid():N}";
 
     private CancellationTokenSource? _openCts;
     private CancellationTokenSource? _closeCts;
@@ -34,7 +44,7 @@
 
         try
         {
-            await Task.Delay(OpenDelay, token);
+            await Task.Delay(EffectiveOpenDelay, token);
             if (!token.IsCancellationRequested)
             {
                 IsOpen = true;
@@ -52,7 +62,7 @@
 
         if (!IsOpen) return;
 
-        if (CloseDelay <= 0)
+        if (EffectiveCloseDelay <= 0)
         {
             IsOpen = false;
             StateHasChanged();
@@ -66,7 +76,7 @@
 
         try
         {
-            await Task.Delay(CloseDelay, token);
+            await Task.Delay(EffectiveCloseDelay, token);
             if (!token.IsCancellationRequested)
             {
                 IsOpen = false;
@@ -74,6 +84,21 @@
             }
         }
         catch (TaskCanceledException) { }
+    }
+
+    /// <summary>Immediately hides the tooltip (WCAG 1.4.13 Escape dismissal), bypassing CloseDelay.</summary>
+    internal void ForceClose()
+    {
+        _openCts?.Cancel();
+        _openCts?.Dispose();
+        _openCts = null;
+        _closeCts?.Cancel();
+        _closeCts?.Dispose();
+        _closeCts = null;
+
+        if (!IsOpen) return;
+        IsOpen = false;
+        StateHasChanged();
     }
 
     public void Dispose()

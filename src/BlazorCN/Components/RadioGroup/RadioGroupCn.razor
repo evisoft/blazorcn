@@ -5,6 +5,7 @@
      style="@Style"
      role="radiogroup"
      data-slot="radio-group"
+     @onkeydown="HandleKeyDown"
      @attributes="AdditionalAttributes">
     <CascadingValue Value="this" IsFixed="false">
         @ChildContent
@@ -16,6 +17,11 @@
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
 
+    // Items register in render order for the APG roving-tabindex model: one tab
+    // stop for the whole group, arrows move focus AND select (wrapping), Home/End
+    // jump to the first/last enabled radio.
+    private readonly List<RadioGroupItemCn> _items = new();
+
     internal bool IsSelected(string value) => Value == value;
 
     internal async Task SelectValue(string value)
@@ -23,5 +29,52 @@
         Value = value;
         await ValueChanged.InvokeAsync(value);
         StateHasChanged();
+    }
+
+    internal void RegisterItem(RadioGroupItemCn item)
+    {
+        if (!_items.Contains(item))
+            _items.Add(item);
+    }
+
+    internal void UnregisterItem(RadioGroupItemCn item) => _items.Remove(item);
+
+    internal bool IsTabStop(RadioGroupItemCn item)
+    {
+        // The checked radio is the single tab stop; with none checked (or the
+        // checked one disabled) the first enabled radio takes it.
+        var selected = _items.FirstOrDefault(i => !i.Disabled && IsSelected(i.Value));
+        var stop = selected ?? _items.FirstOrDefault(i => !i.Disabled);
+        return ReferenceEquals(stop, item);
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        var enabled = _items.Where(i => !i.Disabled).ToList();
+        if (enabled.Count == 0) return;
+
+        var currentIndex = enabled.FindIndex(i => IsSelected(i.Value));
+        if (currentIndex < 0) currentIndex = 0;
+
+        var targetIndex = e.Key switch
+        {
+            "ArrowDown" or "ArrowRight" => (currentIndex + 1) % enabled.Count,
+            "ArrowUp" or "ArrowLeft" => (currentIndex - 1 + enabled.Count) % enabled.Count,
+            "Home" => 0,
+            "End" => enabled.Count - 1,
+            _ => -1
+        };
+        if (targetIndex < 0) return;
+
+        await enabled[targetIndex].SelectAndFocusAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Items register while the first render is in flight, so an item rendered
+        // before the checked one may have claimed the tab stop; re-render once with
+        // the full registry so exactly one radio has tabindex="0".
+        if (firstRender && _items.Count > 0)
+            StateHasChanged();
     }
 }

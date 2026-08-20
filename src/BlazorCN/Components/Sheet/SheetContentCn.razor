@@ -4,7 +4,18 @@
 
 @if (Sheet?.IsOpen == true)
 {
+    @* Built-in backdrop (sheet.tsx always renders the overlay inside Content).
+       Skipped when the consumer places an explicit SheetOverlayCn. *@
+    @if (!Sheet.HasExplicitOverlay)
+    {
+        <div class="cn-sheet-overlay fixed inset-0 z-50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
+             data-slot="sheet-overlay"
+             data-state="open"
+             @onclick="HandleOverlayClick">
+        </div>
+    }
     <div @ref="_element"
+         id="@Sheet.ContentId"
          class="@Cn.Merge(GetClasses(), Class)"
          style="@Style"
          data-slot="sheet-content"
@@ -14,11 +25,14 @@
          aria-modal="true"
          aria-labelledby="@(_titleLink.IsLinked ? _titleLink.Id : null)"
          aria-label="@(!_titleLink.IsLinked ? "Sheet" : null)"
+         aria-describedby="@(_descriptionLink.IsLinked ? _descriptionLink.Id : null)"
          tabindex="-1"
          @onkeydown="HandleKeyDown"
          @attributes="AdditionalAttributes">
         <CascadingValue Value="@_titleLink" Name="ContentTitleLink" IsFixed="true">
-            @ChildContent
+            <CascadingValue Value="@_descriptionLink" Name="ContentDescriptionLink" IsFixed="true">
+                @ChildContent
+            </CascadingValue>
         </CascadingValue>
         @if (ShowCloseButton)
         {
@@ -46,7 +60,9 @@
     private ElementReference _element;
     private string _id = $"sheet-content-{Guid.NewGuid():N}";
     private TitleLink _titleLink = new($"sheet-title-{Guid.NewGuid():N}");
+    private TitleLink _descriptionLink = new($"sheet-description-{Guid.NewGuid():N}");
     private bool _titleLinked;
+    private bool _descriptionLinked;
     private bool _jsInitialized;
 
     private string GetClasses()
@@ -64,9 +80,19 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        var needsRelink = false;
         if (_titleLink.IsLinked && !_titleLinked)
         {
             _titleLinked = true;
+            needsRelink = true;
+        }
+        if (_descriptionLink.IsLinked && !_descriptionLinked)
+        {
+            _descriptionLinked = true;
+            needsRelink = true;
+        }
+        if (needsRelink)
+        {
             StateHasChanged();
             return;
         }
@@ -100,6 +126,11 @@
     }
 
     private async Task HandleClose()
+    {
+        if (Sheet is not null) await Sheet.SetOpen(false);
+    }
+
+    private async Task HandleOverlayClick()
     {
         if (Sheet is not null) await Sheet.SetOpen(false);
     }

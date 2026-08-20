@@ -36,7 +36,7 @@ public partial class MenubarContentCn : IAsyncDisposable
                         Align = Align,
                         AlignOffset = AlignOffset
                     });
-                await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick");
+                await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick", Menu?.TriggerElement);
                 await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
             }
             catch

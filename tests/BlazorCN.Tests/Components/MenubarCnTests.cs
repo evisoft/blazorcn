@@ -8,6 +8,13 @@ namespace BlazorCN.Tests.Components;
 
 public class MenubarCnTests : BunitContext
 {
+    public MenubarCnTests()
+    {
+        // MenubarCn wires arrow-key nav via JsInteropCn on render.
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     private void SetupJsInterop()
     {
         var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");
@@ -505,7 +512,7 @@ public class MenubarCnTests : BunitContext
     public void MenubarRadioGroup_Has_Role_Radiogroup()
     {
         var cut = Render<MenubarRadioGroupCn>(p => p.AddChildContent("Radio"));
-        cut.Find("[data-slot='menubar-radio-group']").GetAttribute("role").Should().Be("radiogroup");
+        cut.Find("[data-slot='menubar-radio-group']").GetAttribute("role").Should().Be("group"); // menuitemradio children require group, not radiogroup
     }
 
     // --- MenubarRadioItemCn ---

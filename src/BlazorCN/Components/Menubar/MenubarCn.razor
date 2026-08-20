@@ -1,7 +1,8 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IAsyncDisposable
 
-<div class="@Cn.Merge("cn-menubar flex items-center bg-background", Class)" style="@Style" data-slot="menubar" role="menubar" aria-label="Menu" @attributes="AdditionalAttributes">
+<div @ref="_rootRef" class="@Cn.Merge("cn-menubar flex items-center bg-background", Class)" style="@Style" data-slot="menubar" role="menubar" aria-label="Menu" @attributes="AdditionalAttributes">
     <CascadingValue Value="this" IsFixed="false">
         @ChildContent
     </CascadingValue>
@@ -9,4 +10,54 @@
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _rootRef;
+    private readonly string _keyboardNavId = $"menubar-root-kbd-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
+    private MenubarMenuCn? _openMenu;
+
+    /// <summary>Whether any menu in the menubar is currently open (drives hover switching on triggers).</summary>
+    internal bool AnyOpen => _openMenu is not null;
+
+    /// <summary>Tracks the single open menu; opening one closes the previously open sibling (Radix behavior).</summary>
+    internal void NotifyMenuOpenChanged(MenubarMenuCn menu, bool open)
+    {
+        if (open)
+        {
+            var previous = _openMenu;
+            _openMenu = menu;
+            if (previous is not null && previous != menu) previous.SetOpen(false);
+        }
+        else if (_openMenu == menu)
+        {
+            _openMenu = null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // APG Menubar: Left/Right arrows (and Home/End) move focus between
+                // the top-level triggers. AutoFocus=false overload — persistent
+                // widget, must not steal focus on mount.
+                await JsInterop.SetupKeyboardNavigationAsync(_rootRef, _keyboardNavId,
+                    "[data-slot=menubar-trigger]", "horizontal");
+                _jsInitialized = true;
+            }
+            catch { /* Prerendering without JS — keyboard nav is progressive enhancement */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupKeyboardNavigationAsync(_keyboardNavId); }
+            catch { /* Circuit may already be gone */ }
+        }
+    }
 }

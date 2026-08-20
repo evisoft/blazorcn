@@ -21,6 +21,9 @@ internal sealed class KeyboardNavJsOptions
     [JsonPropertyName("selector")] public string Selector { get; init; } = "[data-menu-item]";
     [JsonPropertyName("orientation")] public string Orientation { get; init; } = "vertical";
     [JsonPropertyName("autoFocus")] public bool AutoFocus { get; init; } = true;
+    /// <summary>CSS selector for the element to focus on open (e.g. the selected
+    /// option, or a combobox's search input). Falls back to the first enabled item.</summary>
+    [JsonPropertyName("initialSelector")] public string? InitialSelector { get; init; }
 }
 
 /// <summary>
@@ -68,13 +71,17 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
 
     /// <summary>
     /// Registers a handler that fires when a click occurs outside the given element.
+    /// Pass <paramref name="excluded"/> (typically the trigger) to treat it as part of
+    /// the dismissable layer: clicking it will NOT fire the callback, letting the
+    /// trigger's own click toggle perform the close instead of close-then-reopen.
     /// </summary>
     public async ValueTask OnOutsideClickAsync<T>(
         ElementReference element, string id,
-        DotNetObjectReference<T> dotnetRef, string methodName) where T : class
+        DotNetObjectReference<T> dotnetRef, string methodName,
+        ElementReference? excluded = null) where T : class
     {
         var module = await GetModuleAsync();
-        await module.InvokeVoidAsync("onOutsideClick", element, id, dotnetRef, methodName);
+        await module.InvokeVoidAsync("onOutsideClick", element, id, dotnetRef, methodName, excluded);
     }
 
     /// <summary>
@@ -134,6 +141,16 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
     }
 
     /// <summary>
+    /// Positions a context-menu popup at pointer coordinates, flipping and clamping
+    /// against the viewport edges, and sets --available-height/--transform-origin on it.
+    /// </summary>
+    public async ValueTask PositionContextMenuAsync(ElementReference element, double x, double y)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("positionContextMenu", element, x, y);
+    }
+
+    /// <summary>
     /// Sets up keyboard navigation for a menu/list container.
     /// Arrow keys navigate between items, Escape invokes .NET callback.
     /// </summary>
@@ -141,13 +158,15 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         ElementReference container, string id,
         DotNetObjectReference<T> dotnetRef, string escapeMethodName,
         string itemSelector = "[data-menu-item]",
-        string orientation = "vertical") where T : class
+        string orientation = "vertical",
+        string? initialSelector = null) where T : class
     {
         var module = await GetModuleAsync();
         var jsOptions = new KeyboardNavJsOptions
         {
             Selector = itemSelector,
             Orientation = orientation,
+            InitialSelector = initialSelector,
         };
         await module.InvokeVoidAsync(
             "setupKeyboardNavigation", container, id, dotnetRef, escapeMethodName, jsOptions);
@@ -229,6 +248,38 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
         await module.InvokeVoidAsync("destroyResizable", id);
     }
 
+    /// <summary>
+    /// Watches a CSS media query. Invokes <paramref name="methodName"/> on
+    /// <paramref name="dotnetRef"/> with the current match state immediately and on
+    /// every change. Returns a watcher ID for <see cref="UnwatchMediaAsync"/>.
+    /// </summary>
+    public async ValueTask<string> WatchMediaAsync<T>(
+        string query, DotNetObjectReference<T> dotnetRef, string methodName) where T : class
+    {
+        var module = await GetModuleAsync();
+        return await module.InvokeAsync<string>("watchMedia", query, dotnetRef, methodName);
+    }
+
+    /// <summary>
+    /// Stops a media-query watcher created by <see cref="WatchMediaAsync"/>.
+    /// </summary>
+    public async ValueTask UnwatchMediaAsync(string id)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("unwatchMedia", id);
+    }
+
+    /// <summary>
+    /// Registers the global Ctrl/Cmd+B sidebar-toggle shortcut. Torn down via
+    /// <see cref="CleanupAsync"/> with the same ID.
+    /// </summary>
+    public async ValueTask InitSidebarShortcutAsync<T>(
+        string id, DotNetObjectReference<T> dotnetRef, string methodName) where T : class
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("initSidebarShortcut", id, dotnetRef, methodName);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -240,7 +291,18 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
     {
         if (_module is not null)
         {
-            await _module.DisposeAsync();
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Blazor Server: circuit already gone when scoped services dispose.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Runtime already torn down (e.g. prerendering shutdown).
+            }
         }
         _initLock.Dispose();
     }

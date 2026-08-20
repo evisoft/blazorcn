@@ -24,9 +24,7 @@
 
         @* Waveform display *@
         <div class="border-b px-4 py-4">
-            <div class="relative flex h-24 items-end gap-px"
-                 role="img"
-                 aria-label="Audio waveform">
+            <div class="relative flex h-24 items-end gap-px">
 
                 @* Selection region highlight *@
                 <div class="pointer-events-none absolute bottom-0 top-0 bg-foreground/5"
@@ -53,26 +51,40 @@
                     <div class="absolute -left-1 -top-1.5 size-0 border-4 border-transparent border-t-red-500"></div>
                 </div>
 
-                @* Waveform bars *@
+                @* Waveform bars — presentation only. They used to be one <button> each:
+                   40 tab stops named "Waveform bar 7", each ~5px wide, which fails
+                   WCAG 2.5.8 target size and is unusable by touch and screen readers.
+                   Seeking now lives on the single range input below, which covers the
+                   whole waveform, so the pointer target is the full 96px-tall strip. *@
+                <div class="absolute inset-0 flex items-end gap-px"
+                     role="img"
+                     aria-label="Audio waveform">
                 @for (var i = 0; i < _waveformData.Length; i++)
                 {
-                    var index = i;
                     var amplitude = _waveformData[i];
-                    var isInSelection = index >= _trimStart && index <= _trimEnd;
-                    var isAtPlayhead = index == _playheadPosition;
+                    var isInSelection = i >= _trimStart && i <= _trimEnd;
+                    var isAtPlayhead = i == _playheadPosition;
                     var barClass = isAtPlayhead
                         ? "flex-1 rounded-t-sm transition-colors bg-red-500"
                         : isInSelection
                             ? "flex-1 rounded-t-sm transition-colors bg-foreground/60"
                             : "flex-1 rounded-t-sm transition-colors bg-muted-foreground/20";
-                    <button type="button"
-                            class="@barClass"
-                            style="@($"height:{amplitude * 100}%;min-height:2px")"
-                            @onclick="@(() => HandleWaveformClick(index))"
-                            aria-label="@($"Waveform bar {index + 1}")">
-                    </button>
+                    <div class="@barClass" style="@($"height:{amplitude * 100}%;min-height:2px")"></div>
                 }
+                </div>
 
+                @* Seek control: transparent, fills the waveform, keeps arrow-key support.
+                   The visible playhead above reflects its value, so the native thumb is
+                   hidden while the input itself stays focusable and hit-testable. *@
+                <input type="range"
+                       class="absolute inset-0 z-30 h-full w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-moz-range-thumb]:opacity-0 [&::-webkit-slider-thumb]:h-full [&::-webkit-slider-thumb]:w-1 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:opacity-0"
+                       min="@_trimStart"
+                       max="@_trimEnd"
+                       step="1"
+                       value="@_playheadPosition"
+                       @oninput="HandleSeek"
+                       aria-label="Playhead position"
+                       aria-valuetext="@FormatTime(_playheadTime)" />
             </div>
 
             @* Time markers *@
@@ -180,12 +192,10 @@
     private int _selectionDuration => _trimEndTime - _trimStartTime;
     private int _playheadTime => (int)Math.Round((_playheadPosition / (double)_totalBars) * _trackDuration);
 
-    private void HandleWaveformClick(int index)
+    private void HandleSeek(ChangeEventArgs e)
     {
-        if (index >= _trimStart && index <= _trimEnd)
-        {
-            _playheadPosition = index;
-        }
+        if (int.TryParse(e.Value?.ToString(), out var index))
+            _playheadPosition = Math.Clamp(index, _trimStart, _trimEnd);
     }
 
     private static string FormatTime(int seconds)

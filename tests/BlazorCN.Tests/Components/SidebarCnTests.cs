@@ -8,6 +8,13 @@ namespace BlazorCN.Tests.Components;
 
 public class SidebarCnTests : BunitContext
 {
+    public SidebarCnTests()
+    {
+        // SidebarProviderCn watches matchMedia + Ctrl/Cmd+B via JsInteropCn.
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     private void SetupJsInterop()
     {
         var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");

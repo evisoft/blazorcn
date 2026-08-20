@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 
 namespace BlazorCN;
@@ -10,6 +11,11 @@ public partial class ComboboxContentCn : IAsyncDisposable
     [Parameter] public int SideOffset { get; set; } = 4;
     [Parameter] public FloatingAlign Align { get; set; } = FloatingAlign.Start;
     [Parameter] public int AlignOffset { get; set; }
+
+    /// <summary>Accessible name for the listbox. Set to localize the default ("Suggestions");
+    /// set to null to label the listbox via the trigger instead (aria-labelledby).</summary>
+    [Parameter] public string? AriaLabel { get; set; } = "Suggestions";
+
     [CascadingParameter] public ComboboxCn? Combobox { get; set; }
     [Inject] private JsInteropCn JsInterop { get; set; } = default!;
 
@@ -36,8 +42,15 @@ public partial class ComboboxContentCn : IAsyncDisposable
                         Align = Align,
                         AlignOffset = AlignOffset
                     });
-                await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick");
-                await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
+                // Not `Combobox?.` — the guard above already proved it non-null, and a
+                // null-conditional access here resets the compiler's null-state, which made
+                // the FocusInputAsync call below warn CS8602.
+                await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick", Combobox.TriggerElement);
+                // No-autofocus overload: DOM focus must land in the search input, not the
+                // first option (Base UI behavior — arrows still work via the container
+                // listener). Escape is handled by HandleKeyDown on the content div.
+                await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId);
+                await Combobox.FocusInputAsync();
             }
             catch
             {
@@ -61,7 +74,18 @@ public partial class ComboboxContentCn : IAsyncDisposable
     [JSInvokable]
     public async Task OnEscapeKey()
     {
-        if (Combobox is not null) await Combobox.SetOpen(false);
+        if (Combobox is not null)
+        {
+            await Combobox.SetOpen(false);
+            // Keyboard nav runs without autofocus, so JS won't restore focus — return
+            // it to the trigger explicitly (Radix behavior).
+            await Combobox.FocusTriggerAsync();
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") await OnEscapeKey();
     }
 
     private async Task CleanupJs()

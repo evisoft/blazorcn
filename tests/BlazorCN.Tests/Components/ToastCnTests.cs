@@ -356,12 +356,15 @@ public class ToastCnTests : BunitContext
     [Fact]
     public void Toast_Has_Alert_Role()
     {
+        // role=alert (assertive) is reserved for Error/Warning; routine toasts are role=status.
         var service = RegisterToastService();
         var cut = Render<ToasterCn>();
 
-        service.Show("Alert!");
+        service.Show("Routine");
+        cut.Find("[data-slot='toast']").GetAttribute("role").Should().Be("status");
 
-        cut.Find("[data-slot='toast']").GetAttribute("role").Should().Be("alert");
+        service.Error("Something failed");
+        cut.FindAll("[data-slot='toast']").Should().Contain(t => t.GetAttribute("role") == "alert");
     }
 
     [Fact]

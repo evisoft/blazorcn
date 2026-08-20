@@ -3,9 +3,9 @@
 
 <button type="button"
         role="checkbox"
-        aria-checked="@Checked.ToString().ToLowerInvariant()"
+        aria-checked="@AriaChecked"
         data-slot="checkbox"
-        data-state="@(Checked ? "checked" : "unchecked")"
+        data-state="@DataState"
         class="@CssClass"
         style="@Style"
         disabled="@Disabled"
@@ -15,6 +15,10 @@
     {
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M20 6 9 17l-5-5"/></svg>
     }
+    else if (IsIndeterminate)
+    {
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="M5 12h14"/></svg>
+    }
 </button>
 
 @code {
@@ -22,14 +26,39 @@
     [Parameter] public EventCallback<bool> CheckedChanged { get; set; }
     [Parameter] public bool Disabled { get; set; }
 
+    /// <summary>
+    /// Mixed "select all with partial selection" state. Shown (minus indicator,
+    /// aria-checked="mixed", data-state="indeterminate") while <see cref="Checked"/>
+    /// is false; clicking moves to checked and clears it (Radix cycle).
+    /// </summary>
+    [Parameter] public bool Indeterminate { get; set; }
+    [Parameter] public EventCallback<bool> IndeterminateChanged { get; set; }
+
+    private bool IsIndeterminate => Indeterminate && !Checked;
+
+    private string AriaChecked => IsIndeterminate ? "mixed" : Checked.ToString().ToLowerInvariant();
+
+    private string DataState => IsIndeterminate ? "indeterminate" : (Checked ? "checked" : "unchecked");
+
+    // The data-[state=indeterminate] utilities mirror .cn-checkbox's checked colors —
+    // the shipped nova CSS only keys on data-state=checked.
     private string CssClass => Cn.Merge(
-        "cn-checkbox peer shrink-0 outline-none disabled:cursor-not-allowed disabled:opacity-50",
+        "cn-checkbox peer shrink-0 outline-none disabled:cursor-not-allowed disabled:opacity-50 data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground dark:data-[state=indeterminate]:bg-primary",
         Class);
 
     private async Task HandleClick()
     {
         if (Disabled) return;
-        Checked = !Checked;
+        if (IsIndeterminate)
+        {
+            Indeterminate = false;
+            await IndeterminateChanged.InvokeAsync(false);
+            Checked = true;
+        }
+        else
+        {
+            Checked = !Checked;
+        }
         await CheckedChanged.InvokeAsync(Checked);
     }
 }

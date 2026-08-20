@@ -145,4 +145,36 @@ public class SliderCnTests : BunitContext
         cut.Find("input[type='range']").Blur();
         cut.Find("[data-slot='slider-thumb']").HasAttribute("data-focused").Should().BeFalse();
     }
+
+    // Blazor preserves the case the consumer typed, and PascalCase (`Id=`) is what a Blazor
+    // developer naturally writes. Matching case-sensitively used to leave the id on the root
+    // div AND put it on the input: the id appeared twice, and because getElementById finds the
+    // div first — and a div is not labelable — `label[for]` resolved to nothing, leaving the
+    // slider with no accessible name.
+    [Theory]
+    [InlineData("id")]
+    [InlineData("Id")]
+    public void Consumer_Id_Lands_Only_On_The_Focusable_Input(string attributeName)
+    {
+        var cut = Render<SliderCn>(p => p
+            .Add(c => c.Value, 50)
+            .AddUnmatched(attributeName, "volume"));
+
+        cut.FindAll("[id='volume']").Count.Should().Be(1);
+        cut.Find("[id='volume']").TagName.Should().Be("INPUT");
+        cut.Find("[data-slot='slider']").HasAttribute("id").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("aria-label")]
+    [InlineData("Aria-Label")]
+    public void Consumer_AriaLabel_Lands_On_The_Input_Not_The_Root(string attributeName)
+    {
+        var cut = Render<SliderCn>(p => p
+            .Add(c => c.Value, 50)
+            .AddUnmatched(attributeName, "Volume"));
+
+        cut.Find("input[type='range']").GetAttribute("aria-label").Should().Be("Volume");
+        cut.Find("[data-slot='slider']").HasAttribute("aria-label").Should().BeFalse();
+    }
 }

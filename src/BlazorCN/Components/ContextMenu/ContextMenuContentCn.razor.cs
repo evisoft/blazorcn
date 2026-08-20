@@ -23,6 +23,7 @@ public partial class ContextMenuContentCn : IAsyncDisposable
             try
             {
                 _dotnetRef = DotNetObjectReference.Create(this);
+                await JsInterop.PositionContextMenuAsync(_contentRef, ContextMenu.ClientX, ContextMenu.ClientY);
                 await JsInterop.OnOutsideClickAsync(_contentRef, _outsideClickId, _dotnetRef, "OnOutsideClick");
                 await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
             }

@@ -64,12 +64,14 @@ public class InputOtpCnTests : BunitContext
     }
 
     [Fact]
-    public void InputOtp_AdditionalAttributes_Passthrough()
+    public void InputOtp_AdditionalAttributes_Land_On_The_Input()
     {
+        // id/name/aria-* must reach the real <input> (not the container div) so
+        // label association and accessible names work.
         var cut = Render<InputOtpCn>(p => p
             .Add(c => c.AdditionalAttributes, new Dictionary<string, object?> { { "id", "my-otp" } })
             .AddChildContent("Content"));
-        cut.Find("[data-slot='input-otp']").GetAttribute("id").Should().Be("my-otp");
+        cut.Find("[data-slot='input-otp'] input").GetAttribute("id").Should().Be("my-otp");
     }
 
     [Fact]

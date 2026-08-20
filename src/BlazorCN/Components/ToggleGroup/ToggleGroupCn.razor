@@ -1,7 +1,9 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IAsyncDisposable
 
-<div class="@CssClass"
+<div @ref="_groupRef"
+     class="@CssClass"
      style="@($"{SpacingStyle}{Style}")"
      role="group"
      data-slot="toggle-group"
@@ -23,6 +25,15 @@
     [Parameter] public int Spacing { get; set; }
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _groupRef;
+    private readonly string _keyboardNavId = $"toggle-group-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
+
+    // Items register in render order for the roving tabindex (one tab stop for the
+    // whole group); arrow-key focus movement is wired via SetupKeyboardNavigationAsync.
+    private readonly List<ToggleGroupItemCn> _items = new();
 
     private string OrientationValue => Orientation == "vertical" ? "vertical" : "horizontal";
     private string VariantValue => Variant == ToggleVariant.Outline ? "outline" : "default";
@@ -48,4 +59,50 @@
     }
 
     internal bool IsSelected(string value) => Value == value;
+
+    internal void RegisterItem(ToggleGroupItemCn item)
+    {
+        if (!_items.Contains(item))
+            _items.Add(item);
+    }
+
+    internal void UnregisterItem(ToggleGroupItemCn item) => _items.Remove(item);
+
+    internal bool IsTabStop(ToggleGroupItemCn item)
+    {
+        // The pressed item is the single tab stop; with none pressed (or the pressed
+        // one disabled) the first enabled item takes it.
+        var pressed = _items.FirstOrDefault(i => !i.Disabled && IsSelected(i.Value));
+        var stop = pressed ?? _items.FirstOrDefault(i => !i.Disabled);
+        return ReferenceEquals(stop, item);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Items register while the first render is in flight; re-render once with
+            // the full registry so exactly one item has tabindex="0".
+            if (_items.Count > 0)
+                StateHasChanged();
+            try
+            {
+                // Arrow keys (plus Home/End) move focus between items — unlike tabs,
+                // focus does NOT toggle; Space/Enter do, via the native button click.
+                await JsInterop.SetupKeyboardNavigationAsync(_groupRef, _keyboardNavId,
+                    "[data-slot=toggle-group-item]", OrientationValue);
+                _jsInitialized = true;
+            }
+            catch { /* Prerendering without JS — keyboard nav is progressive enhancement */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupKeyboardNavigationAsync(_keyboardNavId); }
+            catch { /* Circuit may already be gone */ }
+        }
+    }
 }

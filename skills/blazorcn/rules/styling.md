@@ -172,30 +172,81 @@ For components, pass extra classes through `Class` — they're already merged vi
 
 ---
 
-## Use `Class=`, not lowercase `class=`, on components
+## Prefer `Class=` (capital C) on components
 
-Pass extra classes to a BlazorCN component with the **`Class`** parameter (capital
-C). Components render `class="@Class"` *and* splat `AdditionalAttributes`, so a
-lowercase `class="..."` lands in the splat and can produce a **duplicate `class`
-attribute** in the HTML (with unreliable last-wins behavior). `Class=` is merged
-through `Cn.Merge` and is the only correct way.
+Pass extra classes to a BlazorCN component with the **`Class`** parameter. Blazor
+matches component parameters case-insensitively, so a lowercase `class="..."` binds
+to the same `Class` parameter and *is* merged through `Cn.Merge` — it does **not**
+produce a duplicate `class` attribute and does not drop the component's own classes.
+(Pinned by `Lowercase_Class_Attribute_Binds_To_Class_Parameter_And_Merges` in
+`tests/BlazorCN.Tests/ComponentBaseCnTests.cs`.) So this is a consistency and
+readability rule, not a correctness one: capital `Class=` makes it obvious you are
+setting a parameter rather than a raw HTML attribute.
 
-**Incorrect:**
+Contrast with `id`: there is no `Id` parameter, so `id="x"` genuinely lands in the
+attribute splat — and because `@attributes` renders after the component's own `id`,
+your value wins. That is what makes `<LabelCn For="x">` + `<SelectTriggerCn id="x">`
+work, which matters because `SelectTriggerCn` renders `role="combobox"` and a
+combobox takes **no accessible name from its contents**.
+
+**Avoid — works, but reads like a raw HTML attribute:**
 
 ```razor
 <CardHeaderCn class="flex items-center justify-between">…</CardHeaderCn>
 <SkeletonCn class="h-4 w-24" />
 ```
 
-**Correct:**
+**Prefer:**
 
 ```razor
 <CardHeaderCn Class="flex items-center justify-between">…</CardHeaderCn>
 <SkeletonCn Class="h-4 w-24" />
 ```
 
-> Lowercase `class` is fine on **plain HTML elements** (`<div class="...">`). The
-> rule is only about BlazorCN `*Cn` components, where `Class` is a real parameter.
+> Lowercase `class` is of course also fine on **plain HTML elements**
+> (`<div class="...">`), where it is the only spelling.
+
+---
+
+## `aria-*` and `data-*` stay lowercase — there is no `AriaLabel` parameter
+
+`Class`/`Style` are the only PascalCase pass-throughs. Accessibility and data
+attributes must be written exactly as in HTML. A PascalCase spelling is **not** a
+compile error: it lands in `AdditionalAttributes` and renders as a literal
+`arialabel="…"` attribute, which no screen reader and no axe rule recognizes — the
+control stays unnamed while the source *looks* correct.
+
+**Incorrect:**
+
+```razor
+<ButtonCn Size="ButtonSize.Icon" AriaLabel="Close"><LucideXCn /></ButtonCn>
+<SwitchCn @bind-Checked="_on" AriaLabel="Enable notifications" />
+```
+
+**Correct:**
+
+```razor
+<ButtonCn Size="ButtonSize.Icon" aria-label="Close"><LucideXCn /></ButtonCn>
+<SwitchCn @bind-Checked="_on" aria-label="Enable notifications" />
+```
+
+Every icon-only control (`ButtonCn`, `ToggleCn`, `SelectTriggerCn` without a
+visible value, standalone `SwitchCn`/`CheckboxCn`/`SliderCn`) needs an accessible
+name — `aria-label`, or a `LabelCn For="…"` pointing at its `id`.
+
+> Exception: `ComboboxContentCn`, `CommandListCn` and `SelectContentCn` *do*
+> declare a real `AriaLabel` parameter for their popup listbox. Everywhere else,
+> lowercase.
+
+On a **component** tag an attribute value must be pure text or a single `@(...)`
+expression — mixed content is a compile error (RZ9986). Interpolate instead:
+
+```razor
+@* Incorrect on a component: mixed text + expression *@
+<ButtonCn aria-label="Remove @item.Name">…</ButtonCn>
+@* Correct *@
+<ButtonCn aria-label="@($"Remove {item.Name}")">…</ButtonCn>
+```
 
 ---
 

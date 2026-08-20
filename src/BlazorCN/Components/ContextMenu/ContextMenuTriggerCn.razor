@@ -1,11 +1,16 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IDisposable
 
 <div class="@Cn.Merge("select-none", Class)"
      style="@Style"
      data-slot="context-menu-trigger"
      @oncontextmenu="HandleContextMenu"
      @oncontextmenu:preventDefault="true"
+     @onpointerdown="HandlePointerDown"
+     @onpointerup="CancelLongPress"
+     @onpointercancel="CancelLongPress"
+     @onpointermove="HandlePointerMove"
      @attributes="AdditionalAttributes">
     @ChildContent
 </div>
@@ -14,11 +19,65 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [CascadingParameter] public ContextMenuCn? ContextMenu { get; set; }
 
+    // iOS Safari never fires the contextmenu event on long-press, so touch
+    // pointers get a Radix-style 700ms long-press timer instead.
+    private const int LongPressDelayMs = 700;
+    private const double LongPressMoveTolerancePx = 10;
+    private CancellationTokenSource? _longPressCts;
+    private double _pressClientX;
+    private double _pressClientY;
+
     private async Task HandleContextMenu(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
     {
+        CancelLongPress();
         if (ContextMenu is not null)
         {
             await ContextMenu.OpenAtPosition(e.ClientX, e.ClientY);
         }
     }
+
+    private void HandlePointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (e.PointerType != "touch") return;
+        CancelLongPress();
+        _pressClientX = e.ClientX;
+        _pressClientY = e.ClientY;
+        _longPressCts = new CancellationTokenSource();
+        _ = OpenAfterLongPress(e.ClientX, e.ClientY, _longPressCts.Token);
+    }
+
+    private async Task OpenAfterLongPress(double clientX, double clientY, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(LongPressDelayMs, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+        if (ContextMenu is not null)
+        {
+            await InvokeAsync(() => ContextMenu.OpenAtPosition(clientX, clientY));
+        }
+    }
+
+    private void HandlePointerMove(Microsoft.AspNetCore.Components.Web.PointerEventArgs e)
+    {
+        if (_longPressCts is null) return;
+        if (Math.Abs(e.ClientX - _pressClientX) > LongPressMoveTolerancePx ||
+            Math.Abs(e.ClientY - _pressClientY) > LongPressMoveTolerancePx)
+        {
+            CancelLongPress();
+        }
+    }
+
+    private void CancelLongPress()
+    {
+        _longPressCts?.Cancel();
+        _longPressCts?.Dispose();
+        _longPressCts = null;
+    }
+
+    public void Dispose() => CancelLongPress();
 }

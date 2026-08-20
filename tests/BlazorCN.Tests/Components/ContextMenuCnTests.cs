@@ -444,7 +444,7 @@ public class ContextMenuCnTests : BunitContext
     public void ContextMenuRadioGroup_Has_Role_Radiogroup()
     {
         var cut = Render<ContextMenuRadioGroupCn>(p => p.AddChildContent("Radio"));
-        cut.Find("[data-slot='context-menu-radio-group']").GetAttribute("role").Should().Be("radiogroup");
+        cut.Find("[data-slot='context-menu-radio-group']").GetAttribute("role").Should().Be("group"); // menuitemradio children require group, not radiogroup
     }
 
     // --- ContextMenuRadioItemCn ---

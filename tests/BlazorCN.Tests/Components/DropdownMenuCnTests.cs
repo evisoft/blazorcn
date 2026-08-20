@@ -529,7 +529,7 @@ public class DropdownMenuCnTests : BunitContext
     public void DropdownMenuRadioGroup_Has_Role_Radiogroup()
     {
         var cut = Render<DropdownMenuRadioGroupCn>(p => p.AddChildContent("Radio group"));
-        cut.Find("[data-slot='dropdown-menu-radio-group']").GetAttribute("role").Should().Be("radiogroup");
+        cut.Find("[data-slot='dropdown-menu-radio-group']").GetAttribute("role").Should().Be("group"); // menuitemradio children require group, not radiogroup
     }
 
     // --- DropdownMenuRadioItemCn ---

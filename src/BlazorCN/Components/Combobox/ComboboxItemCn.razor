@@ -1,12 +1,17 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IDisposable
 
-<div class="@Cn.Merge("cn-combobox-item relative flex w-full cursor-default select-none items-center outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50", Class)"
+@* Filtered-out items keep their component alive but hide via the `hidden` utility
+   (utilities layer beats cn-combobox-item's flex) and drop data-menu-item so the
+   keyboard-nav selector skips them. *@
+<div class="@Cn.Merge("cn-combobox-item relative flex w-full cursor-default select-none items-center outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50", IsVisible ? null : "hidden", Class)"
      style="@Style"
      role="option"
      aria-selected="@(IsSelected ? "true" : "false")"
+     aria-disabled="@(Disabled ? "true" : null)"
      data-slot="combobox-item"
-     data-menu-item
+     data-menu-item="@(IsVisible ? "" : null)"
      data-disabled="@(Disabled ? "true" : null)"
      tabindex="-1"
      @onclick="HandleClick"
@@ -14,7 +19,7 @@
     <span class="cn-combobox-item-indicator pointer-events-none">
         @if (IsSelected)
         {
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M20 6 9 17l-5-5"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
         }
     </span>
     @ChildContent
@@ -24,12 +29,24 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter, EditorRequired] public string Value { get; set; } = "";
     [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Text the search filter matches against. Defaults to Value — set it when
+    /// Value is a slug that differs from the displayed label (cmdk keywords analog).</summary>
+    [Parameter] public string? FilterText { get; set; }
+
     [CascadingParameter] public ComboboxCn? Combobox { get; set; }
 
     private bool IsSelected => Combobox?.IsItemSelected(Value) ?? false;
 
+    /// <summary>Whether the item matches the current search filter (cmdk behavior).</summary>
+    internal bool IsVisible =>
+        Combobox is null
+        || Combobox.Search.Length == 0
+        || (FilterText ?? Value).Contains(Combobox.Search, StringComparison.OrdinalIgnoreCase);
+
     protected override void OnInitialized()
     {
+        Combobox?.RegisterItem(this);
         Combobox?.RegisterItemText(Value, Value);
     }
 
@@ -40,5 +57,10 @@
         {
             await Combobox.SelectItem(Value, Value);
         }
+    }
+
+    public void Dispose()
+    {
+        Combobox?.UnregisterItem(this);
     }
 }

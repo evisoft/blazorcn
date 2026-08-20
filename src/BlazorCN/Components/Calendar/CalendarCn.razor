@@ -8,6 +8,8 @@
                 <button type="button"
                         class="cn-calendar-nav-button"
                         aria-label="Previous month"
+                        disabled="@(!CanGoPrev)"
+                        aria-disabled="@(!CanGoPrev ? "true" : null)"
                         @onclick="PreviousMonth">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cn-rtl-flip size-4" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                 </button>
@@ -17,42 +19,52 @@
                 <button type="button"
                         class="cn-calendar-nav-button"
                         aria-label="Next month"
+                        disabled="@(!CanGoNext)"
+                        aria-disabled="@(!CanGoNext ? "true" : null)"
                         @onclick="NextMonth">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cn-rtl-flip size-4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                 </button>
             </div>
-            <table class="w-full border-collapse">
+            @* role=grid + explicit row/cell roles: the flex-styled rows strip the
+               implicit table semantics, so we restore them the way react-day-picker
+               does. Keyboard nav is pure Blazor (@onkeydown bubbles up from the day
+               buttons); arrows can't preventDefault page scroll without JS — accepted
+               tradeoff for staying JS-free here. *@
+            <table class="w-full border-collapse" role="grid" aria-label="@DisplayMonth.ToString("MMMM yyyy")" @onkeydown="HandleGridKeyDown">
                 <thead>
-                    <tr class="flex">
+                    <tr class="flex" role="row">
                         @if (ShowWeekNumbers)
                         {
-                            <th class="w-(--cell-size) cn-calendar-week-number select-none"></th>
+                            <th class="w-(--cell-size) cn-calendar-week-number select-none" role="columnheader"><span class="sr-only">Week Number</span></th>
                         }
-                        @foreach (var day in DayNames)
+                        @for (var i = 0; i < DayNames.Length; i++)
                         {
-                            <th @key="day" class="cn-calendar-weekday">@day</th>
+                            <th @key="DayNames[i]" class="cn-calendar-weekday" role="columnheader" scope="col" aria-label="@FullDayNames[i]">@DayNames[i]</th>
                         }
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var week in GetWeeks())
                     {
-                        <tr @key="week" class="mt-2 flex w-full">
+                        <tr @key="week" class="mt-2 flex w-full" role="row">
                             @if (ShowWeekNumbers)
                             {
-                                <td class="flex items-center justify-center w-(--cell-size) cn-calendar-week-number">
+                                <td class="flex items-center justify-center w-(--cell-size) cn-calendar-week-number" role="gridcell" aria-label="@($"Week {GetIsoWeekNumber(week)}")">
                                     @GetIsoWeekNumber(week)
                                 </td>
                             }
                             @foreach (var date in week)
                             {
-                                <td @key="date" class="@GetCellClass(date)" data-selected="@(IsAnySelected(date) ? "true" : null)">
+                                <td @key="date" class="@GetCellClass(date)" role="gridcell" aria-selected="@(date.HasValue ? (IsAnySelected(date) ? "true" : "false") : null)" data-selected="@(IsAnySelected(date) ? "true" : null)">
                                     @if (date.HasValue)
                                     {
                                         var d = date.Value;
                                         <button type="button"
+                                                @ref="_dayRefs[d.Date]"
                                                 class="@GetDayClass(d)"
                                                 disabled="@IsDayDisabled(d)"
+                                                aria-label="@GetDayAriaLabel(d)"
+                                                tabindex="@(d.Date == _focusedDate ? 0 : -1)"
                                                 data-selected-single="@(IsSelectedSingle(d) ? "true" : null)"
                                                 data-range-start="@(IsRangeStart(d) ? "true" : null)"
                                                 data-range-end="@(IsRangeEnd(d) ? "true" : null)"
@@ -94,10 +106,27 @@
     [Parameter] public bool ShowWeekNumbers { get; set; }
 
     private DateTime DisplayMonth { get; set; }
+
+    // Month nav stops at Min/MaxDate: prev is allowed while any day before the
+    // displayed month can still be in range, next while any day after can be.
+    private bool CanGoPrev => !MinDate.HasValue
+        || new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1) > MinDate.Value.Date;
+    private bool CanGoNext => !MaxDate.HasValue
+        || new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1).AddMonths(1).AddDays(-1) < MaxDate.Value.Date;
+
     private static readonly string[] DayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    private static readonly string[] FullDayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
     // Track range click state: false = next click sets start, true = next click sets end
     private bool _rangeHasStart;
+
+    // Roving tabindex (APG date-picker grid): only _focusedDate is a Tab stop;
+    // arrows/Home/End/PageUp/PageDown move it. Day button refs are keyed by date
+    // so OnAfterRenderAsync can FocusAsync the new target. Stale entries for
+    // previously displayed months are harmless (~42 per viewed month).
+    private DateTime _focusedDate;
+    private bool _pendingFocus;
+    private readonly Dictionary<DateTime, ElementReference> _dayRefs = new();
 
     protected override void OnInitialized()
     {
@@ -108,14 +137,74 @@
             _ => Value ?? DateTime.Today
         };
         DisplayMonth = new DateTime(seed.Year, seed.Month, 1);
+        _focusedDate = seed.Date;
     }
 
-    private void PreviousMonth() => DisplayMonth = DisplayMonth.AddMonths(-1);
-    private void NextMonth() => DisplayMonth = DisplayMonth.AddMonths(1);
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingFocus)
+        {
+            _pendingFocus = false;
+            if (_dayRefs.TryGetValue(_focusedDate, out var button))
+            {
+                try { await button.FocusAsync(); }
+                catch { /* Prerendering without JS — focus is progressive enhancement */ }
+            }
+        }
+    }
+
+    private void PreviousMonth()
+    {
+        DisplayMonth = DisplayMonth.AddMonths(-1);
+        _focusedDate = ClampToMonth(_focusedDate, DisplayMonth);
+    }
+
+    private void NextMonth()
+    {
+        DisplayMonth = DisplayMonth.AddMonths(1);
+        _focusedDate = ClampToMonth(_focusedDate, DisplayMonth);
+    }
+
+    /// <summary>Same day-of-month within <paramref name="month"/>, clamped to that month's length —
+    /// keeps the roving Tab stop on a visible day after month navigation.</summary>
+    private static DateTime ClampToMonth(DateTime date, DateTime month) =>
+        new(month.Year, month.Month, Math.Min(date.Day, DateTime.DaysInMonth(month.Year, month.Month)));
+
+    private void HandleGridKeyDown(KeyboardEventArgs e)
+    {
+        DateTime? target = e.Key switch
+        {
+            "ArrowLeft" => _focusedDate.AddDays(-1),
+            "ArrowRight" => _focusedDate.AddDays(1),
+            "ArrowUp" => _focusedDate.AddDays(-7),
+            "ArrowDown" => _focusedDate.AddDays(7),
+            "Home" => _focusedDate.AddDays(-(int)_focusedDate.DayOfWeek),
+            "End" => _focusedDate.AddDays(6 - (int)_focusedDate.DayOfWeek),
+            "PageUp" => ClampToMonth(_focusedDate, _focusedDate.AddMonths(-1)),
+            "PageDown" => ClampToMonth(_focusedDate, _focusedDate.AddMonths(1)),
+            _ => null
+        };
+        if (!target.HasValue || target.Value == _focusedDate) return;
+
+        // Disabled day buttons can't receive focus, so stop at Min/MaxDate bounds
+        // (and individually disabled dates) instead of stranding focus.
+        if (IsDayDisabled(target.Value)) return;
+
+        _focusedDate = target.Value.Date;
+        if (_focusedDate.Month != DisplayMonth.Month || _focusedDate.Year != DisplayMonth.Year)
+            DisplayMonth = new DateTime(_focusedDate.Year, _focusedDate.Month, 1);
+        _pendingFocus = true;
+    }
+
+    /// <summary>Full accessible day name, mirroring react-day-picker's labelDayButton
+    /// (e.g. "Today, Friday, June 5, 2026, selected").</summary>
+    private string GetDayAriaLabel(DateTime date) =>
+        (IsToday(date) ? "Today, " : "") + date.ToString("dddd, MMMM d, yyyy") + (IsAnySelected(date) ? ", selected" : "");
 
     // --- Click handler ---
     private async Task OnDayClick(DateTime date)
     {
+        _focusedDate = date.Date;
         switch (Mode)
         {
             case CalendarSelectionMode.Single:

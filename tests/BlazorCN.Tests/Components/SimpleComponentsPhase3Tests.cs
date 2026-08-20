@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Xunit;
@@ -7,6 +8,13 @@ namespace BlazorCN.Tests.Components;
 
 public class SimpleComponentsPhase3Tests : BunitContext
 {
+    public SimpleComponentsPhase3Tests()
+    {
+        // ToggleGroupCn wires arrow-key nav via JsInteropCn on render.
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     // ProgressCn tests
 
     [Fact]
@@ -34,8 +42,9 @@ public class SimpleComponentsPhase3Tests : BunitContext
     [Fact]
     public void Progress_Inner_Div_Width_Reflects_Value()
     {
+        // Root now hosts a track > indicator pair (nova composition).
         var cut = Render<ProgressCn>(p => p.Add(c => c.Value, 50));
-        var inner = cut.Find("[data-slot='progress'] > div");
+        var inner = cut.Find("[data-slot='progress-track'] > div");
         inner.GetAttribute("style").Should().Contain("width: 50");
     }
 

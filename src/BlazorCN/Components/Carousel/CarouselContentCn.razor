@@ -2,8 +2,11 @@
 @inherits ComponentBaseCn
 
 <div class="@Cn.Merge("overflow-hidden", Class)"
-     style="@Style"
+     style="@OuterStyle"
      data-slot="carousel-content"
+     @onpointerdown="HandlePointerDown"
+     @onpointerup="HandlePointerUp"
+     @onpointercancel="HandlePointerCancel"
      @attributes="AdditionalAttributes">
     <div class="@InnerClasses" style="@InnerStyle">
         @ChildContent
@@ -14,17 +17,69 @@
     [CascadingParameter] public CarouselCn? Carousel { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    private string InnerClasses => Carousel?.Orientation == CarouselOrientation.Vertical
+    // Pure-Blazor swipe: record where the pointer went down, advance past a
+    // fixed threshold on pointerup. No pointer capture, so a drag released
+    // outside the content simply resets on the next pointerdown.
+    private const double SwipeThresholdPx = 50;
+    private bool _tracking;
+    private double _startX;
+    private double _startY;
+
+    private bool IsVertical => Carousel?.Orientation == CarouselOrientation.Vertical;
+
+    private string InnerClasses => IsVertical
         ? "flex -mt-4 flex-col transition-transform duration-300 ease-out"
         : "flex -ml-4 transition-transform duration-300 ease-out";
+
+    private string OuterStyle
+    {
+        get
+        {
+            // pan-y (horizontal) / pan-x (vertical) keeps page scrolling on the
+            // other axis working while swipes along the carousel axis reach us.
+            var touchAction = IsVertical ? "pan-x" : "pan-y";
+            return string.IsNullOrEmpty(Style)
+                ? $"touch-action: {touchAction}"
+                : $"touch-action: {touchAction}; {Style}";
+        }
+    }
 
     private string InnerStyle
     {
         get
         {
             var idx = Carousel?.Index ?? 0;
-            var axis = Carousel?.Orientation == CarouselOrientation.Vertical ? "Y" : "X";
-            return $"transform: translate{axis}(-{idx * 100}%)";
+            if (IsVertical)
+                return $"transform: translateY(-{idx * 100}%)";
+            // In RTL flex rows later slides sit to the LEFT, so the track shifts right.
+            var sign = Carousel?.Rtl == true ? "" : "-";
+            return $"transform: translateX({sign}{idx * 100}%)";
         }
     }
+
+    private void HandlePointerDown(PointerEventArgs e)
+    {
+        _tracking = true;
+        _startX = e.ClientX;
+        _startY = e.ClientY;
+    }
+
+    private async Task HandlePointerUp(PointerEventArgs e)
+    {
+        if (!_tracking || Carousel is null) return;
+        _tracking = false;
+
+        var delta = IsVertical ? e.ClientY - _startY : e.ClientX - _startX;
+        if (Math.Abs(delta) < SwipeThresholdPx) return;
+
+        // Swiping toward the start of the axis reveals the next slide; in RTL the
+        // next slide sits to the left, so the horizontal gesture mirrors.
+        var forward = delta < 0;
+        if (!IsVertical && Carousel.Rtl) forward = !forward;
+
+        if (forward) await Carousel.ScrollNext();
+        else await Carousel.ScrollPrev();
+    }
+
+    private void HandlePointerCancel() => _tracking = false;
 }

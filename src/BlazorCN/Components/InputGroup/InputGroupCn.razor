@@ -6,7 +6,9 @@
      role="group"
      data-slot="input-group"
      @attributes="AdditionalAttributes">
-    @ChildContent
+    <CascadingValue Value="this" IsFixed="true">
+        @ChildContent
+    </CascadingValue>
 </div>
 
 @code {
@@ -16,4 +18,26 @@
         "cn-input-group group/input-group relative flex w-full min-w-0 items-center outline-none has-disabled:opacity-50 has-[>textarea]:h-auto";
 
     private string CssClass => Cn.Merge(BaseClasses, Class);
+
+    // Focus plumbing: the first registered control (input/textarea) is focused when
+    // an addon is clicked — mirroring the reference addon's querySelector('input').focus().
+    // Buttons inside the group record their click (their handler runs first in the
+    // bubble order) so clicking a button never steals focus into the control. A short
+    // time window is used instead of a latched flag so a button that is NOT inside an
+    // addon cannot leave stale suppression behind for a later addon click.
+    private Func<ValueTask>? _focusControl;
+    private long _lastButtonClickTicks = long.MinValue;
+
+    internal void RegisterControl(Func<ValueTask> focusControl) => _focusControl ??= focusControl;
+
+    internal void NotifyButtonClick() => _lastButtonClickTicks = Environment.TickCount64;
+
+    internal async Task FocusControlAsync()
+    {
+        // Handlers for one bubbled DOM click run back-to-back, so a button-originated
+        // click reaches us well inside the window; independent clicks never do.
+        if (Environment.TickCount64 - _lastButtonClickTicks < 250) return;
+        if (_focusControl is not null)
+            await _focusControl();
+    }
 }

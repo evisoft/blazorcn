@@ -47,7 +47,10 @@ public class FormCnTests : BunitContext
     [Fact]
     public void FormControlCn_Has_Correct_DataSlot()
     {
-        var cut = Render<FormControlCn>(p => p.AddChildContent("Control content"));
+        // ChildContent is RenderFragment<FormFieldContext> (the cascaded field context
+        // is handed to the child so consumers can wire id/aria onto the control).
+        var cut = Render<FormControlCn>(p => p
+            .Add(c => c.ChildContent, (FormFieldContext _) => "Control content"));
         var div = cut.Find("[data-slot='form-control']");
         div.Should().NotBeNull();
     }

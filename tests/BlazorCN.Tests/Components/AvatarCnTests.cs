@@ -103,6 +103,26 @@ public class AvatarCnTests : BunitContext
         cut.Find("[data-slot='avatar-image']").Should().NotBeNull();
     }
 
+    [Fact]
+    public void AvatarImage_Without_Src_Renders_No_Img()
+    {
+        // An <img src=""> makes the browser re-request the page URL before failing,
+        // so no Src must mean no element at all — the fallback carries the avatar.
+        var cut = Render<AvatarCn>(p => p
+            .AddChildContent<AvatarImageCn>(i => i.Add(c => c.Alt, "Test"))
+            .AddChildContent<AvatarFallbackCn>(f => f.AddChildContent("AB")));
+        cut.FindAll("[data-slot='avatar-image']").Should().BeEmpty();
+        cut.Find("[data-slot='avatar-fallback']").TextContent.Should().Be("AB");
+    }
+
+    [Fact]
+    public void AvatarImage_With_Whitespace_Src_Renders_No_Img()
+    {
+        var cut = Render<AvatarCn>(p => p
+            .AddChildContent<AvatarImageCn>(i => i.Add(c => c.Src, "   ")));
+        cut.FindAll("[data-slot='avatar-image']").Should().BeEmpty();
+    }
+
     // --- AvatarBadgeCn ---
 
     [Fact]
