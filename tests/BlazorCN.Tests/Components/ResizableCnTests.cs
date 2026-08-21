@@ -120,6 +120,34 @@ public class ResizableCnTests : BunitContext
         style.Should().Contain("flex: 50 50 0%");
     }
 
+    // A comma-decimal culture (de-DE) used to render 33.5 as "33,5" — invalid CSS, so the
+    // browser silently dropped the flex/min/max declarations and the sizes never applied.
+    [Fact]
+    public void Panel_Fractional_Sizes_Are_Culture_Invariant()
+    {
+        var original = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+            var cut = Render<ResizablePanelGroupCn>(p => p
+                .AddChildContent<ResizablePanelCn>(panel => panel
+                    .Add(c => c.DefaultSize, 33.5)
+                    .Add(c => c.MinSize, 10.5)
+                    .Add(c => c.MaxSize, 60.5)
+                    .AddChildContent("Panel content")));
+
+            var style = cut.Find("[data-slot='resizable-panel']").GetAttribute("style");
+            style.Should().Contain("flex: 33.5 33.5 0%");
+            style.Should().Contain("min-width: 10.5%");
+            style.Should().Contain("max-width: 60.5%");
+            style.Should().NotContain(",5");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+    }
+
     [Fact]
     public void Panel_Class_Passthrough()
     {

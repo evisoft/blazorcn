@@ -165,6 +165,38 @@ public class SliderCnTests : BunitContext
         cut.Find("[data-slot='slider']").HasAttribute("id").Should().BeFalse();
     }
 
+    // Radix keeps the values array sorted on every update (getNextSortedValues) so thumbs
+    // push each other instead of crossing. An unsorted array inverts the per-input clip-path
+    // hit zones: each thumb lands inside the OTHER input's zone, so grabbing a thumb drags
+    // the wrong value — browser-reproduced by arrow-keying thumb 0 past thumb 1.
+    [Fact]
+    public void Multi_Thumb_Pushed_Past_Its_Neighbor_Keeps_Values_Sorted()
+    {
+        double[]? reported = null;
+        var cut = Render<SliderCn>(p => p
+            .Add(c => c.Values, new[] { 25.0, 75.0 })
+            .Add(c => c.ValuesChanged, v => reported = v));
+
+        cut.FindAll("input[type='range']")[0].Input("90");
+
+        reported.Should().Equal(75.0, 90.0);
+        var inputs = cut.FindAll("input[type='range']");
+        inputs[0].GetAttribute("value").Should().Be("75");
+        inputs[1].GetAttribute("value").Should().Be("90");
+    }
+
+    // Radix renders value={[]} as a slider with no thumbs; RangeStyle used to index
+    // sorted[0] unguarded and threw IndexOutOfRangeException on the empty array.
+    [Fact]
+    public void Empty_Values_Array_Renders_Without_Crashing()
+    {
+        var cut = Render<SliderCn>(p => p.Add(c => c.Values, Array.Empty<double>()));
+
+        cut.FindAll("[data-slot='slider-thumb']").Should().BeEmpty();
+        cut.FindAll("input[type='range']").Should().BeEmpty();
+        cut.Find("[data-slot='slider-range']").GetAttribute("style").Should().Contain("width: 0%");
+    }
+
     [Theory]
     [InlineData("aria-label")]
     [InlineData("Aria-Label")]

@@ -48,6 +48,27 @@ public class SimpleComponentsPhase3Tests : BunitContext
         inner.GetAttribute("style").Should().Contain("width: 50");
     }
 
+    // Max=0 is a normal transient state ("0 of 0 files"). 0/0 is NaN and NaN survives
+    // Math.Clamp, so the indicator used to get `width: NaN%` (dropped by the browser)
+    // and ProgressValueCn printed a literal "NaN%".
+    [Fact]
+    public void Progress_Max_Zero_Renders_Zero_Width_Not_NaN()
+    {
+        var cut = Render<ProgressCn>(p => p.Add(c => c.Value, 0).Add(c => c.Max, 0));
+        var inner = cut.Find("[data-slot='progress-track'] > div");
+        inner.GetAttribute("style").Should().Contain("width: 0%").And.NotContain("NaN");
+    }
+
+    [Fact]
+    public void ProgressValue_Max_Zero_Renders_Zero_Percent_Not_NaN()
+    {
+        var cut = Render<ProgressCn>(p => p
+            .Add(c => c.Value, 0)
+            .Add(c => c.Max, 0)
+            .AddChildContent<ProgressValueCn>());
+        cut.Find("[data-slot='progress-value']").TextContent.Trim().Should().Be("0%");
+    }
+
     // AvatarCn tests
 
     [Fact]
