@@ -1,6 +1,7 @@
 ﻿using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -376,5 +377,71 @@ public class ToastCnTests : BunitContext
         service.Show("Default");
 
         cut.Find("[data-slot='toast']").GetAttribute("data-variant").Should().Be("default");
+    }
+
+    // --- Pause / eviction (paused toast pushed out of the visible window) ---
+
+    [Fact]
+    public void Toaster_Evicted_Paused_Toast_Still_AutoDismisses()
+    {
+        // Regression: hovering pauses the countdown, and only the newest 3 toasts
+        // render. When a 4th toast arrives, the hover-paused oldest toast leaves the
+        // DOM, so the browser never fires the balancing mouseleave. Eviction must
+        // reset the pause state and restart the timer, or the toast — which has no
+        // close button — becomes permanent.
+        var service = RegisterToastService();
+        var cut = Render<ToasterCn>();
+
+        service.Show("One", durationMs: 500);
+        service.Show("Two", durationMs: 500);
+        service.Show("Three", durationMs: 500);
+
+        // Hover-pause the oldest visible toast.
+        cut.FindAll("[data-slot='toast']")
+            .Single(t => t.TextContent.Contains("One"))
+            .TriggerEvent("onmouseenter", new MouseEventArgs());
+
+        // A 4th toast evicts the paused one from the visible window.
+        service.Show("Four", durationMs: 500);
+        // Show marshals through InvokeAsync, so wait for the render to apply.
+        cut.WaitForAssertion(() =>
+        {
+            var rendered = cut.FindAll("[data-slot='toast']");
+            rendered.Should().HaveCount(3);
+            rendered.Should().NotContain(t => t.TextContent.Contains("One"));
+        });
+
+        // Every toast — including the evicted, formerly paused one — must expire.
+        cut.WaitForAssertion(
+            () => cut.FindAll("[data-slot='toast']").Should().BeEmpty(),
+            TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Toaster_Pause_Then_Resume_Dismisses_Without_Resurrection()
+    {
+        // Normal hover flow: pause freezes the countdown past the original duration,
+        // resume restarts it, and the dismissed toast stays gone — the eviction reset
+        // must never revive a genuinely removed toast.
+        var service = RegisterToastService();
+        var cut = Render<ToasterCn>();
+
+        service.Show("Sticky", durationMs: 250);
+
+        cut.Find("[data-slot='toast']").TriggerEvent("onmouseenter", new MouseEventArgs());
+
+        // Paused: still on screen well past its 250ms duration.
+        await Task.Delay(400);
+        cut.FindAll("[data-slot='toast']").Should().HaveCount(1);
+
+        cut.Find("[data-slot='toast']").TriggerEvent("onmouseleave", new MouseEventArgs());
+
+        cut.WaitForAssertion(
+            () => cut.FindAll("[data-slot='toast']").Should().BeEmpty(),
+            TimeSpan.FromSeconds(5));
+
+        // No resurrection after removal.
+        await Task.Delay(300);
+        cut.FindAll("[data-slot='toast']").Should().BeEmpty();
     }
 }

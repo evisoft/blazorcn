@@ -57,11 +57,36 @@
         InvokeAsync(() =>
         {
             _toasts.Add(message);
+            ResetEvictedToast();
             StateHasChanged();
             var timer = new ToastTimer { RemainingMs = message.DurationMs };
             _timers[message.Id] = timer;
             _ = RunTimerAsync(message.Id, timer);
         });
+    }
+
+    // Adding a toast can push the oldest visible one out of the render window. Its
+    // element leaves the DOM, so the browser never fires the mouseleave/focusout
+    // that would balance a hover/focus pause — left alone, the toast keeps
+    // PauseCount > 0 with no timer and lives forever (there's no close button to
+    // rescue it). Eviction is the only way a rendered toast leaves the window
+    // (removals only pull older toasts INTO it), so resetting here upholds the
+    // invariant: a non-rendered toast is never paused without a running timer.
+    private void ResetEvictedToast()
+    {
+        if (_toasts.Count <= MaxVisibleToasts) return;
+        var evicted = _toasts[_toasts.Count - MaxVisibleToasts - 1];
+        if (_focusedToastId == evicted.Id)
+        {
+            // Focusout never fires for the removed element — reuse the RemoveToast
+            // recovery so keyboard focus isn't stranded on <body>.
+            _focusedToastId = null;
+            _ = _containerRef.FocusAsync();
+        }
+        if (!_timers.TryGetValue(evicted.Id, out var timer)) return;
+        timer.PauseCount = 0;
+        if (timer.Cts is null)
+            _ = RunTimerAsync(evicted.Id, timer);
     }
 
     private async Task RunTimerAsync(string id, ToastTimer timer)

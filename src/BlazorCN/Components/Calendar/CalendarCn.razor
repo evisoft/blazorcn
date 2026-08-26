@@ -14,7 +14,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cn-rtl-flip size-4" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                 </button>
                 <div class="text-sm font-medium select-none">
-                    @DisplayMonth.ToString("MMMM yyyy")
+                    @MonthCaption
                 </div>
                 <button type="button"
                         class="cn-calendar-nav-button"
@@ -30,7 +30,7 @@
                does. Keyboard nav is pure Blazor (@onkeydown bubbles up from the day
                buttons); arrows can't preventDefault page scroll without JS — accepted
                tradeoff for staying JS-free here. *@
-            <table class="w-full border-collapse" role="grid" aria-label="@DisplayMonth.ToString("MMMM yyyy")" @onkeydown="HandleGridKeyDown">
+            <table class="w-full border-collapse" role="grid" aria-label="@MonthCaption" @onkeydown="HandleGridKeyDown">
                 <thead>
                     <tr class="flex" role="row">
                         @if (ShowWeekNumbers)
@@ -105,14 +105,31 @@
     [Parameter] public IReadOnlyCollection<DateTime>? DisabledDates { get; set; }
     [Parameter] public bool ShowWeekNumbers { get; set; }
 
-    private DateTime DisplayMonth { get; set; }
+    // Optional two-way bindable control of the visible month (normalized to the
+    // first of the month). Null = the calendar manages the month itself, seeded
+    // from the selected value; internal navigation reports via DisplayMonthChanged.
+    [Parameter] public DateTime? DisplayMonth { get; set; }
+    [Parameter] public EventCallback<DateTime?> DisplayMonthChanged { get; set; }
+
+    private DateTime _displayMonth;
+
+    // Last DisplayMonth parameter value we saw or reported — lets OnParametersSet
+    // distinguish a real external month change from the parent echoing our own
+    // DisplayMonthChanged back (or from an unrelated re-render).
+    private DateTime? _lastDisplayMonthParam;
+
+    // Deliberately InvariantCulture (English) rather than CurrentCulture: the
+    // weekday headers and Sunday-first grid are hardcoded English to match
+    // react-day-picker's default locale in shadcn-ui, so the caption and day
+    // aria-labels must not switch language with the thread culture.
+    private string MonthCaption => _displayMonth.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
 
     // Month nav stops at Min/MaxDate: prev is allowed while any day before the
     // displayed month can still be in range, next while any day after can be.
     private bool CanGoPrev => !MinDate.HasValue
-        || new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1) > MinDate.Value.Date;
+        || new DateTime(_displayMonth.Year, _displayMonth.Month, 1) > MinDate.Value.Date;
     private bool CanGoNext => !MaxDate.HasValue
-        || new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1).AddMonths(1).AddDays(-1) < MaxDate.Value.Date;
+        || new DateTime(_displayMonth.Year, _displayMonth.Month, 1).AddMonths(1).AddDays(-1) < MaxDate.Value.Date;
 
     private static readonly string[] DayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
     private static readonly string[] FullDayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -136,8 +153,26 @@
             CalendarSelectionMode.Multiple => (SelectedDates?.Count > 0 ? SelectedDates.First() : DateTime.Today),
             _ => Value ?? DateTime.Today
         };
-        DisplayMonth = new DateTime(seed.Year, seed.Month, 1);
-        _focusedDate = seed.Date;
+        _displayMonth = new DateTime(seed.Year, seed.Month, 1);
+        // A disabled day button is unfocusable, so a disabled seed (e.g. today
+        // before MinDate) would leave the grid with no reachable Tab stop.
+        _focusedDate = NearestEnabledInMonth(seed.Date);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Only react when the incoming DisplayMonth actually differs from what we
+        // last saw/reported — an unrelated parent re-render must not reset the month.
+        var incoming = DisplayMonth.HasValue
+            ? new DateTime(DisplayMonth.Value.Year, DisplayMonth.Value.Month, 1)
+            : (DateTime?)null;
+        if (incoming == _lastDisplayMonthParam) return;
+        _lastDisplayMonthParam = incoming;
+        if (incoming.HasValue && incoming.Value != _displayMonth)
+        {
+            _displayMonth = incoming.Value;
+            _focusedDate = NearestEnabledInMonth(ClampToMonth(_focusedDate, _displayMonth));
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -153,16 +188,19 @@
         }
     }
 
-    private void PreviousMonth()
-    {
-        DisplayMonth = DisplayMonth.AddMonths(-1);
-        _focusedDate = ClampToMonth(_focusedDate, DisplayMonth);
-    }
+    private Task PreviousMonth() => SetDisplayMonthInternalAsync(_displayMonth.AddMonths(-1));
 
-    private void NextMonth()
+    private Task NextMonth() => SetDisplayMonthInternalAsync(_displayMonth.AddMonths(1));
+
+    /// <summary>Applies an internally initiated month change: clamps the roving Tab stop into the
+    /// new month (skipping disabled days), and reports the change so @bind-DisplayMonth stays in sync.</summary>
+    private async Task SetDisplayMonthInternalAsync(DateTime month)
     {
-        DisplayMonth = DisplayMonth.AddMonths(1);
-        _focusedDate = ClampToMonth(_focusedDate, DisplayMonth);
+        _displayMonth = new DateTime(month.Year, month.Month, 1);
+        _focusedDate = NearestEnabledInMonth(ClampToMonth(_focusedDate, _displayMonth));
+        DisplayMonth = _displayMonth;
+        _lastDisplayMonthParam = _displayMonth;
+        await DisplayMonthChanged.InvokeAsync(_displayMonth);
     }
 
     /// <summary>Same day-of-month within <paramref name="month"/>, clamped to that month's length —
@@ -170,7 +208,27 @@
     private static DateTime ClampToMonth(DateTime date, DateTime month) =>
         new(month.Year, month.Month, Math.Min(date.Day, DateTime.DaysInMonth(month.Year, month.Month)));
 
-    private void HandleGridKeyDown(KeyboardEventArgs e)
+    /// <summary>Nearest enabled day to <paramref name="candidate"/> within its own month,
+    /// searching outward — a disabled day button is unfocusable, so the roving Tab stop must
+    /// never land on one. Returns the candidate unchanged when the whole month is disabled
+    /// (nothing is focusable then, which is correct).</summary>
+    private DateTime NearestEnabledInMonth(DateTime candidate)
+    {
+        if (!IsDayDisabled(candidate)) return candidate;
+        var daysInMonth = DateTime.DaysInMonth(candidate.Year, candidate.Month);
+        for (var offset = 1; offset < daysInMonth; offset++)
+        {
+            var after = candidate.Day + offset;
+            if (after <= daysInMonth && !IsDayDisabled(new DateTime(candidate.Year, candidate.Month, after)))
+                return new DateTime(candidate.Year, candidate.Month, after);
+            var before = candidate.Day - offset;
+            if (before >= 1 && !IsDayDisabled(new DateTime(candidate.Year, candidate.Month, before)))
+                return new DateTime(candidate.Year, candidate.Month, before);
+        }
+        return candidate;
+    }
+
+    private async Task HandleGridKeyDown(KeyboardEventArgs e)
     {
         DateTime? target = e.Key switch
         {
@@ -186,20 +244,35 @@
         };
         if (!target.HasValue || target.Value == _focusedDate) return;
 
-        // Disabled day buttons can't receive focus, so stop at Min/MaxDate bounds
-        // (and individually disabled dates) instead of stranding focus.
-        if (IsDayDisabled(target.Value)) return;
+        // Disabled day buttons can't receive focus. Hop over disabled days in
+        // the direction of travel (react-day-picker does the same) so a booked
+        // date mid-month doesn't strand the roving Tab stop; give up at the
+        // Min/MaxDate bounds (or a huge disabled span) without moving at all.
+        if (IsDayDisabled(target.Value))
+        {
+            var step = target.Value > _focusedDate ? 1 : -1;
+            var probe = target.Value;
+            while (IsDayDisabled(probe))
+            {
+                probe = probe.AddDays(step);
+                if (MinDate.HasValue && probe.Date < MinDate.Value.Date) return;
+                if (MaxDate.HasValue && probe.Date > MaxDate.Value.Date) return;
+                if (Math.Abs((probe - _focusedDate).TotalDays) > 366) return;
+            }
+            target = probe;
+        }
 
         _focusedDate = target.Value.Date;
-        if (_focusedDate.Month != DisplayMonth.Month || _focusedDate.Year != DisplayMonth.Year)
-            DisplayMonth = new DateTime(_focusedDate.Year, _focusedDate.Month, 1);
         _pendingFocus = true;
+        if (_focusedDate.Month != _displayMonth.Month || _focusedDate.Year != _displayMonth.Year)
+            await SetDisplayMonthInternalAsync(new DateTime(_focusedDate.Year, _focusedDate.Month, 1));
     }
 
     /// <summary>Full accessible day name, mirroring react-day-picker's labelDayButton
-    /// (e.g. "Today, Friday, June 5, 2026, selected").</summary>
+    /// (e.g. "Today, Friday, June 5, 2026, selected"). InvariantCulture on purpose —
+    /// see <see cref="MonthCaption"/>.</summary>
     private string GetDayAriaLabel(DateTime date) =>
-        (IsToday(date) ? "Today, " : "") + date.ToString("dddd, MMMM d, yyyy") + (IsAnySelected(date) ? ", selected" : "");
+        (IsToday(date) ? "Today, " : "") + date.ToString("dddd, MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture) + (IsAnySelected(date) ? ", selected" : "");
 
     // --- Click handler ---
     private async Task OnDayClick(DateTime date)
@@ -235,19 +308,28 @@
                 }
                 else
                 {
-                    // Second click: set end (swap if before start)
-                    if (date < RangeStart)
+                    // Second click: set end (swap if before start). Capture the new
+                    // start/end in locals BEFORE any await — if the parent's
+                    // RangeStartChanged handler yields, the parent re-renders
+                    // mid-flight and SetParametersAsync resets the mutable
+                    // RangeStart/RangeEnd parameters to their stale values before
+                    // RangeEndChanged fires.
+                    DateTime? newStart = RangeStart;
+                    DateTime? newEnd;
+                    if (date < newStart)
                     {
-                        RangeEnd = RangeStart;
-                        RangeStart = date;
+                        newEnd = newStart;
+                        newStart = date;
                     }
                     else
                     {
-                        RangeEnd = date;
+                        newEnd = date;
                     }
+                    RangeStart = newStart;
+                    RangeEnd = newEnd;
                     _rangeHasStart = false;
-                    await RangeStartChanged.InvokeAsync(RangeStart);
-                    await RangeEndChanged.InvokeAsync(RangeEnd);
+                    await RangeStartChanged.InvokeAsync(newStart);
+                    await RangeEndChanged.InvokeAsync(newEnd);
                 }
                 break;
         }
@@ -272,7 +354,7 @@
     private bool IsSelected(DateTime date) => Value.HasValue && Value.Value.Date == date.Date;
     private bool IsMultiSelected(DateTime date) => SelectedDates?.Any(d => d.Date == date.Date) == true;
     private bool IsToday(DateTime date) => date.Date == DateTime.Today;
-    private bool IsOutsideMonth(DateTime date) => date.Month != DisplayMonth.Month;
+    private bool IsOutsideMonth(DateTime date) => date.Month != _displayMonth.Month;
 
     private bool IsRangeStart(DateTime date) => Mode == CalendarSelectionMode.Range && RangeStart.HasValue && RangeStart.Value.Date == date.Date;
     private bool IsRangeEnd(DateTime date) => Mode == CalendarSelectionMode.Range && RangeEnd.HasValue && RangeEnd.Value.Date == date.Date;
@@ -343,7 +425,7 @@
     private List<DateTime?[]> GetWeeks()
     {
         var weeks = new List<DateTime?[]>();
-        var firstDay = new DateTime(DisplayMonth.Year, DisplayMonth.Month, 1);
+        var firstDay = new DateTime(_displayMonth.Year, _displayMonth.Month, 1);
         var lastDay = firstDay.AddMonths(1).AddDays(-1);
 
         var current = firstDay.AddDays(-(int)firstDay.DayOfWeek);

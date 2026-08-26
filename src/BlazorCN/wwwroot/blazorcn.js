@@ -215,6 +215,18 @@ function computePosition(reference, floating, options) {
 
     let { side, sideOffset, align, alignOffset } = options;
 
+    // RTL awareness (Radix/Floating UI semantics): align start/end are LOGICAL on the
+    // inline axis — under dir=rtl, align=start hugs the trigger's RIGHT edge. Side
+    // stays physical, except submenus (flipSideOnRtl) which open toward the reading
+    // direction. Direction is read from the reference so per-subtree dir works.
+    const rtl = getComputedStyle(reference).direction === 'rtl';
+    if (rtl && options.flipSideOnRtl && (side === 'left' || side === 'right')) {
+        side = side === 'left' ? 'right' : 'left';
+    }
+    const alignH = rtl && align !== 'center'
+        ? (align === 'start' ? 'end' : 'start')
+        : align;
+
     // Expose the reference (trigger) width so width-matching popovers (Select,
     // DropdownMenu, Combobox) can size themselves via `w-(--anchor-width)`.
     // Mirrors Base UI's `--anchor-width`; `--cn-trigger-width` kept for min-w
@@ -262,11 +274,11 @@ function computePosition(reference, floating, options) {
         switch (s) {
             case 'top':
                 top = refRect.top - floatRect.height - sideOffset;
-                left = calcAlignHorizontal(refRect, floatRect, align, alignOffset);
+                left = calcAlignHorizontal(refRect, floatRect, alignH, alignOffset);
                 break;
             case 'bottom':
                 top = refRect.bottom + sideOffset;
-                left = calcAlignHorizontal(refRect, floatRect, align, alignOffset);
+                left = calcAlignHorizontal(refRect, floatRect, alignH, alignOffset);
                 break;
             case 'left':
                 left = refRect.left - floatRect.width - sideOffset;
@@ -319,7 +331,7 @@ function computePosition(reference, floating, options) {
     let originX, originY;
     if (actualSide === 'top' || actualSide === 'bottom') {
         originY = actualSide === 'top' ? 'bottom' : 'top';
-        originX = align === 'start' ? 'left' : align === 'end' ? 'right' : 'center';
+        originX = alignH === 'start' ? 'left' : alignH === 'end' ? 'right' : 'center';
     } else {
         originX = actualSide === 'left' ? 'right' : 'left';
         originY = align === 'start' ? 'top' : align === 'end' ? 'bottom' : 'center';
@@ -513,6 +525,13 @@ export function setupKeyboardNavigation(container, id, dotnetRef, escapeMethodNa
         if (items.length === 0) return;
 
         const currentIndex = items.indexOf(document.activeElement);
+
+        // A horizontal nav (menubar root, tabs list) must not act on keys that bubble
+        // up while focus is elsewhere — e.g. inside an open menubar menu. Without this,
+        // ArrowRight from a menu item teleported focus to the FIRST trigger (indexOf
+        // returned -1) while the menu stayed open.
+        if (orientation === 'horizontal' && currentIndex === -1) return;
+
         const prevKey = orientation === 'horizontal' ? 'ArrowLeft' : 'ArrowUp';
         const nextKey = orientation === 'horizontal' ? 'ArrowRight' : 'ArrowDown';
 
@@ -1071,4 +1090,38 @@ export function scrollItemIntoView(listEl, itemId) {
     if (!listEl || !itemId) return;
     const item = listEl.querySelector('#' + CSS.escape(itemId)) ?? document.getElementById(itemId);
     if (item) item.scrollIntoView({ block: 'nearest' });
+}
+
+/**
+ * Force-syncs a DOM input's value property. Blazor only patches `value` when the
+ * rendered attribute CHANGES, so a handler that rejects input (leaving the bound
+ * value unchanged) produces no diff and the rejected characters stay in the DOM.
+ * @param {HTMLElement} element - the input element
+ * @param {string} value - the value the DOM must show
+ */
+export function setInputValue(element, value) {
+    if (!element) return;
+    if (element.value !== value) element.value = value ?? '';
+}
+
+/**
+ * preventDefault()s the listed keys on matching descendants, without handling them.
+ * Blazor's @onkeydown cannot conditionally suppress the browser default (the
+ * :preventDefault directive is unconditional and would break Tab/Enter), so C#
+ * key handlers that move focus/selection with arrows still let the page scroll.
+ * This guard swallows only the given keys, only when the event target matches.
+ * @param {HTMLElement} container
+ * @param {string} id - cleanup key (release via cleanup(id))
+ * @param {string[]} keys - e.g. ['ArrowDown','ArrowUp','Home','End']
+ * @param {string} selector - target filter, e.g. '[role="radio"]'
+ */
+export function preventKeyDefaults(container, id, keys, selector) {
+    if (!container) return;
+    const controller = new AbortController();
+    container.addEventListener('keydown', (e) => {
+        if (!keys.includes(e.key)) return;
+        if (selector && !(e.target instanceof Element && e.target.matches(selector))) return;
+        e.preventDefault();
+    }, { signal: controller.signal });
+    cleanupMap.set(id, controller);
 }

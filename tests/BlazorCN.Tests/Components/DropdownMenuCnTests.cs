@@ -855,4 +855,28 @@ public class DropdownMenuCnTests : BunitContext
         isOpen.Should().BeFalse();
         cut.Find("[data-slot='dropdown-menu']").GetAttribute("data-state").Should().Be("closed");
     }
+
+    // Radix parity: nested menus open toward the reading direction, so the JS
+    // positioning payload must carry flipSideOnRtl=true (regular content does not).
+    [Fact]
+    public void SubContent_Positioning_Payload_Flips_Side_On_Rtl()
+    {
+        var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");
+        var handler = module.Setup<string>("createFloating", _ => true);
+        handler.SetResult("right");
+        module.SetupVoid("setupKeyboardNavigation", _ => true).SetVoidResult();
+        module.SetupVoid("onOutsideClick", _ => true).SetVoidResult();
+        Services.AddScoped<JsInteropCn>();
+
+        var cut = Render<DropdownMenuSubCn>(p => p
+            .AddChildContent<DropdownMenuSubTriggerCn>(t => t.AddChildContent("More"))
+            .AddChildContent<DropdownMenuSubContentCn>(c => c.AddChildContent("Item")));
+
+        cut.Find("[data-slot='dropdown-menu-sub-trigger']").Click();
+
+        var invocation = handler.Invocations.Should().ContainSingle().Subject;
+        var options = invocation.Arguments[3];
+        var json = System.Text.Json.JsonSerializer.Serialize(options, options!.GetType());
+        json.Should().Contain("\"flipSideOnRtl\":true").And.Contain("\"side\":\"right\"");
+    }
 }

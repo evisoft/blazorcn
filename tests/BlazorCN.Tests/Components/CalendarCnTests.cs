@@ -1,5 +1,8 @@
+using System.Globalization;
 using Bunit;
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Rendering;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
@@ -266,5 +269,105 @@ public class CalendarCnTests : BunitContext
         var cut = Render<CalendarCn>();
         // Should render without error in default single mode
         cut.Find("[data-slot='calendar']").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void MinDate_In_Future_Moves_Tab_Stop_To_Enabled_Day()
+    {
+        // The seeded focus day (Value = June 1) is before MinDate and therefore
+        // disabled — a disabled button is unfocusable, so the roving tab stop
+        // must move to the nearest enabled day instead of trapping the keyboard.
+        var cut = Render<CalendarCn>(p => p
+            .Add(c => c.Value, new DateTime(2025, 6, 1))
+            .Add(c => c.MinDate, new DateTime(2025, 6, 10)));
+
+        var tabStops = cut.FindAll("td button[tabindex='0']");
+        tabStops.Should().HaveCount(1);
+        tabStops[0].HasAttribute("disabled").Should().BeFalse();
+        tabStops[0].TextContent.Trim().Should().Be("10");
+    }
+
+    [Fact]
+    public async Task Range_Completion_Survives_Async_Start_Handler()
+    {
+        // RangeStartChanged yields, so the host re-renders mid-flight and
+        // SetParametersAsync resets the calendar's RangeEnd parameter before
+        // RangeEndChanged fires — the callback must still report the clicked end.
+        var cut = Render<AsyncRangeHost>();
+
+        await cut.InvokeAsync(() => cut.FindAll("td button").First(b => b.TextContent.Trim() == "5").Click());
+        cut.Instance.Start.Should().Be(new DateTime(2025, 6, 5));
+
+        await cut.InvokeAsync(() => cut.FindAll("td button").First(b => b.TextContent.Trim() == "15").Click());
+        cut.Instance.End.Should().Be(new DateTime(2025, 6, 15));
+    }
+
+    [Fact]
+    public void Caption_Stays_English_Under_German_Culture()
+    {
+        // Weekday headers are hardcoded English (react-day-picker default), so the
+        // caption and aria-labels are deliberately InvariantCulture — never mixed-language.
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var cut = Render<CalendarCn>(p => p.Add(c => c.Value, new DateTime(2025, 6, 15)));
+            cut.Markup.Should().Contain("June 2025");
+            cut.Markup.Should().NotContain("Juni");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void DisplayMonth_Parameter_Controls_Visible_Month()
+    {
+        var cut = Render<CalendarCn>(p => p
+            .Add(c => c.Value, new DateTime(2025, 3, 15))
+            .Add(c => c.DisplayMonth, new DateTime(2025, 6, 1)));
+
+        cut.Markup.Should().Contain("June 2025");
+    }
+
+    [Fact]
+    public void Next_Month_Invokes_DisplayMonthChanged()
+    {
+        DateTime? reported = null;
+        var cut = Render<CalendarCn>(p => p
+            .Add(c => c.DisplayMonth, new DateTime(2025, 6, 1))
+            .Add(c => c.DisplayMonthChanged, (DateTime? v) => reported = v));
+
+        cut.Find("button[aria-label='Next month']").Click();
+
+        reported.Should().Be(new DateTime(2025, 7, 1));
+        cut.Markup.Should().Contain("July 2025");
+    }
+
+    /// <summary>Host that two-way binds RangeStart/RangeEnd the way a real parent does,
+    /// with an async-yielding RangeStartChanged handler — reproduces the re-render race.</summary>
+    private sealed class AsyncRangeHost : ComponentBase
+    {
+        public DateTime? Start;
+        public DateTime? End;
+
+        protected override void BuildRenderTree(RenderTreeBuilder builder)
+        {
+            builder.OpenComponent<CalendarCn>(0);
+            builder.AddComponentParameter(1, nameof(CalendarCn.Mode), CalendarSelectionMode.Range);
+            builder.AddComponentParameter(2, nameof(CalendarCn.DisplayMonth), (DateTime?)new DateTime(2025, 6, 1));
+            builder.AddComponentParameter(3, nameof(CalendarCn.RangeStart), Start);
+            builder.AddComponentParameter(4, nameof(CalendarCn.RangeStartChanged),
+                EventCallback.Factory.Create<DateTime?>(this, async v =>
+                {
+                    Start = v;
+                    await Task.Yield();
+                }));
+            builder.AddComponentParameter(5, nameof(CalendarCn.RangeEnd), End);
+            builder.AddComponentParameter(6, nameof(CalendarCn.RangeEndChanged),
+                EventCallback.Factory.Create<DateTime?>(this, v => End = v));
+            builder.CloseComponent();
+        }
     }
 }

@@ -33,7 +33,10 @@ public partial class DropdownMenuSubContentCn : IAsyncDisposable
                         Side = Side,
                         SideOffset = SideOffset,
                         Align = Align,
-                        AlignOffset = AlignOffset
+                        AlignOffset = AlignOffset,
+                        // Radix parity: a nested menu opens toward the reading
+                        // direction, so its physical side mirrors under dir="rtl".
+                        FlipSideOnRtl = true
                     });
                 await JsInterop.SetupKeyboardNavigationAsync(_contentRef, _keyboardNavId, _dotnetRef, "OnEscapeKey");
             }

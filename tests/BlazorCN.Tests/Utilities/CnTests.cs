@@ -125,24 +125,113 @@ public class CnTests
         result.Should().Be("custom-class");
     }
 
+    // Upstream tailwind-merge keeps important and non-important forms as SEPARATE groups:
+    // !p-2 beats a later p-4 in the browser, so deleting the important class flips rendering.
+    // (Verified against tailwind-merge 3.6.0: twMerge('!p-2 p-4') === '!p-2 p-4'.)
     [Fact]
-    public void Merge_Important_Conflicts_With_Regular()
+    public void Merge_Important_Does_Not_Conflict_With_Regular()
     {
-        var result = Cn.Merge("!bg-red-500", "bg-blue-500");
-        result.Should().Be("bg-blue-500");
+        Cn.Merge("!bg-red-500", "bg-blue-500").Should().Be("!bg-red-500 bg-blue-500");
+        Cn.Merge("bg-red-500", "!bg-blue-500").Should().Be("bg-red-500 !bg-blue-500");
+        Cn.Merge("!p-2", "p-4").Should().Be("!p-2 p-4");
+        Cn.Merge("p-2!", "p-4").Should().Be("p-2! p-4");   // v4 suffix form
     }
 
     [Fact]
-    public void Merge_Regular_Conflicts_With_Important()
+    public void Merge_Important_Conflicts_With_Important()
     {
-        var result = Cn.Merge("bg-red-500", "!bg-blue-500");
-        result.Should().Be("!bg-blue-500");
+        Cn.Merge("!p-3", "!p-4").Should().Be("!p-4");
+    }
+
+    // --- conflictingClassGroups: a later shorthand evicts earlier longhands, never the reverse ---
+
+    [Theory]
+    [InlineData("px-4 p-2", "p-2")]
+    [InlineData("p-2 px-4", "p-2 px-4")]
+    [InlineData("mx-2 m-4", "m-4")]
+    [InlineData("top-1 inset-0", "inset-0")]
+    [InlineData("w-5 size-4", "size-4")]
+    [InlineData("size-4 w-5", "size-4 w-5")]
+    [InlineData("border-t-2 border-2", "border-2")]
+    [InlineData("border-2 border-t-4", "border-2 border-t-4")]
+    [InlineData("gap-x-2 gap-4", "gap-4")]
+    [InlineData("overflow-x-auto overflow-hidden", "overflow-hidden")]
+    public void Merge_Shorthand_Evicts_Earlier_Longhand(string input, string expected)
+    {
+        Cn.Merge(input).Should().Be(expected);
+    }
+
+    // gap-x / gap-y / inset-x / inset-y are orthogonal axes — they must never evict each other.
+    [Theory]
+    [InlineData("gap-x-2 gap-y-4", "gap-x-2 gap-y-4")]
+    [InlineData("inset-x-2 inset-y-4", "inset-x-2 inset-y-4")]
+    [InlineData("gap-4 gap-x-2", "gap-4 gap-x-2")]
+    public void Merge_Axis_Utilities_Do_Not_Conflict(string input, string expected)
+    {
+        Cn.Merge(input).Should().Be(expected);
+    }
+
+    // Per-corner radius refines an earlier base radius; only a later BASE radius resets corners.
+    [Fact]
+    public void Merge_Corner_Radius_Layers_On_Base_Radius()
+    {
+        Cn.Merge("rounded-lg", "rounded-tl-sm").Should().Be("rounded-lg rounded-tl-sm");
+        Cn.Merge("rounded-tl-sm", "rounded-lg").Should().Be("rounded-lg");
+        Cn.Merge("rounded-md", "rounded-t-none").Should().Be("rounded-md rounded-t-none");
+    }
+
+    // Negative and positive forms of one utility are the same group (upstream: -mt-4 evicts mt-2).
+    [Theory]
+    [InlineData("mt-2 -mt-4", "-mt-4")]
+    [InlineData("-mt-4 mt-2", "mt-2")]
+    [InlineData("-inset-1 inset-0", "inset-0")]
+    public void Merge_Negative_Conflicts_With_Positive(string input, string expected)
+    {
+        Cn.Merge(input).Should().Be(expected);
+    }
+
+    // font-size sets line-height in Tailwind, so a later text-* clears an earlier leading-*.
+    [Fact]
+    public void Merge_FontSize_Evicts_Leading()
+    {
+        Cn.Merge("leading-6", "text-lg").Should().Be("text-lg");
+        Cn.Merge("text-lg", "leading-7").Should().Be("text-lg leading-7");
+        Cn.Merge("text-lg", "text-lg/7").Should().Be("text-lg/7");
+        Cn.Merge("text-lg/7", "text-lg").Should().Be("text-lg");
+        Cn.Merge("leading-6", "text-lg/7").Should().Be("text-lg/7");
+    }
+
+    // Arbitrary values join their semantic group instead of only deduping by raw text.
+    [Fact]
+    public void Merge_Arbitrary_Values_Join_Their_Semantic_Group()
+    {
+        Cn.Merge("bg-red-500", "bg-[#ff0000]").Should().Be("bg-[#ff0000]");
+        Cn.Merge("text-lg", "text-[12px]").Should().Be("text-[12px]");
+        Cn.Merge("text-[#fff]", "text-[12px]").Should().Be("text-[#fff] text-[12px]");
+        Cn.Merge("p-2", "p-[3px]").Should().Be("p-[3px]");
+        Cn.Merge("[margin:2px]", "[margin:3px]").Should().Be("[margin:3px]");
     }
 
     [Fact]
-    public void Merge_Important_Spacing_Conflict()
+    public void Merge_Ring_And_Transition_Groups()
     {
-        var result = Cn.Merge("!p-2", "p-4");
-        result.Should().Be("p-4");
+        Cn.Merge("ring-2", "ring-4").Should().Be("ring-4");
+        Cn.Merge("border-t", "border-t-2").Should().Be("border-t-2");
+        Cn.Merge("transition", "transition-colors").Should().Be("transition-colors");
+        Cn.Merge("border-dashed", "border-2").Should().Be("border-dashed border-2");
+    }
+
+    // tailwind-merge sorts variant modifiers, so hover:focus: and focus:hover: conflict.
+    [Fact]
+    public void Merge_Variant_Order_Is_Insensitive()
+    {
+        Cn.Merge("hover:focus:p-2", "focus:hover:p-4").Should().Be("focus:hover:p-4");
+        Cn.Merge("hover:p-2", "focus:p-4").Should().Be("hover:p-2 focus:p-4");
+    }
+
+    [Fact]
+    public void Merge_Color_With_Opacity_Modifier_Shares_The_Color_Group()
+    {
+        Cn.Merge("bg-red-500/50", "bg-blue-500").Should().Be("bg-blue-500");
     }
 }

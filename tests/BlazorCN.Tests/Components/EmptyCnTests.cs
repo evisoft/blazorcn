@@ -76,7 +76,7 @@ public class EmptyCnTests : BunitContext
     public void EmptyMedia_Renders_With_DataSlot()
     {
         var cut = Render<EmptyMediaCn>(p => p.AddChildContent("Icon"));
-        cut.Find("[data-slot='empty-media']").Should().NotBeNull();
+        cut.Find("[data-slot='empty-icon']").Should().NotBeNull();
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class EmptyCnTests : BunitContext
         var cut = Render<EmptyMediaCn>(p => p
             .Add(c => c.Variant, EmptyMediaVariant.Icon)
             .AddChildContent("Icon"));
-        var el = cut.Find("[data-slot='empty-media']");
+        var el = cut.Find("[data-slot='empty-icon']");
         el.GetAttribute("data-variant").Should().Be("icon");
         el.ClassList.Should().Contain("cn-empty-media");
         el.ClassList.Should().Contain("cn-empty-media-icon");
@@ -97,7 +97,7 @@ public class EmptyCnTests : BunitContext
         var cut = Render<EmptyMediaCn>(p => p
             .Add(c => c.Variant, EmptyMediaVariant.Default)
             .AddChildContent("Image"));
-        var el = cut.Find("[data-slot='empty-media']");
+        var el = cut.Find("[data-slot='empty-icon']");
         el.GetAttribute("data-variant").Should().Be("default");
         el.ClassList.Should().Contain("flex");
         el.ClassList.Should().Contain("items-center");
@@ -122,10 +122,10 @@ public class EmptyCnTests : BunitContext
     }
 
     [Fact]
-    public void EmptyTitle_Renders_As_H3()
+    public void EmptyTitle_Renders_As_Div()
     {
         var cut = Render<EmptyTitleCn>(p => p.AddChildContent("Title"));
-        cut.Find("h3").Should().NotBeNull();
+        cut.Find("[data-slot='empty-title']").TagName.Should().Be("DIV");
     }
 
     // --- EmptyDescriptionCn ---
@@ -147,10 +147,10 @@ public class EmptyCnTests : BunitContext
     }
 
     [Fact]
-    public void EmptyDescription_Renders_As_P()
+    public void EmptyDescription_Renders_As_Div()
     {
         var cut = Render<EmptyDescriptionCn>(p => p.AddChildContent("Description"));
-        cut.Find("p").Should().NotBeNull();
+        cut.Find("[data-slot='empty-description']").TagName.Should().Be("DIV");
     }
 
     // --- EmptyContentCn ---

@@ -1,7 +1,9 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
+@implements IAsyncDisposable
 
-<div class="@Cn.Merge("cn-radio-group grid", Class)"
+<div @ref="_groupRef"
+     class="@Cn.Merge("cn-radio-group grid", Class)"
      style="@Style"
      role="radiogroup"
      data-slot="radio-group"
@@ -16,6 +18,11 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _groupRef;
+    private readonly string _preventKeysId = $"radio-nav-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
 
     // Items register in render order for the APG roving-tabindex model: one tab
     // stop for the whole group, arrows move focus AND select (wrapping), Home/End
@@ -69,12 +76,35 @@
         await enabled[targetIndex].SelectAndFocusAsync();
     }
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Items register while the first render is in flight, so an item rendered
-        // before the checked one may have claimed the tab stop; re-render once with
-        // the full registry so exactly one radio has tabindex="0".
-        if (firstRender && _items.Count > 0)
-            StateHasChanged();
+        if (firstRender)
+        {
+            // Items register while the first render is in flight, so an item rendered
+            // before the checked one may have claimed the tab stop; re-render once with
+            // the full registry so exactly one radio has tabindex="0".
+            if (_items.Count > 0)
+                StateHasChanged();
+            try
+            {
+                // Blazor's @onkeydown cannot conditionally preventDefault, so the keys
+                // handled above would also scroll the page; swallow just their browser
+                // default, only when a radio itself is the event target.
+                await JsInterop.PreventKeyDefaultsAsync(_groupRef, _preventKeysId,
+                    new[] { "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End" },
+                    "[role=\"radio\"]");
+                _jsInitialized = true;
+            }
+            catch { /* Prerendering without JS — scroll suppression is progressive enhancement */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupAsync(_preventKeysId); }
+            catch { /* Circuit may already be gone */ }
+        }
     }
 }

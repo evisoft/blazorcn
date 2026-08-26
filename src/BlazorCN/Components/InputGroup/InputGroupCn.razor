@@ -26,7 +26,10 @@
     // time window is used instead of a latched flag so a button that is NOT inside an
     // addon cannot leave stale suppression behind for a later addon click.
     private Func<ValueTask>? _focusControl;
-    private long _lastButtonClickTicks = long.MinValue;
+    // Nullable, NOT a long.MinValue sentinel: TickCount64 - long.MinValue wraps negative,
+    // which made the guard below always trip and FocusControlAsync permanently dead
+    // until the first button click (breaking Combobox open-focus among others).
+    private long? _lastButtonClickTicks;
 
     internal void RegisterControl(Func<ValueTask> focusControl) => _focusControl ??= focusControl;
 
@@ -36,7 +39,7 @@
     {
         // Handlers for one bubbled DOM click run back-to-back, so a button-originated
         // click reaches us well inside the window; independent clicks never do.
-        if (Environment.TickCount64 - _lastButtonClickTicks < 250) return;
+        if (_lastButtonClickTicks is { } ticks && Environment.TickCount64 - ticks < 250) return;
         if (_focusControl is not null)
             await _focusControl();
     }

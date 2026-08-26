@@ -1,6 +1,7 @@
 @namespace BlazorCN
 @inherits ComponentBaseCn
-<div class="@Cn.Merge("flex w-full flex-col", Class)" style="@Style" data-slot="accordion" @attributes="AdditionalAttributes">
+@implements IAsyncDisposable
+<div @ref="_rootRef" class="@Cn.Merge("flex w-full flex-col", Class)" style="@Style" data-slot="accordion" @attributes="AdditionalAttributes">
     <CascadingValue Value="this" IsFixed="false">
         @ChildContent
     </CascadingValue>
@@ -11,6 +12,12 @@
     /// <summary>When true, several items may be open at once. Default matches the
     /// shadcn reference: single-open — expanding an item collapses its siblings.</summary>
     [Parameter] public bool Multiple { get; set; }
+
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
+    private ElementReference _rootRef;
+    private readonly string _preventKeysId = $"accordion-nav-{Guid.NewGuid():N}";
+    private bool _jsInitialized;
 
     private readonly List<AccordionItemCn> _items = new();
 
@@ -63,6 +70,33 @@
                 await _items[i].FocusTriggerAsync();
                 return;
             }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Blazor's @onkeydown cannot conditionally preventDefault, so the keys
+                // handled by MoveFocusAsync would also scroll the page; one root-level
+                // guard swallows just their browser default, only on the triggers.
+                await JsInterop.PreventKeyDefaultsAsync(_rootRef, _preventKeysId,
+                    new[] { "ArrowDown", "ArrowUp", "Home", "End" },
+                    "[data-slot=\"accordion-trigger\"]");
+                _jsInitialized = true;
+            }
+            catch { /* Prerendering without JS — scroll suppression is progressive enhancement */ }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsInitialized)
+        {
+            try { await JsInterop.CleanupAsync(_preventKeysId); }
+            catch { /* Circuit may already be gone */ }
         }
     }
 }

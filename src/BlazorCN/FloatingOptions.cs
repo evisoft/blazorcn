@@ -26,4 +26,11 @@ public sealed class FloatingOptions
 
     /// <summary>Offset (in pixels) along the alignment axis.</summary>
     public int AlignOffset { get; set; } = 0;
+
+    /// <summary>
+    /// Treat a Left/Right <see cref="Side"/> as logical: under dir="rtl" the side is
+    /// mirrored. Radix does this for submenus (a nested menu opens toward the reading
+    /// direction), while regular popovers keep their physical side.
+    /// </summary>
+    public bool FlipSideOnRtl { get; set; }
 }

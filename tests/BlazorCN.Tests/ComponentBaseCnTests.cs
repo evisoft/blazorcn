@@ -2,6 +2,7 @@ using System.Linq;
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Components.Rendering;
 using Xunit;
 
@@ -9,6 +10,13 @@ namespace BlazorCN.Tests;
 
 public class ComponentBaseCnTests : BunitContext
 {
+    public ComponentBaseCnTests()
+    {
+        // InputOtpCn injects JsInteropCn (DOM value resync for rejected characters).
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     private class TestComponent : ComponentBaseCn
     {
         protected override void BuildRenderTree(RenderTreeBuilder builder)

@@ -13,6 +13,7 @@ internal sealed class FloatingJsOptions
     [JsonPropertyName("sideOffset")] public int SideOffset { get; init; }
     [JsonPropertyName("align")] public string Align { get; init; } = "center";
     [JsonPropertyName("alignOffset")] public int AlignOffset { get; init; }
+    [JsonPropertyName("flipSideOnRtl")] public bool FlipSideOnRtl { get; init; }
 }
 
 /// <summary>JS interop payload for setupKeyboardNavigation. See <see cref="FloatingJsOptions"/> for rationale.</summary>
@@ -103,6 +104,29 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
     }
 
     /// <summary>
+    /// Force-syncs a DOM input's value property. Blazor only patches <c>value</c> when the
+    /// rendered attribute changes, so rejecting input (leaving the bound value unchanged)
+    /// produces no diff and the rejected characters would stay visible in the DOM.
+    /// </summary>
+    public async ValueTask SetInputValueAsync(ElementReference element, string value)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("setInputValue", element, value);
+    }
+
+    /// <summary>
+    /// Suppresses the browser default (page scroll) for the given keys on matching
+    /// descendants of <paramref name="container"/>, without handling the keys.
+    /// Release with <see cref="CleanupAsync"/>.
+    /// </summary>
+    public async ValueTask PreventKeyDefaultsAsync(
+        ElementReference container, string id, string[] keys, string selector)
+    {
+        var module = await GetModuleAsync();
+        await module.InvokeVoidAsync("preventKeyDefaults", container, id, keys, selector);
+    }
+
+    /// <summary>
     /// Creates a floating element positioned relative to a reference element.
     /// Returns the actual side used (may differ from requested if flipped).
     /// </summary>
@@ -117,6 +141,7 @@ public sealed class JsInteropCn : IAsyncDisposable, IDisposable
             SideOffset = options.SideOffset,
             Align = options.Align.ToString().ToLowerInvariant(),
             AlignOffset = options.AlignOffset,
+            FlipSideOnRtl = options.FlipSideOnRtl,
         };
         return await module.InvokeAsync<string>(
             "createFloating", reference, floating, id, jsOptions);

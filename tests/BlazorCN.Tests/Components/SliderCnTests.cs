@@ -1,3 +1,4 @@
+using System.Linq;
 using Bunit;
 using FluentAssertions;
 using Xunit;
@@ -183,6 +184,29 @@ public class SliderCnTests : BunitContext
         var inputs = cut.FindAll("input[type='range']");
         inputs[0].GetAttribute("value").Should().Be("75");
         inputs[1].GetAttribute("value").Should().Be("90");
+    }
+
+    // Horizontal multi-thumb hit zones are emitted as LOGICAL custom props
+    // (--clip-is/--clip-ie) that blazorcn.css maps to physical inset() per
+    // direction — a physical clip under dir="rtl" hit-tested every thumb to the
+    // OTHER input, so dragging a thumb moved the wrong value (browser-reproduced).
+    [Fact]
+    public void Horizontal_Multi_Thumb_Inputs_Use_Logical_Clip_Props()
+    {
+        var cut = Render<SliderCn>(p => p.Add(c => c.Values, new[] { 25.0, 75.0 }));
+        var styles = cut.FindAll("input[type='range']").Select(i => i.GetAttribute("style")).ToList();
+        styles.Should().OnlyContain(s => s.Contains("--clip-is:") && s.Contains("--clip-ie:"));
+        styles.Should().OnlyContain(s => !s.Contains("clip-path"));
+    }
+
+    [Fact]
+    public void Vertical_Multi_Thumb_Inputs_Keep_Inline_ClipPath()
+    {
+        var cut = Render<SliderCn>(p => p
+            .Add(c => c.Orientation, SliderOrientation.Vertical)
+            .Add(c => c.Values, new[] { 25.0, 75.0 }));
+        var styles = cut.FindAll("input[type='range']").Select(i => i.GetAttribute("style")).ToList();
+        styles.Should().OnlyContain(s => s.Contains("clip-path: inset("));
     }
 
     // Radix renders value={[]} as a slider with no thumbs; RangeStyle used to index

@@ -60,6 +60,8 @@
     /// </summary>
     [Parameter] public string? InputMode { get; set; }
 
+    [Inject] private JsInteropCn JsInterop { get; set; } = default!;
+
     private ElementReference _inputRef;
     internal bool IsFocused { get; private set; }
     internal int ActiveIndex { get; private set; }
@@ -97,6 +99,17 @@
             delta = 0;
         ActiveIndex = Math.Clamp(ActiveIndex + delta, 0, Math.Min(filtered.Length, MaxLength - 1));
         await ValueChanged.InvokeAsync(Value);
+
+        if (filtered != newValue)
+        {
+            // Rejected characters stay in the DOM: Blazor only patches `value` when the
+            // rendered attribute changes, and rejection leaves Value as-is (no diff).
+            // Left alone, junk accumulates until maxlength and the input goes dead —
+            // force-sync the DOM back to the filtered value. Safe here: HandleInput
+            // only fires from a real DOM event, never during prerender.
+            try { await JsInterop.SetInputValueAsync(_inputRef, Value ?? ""); }
+            catch { /* Circuit may already be gone — DOM sync is best-effort */ }
+        }
     }
 
     private string? _lastKey;

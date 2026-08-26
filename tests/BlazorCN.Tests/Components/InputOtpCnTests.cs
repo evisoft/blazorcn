@@ -1,12 +1,21 @@
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
 
 public class InputOtpCnTests : BunitContext
 {
+    public InputOtpCnTests()
+    {
+        // InputOtpCn injects JsInteropCn (DOM value re-sync when input is rejected).
+        // Loose mode lets those interop calls no-op, and registering the service satisfies [Inject].
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     // --- InputOtpCn ---
 
     [Fact]
@@ -303,5 +312,58 @@ public class InputOtpCnTests : BunitContext
     {
         InputOtpCn.RegexpOnlyDigits.Should().Be("[0-9]");
         InputOtpCn.RegexpOnlyDigitsAndChars.Should().Be("[0-9a-zA-Z]");
+    }
+
+    // --- Rejected input DOM re-sync ---
+
+    [Fact]
+    public void InputOtp_Input_Filters_Rejected_Characters()
+    {
+        string? bound = null;
+        var cut = Render<InputOtpCn>(p => p
+            .Add(c => c.Value, "")
+            .Add(c => c.ValueChanged, (string? v) => bound = v)
+            .AddChildContent("Content"));
+
+        cut.Find("[data-slot='input-otp'] input").Input("1a2b");
+
+        bound.Should().Be("12");
+    }
+
+    [Fact]
+    public void InputOtp_Rejected_Input_Forces_Dom_Value_Resync()
+    {
+        // Regression: Blazor only patches `value` when the rendered attribute changes.
+        // A rejected character leaves Value unchanged (no diff), so the junk would stay
+        // in the sr-only input until maxlength fills and the OTP goes dead. The component
+        // must force-sync the DOM value via JS whenever it rejects part of the input.
+        var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");
+        var handler = module.SetupVoid("setInputValue", _ => true);
+        handler.SetVoidResult();
+
+        var cut = Render<InputOtpCn>(p => p
+            .Add(c => c.Value, "12")
+            .AddChildContent("Content"));
+
+        // Raw DOM value is "12a"; the filtered value stays "12".
+        cut.Find("[data-slot='input-otp'] input").Input("12a");
+
+        var invocation = handler.Invocations.Should().ContainSingle().Subject;
+        invocation.Arguments[1].Should().Be("12");
+        cut.Find("[data-slot='input-otp'] input").GetAttribute("value").Should().Be("12");
+    }
+
+    [Fact]
+    public void InputOtp_Valid_Input_Does_Not_Force_Dom_Resync()
+    {
+        var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");
+        var handler = module.SetupVoid("setInputValue", _ => true);
+        handler.SetVoidResult();
+
+        var cut = Render<InputOtpCn>(p => p.AddChildContent("Content"));
+
+        cut.Find("[data-slot='input-otp'] input").Input("123");
+
+        handler.Invocations.Should().BeEmpty();
     }
 }

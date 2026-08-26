@@ -1,11 +1,20 @@
 using Bunit;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace BlazorCN.Tests.Components;
 
 public class AccordionCnTests : BunitContext
 {
+    public AccordionCnTests()
+    {
+        // AccordionCn injects JsInteropCn (arrow-key scroll suppression).
+        // Loose mode lets those interop calls no-op, and registering the service satisfies [Inject].
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        Services.AddScoped<JsInteropCn>();
+    }
+
     [Fact]
     public void Accordion_Renders_With_DataSlot()
     {
@@ -178,5 +187,41 @@ public class AccordionCnTests : BunitContext
         var items = cut.FindAll("[data-slot='accordion-item']");
         items[0].GetAttribute("data-state").Should().Be("open");
         items[1].GetAttribute("data-state").Should().Be("open");
+    }
+
+    [Fact]
+    public void Wires_PreventKeyDefaults_Once_For_Trigger_Keys()
+    {
+        // Blazor's @onkeydown cannot conditionally preventDefault, so without this
+        // JS guard every arrow/Home/End press on a trigger also scrolls the page.
+        // A single root-level registration covers all triggers (regression).
+        var module = JSInterop.SetupModule("./_content/BlazorCN/blazorcn.js");
+        var handler = module.SetupVoid("preventKeyDefaults", _ => true);
+        handler.SetVoidResult();
+
+        Render<AccordionCn>(p => p.AddChildContent(builder =>
+        {
+            builder.OpenComponent<AccordionItemCn>(0);
+            builder.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b =>
+            {
+                b.OpenComponent<AccordionTriggerCn>(0);
+                b.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(t => t.AddContent(0, "One")));
+                b.CloseComponent();
+            }));
+            builder.CloseComponent();
+            builder.OpenComponent<AccordionItemCn>(2);
+            builder.AddAttribute(3, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(b =>
+            {
+                b.OpenComponent<AccordionTriggerCn>(0);
+                b.AddAttribute(1, "ChildContent", (Microsoft.AspNetCore.Components.RenderFragment)(t => t.AddContent(0, "Two")));
+                b.CloseComponent();
+            }));
+            builder.CloseComponent();
+        }));
+
+        var invocation = handler.Invocations.Should().ContainSingle().Subject;
+        invocation.Arguments[2].Should().BeEquivalentTo(
+            new[] { "ArrowDown", "ArrowUp", "Home", "End" });
+        invocation.Arguments[3].Should().Be("[data-slot=\"accordion-trigger\"]");
     }
 }

@@ -52,6 +52,18 @@ public partial class MenubarContentCn : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// APG menubar: ArrowRight/ArrowLeft inside an open menu switch to the adjacent
+    /// top-level menu. Keys the submenu logic consumes (ArrowRight on a sub-trigger,
+    /// ArrowLeft inside sub-content) are stopPropagation'd in JS and never reach
+    /// Blazor's document-level delegation, so this only fires for the unhandled cases.
+    /// </summary>
+    private void HandleContentKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "ArrowRight") Menu?.MoveOpenMenu(1);
+        else if (e.Key == "ArrowLeft") Menu?.MoveOpenMenu(-1);
+    }
+
     [JSInvokable]
     public void OnOutsideClick()
     {

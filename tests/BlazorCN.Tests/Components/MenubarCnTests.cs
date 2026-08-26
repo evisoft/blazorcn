@@ -763,4 +763,53 @@ public class MenubarCnTests : BunitContext
         cut.Find("[data-slot='menubar-content']").Should().NotBeNull();
         cut.Find("[data-slot='menubar-item']").TextContent.Should().Contain("New File");
     }
+
+    // APG menubar: with a menu open, ArrowRight/ArrowLeft inside the content close it
+    // and open the adjacent menu. Previously the key bubbled to the root's horizontal
+    // nav, which teleported focus to the first/last trigger with the menu stuck open.
+    [Fact]
+    public void ArrowRight_In_Open_Content_Switches_To_Next_Menu()
+    {
+        var cut = Render<MenubarCn>(p => p
+            .AddChildContent<MenubarMenuCn>(m1 => m1.AddChildContent(builder =>
+            {
+                builder.OpenComponent<MenubarTriggerCn>(0);
+                builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "File")));
+                builder.CloseComponent();
+                builder.OpenComponent<MenubarContentCn>(2);
+                builder.AddAttribute(3, "ChildContent", (RenderFragment)(b =>
+                {
+                    b.OpenComponent<MenubarItemCn>(0);
+                    b.AddAttribute(1, "ChildContent", (RenderFragment)(b2 => b2.AddContent(0, "New File")));
+                    b.CloseComponent();
+                }));
+                builder.CloseComponent();
+            }))
+            .AddChildContent<MenubarMenuCn>(m2 => m2.AddChildContent(builder =>
+            {
+                builder.OpenComponent<MenubarTriggerCn>(0);
+                builder.AddAttribute(1, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Edit")));
+                builder.CloseComponent();
+                builder.OpenComponent<MenubarContentCn>(2);
+                builder.AddAttribute(3, "ChildContent", (RenderFragment)(b =>
+                {
+                    b.OpenComponent<MenubarItemCn>(0);
+                    b.AddAttribute(1, "ChildContent", (RenderFragment)(b2 => b2.AddContent(0, "Undo")));
+                    b.CloseComponent();
+                }));
+                builder.CloseComponent();
+            })));
+
+        cut.FindAll("[data-slot='menubar-trigger']")[0].Click();
+        cut.Find("[data-slot='menubar-content']").TextContent.Should().Contain("New File");
+
+        cut.Find("[data-slot='menubar-content']").KeyDown("ArrowRight");
+        cut.Find("[data-slot='menubar-content']").TextContent.Should().Contain("Undo");
+        cut.FindAll("[data-slot='menubar-menu']")[0].GetAttribute("data-state").Should().Be("closed");
+        cut.FindAll("[data-slot='menubar-menu']")[1].GetAttribute("data-state").Should().Be("open");
+
+        // ArrowLeft wraps back
+        cut.Find("[data-slot='menubar-content']").KeyDown("ArrowLeft");
+        cut.Find("[data-slot='menubar-content']").TextContent.Should().Contain("New File");
+    }
 }

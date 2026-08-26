@@ -16,9 +16,36 @@
     private readonly string _keyboardNavId = $"menubar-root-kbd-{Guid.NewGuid():N}";
     private bool _jsInitialized;
     private MenubarMenuCn? _openMenu;
+    private readonly List<MenubarMenuCn> _menus = new();
 
     /// <summary>Whether any menu in the menubar is currently open (drives hover switching on triggers).</summary>
     internal bool AnyOpen => _openMenu is not null;
+
+    /// <summary>Menus register in render order so arrow keys can walk them.</summary>
+    internal void RegisterMenu(MenubarMenuCn menu)
+    {
+        if (!_menus.Contains(menu)) _menus.Add(menu);
+    }
+
+    internal void UnregisterMenu(MenubarMenuCn menu)
+    {
+        _menus.Remove(menu);
+        if (_openMenu == menu) _openMenu = null;
+    }
+
+    /// <summary>
+    /// APG menubar: with a menu open, ArrowRight/ArrowLeft close it and open the
+    /// adjacent sibling (wrapping). The newly opened content's keyboard-nav autofocus
+    /// puts focus on its first item.
+    /// </summary>
+    internal void MoveOpenMenu(int delta)
+    {
+        if (_openMenu is null || _menus.Count < 2) return;
+        var index = _menus.IndexOf(_openMenu);
+        if (index < 0) return;
+        var next = ((index + delta) % _menus.Count + _menus.Count) % _menus.Count;
+        _menus[next].SetOpen(true);   // NotifyMenuOpenChanged closes the previous one
+    }
 
     /// <summary>Tracks the single open menu; opening one closes the previously open sibling (Radix behavior).</summary>
     internal void NotifyMenuOpenChanged(MenubarMenuCn menu, bool open)

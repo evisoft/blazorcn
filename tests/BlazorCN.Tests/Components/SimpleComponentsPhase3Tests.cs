@@ -312,16 +312,18 @@ public class SimpleComponentsPhase3Tests : BunitContext
     public void PaginationPrevious_Has_AriaLabel()
     {
         var cut = Render<PaginationPreviousCn>(p => p.Add(c => c.Href, "/page/1"));
-        var a = cut.Find("[data-slot='pagination-previous']");
+        var a = cut.Find("[data-slot='pagination-link']");
         a.GetAttribute("aria-label").Should().Be("Go to previous page");
+        a.ClassList.Should().Contain("cn-pagination-previous");
     }
 
     [Fact]
     public void PaginationNext_Has_AriaLabel()
     {
         var cut = Render<PaginationNextCn>(p => p.Add(c => c.Href, "/page/3"));
-        var a = cut.Find("[data-slot='pagination-next']");
+        var a = cut.Find("[data-slot='pagination-link']");
         a.GetAttribute("aria-label").Should().Be("Go to next page");
+        a.ClassList.Should().Contain("cn-pagination-next");
     }
 
     [Fact]
