@@ -163,7 +163,8 @@ export function createFloating(reference, floating, id, options) {
         side: options?.side ?? 'bottom',
         sideOffset: options?.sideOffset ?? 4,
         align: options?.align ?? 'center',
-        alignOffset: options?.alignOffset ?? 0
+        alignOffset: options?.alignOffset ?? 0,
+        flipSideOnRtl: options?.flipSideOnRtl ?? false
     };
 
     const update = () => computePosition(reference, floating, opts);
