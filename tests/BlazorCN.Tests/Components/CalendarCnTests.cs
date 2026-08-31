@@ -293,13 +293,17 @@ public class CalendarCnTests : BunitContext
         // RangeStartChanged yields, so the host re-renders mid-flight and
         // SetParametersAsync resets the calendar's RangeEnd parameter before
         // RangeEndChanged fires — the callback must still report the clicked end.
+        // The click's own Task settles as soon as that first yield is hit (Blazor
+        // doesn't block event dispatch on the rest of the async chain), so the
+        // final RangeEndChanged callback can still be in flight when InvokeAsync
+        // returns — WaitForAssertion polls until it actually lands.
         var cut = Render<AsyncRangeHost>();
 
         await cut.InvokeAsync(() => cut.FindAll("td button").First(b => b.TextContent.Trim() == "5").Click());
-        cut.Instance.Start.Should().Be(new DateTime(2025, 6, 5));
+        cut.WaitForAssertion(() => cut.Instance.Start.Should().Be(new DateTime(2025, 6, 5)));
 
         await cut.InvokeAsync(() => cut.FindAll("td button").First(b => b.TextContent.Trim() == "15").Click());
-        cut.Instance.End.Should().Be(new DateTime(2025, 6, 15));
+        cut.WaitForAssertion(() => cut.Instance.End.Should().Be(new DateTime(2025, 6, 15)));
     }
 
     [Fact]
