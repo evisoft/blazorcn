@@ -4,6 +4,10 @@ A production-ready **Blazor component library that replicates [shadcn/ui](https:
 
 [![NuGet](https://img.shields.io/badge/NuGet-BlazorCN-blue)](https://www.nuget.org/packages/BlazorCN) ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4) ![License](https://img.shields.io/badge/license-MIT-green)
 
+**🔗 Live demo:** [blazorcn.evisoft.com](https://blazorcn.evisoft.com)
+
+[![BlazorCN live demo](docs/assets/screenshot.png)](https://blazorcn.evisoft.com)
+
 - **~200 components across 55 groups** — full shadcn/ui parity
 - **1,702 Lucide icons** as components, plus a by‑name `LucideIconCn` dispatcher
 - **CVA + `Cn.Merge()`** — C# ports of `class-variance-authority` and `cn()` (tailwind‑merge)
