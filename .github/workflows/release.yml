@@ -5,19 +5,20 @@ on:
     tags:
       - "v*.*.*"
 
-permissions:
-  contents: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write # required for NuGet Trusted Publishing (OIDC)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: "10.0.x"
 
@@ -35,20 +36,28 @@ jobs:
         run: dotnet test tests/BlazorCN.Tests/BlazorCN.Tests.csproj -c Release --no-build
 
       - name: Pack
-        run: >
-          dotnet pack src/BlazorCN/BlazorCN.csproj -c Release --no-build
-          -o artifacts/nupkg
-          -p:Version=${{ steps.version.outputs.version }}
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: dotnet pack src/BlazorCN/BlazorCN.csproj -c Release --no-build -o artifacts/nupkg -p:Version="$PACKAGE_VERSION"
+
+      # Exchanges this job's short-lived GitHub OIDC token for a NuGet.org API key
+      # that's scoped to this push and expires in ~1 hour. No stored secret needed.
+      # Requires a Trusted Publishing policy configured on nuget.org for this repo
+      # + workflow file (Settings on nuget.org > Trusted Publishing), restricted to
+      # the "release" GitHub Actions environment.
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        id: nuget_login
+        with:
+          user: ${{ secrets.NUGET_USERNAME }} # your nuget.org profile name, not your email
 
       - name: Push to NuGet.org
-        run: >
-          dotnet nuget push "artifacts/nupkg/*.nupkg"
-          --api-key ${{ secrets.NUGET_API_KEY }}
-          --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
+        env:
+          NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "artifacts/nupkg/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: artifacts/nupkg/*.nupkg
           generate_release_notes: true
